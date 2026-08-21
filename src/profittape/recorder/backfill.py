@@ -158,6 +158,7 @@ def executar(
         t0 = time.monotonic()
         anterior = -1
         estavel_desde = time.monotonic()
+        proximo_progresso = time.monotonic() + 15.0
         while time.monotonic() - t0 < timeout_s:
             time.sleep(1.0)
             atual = bus.stats().total_recebido
@@ -167,9 +168,31 @@ def executar(
             elif atual > 0 and time.monotonic() - estavel_desde >= quiesce_s:
                 log.info("backfill.quiesce", eventos=atual)
                 break
+            # Progresso periodico: download longo sem log parece travamento,
+            # e a pessoa mata um processo saudavel. Licao de producao.
+            if time.monotonic() >= proximo_progresso:
+                proximo_progresso = time.monotonic() + 15.0
+                decorrido = time.monotonic() - t0
+                log.info(
+                    "backfill.progresso",
+                    eventos=atual,
+                    eventos_por_s=int(atual / decorrido) if decorrido else 0,
+                    decorrido_min=round(decorrido / 60, 1),
+                    fila=bus.stats().profundidade_atual,
+                )
         else:
-            log.warning("backfill.timeout", eventos=anterior,
-                        aviso="pode estar incompleto — aumente --timeout")
+            ainda_fluindo = time.monotonic() - estavel_desde < quiesce_s
+            if ainda_fluindo:
+                log.error(
+                    "backfill.timeout_com_dado_fluindo",
+                    eventos=anterior,
+                    aviso="o corte foi ARBITRARIO: o servidor ainda entregava. "
+                          "O que esta em disco e' parcial no meio de um dia — "
+                          "re-rode com --timeout maior antes de usar este intervalo.",
+                )
+            else:
+                log.warning("backfill.timeout", eventos=anterior,
+                            aviso="pode estar incompleto — aumente --timeout")
 
         if anterior <= 0:
             log.error(
