@@ -160,11 +160,14 @@ def executar_por_dia(
     feriados: list[str] = []
     incompletos: list[str] = []
     capturados = 0
+    interrompido = False
+    dia_em_andamento: str | None = None
     try:
         client.connect()
         if settle_s > 0:
             time.sleep(settle_s)
         for idx, dia in enumerate(pendentes, 1):
+            dia_em_andamento = dia
             d = datetime.strptime(dia, "%Y-%m-%d")
             ini = d.strftime("%d/%m/%Y")
             fim = (d + timedelta(days=1)).strftime("%d/%m/%Y")
@@ -204,6 +207,15 @@ def executar_por_dia(
             else:
                 capturados += 1
                 log.info("backfill_dia.ok", dia=dia, eventos=eventos)
+    except KeyboardInterrupt:
+        # BaseException, nao Exception: passa direto por cima do except acima
+        # SEM este bloco explicito. Achado real: isso deixava o resumo (o
+        # 'quanto eu ja tenho') sem imprimir depois de um Ctrl+C — usuario
+        # via so' um traceback assustador, sem saber quantos dias/eventos
+        # sobreviveram. O finally abaixo ja' dreno a fila e fecha os
+        # arquivos de qualquer forma; aqui so' evitamos apagar o resumo.
+        interrompido = True
+        log.warning("backfill_dia.interrompido_pelo_usuario", dia_em_andamento=dia_em_andamento)
     except Exception:
         log.exception("backfill_dia.erro")
         return 1
@@ -220,6 +232,16 @@ def executar_por_dia(
     if incompletos:
         log.error("backfill_dia.ATENCAO_incompletos", dias=incompletos,
                   acao="remova as particoes desses dias e re-rode para completar")
+    if interrompido:
+        restantes = len(pendentes) - capturados - len(feriados) - len(incompletos)
+        log.warning(
+            "backfill_dia.parcial",
+            capturados_nesta_rodada=capturados, dia_interrompido=dia_em_andamento,
+            estimativa_restante=max(restantes, 0),
+            dica="rode o MESMO comando de novo — dias ja capturados sao "
+                 "pulados automaticamente (retomavel por particao)",
+        )
+        return 130   # convencao POSIX para SIGINT
     return 0 if not incompletos else 3
 
 

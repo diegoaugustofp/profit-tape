@@ -281,3 +281,54 @@ def test_backfill_avisa_dias_fora_da_janela_de_30_dias(tmp_raiz: Path) -> None:
     # Nao afirma sobre o log (capturado so' por caplog se configurado); o
     # teste de valor aqui e' que a funcao NAO LEVANTA e completa mesmo com
     # o intervalo inteiro fora da janela.
+
+
+def test_por_dia_interrompido_ainda_reporta_resumo_e_e_retomavel(tmp_raiz: Path) -> None:
+    """
+    Achado real: Ctrl+C no meio de --por-dia pulava o log de resumo (Keyboard
+    Interrupt e' BaseException, escapa do 'except Exception'), deixando o
+    usuario sem saber quanto ja tinha. Corrigido: resumo sempre imprime;
+    codigo de saida vira 130 (convencao SIGINT); dias ja gravados permanecem
+    e o proximo run pula exatamente esses.
+    """
+    from profittape.recorder import backfill as bf
+
+    cfg = RecorderConfig(
+        ativos=[AtivoConfig(ticker="PETR4")],
+        storage=StorageConfig(raiz=tmp_raiz),
+        pipeline=PipelineConfig(poll_timeout_s=0.1),
+        runtime=RuntimeConfig(),
+    )
+    cred = Credenciais(activation_key="k", user="u", password="p", dll_path="fake")
+
+    original = bf._aguardar_quiesce
+    chamadas = {"n": 0}
+
+    def _quiesce_que_interrompe(bus, base, quiesce_s, timeout_s):
+        chamadas["n"] += 1
+        if chamadas["n"] == 2:          # interrompe no 2o dia
+            raise KeyboardInterrupt
+        return original(bus, base, quiesce_s, timeout_s)
+
+    monkey = bf._aguardar_quiesce
+    bf._aguardar_quiesce = _quiesce_que_interrompe
+    try:
+        rc = bf.executar_por_dia(
+            cfg, cred, "2026-08-17", "2026-08-19",   # 3 dias uteis (seg-qua)
+            quiesce_s=1.0, timeout_dia_s=10, settle_s=0.0,
+            dll_injetada=FakeProfitDLL(eventos_por_ativo=50),
+        )
+    finally:
+        bf._aguardar_quiesce = monkey
+
+    assert rc == 130
+    capturados = sorted(p.name for p in (tmp_raiz / "trade").glob("dt=*"))
+    assert capturados == ["dt=2026-08-17"]        # 1o dia completo, 2o interrompido
+
+    # Retomada: so' pede o que falta.
+    rc2 = bf.executar_por_dia(cfg, cred, "2026-08-17", "2026-08-19",
+                              quiesce_s=1.0, timeout_dia_s=10, settle_s=0.0,
+                              dll_injetada=FakeProfitDLL(eventos_por_ativo=50))
+    assert rc2 == 0
+    capturados2 = sorted(p.name for p in (tmp_raiz / "trade").glob("dt=*"))
+    assert capturados2 == ["dt=2026-08-17", "dt=2026-08-18", "dt=2026-08-19"]
