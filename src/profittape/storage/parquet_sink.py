@@ -69,11 +69,12 @@ class PartitionKey(tuple[Stream, str, str]):
 
 
 class _OpenFile:
-    __slots__ = ("opened_at", "path", "rows", "writer")
+    __slots__ = ("opened_at", "path_final", "path_tmp", "rows", "writer")
 
-    def __init__(self, writer: pq.ParquetWriter, path: Path) -> None:
+    def __init__(self, writer: pq.ParquetWriter, path_tmp: Path, path_final: Path) -> None:
         self.writer = writer
-        self.path = path
+        self.path_tmp = path_tmp
+        self.path_final = path_final
         self.rows = 0
         self.opened_at = datetime.now(UTC)
 
@@ -131,7 +132,14 @@ class ParquetSink:
         pasta.mkdir(parents=True, exist_ok=True)
         seq = self._seq.get(key, 0)
         self._seq[key] = seq + 1
-        caminho = pasta / f"part-{seq:04d}.parquet"
+        # Escreve com sufixo .inprogress e renomeia no close. Incidente real:
+        # um processo morto a forca deixou um part-0000.parquet sem footer, e
+        # o arquivo truncado era INDISTINGUIVEL de um pronto ate o pyarrow
+        # explodir na leitura. Com o sufixo, incompleto se declara incompleto:
+        # leitores globam *.parquet e nunca o veem, e sobra de crash aparece
+        # no disco como *.inprogress — evidencia, nao armadilha.
+        final = pasta / f"part-{seq:04d}.parquet"
+        caminho = pasta / f"part-{seq:04d}.parquet.inprogress"
         writer = pq.ParquetWriter(
             caminho,
             schema,
@@ -141,7 +149,7 @@ class ParquetSink:
             # janela de tempo, que e' o filtro mais comum em dado de tape.
             write_statistics=True,
         )
-        aberto = _OpenFile(writer, caminho)
+        aberto = _OpenFile(writer, caminho, final)
         self._abertos[key] = aberto
         return aberto
 
@@ -149,6 +157,7 @@ class ParquetSink:
         aberto = self._abertos.pop(key, None)
         if aberto is not None:
             aberto.writer.close()
+            aberto.path_tmp.rename(aberto.path_final)
 
     def close_idle(self, idade_maxima_s: float) -> list[Path]:
         """
@@ -162,12 +171,12 @@ class ParquetSink:
         for key in list(self._abertos):
             aberto = self._abertos[key]
             if (agora - aberto.opened_at).total_seconds() >= idade_maxima_s:
-                fechados.append(aberto.path)
+                fechados.append(aberto.path_final)
                 self._close_one(key)
         return fechados
 
     def close(self) -> list[Path]:
-        caminhos = [a.path for a in self._abertos.values()]
+        caminhos = [a.path_final for a in self._abertos.values()]
         for key in list(self._abertos):
             self._close_one(key)
         return caminhos

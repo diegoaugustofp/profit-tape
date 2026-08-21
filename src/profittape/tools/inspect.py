@@ -16,6 +16,7 @@ import pyarrow.dataset as ds
 
 from ..domain.enums import TradeType
 from ..profitdll.timeparse import formatar
+from ..storage.validacao import relatorio
 
 
 def _agrupar_contando(tabela: pa.Table, coluna: str) -> list[dict]:
@@ -37,7 +38,13 @@ def _agrupar_contando(tabela: pa.Table, coluna: str) -> list[dict]:
 
 def resumir(caminho: Path, stream: str = "trade") -> None:
     alvo = caminho / stream if (caminho / stream).exists() else caminho
-    dataset = ds.dataset(alvo, format="parquet", partitioning="hive")
+    relatorio(alvo)
+    dataset = ds.dataset(
+        alvo, format="parquet", partitioning="hive",
+        # Pula arquivo ilegivel em vez de morrer nele. O relatorio acima ja
+        # gritou QUAIS sao — resiliencia sem silencio.
+        exclude_invalid_files=True,
+    )
     tabela = dataset.to_table()
     n = tabela.num_rows
 

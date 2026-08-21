@@ -104,3 +104,53 @@ def test_inspect_sobrevive_a_dicionarios_divergentes(tmp_raiz: Path, capsys) -> 
     saida = capsys.readouterr().out
     assert "linhas            : 60" in saida
     assert "PETR4" in saida and "VALE3" in saida and "ITUB4" in saida
+
+
+def test_arquivo_aberto_tem_sufixo_inprogress(tmp_raiz: Path) -> None:
+    """
+    Regressao do incidente real: processo morto a forca deixou um .parquet sem
+    footer indistinguivel de um pronto. Com o sufixo, incompleto se declara.
+    """
+    sink = ParquetSink(tmp_raiz)
+    sink.write(Stream.TRADE, "2024-01-02", "PETR4", _colunas([_trade(0)]))
+
+    assert list(tmp_raiz.rglob("*.parquet")) == []          # nada "pronto" ainda
+    assert len(list(tmp_raiz.rglob("*.inprogress"))) == 1
+
+    sink.close()
+    assert len(list(tmp_raiz.rglob("*.parquet"))) == 1      # renomeado no close
+    assert list(tmp_raiz.rglob("*.inprogress")) == []
+
+
+def test_inspect_ignora_corrompido_e_lista_o_caminho(tmp_raiz: Path, capsys) -> None:
+    from profittape.tools.inspect import resumir
+
+    sink = ParquetSink(tmp_raiz)
+    sink.write(Stream.TRADE, "2024-01-02", "PETR4", _colunas([_trade(i) for i in range(30)]))
+    sink.close()
+
+    podre = tmp_raiz / "trade" / "dt=2024-01-02" / "sym=VALE3"
+    podre.mkdir(parents=True)
+    (podre / "part-0000.parquet").write_bytes(b"PAR1\x00\x00truncado-sem-footer")
+
+    resumir(tmp_raiz, "trade")
+    out = capsys.readouterr().out
+    assert "CORROMPIDO" in out
+    assert "sym=VALE3" in out
+    assert "linhas            : 30" in out   # o valido foi lido normalmente
+
+
+def test_curate_recusa_rodar_com_inprogress(tmp_path: Path) -> None:
+    """Curar durante uma escrita produziria curated parcial que parece completo."""
+    import pytest as _pytest
+
+    from profittape.tools.curate import curar_trades
+
+    raw = tmp_path / "raw"
+    sink = ParquetSink(raw)
+    sink.write(Stream.TRADE, "2024-01-02", "PETR4", _colunas([_trade(0)]))
+    # sem close(): o .inprogress fica no disco, como num recorder ativo
+
+    with _pytest.raises(SystemExit, match="inprogress"):
+        curar_trades(raw, tmp_path / "curated")
+    sink.close()

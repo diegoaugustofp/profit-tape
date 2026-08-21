@@ -31,6 +31,8 @@ import pyarrow as pa
 import pyarrow.dataset as ds
 import pyarrow.parquet as pq
 
+from ..storage.validacao import relatorio
+
 
 def curar_trades(raiz_raw: Path, raiz_curated: Path) -> dict[str, int]:
     """
@@ -46,11 +48,23 @@ def curar_trades(raiz_raw: Path, raiz_curated: Path) -> dict[str, int]:
     if not origem.exists():
         raise SystemExit(f"Nao ha dado em {origem}. Rode record ou backfill antes.")
 
+    _corrompidos, inprogress = relatorio(origem)
+    if inprogress:
+        raise SystemExit(
+            "Ha arquivos .inprogress na origem — um recorder/backfill pode estar "
+            "rodando. Curar no meio de uma escrita produz curated incompleto que "
+            "parece completo. Encerre a captura (ou confirme que e' sobra e "
+            "remova) antes de curar."
+        )
+
     totais = {"lidas": 0, "duplicatas": 0, "ts_invalido": 0, "gravadas": 0, "particoes": 0}
 
     for pasta_dia in sorted(origem.glob("dt=*")):
         dia = pasta_dia.name.split("=", 1)[1]
-        tabela = ds.dataset(pasta_dia, format="parquet", partitioning="hive").to_table()
+        tabela = ds.dataset(
+            pasta_dia, format="parquet", partitioning="hive",
+            exclude_invalid_files=True,
+        ).to_table()
         if tabela.num_rows == 0:
             continue
         df = tabela.to_pandas()
