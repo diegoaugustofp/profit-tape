@@ -40,7 +40,8 @@ def test_backfill_ponta_a_ponta(tmp_raiz: Path) -> None:
     fake = FakeProfitDLL(eventos_por_ativo=300)
 
     rc = executar(cfg, cred, "2026-08-18", "2026-08-19",
-                  quiesce_s=1.5, timeout_s=60, dll_injetada=fake)
+                  quiesce_s=1.5, timeout_s=20, dll_injetada=fake)
+    assert not fake.erros, f"thread emissora do fake morreu: {fake.erros[0]!r}"
     assert rc == 0
 
     tabela = ds.dataset(tmp_raiz / "trade", format="parquet", partitioning="hive").to_table()

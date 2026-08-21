@@ -16,8 +16,10 @@ Ela imita tres comportamentos que sao os que costumam quebrar em producao:
 from __future__ import annotations
 
 import random
+import sys
 import threading
 import time
+import traceback
 from datetime import datetime, timedelta
 
 from profittape.profitdll.types import TAssetIDRec
@@ -50,6 +52,7 @@ class FakeProfitDLL:
         self._cb: dict[str, object] = {}
         self._subscritos: list[tuple[str, str, str]] = []
         self._threads: list[threading.Thread] = []
+        self.erros: list[BaseException] = []
         self._parar = threading.Event()
         self.finalizado = False
 
@@ -100,7 +103,9 @@ class FakeProfitDLL:
         E' esse formato assincrono que o quiesce do backfill precisa tratar.
         """
         t = threading.Thread(
-            target=self._emitir_historico, args=(ticker, bolsa, ini), daemon=True
+            target=self._com_diagnostico,
+            args=(self._emitir_historico, ticker, bolsa, ini),
+            daemon=True,
         )
         t.start()
         self._threads.append(t)
@@ -136,9 +141,30 @@ class FakeProfitDLL:
     # -- geracao -------------------------------------------------------
     def _iniciar(self, ticker: str, bolsa: str, tipo: str) -> None:
         self._subscritos.append((ticker, bolsa, tipo))
-        t = threading.Thread(target=self._emitir, args=(ticker, bolsa, tipo), daemon=True)
+        t = threading.Thread(
+            target=self._com_diagnostico, args=(self._emitir, ticker, bolsa, tipo),
+            daemon=True,
+        )
         t.start()
         self._threads.append(t)
+
+    def _com_diagnostico(self, alvo, *args) -> None:
+        """
+        Torna VISIVEL qualquer excecao de thread emissora.
+
+        Excecao em thread daemon vai para stderr via threading.excepthook e o
+        pytest a esconde em warnings — o sintoma vira "zero eventos" sem causa
+        aparente. Imprimir em STDOUT garante que ela apareca na secao
+        'Captured stdout call' de qualquer teste que falhe. A excecao e'
+        registrada em `self.erros` para os testes poderem afirmar sobre ela.
+        """
+        try:
+            alvo(*args)
+        except BaseException as exc:
+            self.erros.append(exc)
+            print(f"\n{'!' * 70}\nFAKE DLL: thread emissora morreu: {exc!r}")
+            traceback.print_exc(file=sys.stdout)
+            print("!" * 70)
 
     def _emitir(self, ticker: str, bolsa: str, tipo: str) -> None:
         ativo = _ativo(ticker, bolsa)
