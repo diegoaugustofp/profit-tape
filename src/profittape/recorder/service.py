@@ -76,6 +76,16 @@ class RecorderService:
 
     def _instalar_sinais(self) -> None:
         def handler(signum: int, _frame: object) -> None:
+            if self._parar.is_set():
+                # Segundo Ctrl+C durante o encerramento: sem esta resposta, o
+                # silencio induz a acreditar que o primeiro nao registrou (e a
+                # apertar de novo, ou matar o processo — que ai sim perde a
+                # cauda). O handler customizado ja' impede que o sinal vire
+                # KeyboardInterrupt, entao aqui e' so' comunicacao.
+                log.warning("recorder.ENCERRAMENTO_JA_EM_ANDAMENTO",
+                            nota="aguarde — fila sendo drenada e arquivos "
+                                 "sendo fechados; nao e' preciso pressionar de novo")
+                return
             log.info("recorder.sinal_recebido", sinal=signum)
             self._parar.set()
 

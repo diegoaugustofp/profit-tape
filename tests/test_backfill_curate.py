@@ -310,7 +310,10 @@ def test_por_dia_interrompido_ainda_reporta_resumo_e_e_retomavel(tmp_raiz: Path)
             raise KeyboardInterrupt
         return original(bus, base, quiesce_s, timeout_s)
 
+    sinais_configurados = []
     monkey = bf._aguardar_quiesce
+    monkey_signal = bf.signal.signal
+    bf.signal.signal = lambda sig, disp: sinais_configurados.append((sig, disp))
     bf._aguardar_quiesce = _quiesce_que_interrompe
     try:
         rc = bf.executar_por_dia(
@@ -320,8 +323,12 @@ def test_por_dia_interrompido_ainda_reporta_resumo_e_e_retomavel(tmp_raiz: Path)
         )
     finally:
         bf._aguardar_quiesce = monkey
+        bf.signal.signal = monkey_signal
 
     assert rc == 130
+    # Blindagem: apos o 1o Ctrl+C, SIGINT passa a ser ignorado para o
+    # fechamento dos arquivos nao poder ser interrompido por um 2o aperto.
+    assert (bf.signal.SIGINT, bf.signal.SIG_IGN) in sinais_configurados
     capturados = sorted(p.name for p in (tmp_raiz / "trade").glob("dt=*"))
     assert capturados == ["dt=2026-08-17"]        # 1o dia completo, 2o interrompido
 

@@ -288,3 +288,22 @@ def test_has_date_true_confia_na_data(tmp_raiz: Path) -> None:
         assert evento.ts_ns > 0
     finally:
         c.disconnect()
+
+
+def test_segundo_sinal_durante_encerramento_avisa_e_nao_quebra(tmp_raiz: Path) -> None:
+    """
+    Diagnostico do proprio usuario: o resumo sumia porque o SEGUNDO Ctrl+C
+    interrompia a limpeza — e ele apertava de novo porque nada confirmava que
+    o primeiro registrou. O handler do record agora responde ao segundo sinal
+    com aviso em vez de silencio.
+    """
+    svc = RecorderService(_config(tmp_raiz), _cred(),
+                          dll_injetada=FakeProfitDLL(eventos_por_ativo=10))
+    # chama o handler direto, sem sinal de verdade (portavel em qualquer SO)
+    import signal as _s
+    svc._instalar_sinais()
+    handler = _s.getsignal(_s.SIGINT)
+    handler(_s.SIGINT, None)              # 1o: inicia encerramento
+    assert svc._parar.is_set()
+    handler(_s.SIGINT, None)              # 2o: so avisa, nao levanta
+    assert svc._parar.is_set()

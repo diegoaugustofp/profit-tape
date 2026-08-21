@@ -30,7 +30,9 @@ consideramos completo. Conservador e a prova de versao.
 
 from __future__ import annotations
 
+import signal
 import time
+from contextlib import suppress
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -208,21 +210,36 @@ def executar_por_dia(
                 capturados += 1
                 log.info("backfill_dia.ok", dia=dia, eventos=eventos)
     except KeyboardInterrupt:
-        # BaseException, nao Exception: passa direto por cima do except acima
-        # SEM este bloco explicito. Achado real: isso deixava o resumo (o
-        # 'quanto eu ja tenho') sem imprimir depois de um Ctrl+C — usuario
-        # via so' um traceback assustador, sem saber quantos dias/eventos
-        # sobreviveram. O finally abaixo ja' dreno a fila e fecha os
-        # arquivos de qualquer forma; aqui so' evitamos apagar o resumo.
+        # BaseException, nao Exception: sem este bloco, o resumo final nunca
+        # imprimia apos Ctrl+C. E o incidente real teve uma SEGUNDA camada,
+        # diagnosticada pelo proprio usuario: sem feedback imediato de que o
+        # primeiro Ctrl+C registrou, a reacao natural e' apertar DE NOVO — e
+        # o segundo interrompe o finally no meio, matando a drenagem da fila
+        # e o fechamento dos arquivos. Por isso, duas medidas aqui:
+        #   1. logar NA HORA que o encerramento comecou (feedback);
+        #   2. ignorar SIGINT dali em diante (blindagem): depois que a
+        #      limpeza inicia, um segundo Ctrl+C so' pode causar dano.
         interrompido = True
-        log.warning("backfill_dia.interrompido_pelo_usuario", dia_em_andamento=dia_em_andamento)
+        with suppress(ValueError, OSError):   # fora da main thread / plataforma
+            signal.signal(signal.SIGINT, signal.SIG_IGN)
+        log.warning(
+            "backfill_dia.ENCERRAMENTO_INICIADO",
+            dia_em_andamento=dia_em_andamento,
+            nota="Ctrl+C recebido. Drenando fila e fechando arquivos — pode "
+                 "levar ate' alguns minutos com fila cheia. Ctrl+C adicional "
+                 "sera IGNORADO de proposito: interromper o fechamento e' a "
+                 "unica forma de perder dado nesta fase. Aguarde o resumo.",
+        )
     except Exception:
         log.exception("backfill_dia.erro")
         return 1
     finally:
+        log.info("backfill_dia.encerrando",
+                 nota="desconectando DLL, drenando fila, fechando arquivos")
         client.disconnect()
         bus.close()
         writer.join(timeout=600)
+        log.info("backfill_dia.arquivos_fechados")
 
     st = bus.stats()
     log.info("backfill_dia.resumo",
