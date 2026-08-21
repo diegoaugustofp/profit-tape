@@ -127,6 +127,13 @@ def backfill(
         [], "--ticker",
         help="Sobrepoe os ativos do config. Formato TICKER ou TICKER:BOLSA. Repetivel.",
     ),
+    por_dia: bool = typer.Option(
+        False, "--por-dia",
+        help="Um request por pregao, RETOMAVEL (pula dt= ja capturados). "
+             "Use para intervalos longos; aqui --fim e' INCLUSIVO.",
+    ),
+    timeout_dia: float = typer.Option(900.0, "--timeout-dia",
+                                      help="Timeout por pregao no modo --por-dia."),
     log_level: str = typer.Option("INFO", "--log-level"),
 ) -> None:
     """
@@ -148,6 +155,12 @@ def backfill(
         cfg = cfg.model_copy(update={"ativos": novos})
     cred = Credenciais()
     cred.validar()
+    if por_dia:
+        from .recorder.backfill import executar_por_dia
+
+        raise typer.Exit(executar_por_dia(cfg, cred, inicio, fim,
+                                          quiesce_s=quiesce, timeout_dia_s=timeout_dia,
+                                          settle_s=settle))
     from .recorder.backfill import executar
 
     raise typer.Exit(executar(cfg, cred, inicio, fim, quiesce_s=quiesce, timeout_s=timeout,

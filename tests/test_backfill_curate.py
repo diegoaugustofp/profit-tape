@@ -215,3 +215,37 @@ def test_curated_nao_duplica_colunas_de_particao(tmp_path: Path) -> None:
     tabela = ds.dataset(tmp_path / "curated" / "trade", format="parquet",
                         partitioning="hive").to_table()
     assert set(tabela.column_names) >= {"dt", "sym", "trade_id"}   # vindos da particao
+
+
+def test_por_dia_captura_e_e_retomavel(tmp_raiz: Path) -> None:
+    """
+    O contrato do modo longo: (1) uma particao dt= por dia util pedido;
+    (2) re-rodar NAO re-baixa o que ja existe — queda no meio da noite custa
+    um comando, nao a noite.
+    """
+    from profittape.recorder.backfill import executar_por_dia
+
+    cfg = RecorderConfig(
+        ativos=[AtivoConfig(ticker="PETR4")],
+        storage=StorageConfig(raiz=tmp_raiz),
+        pipeline=PipelineConfig(poll_timeout_s=0.1),
+        runtime=RuntimeConfig(),
+    )
+    cred = Credenciais(activation_key="k", user="u", password="p", dll_path="fake")
+
+    # 2026-08-14 (sex) a 2026-08-18 (ter): 3 dias uteis, fim de semana pulado
+    fake = FakeProfitDLL(eventos_por_ativo=50)
+    rc = executar_por_dia(cfg, cred, "2026-08-14", "2026-08-18",
+                          quiesce_s=1.0, timeout_dia_s=20, settle_s=0.0,
+                          dll_injetada=fake)
+    assert rc == 0
+    dias = sorted(p.name for p in (tmp_raiz / "trade").glob("dt=*"))
+    assert dias == ["dt=2026-08-14", "dt=2026-08-17", "dt=2026-08-18"]
+
+    # Retomada: nada pendente -> nenhuma chamada de historico nova
+    fake2 = FakeProfitDLL(eventos_por_ativo=50)
+    rc2 = executar_por_dia(cfg, cred, "2026-08-14", "2026-08-18",
+                           quiesce_s=1.0, timeout_dia_s=20, settle_s=0.0,
+                           dll_injetada=fake2)
+    assert rc2 == 0
+    assert fake2._hist_chamadas == {} and not fake2._subscritos

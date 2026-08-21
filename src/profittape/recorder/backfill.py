@@ -31,7 +31,8 @@ consideramos completo. Conservador e a prova de versao.
 from __future__ import annotations
 
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
+from pathlib import Path
 
 import structlog
 
@@ -52,6 +53,145 @@ def _iso_para_dll(iso: str) -> str:
         return datetime.strptime(iso, "%Y-%m-%d").strftime("%d/%m/%Y")
     except ValueError as exc:
         raise ValueError(f"Data deve ser YYYY-MM-DD, veio {iso!r}") from exc
+
+
+def _dias_uteis(inicio_iso: str, fim_iso: str) -> list[str]:
+    """Dias uteis (seg-sex) no intervalo INCLUSIVO. Feriado da B3 nao e'
+    conhecido aqui — dia sem entrega e' tratado como feriado no loop."""
+    d = datetime.strptime(inicio_iso, "%Y-%m-%d").date()
+    fim = datetime.strptime(fim_iso, "%Y-%m-%d").date()
+    dias = []
+    while d <= fim:
+        if d.weekday() < 5:
+            dias.append(d.isoformat())
+        d += timedelta(days=1)
+    return dias
+
+
+def _dia_ja_capturado(raiz: Path, dia: str) -> bool:
+    pasta = Path(raiz) / "trade" / f"dt={dia}"
+    return pasta.exists() and any(pasta.rglob("*.parquet"))
+
+
+def _aguardar_quiesce(bus, base: int, quiesce_s: float, timeout_s: float) -> tuple[int, bool]:
+    """Espera o total (relativo a `base`) estabilizar. Devolve (eventos, completou)."""
+    t0 = time.monotonic()
+    anterior = -1
+    estavel_desde = time.monotonic()
+    while time.monotonic() - t0 < timeout_s:
+        time.sleep(1.0)
+        atual = bus.stats().total_recebido - base
+        if atual != anterior:
+            anterior = atual
+            estavel_desde = time.monotonic()
+        elif time.monotonic() - estavel_desde >= quiesce_s:
+            return max(anterior, 0), True
+    return max(anterior, 0), False
+
+
+def executar_por_dia(
+    cfg: RecorderConfig,
+    cred: Credenciais,
+    inicio_iso: str,
+    fim_iso: str,
+    quiesce_s: float = 10.0,
+    timeout_dia_s: float = 900.0,
+    settle_s: float = 5.0,
+    dll_injetada: object | None = None,
+) -> int:
+    """
+    Backfill longo, um pregao por request, RETOMAVEL.
+
+    Por que existe: a unica entrega multi... o unico comportamento OBSERVADO
+    do servidor foi [d, d+1) -> exatamente o dia d. Um request de 60 dias e'
+    hipotese nao testada; 60 requests de 1 dia e' comportamento provado. E a
+    retomada por particao significa que queda de conexao na madrugada custa
+    re-rodar o comando, nao a noite.
+
+    Dia sem entrega apos o quiesce e' registrado como provavel feriado e o
+    loop segue — a B3 tem ~10 por ano e nao vale manter tabela.
+    """
+    dias = [d for d in _dias_uteis(inicio_iso, fim_iso)]
+    pulados = [d for d in dias if _dia_ja_capturado(cfg.storage.raiz, d)]
+    pendentes = [d for d in dias if d not in pulados]
+    log.info("backfill_dia.plano", dias_uteis=len(dias),
+             ja_capturados=len(pulados), pendentes=len(pendentes))
+    if not pendentes:
+        log.info("backfill_dia.nada_a_fazer")
+        return 0
+
+    metrics = Metrics()
+    bus = EventBus(maxsize=cfg.pipeline.fila_maxsize)
+    sink = ParquetSink(
+        raiz=cfg.storage.raiz, max_rows_per_file=cfg.storage.max_rows_per_file,
+        compressao=cfg.storage.compressao, nivel_compressao=cfg.storage.nivel_compressao,
+    )
+    writer = WriterThread(bus=bus, sink=sink, metrics=metrics,
+                          batch_max=cfg.pipeline.batch_max,
+                          poll_timeout=cfg.pipeline.poll_timeout_s)
+    client = ProfitClient(
+        dll_path=cred.dll_path, activation_key=cred.activation_key,
+        user=cred.user, password=cred.password, bus=bus,
+        tz_offset_horas=cfg.runtime.tz_offset_horas,
+        on_state=lambda t, v: log.info("backfill_dia.estado", tipo=t, valor=v),
+        dll=dll_injetada,
+    )
+
+    writer.start()
+    feriados: list[str] = []
+    incompletos: list[str] = []
+    capturados = 0
+    try:
+        client.connect()
+        if settle_s > 0:
+            time.sleep(settle_s)
+        for idx, dia in enumerate(pendentes, 1):
+            d = datetime.strptime(dia, "%Y-%m-%d")
+            ini = d.strftime("%d/%m/%Y")
+            fim = (d + timedelta(days=1)).strftime("%d/%m/%Y")
+            base = bus.stats().total_recebido
+            log.info("backfill_dia.solicitando", dia=dia, progresso=f"{idx}/{len(pendentes)}")
+            recusas = 0
+            for a in cfg.ativos:
+                try:
+                    client.request_history(a.ticker, ini, fim, a.bolsa)
+                except SubscriptionFailed as exc:
+                    recusas += 1
+                    log.error("backfill_dia.recusado", dia=dia, ticker=a.ticker,
+                              detalhe=str(exc))
+            if recusas == len(cfg.ativos):
+                incompletos.append(dia)
+                continue
+            eventos, ok = _aguardar_quiesce(bus, base, quiesce_s, timeout_dia_s)
+            if eventos == 0:
+                feriados.append(dia)
+                log.info("backfill_dia.sem_entrega", dia=dia,
+                         nota="provavel feriado/sem pregao")
+            elif not ok:
+                incompletos.append(dia)
+                log.error("backfill_dia.timeout", dia=dia, eventos=eventos,
+                          aviso="dia possivelmente parcial — sera re-pedido no "
+                                "proximo run se a particao for removida")
+            else:
+                capturados += 1
+                log.info("backfill_dia.ok", dia=dia, eventos=eventos)
+    except Exception:
+        log.exception("backfill_dia.erro")
+        return 1
+    finally:
+        client.disconnect()
+        bus.close()
+        writer.join(timeout=600)
+
+    st = bus.stats()
+    log.info("backfill_dia.resumo",
+             capturados=capturados, ja_existiam=len(pulados),
+             sem_entrega=feriados, incompletos=incompletos,
+             eventos=st.total_recebido, descartados=st.total_descartado)
+    if incompletos:
+        log.error("backfill_dia.ATENCAO_incompletos", dias=incompletos,
+                  acao="remova as particoes desses dias e re-rode para completar")
+    return 0 if not incompletos else 3
 
 
 def executar(
