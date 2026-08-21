@@ -20,8 +20,8 @@ from profittape.domain.enums import Stream
 from profittape.domain.events import Trade
 from profittape.recorder.backfill import _iso_para_dll, executar
 from profittape.storage.parquet_sink import ParquetSink
+from profittape.testing import FakeProfitDLL
 from profittape.tools.curate import curar_trades
-from tests.fakes.fake_dll import FakeProfitDLL
 
 
 def test_conversao_de_data() -> None:

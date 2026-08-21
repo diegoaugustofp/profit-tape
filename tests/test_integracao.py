@@ -23,7 +23,7 @@ from profittape.config import (
     StorageConfig,
 )
 from profittape.recorder.service import RecorderService
-from tests.fakes.fake_dll import FakeProfitDLL
+from profittape.testing import FakeProfitDLL
 
 
 def _config(raiz: Path) -> RecorderConfig:

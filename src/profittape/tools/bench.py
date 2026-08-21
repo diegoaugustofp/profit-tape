@@ -41,12 +41,7 @@ def rodar(eventos_por_ativo: int, n_ativos: int, duracao_s: float, intervalo_s: 
         StorageConfig,
     )
     from ..recorder.service import RecorderService
-
-    try:
-        from tests.fakes.fake_dll import FakeProfitDLL
-    except ImportError:  # pragma: no cover
-        print("bench exige o pacote de testes no PYTHONPATH (rode da raiz do repo).")
-        return
+    from ..testing import FakeProfitDLL
 
     if raiz is None:
         # ATENCAO: o temp do sistema fica no volume do SO (C:). Se a captura
