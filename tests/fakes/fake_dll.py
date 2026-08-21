@@ -94,7 +94,37 @@ class FakeProfitDLL:
         return 0
 
     def GetHistoryTrades(self, ticker, bolsa, ini, fim):
+        """
+        Emite historico pelo callback proprio, como a DLL real: a chamada
+        retorna imediatamente e os eventos chegam depois, de outra thread.
+        E' esse formato assincrono que o quiesce do backfill precisa tratar.
+        """
+        t = threading.Thread(
+            target=self._emitir_historico, args=(ticker, bolsa, ini), daemon=True
+        )
+        t.start()
+        self._threads.append(t)
         return 0
+
+    def _emitir_historico(self, ticker: str, bolsa: str, ini: str) -> None:
+        ativo = _ativo(ticker, bolsa)
+        preco = 30.0 + self.rng.random() * 10
+        base = datetime.strptime(ini, "%d/%m/%Y").replace(hour=10)
+        time.sleep(0.05)  # a DLL real tambem demora a comecar a entregar
+        for i in range(self.eventos_por_ativo):
+            if self._parar.is_set():
+                return
+            momento = base + timedelta(milliseconds=i * 250)
+            data = momento.strftime("%d/%m/%Y %H:%M:%S.") + f"{momento.microsecond // 1000:03d}"
+            preco += (self.rng.random() - 0.5) * 0.05
+            tt = self.rng.choices([2, 3, 1, 4, 32], weights=[45, 45, 4, 3, 3])[0]
+            qtd = self.rng.choice([100, 200, 300, 1000])
+            self._cb["hist"](
+                ativo, data, i + 1, preco, preco * qtd, qtd,
+                self.rng.randint(1, 400), self.rng.randint(1, 400), tt,
+            )
+            if self.intervalo_s:
+                time.sleep(self.intervalo_s)
 
     def DLLFinalize(self):
         self._parar.set()

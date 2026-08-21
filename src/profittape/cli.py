@@ -111,6 +111,47 @@ def inspect(
 
 
 @app.command()
+def backfill(
+    inicio: str = typer.Option(..., "--inicio", help="YYYY-MM-DD"),
+    fim: str = typer.Option(..., "--fim", help="YYYY-MM-DD"),
+    config: Path = typer.Option(Path("config/recorder.yaml"), "--config", "-c"),
+    quiesce: float = typer.Option(15.0, "--quiesce", help="Segundos sem evento novo = fim."),
+    timeout: float = typer.Option(3600.0, "--timeout"),
+    log_level: str = typer.Option("INFO", "--log-level"),
+) -> None:
+    """
+    Puxa o historico de TRADES dos ativos do config. Book nao tem historico.
+
+    Funciona fora do pregao se o servidor da corretora responder — vale tentar;
+    se recusar, rode em horario comercial. A profundidade entregue e' empirica:
+    confira com `inspect` depois.
+    """
+    configurar(log_level)
+    cfg = RecorderConfig.from_yaml(config)
+    cred = Credenciais()
+    cred.validar()
+    from .recorder.backfill import executar
+
+    raise typer.Exit(executar(cfg, cred, inicio, fim, quiesce_s=quiesce, timeout_s=timeout))
+
+
+@app.command()
+def curate(
+    raw: Path = typer.Option(Path("data/raw"), "--raw"),
+    curated: Path = typer.Option(Path("data/curated"), "--curated"),
+) -> None:
+    """
+    Deduplica e ordena raw -> curated. Rode SEMPRE antes de calcular features.
+
+    Idempotente: reprocessar sobrescreve a mesma saida.
+    """
+    configurar("WARNING")
+    from .tools.curate import curar_trades, imprimir_relatorio
+
+    imprimir_relatorio(curar_trades(raw, curated))
+
+
+@app.command()
 def bench(
     ativos: int = typer.Option(5, "--ativos"),
     duracao: float = typer.Option(15.0, "--duracao", help="Segundos de simulacao."),
