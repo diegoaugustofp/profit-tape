@@ -143,8 +143,10 @@ def resumir(caminho: Path, stream: str = "trade") -> None:
         if implausiveis:
             exemplo = formatar(int(ts_ns[~plausivel & (ts_ns != 0)][0]))
             print(f"  timestamps implausiveis : {implausiveis:,} "
-                  f"(ex.: {exemplo} — provavel pacote atFullBook anterior "
-                  f"a correcao; ja descartado em capturas novas)")
+                  f"(ex.: {exemplo} — dado LEGADO gravado antes das correcoes "
+                  f"de timestamp desta sessao [ver docs/OPERACAO.md]; capturas "
+                  f"novas ja saem sem isso. Se a particao mistura sessao antiga "
+                  f"e nova, remova a antiga em vez de investigar mais)")
         if plausivel.any():
             lat_ms = (ts_recv[plausivel] - ts_ns[plausivel]) / 1_000_000.0
             p50 = float(np.median(lat_ms))
