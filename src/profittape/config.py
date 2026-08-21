@@ -57,6 +57,10 @@ class PipelineConfig(BaseModel):
     fila_maxsize: int = 500_000
     batch_max: int = 50_000
     poll_timeout_s: float = 0.5
+    # Acima disso, escrita de lote vira log. Em HDD USB com spin-down, 1-2 s
+    # na CRIACAO de arquivo e' fisica do disco, nao gargalo — suba o limiar ou
+    # ignore os eventos rotulados como criacao_de_arquivo.
+    limiar_lote_lento_s: float = 1.0
 
 
 class RuntimeConfig(BaseModel):

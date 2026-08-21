@@ -100,6 +100,10 @@ class ParquetSink:
         self.nivel_compressao = nivel_compressao
         self._abertos: dict[PartitionKey, _OpenFile] = {}
         self._seq: dict[PartitionKey, int] = {}
+        # Total de arquivos abertos na vida do sink. O writer compara antes e
+        # depois de cada lote para distinguir lote lento por CRIACAO de
+        # arquivo (spin-up de HDD USB: esperado) de lote lento por vazao.
+        self.aberturas = 0
 
     # ------------------------------------------------------------------
     def write(self, stream: Stream, dia: str, symbol: str, colunas: dict[str, list[Any]]) -> int:
@@ -153,6 +157,7 @@ class ParquetSink:
         # no disco como *.inprogress — evidencia, nao armadilha.
         final = pasta / f"part-{seq:04d}.parquet"
         caminho = pasta / f"part-{seq:04d}.parquet.inprogress"
+        self.aberturas += 1
         writer = pq.ParquetWriter(
             caminho,
             schema,

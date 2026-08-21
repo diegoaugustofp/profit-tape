@@ -313,3 +313,21 @@ def test_inspect_mostra_caminho_absoluto(tmp_raiz: Path, capsys, monkeypatch) ->
     resumir(Path(tmp_raiz.name), "trade")
     out = capsys.readouterr().out
     assert str(tmp_raiz.resolve()) in out
+
+
+def test_sink_conta_aberturas_de_arquivo(tmp_raiz: Path) -> None:
+    """
+    O writer usa este contador para distinguir lote lento por CRIACAO de
+    arquivo (spin-up de HDD USB — esperado, info) de lote lento por VAZAO
+    (warning de verdade). Observacao do operador: alarme para comportamento
+    esperado ensina a ignorar alarmes.
+    """
+    sink = ParquetSink(tmp_raiz)
+    assert sink.aberturas == 0
+    sink.write(Stream.TRADE, "2024-01-02", "PETR4", _colunas([_trade(0)]))
+    assert sink.aberturas == 1
+    sink.write(Stream.TRADE, "2024-01-02", "PETR4", _colunas([_trade(1)]))
+    assert sink.aberturas == 1          # mesma particao: nao abre de novo
+    sink.write(Stream.TRADE, "2024-01-03", "PETR4", _colunas([_trade(2)]))
+    assert sink.aberturas == 2          # particao nova: abre
+    sink.close()

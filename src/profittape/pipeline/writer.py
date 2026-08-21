@@ -45,6 +45,7 @@ class WriterThread(threading.Thread):
         batch_max: int = 50_000,
         poll_timeout: float = 0.5,
         idle_close_s: float = 900.0,
+        limiar_lote_lento_s: float = 1.0,
     ) -> None:
         super().__init__(name="parquet-writer", daemon=False)
         self.bus = bus
@@ -53,6 +54,7 @@ class WriterThread(threading.Thread):
         self.batch_max = batch_max
         self.poll_timeout = poll_timeout
         self.idle_close_s = idle_close_s
+        self.limiar_lote_lento_s = limiar_lote_lento_s
         self._parar = threading.Event()
         self._ultimo_idle_check = time.monotonic()
 
@@ -94,6 +96,7 @@ class WriterThread(threading.Thread):
             grupos[(env.stream, _dia_de(ts), ev.symbol)].append(ev)
 
         linhas = 0
+        aberturas_antes = self.sink.aberturas
         por_stream: dict[str, int] = {}
         for (stream, dia, symbol), eventos in grupos.items():
             colunas = self._colunizar(stream, eventos)
@@ -105,9 +108,24 @@ class WriterThread(threading.Thread):
         self.metrics.registrar_lote(por_stream)
         self.metrics.registrar_escrita(linhas, dt, self.sink.arquivos_abertos)
 
-        if dt > 1.0:
-            # Sinal de alerta: escrita lenta empurra a fila para cima.
-            log.warning("writer.lote_lento", linhas=linhas, segundos=round(dt, 3))
+        if dt > self.limiar_lote_lento_s:
+            if self.sink.aberturas > aberturas_antes:
+                # Lote lento COINCIDINDO com criacao de arquivo: em HDD
+                # USB/spin-down e' o disco acordando — esperado, nao e'
+                # gargalo de vazao. INFO, nao WARNING: alarme para
+                # comportamento esperado ensina a ignorar alarmes
+                # (observacao do operador, 2026-08-21).
+                log.info("writer.lote_lento_criacao_de_arquivo",
+                         linhas=linhas, segundos=round(dt, 3),
+                         nota="abertura de arquivo novo (spin-up?) — esperado "
+                              "em disco USB; nao indica vazao insuficiente")
+            else:
+                # Sinal de alerta de verdade: lento SEM arquivo novo e' vazao,
+                # e vazao insuficiente empurra a fila para cima.
+                log.warning("writer.lote_lento", linhas=linhas,
+                            segundos=round(dt, 3),
+                            nota="sem criacao de arquivo — se recorrente, "
+                                 "a fila vai subir")
 
     @staticmethod
     def _colunizar(stream: Stream, eventos: list[Any]) -> dict[str, list[Any]]:

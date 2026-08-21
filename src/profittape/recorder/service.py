@@ -57,6 +57,7 @@ class RecorderService:
             batch_max=cfg.pipeline.batch_max,
             poll_timeout=cfg.pipeline.poll_timeout_s,
             idle_close_s=cfg.storage.idle_close_s,
+            limiar_lote_lento_s=cfg.pipeline.limiar_lote_lento_s,
         )
         self.client = ProfitClient(
             dll_path=cred.dll_path,

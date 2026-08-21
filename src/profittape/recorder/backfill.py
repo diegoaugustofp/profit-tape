@@ -149,7 +149,8 @@ def executar_por_dia(
     )
     writer = WriterThread(bus=bus, sink=sink, metrics=metrics,
                           batch_max=cfg.pipeline.batch_max,
-                          poll_timeout=cfg.pipeline.poll_timeout_s)
+                          poll_timeout=cfg.pipeline.poll_timeout_s,
+                          limiar_lote_lento_s=cfg.pipeline.limiar_lote_lento_s)
     client = ProfitClient(
         dll_path=cred.dll_path, activation_key=cred.activation_key,
         user=cred.user, password=cred.password, bus=bus,
@@ -192,9 +193,16 @@ def executar_por_dia(
                 nota = (
                     "provavel LIMITE DE 30 DIAS do GetHistoryTrades, nao feriado"
                     if dia < limite_30d else
-                    "provavel feriado/sem pregao"
+                    # Fato: pedido ACEITO, zero eventos ate o quiesce. Nao
+                    # chutamos a causa — incidente real: 'provavel feriado'
+                    # em quarta e quinta uteis consecutivas era warmup do
+                    # servidor de historico logo apos a conexao, nao feriado.
+                    "aceito mas nada chegou — candidatos: feriado, warmup do "
+                    "servidor pos-conexao, ou borda da janela de 30 dias"
                 )
-                log.info("backfill_dia.sem_entrega", dia=dia, nota=nota)
+                log.info("backfill_dia.sem_entrega", dia=dia, nota=nota,
+                         reacao="dia NAO e' marcado como capturado; o mesmo "
+                                "comando re-tenta sozinho no proximo run")
             elif not ok:
                 incompletos.append(dia)
                 log.error("backfill_dia.timeout", dia=dia, eventos=eventos,
@@ -289,6 +297,7 @@ def executar(
         bus=bus, sink=sink, metrics=metrics,
         batch_max=cfg.pipeline.batch_max,
         poll_timeout=cfg.pipeline.poll_timeout_s,
+        limiar_lote_lento_s=cfg.pipeline.limiar_lote_lento_s,
     )
 
     def _log_estado(tipo: int, valor: int) -> None:

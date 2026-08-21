@@ -141,6 +141,12 @@ def backfill(
     timeout_dia: float = typer.Option(900.0, "--timeout-dia",
                                       help="Timeout por pregao no modo --por-dia."),
     log_level: str = typer.Option("INFO", "--log-level"),
+    log_file: Path | None = typer.Option(
+        None, "--log-file",
+        help="Grava o log em arquivo alem do console — permite acompanhar com "
+             "Get-Content -Wait sem tocar na janela do processo (QuickEdit "
+             "pausa processo que escreve no console selecionado).",
+    ),
 ) -> None:
     """
     Puxa o historico de TRADES dos ativos do config. Book nao tem historico.
@@ -149,7 +155,7 @@ def backfill(
     se recusar, rode em horario comercial. A profundidade entregue e' empirica:
     confira com `inspect` depois.
     """
-    configurar(log_level)
+    configurar(log_level, log_file)
     cfg = RecorderConfig.from_yaml(config)
     if ticker:
         from .config import AtivoConfig
