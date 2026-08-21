@@ -175,3 +175,23 @@ def test_segundo_processo_nao_colide_nem_sobrescreve(tmp_raiz: Path) -> None:
     assert nomes == ["part-0000.parquet", "part-0001.parquet"]
     total = ds.dataset(tmp_raiz / "trade", format="parquet", partitioning="hive").to_table()
     assert total.num_rows == 17  # nada sobrescrito
+
+
+def test_colisao_de_trade_id_entre_simbolos_nao_e_duplicata(tmp_raiz: Path, capsys) -> None:
+    """
+    Regressao: 621.412 falsos positivos num pregao real porque o inspect
+    contava trade_id distintos globalmente, quando a sequencia e' POR SIMBOLO.
+    """
+    from profittape.tools.inspect import resumir
+
+    sink = ParquetSink(tmp_raiz)
+    # Mesmos ids 0..19 em dois simbolos: colisao global, zero duplicata real.
+    for sym in ("WINFUT", "WDOFUT"):
+        sink.write(Stream.TRADE, "2024-01-02", sym,
+                   _colunas([_trade(i, sym) for i in range(20)]))
+    sink.close()
+
+    resumir(tmp_raiz, "trade")
+    out = capsys.readouterr().out
+    assert "sem duplicidade" in out
+    assert "ATENCAO" not in out

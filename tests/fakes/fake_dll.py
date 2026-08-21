@@ -150,6 +150,12 @@ class FakeProfitDLL:
             if self.intervalo_s:
                 time.sleep(self.intervalo_s)
 
+    def GetAgentNameByID(self, agent_id):
+        # Nomes deterministas para teste; codigo 999 simula "desconhecido".
+        if agent_id == 999:
+            return ""
+        return f"CORRETORA {agent_id}"
+
     def DLLFinalize(self):
         self._parar.set()
         for t in self._threads:

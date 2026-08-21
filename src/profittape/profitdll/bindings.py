@@ -204,6 +204,16 @@ def _declare(dll: Any) -> None:
         dll.SetServerAndPort.argtypes = [c_wchar_p, c_wchar_p]
         dll.SetServerAndPort.restype = c_int
 
+    # Resolucao de nome de corretora. GetProcAddress e' case-sensitive e a
+    # grafia do sufixo (ById/ByID) varia entre versoes — declaramos a que
+    # existir. Retorno PWideChar: c_wchar_p copia a string na conversao.
+    for nome in ("GetAgentNameByID", "GetAgentNameById",
+                 "GetAgentShortNameByID", "GetAgentShortNameById"):
+        if hasattr(dll, nome):
+            fn = getattr(dll, nome)
+            fn.argtypes = [c_int]
+            fn.restype = c_wchar_p
+
 
 EXPORTS_OBRIGATORIOS = (
     "DLLInitializeMarketLogin",

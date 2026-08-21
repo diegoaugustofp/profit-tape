@@ -133,9 +133,20 @@ def resumir(caminho: Path, stream: str = "trade") -> None:
             print("    campo e' disseminado para o seu perfil.")
 
     if "trade_id" in tabela.column_names:
-        unicos = pc.count_distinct(tabela["trade_id"]).as_py()
-        if unicos < n:
-            print(f"\n  ATENCAO: {n - unicos:,} trade_id repetidos.")
+        # trade_id e' sequencial POR SIMBOLO: contar distintos globalmente
+        # acusa colisao entre simbolos como se fosse duplicata (bug real:
+        # 621.412 falsos positivos num pregao — exatamente a soma das linhas
+        # nao-WIN, ja que todo id delas cabia na faixa 1..N do WIN).
+        chaves = tabela.select(["symbol", "trade_id"])
+        col = chaves["symbol"]
+        if pa.types.is_dictionary(col.type):
+            chaves = chaves.set_column(0, "symbol", col.cast(pa.string()))
+        pares_distintos = chaves.group_by(["symbol", "trade_id"]).aggregate([]).num_rows
+        repetidos = n - pares_distintos
+        if repetidos:
+            print(f"\n  ATENCAO: {repetidos:,} pares (symbol, trade_id) repetidos.")
             print("  Pode ser edicao de negocio (is_edit) ou reentrega no reconnect.")
-            print("  Deduplique por (symbol, trade_id) mantendo a ultima versao.")
+            print("  O curate deduplica mantendo a versao de maior ts_recv.")
+        else:
+            print("\n  trade_id: sem duplicidade por (symbol, trade_id).")
     print("=" * 78)

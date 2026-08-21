@@ -145,6 +145,21 @@ class ProfitClient:
             f"GetHistoryTrades {ticker}",
         )
 
+    def agent_name(self, agent_id: int) -> str | None:
+        """
+        Nome da corretora pelo codigo, via GetAgentNameById (grafia varia).
+
+        Devolve None se a DLL nao expuser o export ou nao conhecer o codigo —
+        quem chama decide se isso e' erro (para o CSV de referencia, nao e':
+        codigo sem nome vira linha com nome vazio, ainda util para o join).
+        """
+        for nome in ("GetAgentNameByID", "GetAgentNameById"):
+            fn = getattr(self._dll, nome, None)
+            if fn is not None:
+                resultado = fn(int(agent_id))
+                return resultado or None
+        return None
+
     # ------------------------------------------------------------------
     # Callbacks — caminho quente
     # ------------------------------------------------------------------

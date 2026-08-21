@@ -171,3 +171,18 @@ def test_tabela_de_tipos_validada_contra_a_dll_em_uso() -> None:
     assert TradeType(13).is_agressao_continua is False   # RLP fora do OFI
     assert TradeType(2).signo == 1 and TradeType(3).signo == -1
     assert TradeType(34).name == "MID"
+
+
+def test_agent_name_via_fake() -> None:
+    from profittape.pipeline.bus import EventBus
+    from profittape.profitdll.client import ProfitClient
+
+    fake = FakeProfitDLL(eventos_por_ativo=1)
+    c = ProfitClient(dll_path="x", activation_key="k", user="u", password="p",
+                     bus=EventBus(maxsize=16), dll=fake)
+    c.connect(timeout_s=5)
+    try:
+        assert c.agent_name(3) == "CORRETORA 3"
+        assert c.agent_name(999) is None       # DLL nao conhece -> None
+    finally:
+        c.disconnect()

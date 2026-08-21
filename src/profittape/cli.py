@@ -172,6 +172,63 @@ def curate(
 
 
 @app.command()
+def agents(
+    dados: Path = typer.Option(
+        Path("data/curated"), "--dados",
+        help="Arvore Parquet de onde extrair os codigos de agente observados.",
+    ),
+    saida: Path = typer.Option(Path("data/ref/agentes.csv"), "--saida"),
+) -> None:
+    """
+    Resolve codigos de corretora em nomes via GetAgentNameById e grava um CSV
+    de referencia (agent_id, nome) para join nas analises de fluxo.
+
+    Conecta na DLL; funciona fora do pregao. Codigo sem nome vira linha com
+    nome vazio — ainda util para o join nao perder linhas.
+    """
+    configurar("INFO")
+    import csv
+
+    import pyarrow.compute as pc
+    import pyarrow.dataset as ds
+
+    from .pipeline.bus import EventBus
+    from .profitdll.client import ProfitClient
+
+    origem = dados / "trade" if (dados / "trade").exists() else dados
+    tabela = ds.dataset(origem, format="parquet", partitioning="hive",
+                        exclude_invalid_files=True).to_table()
+    ids = sorted(
+        set(pc.unique(tabela["agente_comprador"]).to_pylist())
+        | set(pc.unique(tabela["agente_vendedor"]).to_pylist())
+    )
+    typer.echo(f"{len(ids)} codigos de agente observados em {origem}")
+
+    cred = Credenciais()
+    cred.validar()
+    client = ProfitClient(
+        dll_path=cred.dll_path, activation_key=cred.activation_key,
+        user=cred.user, password=cred.password, bus=EventBus(maxsize=16),
+    )
+    client.connect()
+    try:
+        linhas = [(i, client.agent_name(i) or "") for i in ids]
+    finally:
+        client.disconnect()
+
+    saida.parent.mkdir(parents=True, exist_ok=True)
+    with saida.open("w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["agent_id", "nome"])
+        w.writerows(linhas)
+
+    sem_nome = sum(1 for _, nome in linhas if not nome)
+    typer.echo(f"gravado: {saida}  ({len(linhas)} agentes, {sem_nome} sem nome)")
+    for i, nome in linhas[:10]:
+        typer.echo(f"  {i:>6}  {nome}")
+
+
+@app.command()
 def bench(
     ativos: int = typer.Option(5, "--ativos"),
     duracao: float = typer.Option(15.0, "--duracao", help="Segundos de simulacao."),

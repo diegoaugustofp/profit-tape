@@ -96,8 +96,11 @@ de rede boa e horario comercial, ai sim procure o 46o codigo NL_ no manual.
   (ex.: 60 pregoes de WIN ~= 300M eventos ~= 2h30-3h de download).
 - O servidor respondeu de madrugada; a recusa NL base+46 logo apos conectar
   se resolve com o settle padrao de 5s.
-- ~11% dos trade_id vieram repetidos dentro do proprio feed de historico.
-  E' esperado; o curate resolve. NAO use raw em feature sem curar.
+- ERRATA (2026-08-21): uma versao anterior desta doc afirmava "~11% de
+  trade_id repetidos no feed". FALSO — era bug do inspect contando ids
+  globalmente quando eles sao sequenciais POR SIMBOLO. O feed de historico
+  nao apresentou duplicata alguma. O curate segue obrigatorio (dedup real
+  pode ocorrer em reconnect no realtime), mas o numero era artefato.
 - A maquina NAO pode suspender durante captura: um cochilo do Windows
   congelou quiesce, progresso e timeout no meio de um run (deteccao de
   drift agora avisa, mas nao conserta). Desative a suspensao no plano de
