@@ -14,18 +14,38 @@ from enum import IntEnum, StrEnum
 
 
 class TradeType(IntEnum):
-    """Classificacao do negocio no tape."""
+    """
+    Classificacao do negocio no tape.
 
-    DESCONHECIDO = 0
-    CROSS = 1
-    AGRESSOR_COMPRADOR = 2
-    AGRESSOR_VENDEDOR = 3
-    LEILAO = 4
+    Tabela VALIDADA contra a versao da DLL em uso (2026-08-21), com nomes
+    identicos aos do manual para facilitar o cross-reference. Nota historica:
+    a primeira versao desta tabela chutava RLP=32; o dado real (25% de um
+    pregao de WIN em codigo 13, a fatia tipica do RLP em minicontratos)
+    derrubou o chute e o manual confirmou RLP=13 e UNKNOWN=32.
+    """
+
+    CROSS_TRADE = 1
+    AGGRESSOR_BUYER = 2
+    AGGRESSOR_SELLER = 3
+    AUCTION = 4
     SURVEILLANCE = 5
     EXPIT = 6
-    EXERCICIO_OPCAO = 7
-    BALCAO = 8
-    RLP = 32
+    OPTION_EXERCISE = 7
+    OVER_THE_COUNTER = 8
+    DERIVATIVE_TERM = 9
+    INDEX = 10
+    BTC = 11
+    ON_BEHALF = 12
+    RLP = 13
+    BBT = 14
+    RFQ = 15
+    MPT = 16
+    TAC = 17
+    TAA = 18
+    UNKNOWN = 32
+    UPDATE = 33
+    MID = 34
+    OFF_EXCHANGE = 35
 
     @property
     def is_agressao_continua(self) -> bool:
@@ -33,18 +53,18 @@ class TradeType(IntEnum):
         True apenas para negocio de mercado continuo com agressor identificado.
 
         Leilao, balcao, exercicio e RLP NAO sao agressao no sentido de
-        microestrutura: leilao e' batimento por preco unico e RLP e' contraparte
-        de varejo. Incluir esses no order flow imbalance contamina o sinal — por
-        isso a distincao mora aqui, e nao espalhada pelo codigo de feature.
+        microestrutura: leilao e' batimento por preco unico e RLP e' varejo
+        internalizado pelo provedor de liquidez. Incluir esses no order flow
+        imbalance contamina o sinal — a distincao mora aqui, num lugar so.
         """
-        return self in (TradeType.AGRESSOR_COMPRADOR, TradeType.AGRESSOR_VENDEDOR)
+        return self in (TradeType.AGGRESSOR_BUYER, TradeType.AGGRESSOR_SELLER)
 
     @property
     def signo(self) -> int:
         """+1 agressao compradora, -1 vendedora, 0 nao aplicavel."""
-        if self is TradeType.AGRESSOR_COMPRADOR:
+        if self is TradeType.AGGRESSOR_BUYER:
             return 1
-        if self is TradeType.AGRESSOR_VENDEDOR:
+        if self is TradeType.AGGRESSOR_SELLER:
             return -1
         return 0
 

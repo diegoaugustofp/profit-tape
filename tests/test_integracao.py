@@ -114,7 +114,7 @@ def test_tipos_de_negocio_preservados_ate_o_disco(tmp_raiz: Path) -> None:
     tabela = ds.dataset(tmp_raiz / "trade", format="parquet", partitioning="hive").to_table()
     tipos = set(tabela["trade_type"].to_pylist())
     assert {2, 3} <= tipos, "agressao continua ausente"
-    assert tipos & {4, 32}, "leilao/RLP foram perdidos pelo caminho"
+    assert 13 in tipos, "RLP foi perdido pelo caminho"
 
 
 def test_dll_e_finalizada(tmp_raiz: Path) -> None:

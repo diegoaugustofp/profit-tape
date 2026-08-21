@@ -108,7 +108,7 @@ SELECT
     symbol,
     SUM(quantidade * agressao)                             AS delta_qtd,
     SUM(quantidade) FILTER (WHERE agressao <> 0)           AS qtd_continua,
-    SUM(quantidade) FILTER (WHERE trade_type = 32)         AS qtd_rlp,
+    SUM(quantidade) FILTER (WHERE trade_type = 13)         AS qtd_rlp,
     SUM(quantidade) FILTER (WHERE trade_type = 4)          AS qtd_leilao,
     COUNT(*)                                               AS n_negocios,
     first(price, ts)                                       AS abertura,

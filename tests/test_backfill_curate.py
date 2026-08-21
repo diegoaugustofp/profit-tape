@@ -160,3 +160,14 @@ def test_retry_recupera_servidor_nao_pronto(tmp_raiz: Path) -> None:
 
     tabela = ds.dataset(tmp_raiz / "trade", format="parquet", partitioning="hive").to_table()
     assert tabela.num_rows == 80
+
+
+def test_tabela_de_tipos_validada_contra_a_dll_em_uso() -> None:
+    """Trava os fatos confirmados pelo manual em 2026-08-21."""
+    from profittape.domain.enums import TradeType
+
+    assert TradeType.RLP == 13
+    assert TradeType.UNKNOWN == 32
+    assert TradeType(13).is_agressao_continua is False   # RLP fora do OFI
+    assert TradeType(2).signo == 1 and TradeType(3).signo == -1
+    assert TradeType(34).name == "MID"

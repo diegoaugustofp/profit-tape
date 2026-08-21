@@ -140,7 +140,8 @@ class FakeProfitDLL:
             momento = base + timedelta(milliseconds=i * 250)
             data = momento.strftime("%d/%m/%Y %H:%M:%S.") + f"{momento.microsecond // 1000:03d}"
             preco += (self.rng.random() - 0.5) * 0.05
-            tt = self.rng.choices([2, 3, 1, 4, 32], weights=[45, 45, 4, 3, 3])[0]
+            tt = self.rng.choices([2, 3, 13, 4, 1, 32],
+                                  weights=[36, 36, 24, 2, 1, 1])[0]
             qtd = self.rng.choice([100, 200, 300, 1000])
             self._cb["hist"](
                 ativo, data, i + 1, preco, preco * qtd, qtd,
@@ -197,9 +198,11 @@ class FakeProfitDLL:
             preco += (self.rng.random() - 0.5) * 0.05
 
             if tipo == "trade":
-                # Mistura proposital de tipos: continuo, leilao e RLP. O
-                # pipeline precisa preservar essa distincao ate o disco.
-                tt = self.rng.choices([2, 3, 1, 4, 32], weights=[45, 45, 4, 3, 3])[0]
+                # Mistura proposital calcada no pregao real medido: agressao
+                # dominante, ~25% de RLP (13), leilao, cross e um UNKNOWN (32)
+                # raro. O pipeline preserva a distincao ate o disco.
+                tt = self.rng.choices([2, 3, 13, 4, 1, 32],
+                                      weights=[36, 36, 24, 2, 1, 1])[0]
                 qtd = self.rng.choice([100, 200, 300, 1000, 5000])
                 self._cb["trade"](
                     ativo, data, i + 1, preco, preco * qtd, qtd,
