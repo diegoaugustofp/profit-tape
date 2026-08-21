@@ -40,7 +40,7 @@ import structlog
 
 from ..config import Credenciais, RecorderConfig
 from ..health.metrics import Metrics
-from ..pipeline.bus import EventBus
+from ..pipeline.bus import EventBus, nivel_ocupacao
 from ..pipeline.writer import WriterThread
 from ..profitdll.client import ProfitClient
 from ..profitdll.errors import SubscriptionFailed
@@ -395,13 +395,21 @@ def executar(
             if time.monotonic() >= proximo_progresso:
                 proximo_progresso = time.monotonic() + 15.0
                 decorrido = time.monotonic() - t0
+                fila_agora = bus.stats().profundidade_atual
                 log.info(
                     "backfill.progresso",
                     eventos=atual,
                     eventos_por_s=int(atual / decorrido) if decorrido else 0,
                     decorrido_min=round(decorrido / 60, 1),
-                    fila=bus.stats().profundidade_atual,
+                    fila=fila_agora,
                 )
+                nivel = nivel_ocupacao(fila_agora, bus.maxsize)
+                if nivel is not None:
+                    log.warning("backfill.fila_ocupada",
+                                nivel=nivel,
+                                ocupacao=f"{fila_agora / bus.maxsize:.0%}",
+                                causa_tipica="writer atras da chegada — "
+                                             "tipicamente disco lento")
         else:
             ainda_fluindo = time.monotonic() - estavel_desde < quiesce_s
             if ainda_fluindo:

@@ -28,7 +28,8 @@ import time
 from pathlib import Path
 
 
-def rodar(eventos_por_ativo: int, n_ativos: int, duracao_s: float, intervalo_s: float) -> None:
+def rodar(eventos_por_ativo: int, n_ativos: int, duracao_s: float, intervalo_s: float,
+          raiz: Path | None = None) -> None:
     import pyarrow.dataset as ds
 
     from ..config import (
@@ -47,7 +48,18 @@ def rodar(eventos_por_ativo: int, n_ativos: int, duracao_s: float, intervalo_s: 
         print("bench exige o pacote de testes no PYTHONPATH (rode da raiz do repo).")
         return
 
-    raiz = Path(tempfile.mkdtemp()) / "raw"
+    if raiz is None:
+        # ATENCAO: o temp do sistema fica no volume do SO (C:). Se a captura
+        # real grava em OUTRO volume, este bench mede o disco ERRADO — passe
+        # --raiz apontando para o volume de destino. Achado real: G: com
+        # latencia de criacao de arquivo de segundos que o bench no C: jamais
+        # veria.
+        raiz = Path(tempfile.mkdtemp()) / "raw"
+        print(f"AVISO: medindo no temp do sistema ({raiz.drive or 'volume do SO'}). "
+              f"Se a captura grava em outro volume, use --raiz.")
+    else:
+        raiz = Path(raiz) / "profit_tape_bench"
+        print(f"Medindo no volume de destino: {raiz}")
     tickers = [f"SYM{i}" for i in range(n_ativos)]
     cfg = RecorderConfig(
         ativos=[AtivoConfig(ticker=t, trades=True, offer_book=True) for t in tickers],
@@ -90,6 +102,9 @@ def rodar(eventos_por_ativo: int, n_ativos: int, duracao_s: float, intervalo_s: 
     if linhas:
         print(f"  tamanho por evento : {tam / linhas:.1f} bytes")
         print(f"  projecao 50M ev    : {tam / linhas * 50e6 / 1e9:.1f} GB")
+    if st.profundidade_maxima > 0.10 * 500_000:
+        print("  FILA PASSOU DE 10%: neste volume, o writer nao acompanha com folga.")
+        print("  Ver OPERACAO.md secao 'Disco lento' para mitigacoes.")
     print()
     if st.total_descartado:
         print("  DESCARTE OBSERVADO. Na pratica isso quase sempre significa que o")

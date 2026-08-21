@@ -25,7 +25,7 @@ import structlog
 
 from ..config import Credenciais, RecorderConfig
 from ..health.metrics import Metrics
-from ..pipeline.bus import EventBus
+from ..pipeline.bus import EventBus, nivel_ocupacao
 from ..pipeline.writer import WriterThread
 from ..profitdll.client import ProfitClient
 from ..storage.parquet_sink import ParquetSink
@@ -149,6 +149,8 @@ class RecorderService:
                 st.profundidade_atual, st.profundidade_maxima,
                 st.total_descartado, st.total_recebido,
             )
+            vazao = (int(snap.linhas_escritas / snap.escrita_s_total)
+                     if snap.escrita_s_total > 0 else 0)
             log.info(
                 "recorder.heartbeat",
                 uptime_min=round(snap.uptime_s / 60, 1),
@@ -158,7 +160,21 @@ class RecorderService:
                 descartados=snap.descartados,
                 arquivos=snap.arquivos_abertos,
                 sem_evento_ha_s=round(snap.ultimo_evento_ha_s, 1),
+                # Vazao de escrita do writer (linhas/s de tempo GASTO
+                # escrevendo). Se cair abaixo da taxa de chegada, a fila sobe
+                # — este numero e' o preditor do descarte, nao o descarte.
+                escrita_linhas_s=vazao,
             )
+            nivel = nivel_ocupacao(st.profundidade_atual, self.bus.maxsize)
+            if nivel == "atencao":
+                log.warning("recorder.fila_subindo",
+                            ocupacao=f"{st.profundidade_atual / self.bus.maxsize:.0%}",
+                            causa_tipica="disco lento segurando o writer",
+                            mitigacao="ver OPERACAO.md secao 'Disco lento'")
+            elif nivel == "critico":
+                log.error("recorder.fila_critica",
+                          ocupacao=f"{st.profundidade_atual / self.bus.maxsize:.0%}",
+                          aviso="descarte iminente se a tendencia continuar")
             if st.taxa_descarte > limite_descarte:
                 log.error(
                     "recorder.descarte_acima_do_limite",

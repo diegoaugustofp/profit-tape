@@ -286,12 +286,18 @@ def bench(
         0.0004, "--intervalo",
         help="Pausa entre eventos por produtor. 0 satura o GIL e nao representa mercado.",
     ),
+    raiz: Path | None = typer.Option(
+        None, "--raiz",
+        help="Volume onde MEDIR a escrita (ex.: G:\\bench). Sem isto, mede o "
+             "temp do C: — que pode nao ser onde a captura grava.",
+    ),
 ) -> None:
     """Mede a folga do pipeline NESTA maquina, com a DLL falsa."""
     configurar("WARNING")
     from .tools.bench import rodar
 
-    rodar(eventos_por_ativo=10_000_000, n_ativos=ativos, duracao_s=duracao, intervalo_s=intervalo)
+    rodar(eventos_por_ativo=10_000_000, n_ativos=ativos, duracao_s=duracao,
+          intervalo_s=intervalo, raiz=raiz)
 
 
 def main() -> None:  # pragma: no cover

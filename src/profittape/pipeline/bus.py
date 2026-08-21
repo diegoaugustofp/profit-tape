@@ -59,6 +59,7 @@ class EventBus:
     """
 
     def __init__(self, maxsize: int = 500_000) -> None:
+        self.maxsize = maxsize
         self._q: queue.Queue[Envelope | None] = queue.Queue(maxsize=maxsize)
         self._lock = threading.Lock()
         self._recebidos = 0
@@ -135,6 +136,23 @@ class EventBus:
     def stats(self) -> DropStats:
         with self._lock:
             return DropStats(self._recebidos, self._descartados, self._q.qsize(), self._pico)
+
+
+def nivel_ocupacao(fila_atual: int, maxsize: int) -> str | None:
+    """
+    Classificacao padronizada da ocupacao da fila, para alerta ANTES do
+    descarte. Descarte so' acontece a 100% — avisar a 10% e 50% da' tempo de
+    reagir (tipicamente: disco lento segurando o writer). Um unico criterio
+    aqui evita que record e backfill divirjam no que consideram 'alerta'.
+    """
+    if maxsize <= 0:
+        return None
+    ocupacao = fila_atual / maxsize
+    if ocupacao >= 0.50:
+        return "critico"
+    if ocupacao >= 0.10:
+        return "atencao"
+    return None
 
 
 class _Shutdown(Exception):

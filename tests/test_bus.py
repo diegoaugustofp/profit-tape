@@ -72,3 +72,16 @@ def test_concorrencia_de_multiplos_produtores() -> None:
     st = bus.stats()
     assert st.total_recebido == 16_000
     assert st.total_descartado == 0
+
+
+def test_nivel_ocupacao_limiares() -> None:
+    """Criterio unico de alerta pre-descarte, usado por record e backfill."""
+    from profittape.pipeline.bus import nivel_ocupacao
+
+    assert nivel_ocupacao(0, 500_000) is None
+    assert nivel_ocupacao(49_999, 500_000) is None
+    assert nivel_ocupacao(50_000, 500_000) == "atencao"
+    assert nivel_ocupacao(249_999, 500_000) == "atencao"
+    assert nivel_ocupacao(250_000, 500_000) == "critico"
+    assert nivel_ocupacao(500_000, 500_000) == "critico"
+    assert nivel_ocupacao(10, 0) is None            # maxsize invalido nao explode

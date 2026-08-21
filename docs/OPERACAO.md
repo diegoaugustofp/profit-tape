@@ -211,3 +211,39 @@ limites de 1-Trade DIFERENTES por ativo — WIN=8 dias, WDO=30, DOL/IND=180,
 outros=365. Essa API nao esta implementada neste projeto; se um dia for
 adotada, WIN especificamente teria janela AINDA MENOR (8 dias), nao maior.
 Nao e' uma saida para o limite de 30 dias do WIN.
+
+## Disco lento (latencia de escrita no volume de dados)
+
+SINTOMA: `writer.lote_lento` com poucos segundos para POUCAS linhas indica
+latencia de criacao de arquivo (nao vazao) — suspeitos classicos: antivirus
+escaneando cada parquet novo, HDD saindo de spin-down, USB com suspensao
+seletiva. `lote_lento` com MUITAS linhas indica vazao baixa de verdade.
+
+O QUE PROTEGE A CAPTURA: a fila (pipeline.fila_maxsize) absorve o descompasso.
+Descarte so' ocorre com fila 100% cheia — e agora ha' alerta ANTES:
+`fila_subindo` a 10% de ocupacao, `fila_critica` a 50%. O heartbeat tambem
+mostra `escrita_linhas_s` (vazao do writer): se ficar abaixo da taxa de
+chegada, a fila sobe — e' o preditor do problema, nao o problema.
+
+MEDIR ANTES DE MITIGAR:
+    profit-tape bench --raiz G:\bench_tmp --duracao 20
+O bench sem --raiz mede o temp do C:, que pode nao ser onde a captura grava.
+
+MITIGACOES, em ordem de custo/beneficio:
+1. Exclusao de antivirus na pasta de dados (G:\data) — resolve o caso mais
+   comum de latencia de segundos na criacao de arquivo. Decisao de seguranca
+   do operador.
+2. Energia: desativar spin-down do HDD e suspensao seletiva de USB no plano
+   de energia enquanto captura.
+3. fila_maxsize maior no recorder.yaml (ex.: 2_000_000 ~ centenas de MB de
+   RAM) — mais colchao para rajadas; nao conserta vazao cronica, so' absorve.
+4. batch_max maior (ex.: 100_000) — menos operacoes de escrita, maiores;
+   ajuda quando o custo dominante e' por-operacao (latencia), nao por-byte.
+5. SPOOL: gravar no volume rapido (C:) e mover ao fim da sessao:
+       storage.raiz: data/raw          (local, rapido)
+       robocopy C:\projetos\profit-tape\data\raw G:\data\raw /E /MOVE
+   Viabilidade: ~20 pregoes de trades ~= poucos GB; sessao diaria de book
+   ~= 1-2 GB — cabem com folga nos ~25 GB do C: antes do move noturno.
+
+O que NAO ajuda: reduzir nivel_compressao (zstd e' custo de CPU, nao de
+latencia de disco); aumentar poll_timeout (so' atrasa a deteccao).
