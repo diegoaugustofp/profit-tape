@@ -44,7 +44,9 @@ class FakeProfitDLL:
         intervalo_s: float = 0.0,
         atraso_login_s: float = 0.05,
         seed: int = 42,
+        com_offer_v2: bool = True,
     ) -> None:
+        self.com_offer_v2 = com_offer_v2
         self.eventos_por_ativo = eventos_por_ativo
         self.intervalo_s = intervalo_s
         self.atraso_login_s = atraso_login_s
@@ -79,6 +81,13 @@ class FakeProfitDLL:
     def SubscribeTicker(self, ticker, bolsa):
         self._iniciar(ticker, bolsa, "trade")
         return 0
+
+    def SetOfferBookCallbackV2(self, cb):
+        """Como a DLL real: o offer book V2 so flui apos este registro."""
+        if self.com_offer_v2:
+            self._cb["offer_v2"] = cb
+            return 0
+        return -1
 
     def SubscribeOfferBook(self, ticker, bolsa):
         self._iniciar(ticker, bolsa, "offer")
@@ -215,7 +224,13 @@ class FakeProfitDLL:
                     self.rng.randint(1, 400), self.rng.randint(1, 400), tt, b"\x00",
                 )
             elif tipo == "offer":
-                self._cb["offer"](
+                # Fidelidade ao incidente real: o slot "offer" do init NUNCA e'
+                # alimentado. So o callback registrado via SetOfferBookCallbackV2
+                # recebe — sem o registro, silencio total, como em producao.
+                destino = self._cb.get("offer_v2")
+                if destino is None:
+                    continue
+                destino(
                     ativo, self.rng.choice([0, 1, 2]), self.rng.randint(0, 9),
                     self.rng.choice([0, 1]), self.rng.choice([100, 500, 1000]),
                     self.rng.randint(1, 400), 10_000_000 + i, preco,

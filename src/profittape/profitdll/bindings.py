@@ -81,6 +81,35 @@ TNewDailyCallback = WINFUNCTYPE(
     c_int, c_int, c_int, c_int, c_int, c_int, # qtd, negocios, contratos abertos, ...
 )
 
+# V1 x V2 (manual, secao de tipos): as assinaturas sao identicas EXCETO nQtd —
+# Integer (32 bits) no V1, Int64 no V2. Os slots do DLLInitializeMarketLogin
+# sao os tipos V1; o V2 so entra pelos setters SetOfferBookCallbackV2 /
+# SetPriceBookCallbackV2, que "sobrepoem a callback definida pelo
+# DLLInitialize*" (texto do manual).
+#
+# Incidente que gravou essa licao (2026-08-21): callbacks V2 registrados nos
+# slots V1 do init. Sintomas DIFERENTES por callback: offer book ficou MUDO
+# (subscribe OK, zero eventos em 14 min de pregao); price book "funcionou",
+# mas lendo Int64 de um slot onde o Delphi escreve 32 bits — quantidade com
+# bits altos potencialmente sujos. Silencio e corrupcao silenciosa, nenhum
+# crash: e' assim que erro de ABI se manifesta.
+
+TOfferBookCallbackV1 = WINFUNCTYPE(
+    None,
+    TAssetIDRec,
+    c_int,         # action
+    c_int,         # position
+    c_int,         # side
+    c_int,         # quantidade — Integer no V1
+    c_int,         # agente
+    c_int64,       # offer id
+    c_double,      # preco
+    c_char, c_char, c_char, c_char, c_char,   # has price/qtd/date/id/agent
+    c_wchar_p,     # data
+    c_void_p,      # array sell
+    c_void_p,      # array buy
+)
+
 TOfferBookCallbackV2 = WINFUNCTYPE(
     None,
     TAssetIDRec,
@@ -99,6 +128,19 @@ TOfferBookCallbackV2 = WINFUNCTYPE(
     c_wchar_p,     # data
     c_void_p,      # array sell (nao usamos: reconstruimos do delta)
     c_void_p,      # array buy
+)
+
+TPriceBookCallbackV1 = WINFUNCTYPE(
+    None,
+    TAssetIDRec,
+    c_int,         # action
+    c_int,         # position
+    c_int,         # side
+    c_int,         # quantidade — Integer no V1
+    c_int,         # numero de ofertas no nivel
+    c_double,      # preco
+    c_void_p,
+    c_void_p,
 )
 
 TPriceBookCallbackV2 = WINFUNCTYPE(
@@ -178,8 +220,8 @@ def _declare(dll: Any) -> None:
         TStateCallback,
         TNewTradeCallback,
         TNewDailyCallback,
-        TPriceBookCallbackV2,
-        TOfferBookCallbackV2,
+        TPriceBookCallbackV1,      # slots do init sao V1 — ver nota acima
+        TOfferBookCallbackV1,
         THistoryTradeCallback,
         TProgressCallback,
         TTinyBookCallback,
@@ -207,6 +249,14 @@ def _declare(dll: Any) -> None:
     # Resolucao de nome de corretora. GetProcAddress e' case-sensitive e a
     # grafia do sufixo (ById/ByID) varia entre versoes — declaramos a que
     # existir. Retorno PWideChar: c_wchar_p copia a string na conversao.
+    # Setters V2 (o caminho moderno do offer book order-by-order).
+    for nome, tipo in (("SetOfferBookCallbackV2", TOfferBookCallbackV2),
+                       ("SetPriceBookCallbackV2", TPriceBookCallbackV2)):
+        if hasattr(dll, nome):
+            fn = getattr(dll, nome)
+            fn.argtypes = [tipo]
+            fn.restype = c_int
+
     for nome in ("GetAgentNameByID", "GetAgentNameById",
                  "GetAgentShortNameByID", "GetAgentShortNameById"):
         if hasattr(dll, nome):

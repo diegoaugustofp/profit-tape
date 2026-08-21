@@ -91,6 +91,24 @@ class ProfitClient:
             raise LoginFailed(f"DLLInitializeMarketLogin devolveu {codigo}")
         self._inicializado = True
 
+        # O offer book order-by-order (com agente e offer_id confiaveis em
+        # Int64) so chega pelo setter V2 — o slot V1 do init ficou MUDO em
+        # producao (subscribe OK, zero eventos). Registrar aqui, apos o init,
+        # conforme o manual: o setter sobrepoe a callback do init.
+        set_v2 = getattr(self._dll, "SetOfferBookCallbackV2", None)
+        if callable(set_v2):
+            ret = set_v2(self._cb["offer_book_v2"])
+            log.info("profitdll.offer_book_v2_registrado", retorno=int(ret))
+            self.offer_book_v2 = True
+        else:
+            self.offer_book_v2 = False
+            log.warning(
+                "profitdll.sem_offer_book_v2",
+                aviso="esta versao da DLL nao expoe SetOfferBookCallbackV2; "
+                      "o offer book dependera do slot V1 do init, que em "
+                      "producao pode nao entregar nada",
+            )
+
         # O login e' assincrono: a chamada acima retorna antes da conexao
         # existir. Subscrever antes do market data estar pronto falha em
         # silencio — o ticker simplesmente nunca entrega evento.
@@ -197,10 +215,8 @@ class ProfitClient:
                 ),
             )
 
-        @b.TOfferBookCallbackV2
-        def _offer(ativo, action, position, side, qtd, agente, offer_id,
-                   preco, has_price, has_qtd, has_date, has_id, has_agent,
-                   data, arr_sell, arr_buy) -> None:
+        def _corpo_offer(ativo, action, position, side, qtd, agente, offer_id,
+                         preco, has_price, has_qtd, data) -> None:
             publish(
                 Stream.BOOK_OFFER,
                 BookDelta(
@@ -220,7 +236,26 @@ class ProfitClient:
                 ),
             )
 
-        @b.TPriceBookCallbackV2
+        # Mesmo corpo, DOIS envelopes de tipo: o V1 (nQtd Integer) vive no
+        # slot do init — se alguma versao da DLL alimentar por la, capturamos
+        # em vez de perder — e o V2 (nQtd Int64) e' registrado via
+        # SetOfferBookCallbackV2 no connect(). O manual garante que o setter
+        # SOBREPOE o do init: nunca os dois ativos, sem duplicata.
+        @b.TOfferBookCallbackV1
+        def _offer_v1(ativo, action, position, side, qtd, agente, offer_id,
+                      preco, has_price, has_qtd, has_date, has_id, has_agent,
+                      data, arr_sell, arr_buy) -> None:
+            _corpo_offer(ativo, action, position, side, qtd, agente, offer_id,
+                         preco, has_price, has_qtd, data)
+
+        @b.TOfferBookCallbackV2
+        def _offer_v2(ativo, action, position, side, qtd, agente, offer_id,
+                      preco, has_price, has_qtd, has_date, has_id, has_agent,
+                      data, arr_sell, arr_buy) -> None:
+            _corpo_offer(ativo, action, position, side, qtd, agente, offer_id,
+                         preco, has_price, has_qtd, data)
+
+        @b.TPriceBookCallbackV1
         def _price(ativo, action, position, side, qtd, n_ofertas, preco,
                    arr_sell, arr_buy) -> None:
             agora = time.time_ns()
@@ -284,6 +319,7 @@ class ProfitClient:
 
         self._cb = {
             "state": _state, "trade": _trade, "daily": _daily,
-            "price_book": _price, "offer_book": _offer,
+            "price_book": _price, "offer_book": _offer_v1,
+            "offer_book_v2": _offer_v2,
             "history": _history, "progress": _progress, "tiny": _tiny,
         }

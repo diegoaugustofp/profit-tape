@@ -105,3 +105,19 @@ de rede boa e horario comercial, ai sim procure o 46o codigo NL_ no manual.
   congelou quiesce, progresso e timeout no meio de um run (deteccao de
   drift agora avisa, mas nao conserta). Desative a suspensao no plano de
   energia enquanto grava.
+
+## Offer book: V1 x V2 (incidente 2026-08-21)
+
+Os slots de callback do DLLInitializeMarketLogin sao os tipos V1 (nQtd em
+Integer 32 bits). Registrar callbacks V2 neles produziu dois sintomas
+diferentes e nenhum crash: o offer book ficou MUDO (subscribe aceito, zero
+eventos em 14 min de pregao) e o price book "funcionou" lendo Int64 de um slot
+de 32 bits — quantidade com bits altos potencialmente sujos.
+
+Correcao: slots do init tipados como V1; o offer book order-by-order e'
+registrado via SetOfferBookCallbackV2 apos o init (o setter sobrepoe o slot do
+init, por manual). O doctor passou a checar a presenca do setter.
+
+DADO A DESCARTAR: o book_price gravado ANTES desta correcao (sessao de
+2026-08-21, ~14 min) pode ter quantidades corrompidas nos bits altos. Nao usar
+em analise; a particao pode ser removida.

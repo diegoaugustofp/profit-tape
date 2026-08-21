@@ -151,3 +151,43 @@ def test_metricas_por_stream_e_feed_vivo(tmp_raiz: Path) -> None:
     t.join(timeout=60)
     snap2 = svc.metrics.snapshot(0, 0, 0, 1)
     assert sum(snap2.eventos_por_stream.values()) == svc.bus.stats().total_recebido
+
+
+def test_offer_book_exige_registro_v2(tmp_raiz: Path) -> None:
+    """
+    Regressao do incidente 2026-08-21: 14 min de pregao com subscribe aceito e
+    ZERO eventos de offer book — o slot V1 do init nao e' alimentado; so o
+    callback registrado via SetOfferBookCallbackV2 recebe. O fake reproduz
+    esse comportamento com fidelidade, entao este teste so passa se o cliente
+    fizer o registro.
+    """
+    fake = FakeProfitDLL(eventos_por_ativo=150)
+    svc = RecorderService(_config(tmp_raiz), _cred(), dll_injetada=fake)
+    t = threading.Thread(target=svc.run, daemon=True)
+    t.start()
+    time.sleep(2.5)
+    svc._parar.set()
+    t.join(timeout=60)
+
+    assert svc.client.offer_book_v2 is True
+    livro = ds.dataset(tmp_raiz / "book_offer", format="parquet",
+                       partitioning="hive").to_table()
+    assert livro.num_rows > 0
+
+
+def test_dll_sem_v2_nao_quebra_e_avisa(tmp_raiz: Path) -> None:
+    """DLL antiga sem o setter: sem crash, offer_book ausente, flag False."""
+    fake = FakeProfitDLL(eventos_por_ativo=100, com_offer_v2=False)
+    fake.SetOfferBookCallbackV2 = None          # export ausente
+    svc = RecorderService(_config(tmp_raiz), _cred(), dll_injetada=fake)
+    t = threading.Thread(target=svc.run, daemon=True)
+    t.start()
+    time.sleep(2.0)
+    svc._parar.set()
+    t.join(timeout=60)
+
+    assert svc.client.offer_book_v2 is False
+    assert not (tmp_raiz / "book_offer").exists()      # silencio, como em producao
+    trades = ds.dataset(tmp_raiz / "trade", format="parquet",
+                        partitioning="hive").to_table()
+    assert trades.num_rows > 0                          # o resto segue vivo

@@ -75,6 +75,12 @@ def doctor(
                 ok = False
             else:
                 typer.echo("  exports      ok")
+            if hasattr(dll, "SetOfferBookCallbackV2"):
+                typer.echo("  offer book   V2 disponivel (order-by-order)")
+            else:
+                typer.echo("  offer book   SEM SetOfferBookCallbackV2 — o offer book")
+                typer.echo("               pode nao entregar NADA nesta versao (visto em")
+                typer.echo("               producao). Estrategias de fila ficam bloqueadas.")
         except Exception as exc:
             typer.echo(f"  DLL          FALHOU: {exc}")
             ok = False
