@@ -1,0 +1,109 @@
+"""
+Auditoria do dado gravado.
+
+Mesma filosofia do seu data_audit.py: mede o DADO, nao a estrategia. A pergunta
+que responde e' "posso confiar nesta particao?", e ela precisa ser respondida
+ANTES de qualquer feature ser calculada em cima.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pyarrow as pa
+import pyarrow.compute as pc
+import pyarrow.dataset as ds
+
+from ..domain.enums import TradeType
+from ..profitdll.timeparse import formatar
+
+
+def _agrupar_contando(tabela: pa.Table, coluna: str) -> list[dict]:
+    """
+    Contagem por coluna, robusta a dicionarios divergentes.
+
+    Arquivos Parquet distintos carregam dicionarios distintos para a mesma
+    coluna. `group_by` sobre isso levanta `ArrowNotImplementedError: Unifying
+    differing dictionaries` — falha que so aparece quando ha MAIS DE UM arquivo,
+    ou seja, nunca no teste pequeno e sempre no dado real.
+    """
+    col = tabela[coluna]
+    if pa.types.is_dictionary(col.type):
+        tabela = tabela.set_column(
+            tabela.column_names.index(coluna), coluna, col.cast(pa.string())
+        )
+    return tabela.group_by(coluna).aggregate([([], "count_all")]).to_pylist()
+
+
+def resumir(caminho: Path, stream: str = "trade") -> None:
+    alvo = caminho / stream if (caminho / stream).exists() else caminho
+    dataset = ds.dataset(alvo, format="parquet", partitioning="hive")
+    tabela = dataset.to_table()
+    n = tabela.num_rows
+
+    print("=" * 78)
+    print(f"AUDITORIA — {alvo}")
+    print("=" * 78)
+    print(f"  linhas            : {n:,}")
+    if n == 0:
+        print("  particao vazia.")
+        return
+
+    col_ts = "ts_ns" if "ts_ns" in tabela.column_names else "ts_recv_ns"
+    ts = tabela[col_ts]
+    print(f"  primeiro evento   : {formatar(pc.min(ts).as_py())}")
+    print(f"  ultimo evento     : {formatar(pc.max(ts).as_py())}")
+
+    if "ts_ns" in tabela.column_names:
+        invalidos = pc.sum(pc.equal(tabela["ts_ns"], 0)).as_py() or 0
+        if invalidos:
+            print(f"  TIMESTAMP INVALIDO: {invalidos:,} ({invalidos/n:.2%}) — parse falhou;")
+            print("                      confira o formato de data da sua versao da DLL.")
+
+    # Latencia do feed: quanto tempo entre o evento acontecer e chegar aqui.
+    if "ts_ns" in tabela.column_names and "ts_recv_ns" in tabela.column_names:
+        validos = tabela.filter(pc.greater(tabela["ts_ns"], 0))
+        if validos.num_rows:
+            lat_ms = pc.divide(
+                pc.subtract(validos["ts_recv_ns"], validos["ts_ns"]), 1_000_000.0
+            )
+            p50 = pc.approximate_median(lat_ms).as_py()
+            if p50 < 0:
+                # Recebido ANTES de acontecer e' impossivel. Significa que o
+                # timestamp do evento e o relogio local discordam — quase sempre
+                # `tz_offset_horas` errado no config, ou relogio da maquina fora
+                # de sincronia. Qualquer analise que junte os dois vai errar.
+                print(f"  latencia feed p50 : {p50:,.0f} ms  <-- NEGATIVA, IMPOSSIVEL")
+                print("      Confira runtime.tz_offset_horas e o relogio da maquina.")
+            elif p50 > 5_000:
+                print(f"  latencia feed p50 : {p50:,.0f} ms  <-- alta demais, investigar")
+            else:
+                print(f"  latencia feed p50 : {p50:.1f} ms")
+
+    if "symbol" in tabela.column_names:
+        print("\n  por simbolo:")
+        for row in _agrupar_contando(tabela, "symbol"):
+            print(f"    {row['symbol']:<12} {row['count_all']:>12,}")
+
+    if "trade_type" in tabela.column_names:
+        print("\n  por tipo de negocio:")
+        continuo = 0
+        for row in sorted(_agrupar_contando(tabela, "trade_type"), key=lambda r: -r["count_all"]):
+            codigo = row["trade_type"]
+            try:
+                nome = TradeType(codigo).name
+                if TradeType(codigo).is_agressao_continua:
+                    continuo += row["count_all"]
+            except ValueError:
+                nome = "*** CODIGO DESCONHECIDO ***"
+            print(f"    {codigo:>4} {nome:<24} {row['count_all']:>12,}")
+        print(f"\n  agressao em mercado continuo: {continuo:,} ({continuo/n:.1%})")
+        print("  (o resto — leilao, RLP, balcao — deve ser excluido do calculo de OFI)")
+
+    if "trade_id" in tabela.column_names:
+        unicos = pc.count_distinct(tabela["trade_id"]).as_py()
+        if unicos < n:
+            print(f"\n  ATENCAO: {n - unicos:,} trade_id repetidos.")
+            print("  Pode ser edicao de negocio (is_edit) ou reentrega no reconnect.")
+            print("  Deduplique por (symbol, trade_id) mantendo a ultima versao.")
+    print("=" * 78)

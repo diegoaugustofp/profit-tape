@@ -1,0 +1,59 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "profit-tape"
+version = "0.1.0"
+description = "Gravador de tape e book da B3 via ProfitDLL, com sink Parquet particionado."
+requires-python = ">=3.11"
+dependencies = [
+    "pyarrow>=15.0",
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    "PyYAML>=6.0",
+    "typer>=0.12",
+    "structlog>=24.1",
+]
+
+[project.optional-dependencies]
+db = ["psycopg[binary]>=3.1"]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.4",
+    "mypy>=1.10",
+    "pandas>=2.2",
+]
+
+[project.scripts]
+profit-tape = "profittape.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/profittape"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+# Typer EXIGE typer.Option()/Argument() no default do parametro. B008 aqui e'
+# falso positivo — nao ha default mutavel compartilhado.
+"src/profittape/cli.py" = ["B008"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true
+# ctypes com DLL externa nao tem stub; o modulo de bindings e' inerentemente dinamico.
+[[tool.mypy.overrides]]
+module = "profittape.profitdll.bindings"
+disallow_untyped_calls = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+markers = ["windows: exige Windows e a ProfitDLL real"]

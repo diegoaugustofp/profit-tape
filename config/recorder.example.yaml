@@ -1,0 +1,51 @@
+# Copie para config/recorder.yaml (o real esta no .gitignore).
+#
+# Regra de bolso para escolher o que gravar:
+#   offer_book em ativo liquido gera de 10 a 100x mais evento que trades.
+#   Comece por WINFUT e WDOFUT — book denso, que e' onde as tecnicas de fila
+#   funcionam. Acao fora das dez mais liquidas tem livro raso demais para
+#   sustentar OFI ou queue imbalance com significancia.
+
+ativos:
+  - ticker: WINFUT
+    bolsa: F
+    trades: true
+    offer_book: true
+    price_book: true
+
+  - ticker: WDOFUT
+    bolsa: F
+    trades: true
+    offer_book: true
+
+  - ticker: PETR4
+    bolsa: B
+    trades: true
+    offer_book: true
+
+  - ticker: VALE3
+    bolsa: B
+    trades: true
+    offer_book: true
+
+  - ticker: ITUB4
+    bolsa: B
+    trades: true
+
+storage:
+  raiz: data/raw
+  compressao: zstd
+  nivel_compressao: 3          # 3 e' o joelho da curva; 9 dobra CPU por ~8% de tamanho
+  max_rows_per_file: 5000000
+  idle_close_s: 900            # fecha arquivo a cada 15 min: limita perda em queda
+
+pipeline:
+  fila_maxsize: 500000
+  batch_max: 50000
+  poll_timeout_s: 0.5
+
+runtime:
+  tz_offset_horas: -3
+  heartbeat_s: 30
+  encerrar_em: "18:30"
+  alerta_taxa_descarte: 0.0001   # 1 em 10 mil ja merece investigacao
