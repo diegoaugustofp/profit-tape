@@ -51,6 +51,7 @@ BOOK_OFFER_SCHEMA = pa.schema(
         pa.field("agente", pa.int32()),
         pa.field("has_price", pa.bool_()),
         pa.field("has_qtd", pa.bool_()),
+        pa.field("has_date", pa.bool_()),
     ]
 )
 

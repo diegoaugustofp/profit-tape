@@ -56,6 +56,9 @@ class BookDelta(NamedTuple):
     agente: int
     has_price: bool
     has_qtd: bool
+    has_date: bool      # ver domain/schema.py: quando False, ts_ns e' 0 por
+                         # design — a maioria dos deltas de book NAO carrega
+                         # data por evento (manual: bHasDate)
 
 
 class PriceLevel(NamedTuple):

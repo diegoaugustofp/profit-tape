@@ -223,3 +223,68 @@ def test_fullbook_scalar_nao_e_publicado_como_delta(tmp_raiz: Path) -> None:
         assert c.full_book_descartados["offer"] == 2
     finally:
         c.disconnect()
+
+
+def test_has_date_false_nao_confia_no_ponteiro_de_data(tmp_raiz: Path) -> None:
+    """
+    Regressao do achado real (SESSAO 2, 2026-08-21): 97% dos deltas de
+    book_offer saiam com timestamp '1990-01-01' — memoria obsoleta de um
+    pwcDate nao preenchido pela DLL para aquele evento, lida como se fosse
+    data valida, porque has_date era ignorado. O manual documenta bHasDate
+    exatamente para isto. Chama o callback diretamente com has_date=False e
+    uma string de data PLAUSIVEL (simulando o buffer obsoleto) para provar
+    que o cliente a ignora e grava ts_ns=0, has_date=False.
+    """
+    from profittape.pipeline.bus import EventBus
+    from profittape.profitdll.client import ProfitClient
+    from profittape.profitdll.types import TAssetIDRec
+
+    bus = EventBus()
+    fake = FakeProfitDLL(eventos_por_ativo=1)
+    c = ProfitClient(dll_path="x", activation_key="k", user="u", password="p",
+                     bus=bus, dll=fake)
+    c.connect(timeout_s=5)
+    try:
+        ativo = TAssetIDRec("WINFUT", "F", 0)
+        c._cb["offer_book_v2"](
+            ativo, 0, 0, 0, 100, 3, 55, 5000.0,
+            b"\x01", b"\x01", b"\x00",           # has_date=False
+            b"\x01", b"\x01",
+            "01/01/1990 00:00:00.000",           # data-lixo plausivel
+            None, None,
+        )
+        lote = bus.drain(timeout=2.0, max_batch=10)
+        assert len(lote) == 1
+        evento = lote[0].event
+        assert evento.has_date is False
+        assert evento.ts_ns == 0
+    finally:
+        c.disconnect()
+
+
+def test_has_date_true_confia_na_data(tmp_raiz: Path) -> None:
+    """Contraprova: quando a flag confirma, a data e' parseada normalmente."""
+    from profittape.pipeline.bus import EventBus
+    from profittape.profitdll.client import ProfitClient
+    from profittape.profitdll.types import TAssetIDRec
+
+    bus = EventBus()
+    fake = FakeProfitDLL(eventos_por_ativo=1)
+    c = ProfitClient(dll_path="x", activation_key="k", user="u", password="p",
+                     bus=bus, dll=fake)
+    c.connect(timeout_s=5)
+    try:
+        ativo = TAssetIDRec("WINFUT", "F", 0)
+        c._cb["offer_book_v2"](
+            ativo, 0, 0, 0, 100, 3, 55, 5000.0,
+            b"\x01", b"\x01", b"\x01",           # has_date=True
+            b"\x01", b"\x01",
+            "21/08/2026 13:00:00.000",
+            None, None,
+        )
+        lote = bus.drain(timeout=2.0, max_batch=10)
+        evento = lote[0].event
+        assert evento.has_date is True
+        assert evento.ts_ns > 0
+    finally:
+        c.disconnect()

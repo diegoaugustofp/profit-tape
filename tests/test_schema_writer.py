@@ -262,3 +262,34 @@ def test_inspect_imprime_progresso(tmp_raiz: Path, capsys) -> None:
     assert "Escaneando" in out
     assert "Carregando" in out
     assert "Calculando estatisticas" in out
+
+
+def test_inspect_distingue_sem_data_por_design_de_erro(tmp_raiz: Path, capsys) -> None:
+    """
+    Regressao dupla: (1) has_date=False deve produzir ts_ns=0 SEM alarme —
+    e' o comportamento normal de deltas de book; (2) achado ao validar isso:
+    o inspect nao carregava a coluna has_date, entao SEMPRE caia no ramo de
+    alarme mesmo com o dado correto. As duas camadas ficam cobertas aqui.
+    """
+    from profittape.tools.inspect import resumir
+
+    base = _trade(0).ts_ns
+    linhas = []
+    for i in range(20):
+        ts = base if i < 2 else 0        # so' 2 com data real
+        linhas.append(BookDelta(
+            ts_ns=ts, ts_recv_ns=base + i * 1000, symbol="WINFUT", exchange="F",
+            action=0, side=0, position=i, offer_id=i, price=100.0, quantidade=10,
+            agente=3, has_price=True, has_qtd=True, has_date=(i < 2),
+        ))
+    cols = dict(zip(BookDelta._fields,
+                    (list(c) for c in zip(*linhas, strict=True)), strict=True))
+    sink = ParquetSink(tmp_raiz)
+    sink.write(Stream.BOOK_OFFER, "2024-01-02", "WINFUT", cols)
+    sink.close()
+
+    resumir(tmp_raiz, "book_offer")
+    out = capsys.readouterr().out
+    assert "sem data por evento : 18" in out
+    assert "94" in out or "90.0%" in out
+    assert "TIMESTAMP INVALIDO" not in out

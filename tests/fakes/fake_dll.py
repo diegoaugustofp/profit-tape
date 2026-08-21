@@ -56,6 +56,7 @@ class FakeProfitDLL:
         self._threads: list[threading.Thread] = []
         self.erros: list[BaseException] = []
         self._hist_chamadas: dict[str, int] = {}
+        self._ultima_data_offer = "01/01/1970 00:00:00.000"   # buffer "obsoleto" inicial
         self._parar = threading.Event()
         self.finalizado = False
 
@@ -230,11 +231,22 @@ class FakeProfitDLL:
                 destino = self._cb.get("offer_v2")
                 if destino is None:
                     continue
+                # Fidelidade ao SEGUNDO achado real: a maioria dos deltas NAO
+                # carrega data por evento (bHasDate=False), e quando isso
+                # acontece o ponteiro de data aponta para conteudo OBSOLETO
+                # (nao nulo!) — nesse caso mandamos uma data-lixo plausivel
+                # (de um evento anterior) para provar que o cliente ignora
+                # pwcDate quando has_date=False, em vez de confiar nela.
+                tem_data = self.rng.random() < 0.05    # ~5%: so' o snapshot inicial
+                data_enviada = data if tem_data else self._ultima_data_offer
+                self._ultima_data_offer = data
                 destino(
                     ativo, self.rng.choice([0, 1, 2]), self.rng.randint(0, 9),
                     self.rng.choice([0, 1]), self.rng.choice([100, 500, 1000]),
                     self.rng.randint(1, 400), 10_000_000 + i, preco,
-                    b"\x01", b"\x01", b"\x01", b"\x01", b"\x01", data, None, None,
+                    b"\x01", b"\x01",
+                    b"\x01" if tem_data else b"\x00",
+                    b"\x01", b"\x01", data_enviada, None, None,
                 )
             else:
                 self._cb["price"](

@@ -76,7 +76,8 @@ def resumir(caminho: Path, stream: str = "trade") -> None:
     # junto com a dupla varredura de footer (exclude_invalid_files repete a
     # validacao; agora so entra quando a varredura achou podre).
     desejadas = [c for c in ("ts_ns", "ts_recv_ns", "symbol", "trade_type",
-                             "trade_id", "agente_comprador", "agente_vendedor", "dt")
+                             "trade_id", "agente_comprador", "agente_vendedor",
+                             "has_date", "dt")
                  if c in dataset.schema.names]
     tabela = dataset.to_table(columns=desejadas)
     n = tabela.num_rows
@@ -97,7 +98,19 @@ def resumir(caminho: Path, stream: str = "trade") -> None:
 
     if "ts_ns" in tabela.column_names:
         invalidos = pc.sum(pc.equal(tabela["ts_ns"], 0)).as_py() or 0
-        if invalidos:
+        if invalidos and "has_date" in tabela.column_names:
+            # book_offer: ts_ns=0 e' predominantemente DESIGN (bHasDate=False
+            # no evento, manual), nao erro de parse — a maioria dos deltas de
+            # livro nao carrega data propria. Distinguir evita alarme falso
+            # numa situacao normal e esperada.
+            sem_data_flag = pc.sum(pc.equal(tabela["has_date"], False)).as_py() or 0
+            print(f"  sem data por evento : {sem_data_flag:,} ({sem_data_flag/n:.1%}) "
+                  f"— normal para deltas de book (bHasDate=False); use ts_recv_ns")
+            inexplicados = invalidos - sem_data_flag
+            if inexplicados > 0:
+                print(f"  TIMESTAMP INVALIDO : {inexplicados:,} SEM has_date=False "
+                      f"correspondente — isso sim e' parse falhando, investigar.")
+        elif invalidos:
             print(f"  TIMESTAMP INVALIDO: {invalidos:,} ({invalidos/n:.2%}) — parse falhou;")
             print("                      confira o formato de data da sua versao da DLL.")
 

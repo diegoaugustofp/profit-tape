@@ -224,7 +224,7 @@ class ProfitClient:
         FULL_BOOK = 4   # BookAction.FULL_BOOK — ver domain/enums.py
 
         def _corpo_offer(ativo, action, position, side, qtd, agente, offer_id,
-                         preco, has_price, has_qtd, data) -> None:
+                         preco, has_price, has_qtd, has_date, data) -> None:
             if action == FULL_BOOK:
                 # Manual (TOfferBookCallbackV2): "pArraySell, pArrayBuy: Lista
                 # com as ofertas de compra/venda; (Validos em atFullBook)".
@@ -239,10 +239,18 @@ class ProfitClient:
                 # Ate o parser de array existir, descartamos e contamos.
                 self.full_book_descartados["offer"] += 1
                 return
+            # bHasDate ("1 byte para especificar se existe data", manual):
+            # a maioria dos deltas de book NAO carrega data por evento — so'
+            # parseamos pwcDate quando a flag confirma que ha' conteudo valido
+            # ali. Achado real: nao checar isso fez ~97% dos deltas de uma
+            # sessao saírem com ts_ns=1990-01-01 — memoria obsoleta de um
+            # ponteiro que a DLL nao preencheu para este evento, lida como se
+            # fosse uma data de verdade. ts_recv_ns continua confiavel sempre.
+            tem_data = has_date != b"\x00"
             publish(
                 Stream.BOOK_OFFER,
                 BookDelta(
-                    ts_ns=parse_ts_ns(data, tz),
+                    ts_ns=parse_ts_ns(data, tz) if tem_data else 0,
                     ts_recv_ns=time.time_ns(),
                     symbol=ativo.ticker or "",
                     exchange=ativo.bolsa or "",
@@ -255,6 +263,7 @@ class ProfitClient:
                     agente=int(agente),
                     has_price=has_price != b"\x00",
                     has_qtd=has_qtd != b"\x00",
+                    has_date=tem_data,
                 ),
             )
 
@@ -268,14 +277,14 @@ class ProfitClient:
                       preco, has_price, has_qtd, has_date, has_id, has_agent,
                       data, arr_sell, arr_buy) -> None:
             _corpo_offer(ativo, action, position, side, qtd, agente, offer_id,
-                         preco, has_price, has_qtd, data)
+                         preco, has_price, has_qtd, has_date, data)
 
         @b.TOfferBookCallbackV2
         def _offer_v2(ativo, action, position, side, qtd, agente, offer_id,
                       preco, has_price, has_qtd, has_date, has_id, has_agent,
                       data, arr_sell, arr_buy) -> None:
             _corpo_offer(ativo, action, position, side, qtd, agente, offer_id,
-                         preco, has_price, has_qtd, data)
+                         preco, has_price, has_qtd, has_date, data)
 
         @b.TPriceBookCallbackV1
         def _price(ativo, action, position, side, qtd, n_ofertas, preco,

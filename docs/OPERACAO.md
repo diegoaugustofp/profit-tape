@@ -122,6 +122,30 @@ DADO A DESCARTAR: o book_price gravado ANTES desta correcao (sessao de
 2026-08-21, ~14 min) pode ter quantidades corrompidas nos bits altos. Nao usar
 em analise; a particao pode ser removida.
 
+## bHasDate ignorada: causa DOMINANTE do timestamp "1990" (incidente 2026-08-21, parte 3)
+
+CORRECAO DE REGISTRO: a "parte 2" abaixo atribuiu o timestamp implausivel ao
+atFullBook. Isso estava CERTO mas INCOMPLETO — o atFullBook explica ~100
+pacotes por sessao; a sessao real tinha 2.181.338 linhas implausiveis (97% do
+total). A causa dominante e' outra, e maior: o manual documenta bHasDate ("1
+byte para especificar se existe data") no TOfferBookCallbackV2, e o codigo
+IGNORAVA essa flag, parseando pwcDate incondicionalmente. A maioria dos
+deltas de book (atAdd/atEdit/atDelete) NAO carrega data por evento — quando
+bHasDate=False, pwcDate aponta para conteudo obsoleto (nao nulo!) de um
+evento anterior, que parece uma data valida e parseia "com sucesso" para o
+timestamp errado.
+
+Correcao: has_date persistido no schema (BookDelta.has_date); ts_ns so' e'
+parseado quando a flag confirma presenca de data, senao ts_ns=0 por design
+(nao por falha). O `inspect` foi atualizado para NAO alarmar nesse caso —
+"sem data por evento: N (X%) — normal para deltas de book; use ts_recv_ns" —
+e so' aponta TIMESTAMP INVALIDO de verdade quando ts_ns=0 SEM has_date=False
+correspondente (parse realmente falhando).
+
+ESTADO ESPERADO DAQUI PRA FRENTE: e' NORMAL que a maioria das linhas de
+book_offer tenha has_date=False e ts_ns=0. Use ts_recv_ns para ordenacao
+temporal de deltas de book; ts_ns so' e' confiavel quando has_date=True.
+
 ## atFullBook: campos escalares descartados (incidente 2026-08-21, parte 2)
 
 O manual documenta, para TOfferBookCallbackV2 e TPriceBookCallbackV2: os
