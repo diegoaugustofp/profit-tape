@@ -172,6 +172,37 @@ def curate(
 
 
 @app.command()
+def features(
+    symbol: str = typer.Argument(..., help="Ex.: WINFUT"),
+    curated: Path = typer.Option(Path("data/curated"), "--curated"),
+    saida: Path = typer.Option(Path("data/features"), "--saida"),
+    volume_barra: int | None = typer.Option(None, "--volume-barra",
+                                            help="Fixo; omita para sugerir pela mediana."),
+    barras_por_dia: int = typer.Option(100, "--barras-por-dia"),
+    top_agentes: int = typer.Option(10, "--top-agentes"),
+    janela_z: int = typer.Option(50, "--janela-z"),
+    label_k: float = typer.Option(2.0, "--label-k"),
+    label_h: int = typer.Option(10, "--label-h"),
+) -> None:
+    """
+    Gera barras de volume (relogio de agressao) com features de fluxo Tier 1,
+    z-scores anti-lookahead e labels triple-barrier. Uma linha por barra.
+    """
+    configurar("WARNING")
+    from .features.pipeline import gerar
+
+    r = gerar(curated, saida, symbol.upper(), volume_barra, barras_por_dia,
+              top_agentes, janela_z, label_k, label_h)
+    typer.echo("=" * 60)
+    typer.echo(f"FEATURES — {r['symbol']}")
+    typer.echo("=" * 60)
+    for chave in ("trades", "volume_barra", "tick_inferido", "barras",
+                  "barras_parciais_descartadas", "agentes_top", "labels",
+                  "ambiguas", "arquivo"):
+        typer.echo(f"  {chave:<28}: {r[chave]}")
+
+
+@app.command()
 def agents(
     dados: Path = typer.Option(
         Path("data/curated"), "--dados",

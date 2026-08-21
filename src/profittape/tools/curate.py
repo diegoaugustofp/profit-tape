@@ -85,8 +85,12 @@ def curar_trades(raiz_raw: Path, raiz_curated: Path) -> dict[str, int]:
         for sym, grupo in df.groupby("symbol", observed=True):
             destino = raiz_curated / "trade" / f"dt={dia}" / f"sym={sym}"
             destino.mkdir(parents=True, exist_ok=True)
+            # dt e sym vivem no CAMINHO (hive). Duplica-los dentro do arquivo
+            # cria conflito de merge na leitura do dataset quando o tipo da
+            # coluna difere do inferido da particao (string vs large_string —
+            # varia com a versao do pandas). A particao e' a dona dessas duas.
             pq.write_table(
-                pa.Table.from_pandas(grupo.drop(columns=["sym"], errors="ignore"),
+                pa.Table.from_pandas(grupo.drop(columns=["sym", "dt"], errors="ignore"),
                                      preserve_index=False),
                 destino / "part-0000.parquet",
                 compression="zstd",

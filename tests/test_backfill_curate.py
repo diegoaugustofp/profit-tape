@@ -186,3 +186,32 @@ def test_agent_name_via_fake() -> None:
         assert c.agent_name(999) is None       # DLL nao conhece -> None
     finally:
         c.disconnect()
+
+
+def test_curated_nao_duplica_colunas_de_particao(tmp_path: Path) -> None:
+    """
+    Regressao: dt gravado dentro do arquivo sob dt=... quebra a leitura do
+    dataset quando o tipo em-arquivo (large_string, dependendo da versao do
+    pandas) difere do inferido da particao (string).
+    """
+    import pyarrow.parquet as pq_
+
+    from profittape.tools.curate import curar_trades
+
+    raw = tmp_path / "raw"
+    base = 1_704_193_200_000_000_000
+    eventos = [_trade(0, trade_id=1, ts=base, recv=base + 1)]
+    cols = dict(zip(Trade._fields, (list(c) for c in zip(*eventos, strict=True)), strict=True))
+    sink = ParquetSink(raw)
+    sink.write(Stream.TRADE, "2024-01-02", "PETR4", cols)
+    sink.close()
+
+    curar_trades(raw, tmp_path / "curated")
+    arquivos = list((tmp_path / "curated").rglob("*.parquet"))
+    schema = pq_.read_schema(arquivos[0])
+    assert "dt" not in schema.names
+    assert "sym" not in schema.names
+
+    tabela = ds.dataset(tmp_path / "curated" / "trade", format="parquet",
+                        partitioning="hive").to_table()
+    assert set(tabela.column_names) >= {"dt", "sym", "trade_id"}   # vindos da particao
