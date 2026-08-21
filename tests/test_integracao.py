@@ -191,3 +191,35 @@ def test_dll_sem_v2_nao_quebra_e_avisa(tmp_raiz: Path) -> None:
     trades = ds.dataset(tmp_raiz / "trade", format="parquet",
                         partitioning="hive").to_table()
     assert trades.num_rows > 0                          # o resto segue vivo
+
+
+def test_fullbook_scalar_nao_e_publicado_como_delta(tmp_raiz: Path) -> None:
+    """
+    Regressao: pacote atFullBook (action=4) escapava para o disco com campos
+    escalares invalidos (a manual so garante os arrays em atFullBook) — em
+    producao produziu uma linha com timestamp '1990-01-01', memoria obsoleta
+    lida como data. Confirma que o cliente descarta e conta.
+    """
+    from profittape.pipeline.bus import EventBus
+    from profittape.profitdll.client import ProfitClient
+    from profittape.profitdll.types import TAssetIDRec
+
+    bus = EventBus()
+    fake = FakeProfitDLL(eventos_por_ativo=1)
+    c = ProfitClient(dll_path="x", activation_key="k", user="u", password="p",
+                     bus=bus, dll=fake)
+    c.connect(timeout_s=5)
+    try:
+        ativo = TAssetIDRec("WINFUT", "F", 0)
+        # action=4 (atFullBook) com data LIXO: se publicado, contaminaria com
+        # um timestamp implausivel — exatamente o incidente real.
+        c._cb["offer_book"](ativo, 4, 0, 0, 999, 1, 1, 999.0,
+                            b"\x01", b"\x01", b"\x01", b"\x01", b"\x01",
+                            "01/01/1990 00:00:00.000", None, None)
+        c._cb["offer_book_v2"](ativo, 4, 0, 0, 999, 1, 1, 999.0,
+                               b"\x01", b"\x01", b"\x01", b"\x01", b"\x01",
+                               "01/01/1990 00:00:00.000", None, None)
+        assert bus.stats().total_recebido == 0
+        assert c.full_book_descartados["offer"] == 2
+    finally:
+        c.disconnect()

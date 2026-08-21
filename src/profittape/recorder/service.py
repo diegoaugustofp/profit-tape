@@ -189,6 +189,7 @@ class RecorderService:
             taxa_descarte=round(st.taxa_descarte, 8),
             fila_pico=st.profundidade_maxima,
             por_stream=snap.eventos_por_stream,
+            full_book_descartados=self.client.full_book_descartados,
             raiz=str(Path(self.cfg.storage.raiz).resolve()),
         )
         if st.total_descartado:

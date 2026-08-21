@@ -226,3 +226,39 @@ def test_mesmo_trade_id_em_dias_diferentes_nao_e_duplicata(tmp_raiz: Path, capsy
     resumir(tmp_raiz, "trade")
     out = capsys.readouterr().out
     assert "sem duplicidade" in out and "ATENCAO" not in out
+
+
+def test_timestamp_implausivel_nao_derruba_o_inspect(tmp_raiz: Path, capsys) -> None:
+    """
+    Regressao real: uma linha com ts_ns de 1990 (pacote atFullBook pre-fix,
+    ver client.py) fazia ts_recv - ts_ns estourar o cast seguro int64->float64
+    do pyarrow ao calcular latencia, derrubando o comando inteiro.
+    """
+    from profittape.tools.inspect import resumir
+
+    agora = _trade(0).ts_ns
+    implausivel = _trade(1, ts=631152000_000_000_000)   # ~1990
+    sink = ParquetSink(tmp_raiz)
+    sink.write(Stream.TRADE, "2024-01-02", "PETR4",
+              _colunas([_trade(0, ts=agora), implausivel]))
+    sink.close()
+
+    resumir(tmp_raiz, "trade")            # nao pode levantar
+    out = capsys.readouterr().out
+    assert "timestamps implausiveis" in out
+    assert "1990" in out
+
+
+def test_inspect_imprime_progresso(tmp_raiz: Path, capsys) -> None:
+    """Pedido direto: nao ficar em silencio durante etapas longas."""
+    from profittape.tools.inspect import resumir
+
+    sink = ParquetSink(tmp_raiz)
+    sink.write(Stream.TRADE, "2024-01-02", "PETR4", _colunas([_trade(0)]))
+    sink.close()
+
+    resumir(tmp_raiz, "trade")
+    out = capsys.readouterr().out
+    assert "Escaneando" in out
+    assert "Carregando" in out
+    assert "Calculando estatisticas" in out

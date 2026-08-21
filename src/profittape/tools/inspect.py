@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
 import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.dataset as ds
@@ -36,6 +38,13 @@ def _agrupar_contando(tabela: pa.Table, coluna: str) -> list[dict]:
     return tabela.group_by(coluna).aggregate([([], "count_all")]).to_pylist()
 
 
+def _msg(texto: str) -> None:
+    """print com flush: sem isto, output fica preso em buffer e o comando
+    parece travado durante etapas longas (achado real: usuario sem certeza
+    se o inspect estava rodando)."""
+    print(texto, flush=True)
+
+
 def resumir(caminho: Path, stream: str = "trade") -> None:
     candidato = caminho / stream
     if candidato.exists():
@@ -56,9 +65,12 @@ def resumir(caminho: Path, stream: str = "trade") -> None:
             f"Diretorios disponiveis: {disponiveis or '(nenhum)'}"
         )
 
+    _msg(f"Escaneando arquivos parquet em {alvo} ...")
     corrompidos, _ = relatorio(alvo)
     extras = {"exclude_invalid_files": True} if corrompidos else {}
     dataset = ds.dataset(alvo, format="parquet", partitioning="hive", **extras)
+    n_arquivos = len(list(dataset.files))
+    _msg(f"Carregando {n_arquivos} arquivo(s)...")
     # So as colunas que o resumo usa: numa arvore de milhoes de linhas, carregar
     # price/quantidade/flags que ninguem le e' o que tornava o inspect lento —
     # junto com a dupla varredura de footer (exclude_invalid_files repete a
@@ -68,6 +80,7 @@ def resumir(caminho: Path, stream: str = "trade") -> None:
                  if c in dataset.schema.names]
     tabela = dataset.to_table(columns=desejadas)
     n = tabela.num_rows
+    _msg(f"Carregado. Calculando estatisticas sobre {n:,} linhas...\n")
 
     print("=" * 78)
     print(f"AUDITORIA — {alvo}")
@@ -90,12 +103,32 @@ def resumir(caminho: Path, stream: str = "trade") -> None:
 
     # Latencia do feed: quanto tempo entre o evento acontecer e chegar aqui.
     if "ts_ns" in tabela.column_names and "ts_recv_ns" in tabela.column_names:
-        validos = tabela.filter(pc.greater(tabela["ts_ns"], 0))
-        if validos.num_rows:
-            lat_ms = pc.divide(
-                pc.subtract(validos["ts_recv_ns"], validos["ts_ns"]), 1_000_000.0
-            )
-            p50 = pc.approximate_median(lat_ms).as_py()
+        # ts_ns==0 e' a sentinela de parse-falhou. Mas existe uma SEGUNDA
+        # classe de invalido, descoberta em producao: um pacote atFullBook
+        # (agora descartado na origem, ver profitdll/client.py) gravava um
+        # timestamp PEQUENO MAS NAO-ZERO — memoria obsoleta lida como se
+        # fosse data valida, produzindo eventos com "primeiro evento:
+        # 1990-01-01". Um ts_ns assim escapa do filtro > 0 e, ao ser
+        # subtraido de ts_recv_ns (~2026, em ns desde 1970), gera uma
+        # diferenca tao grande que o cast seguro int64->float64 do pyarrow
+        # REJEITA — e foi exatamente isso que derrubou o inspect. A defesa e'
+        # dupla: (1) tratar a subtracao em Python/numpy, sem o cast-seguro do
+        # pyarrow, e (2) reportar quantos timestamps sao implausiveis em vez
+        # de deixa-los contaminar silenciosamente a mediana.
+        ts_ns = tabela["ts_ns"].to_numpy(zero_copy_only=False)
+        ts_recv = tabela["ts_recv_ns"].to_numpy(zero_copy_only=False)
+        HOJE_NS = int(pd.Timestamp.now(tz="UTC").value)
+        UM_ANO_NS = 365 * 86_400 * 1_000_000_000
+        plausivel = (ts_ns > HOJE_NS - 5 * UM_ANO_NS) & (ts_ns <= ts_recv)
+        implausiveis = int((~plausivel & (ts_ns != 0)).sum())
+        if implausiveis:
+            exemplo = formatar(int(ts_ns[~plausivel & (ts_ns != 0)][0]))
+            print(f"  timestamps implausiveis : {implausiveis:,} "
+                  f"(ex.: {exemplo} — provavel pacote atFullBook anterior "
+                  f"a correcao; ja descartado em capturas novas)")
+        if plausivel.any():
+            lat_ms = (ts_recv[plausivel] - ts_ns[plausivel]) / 1_000_000.0
+            p50 = float(np.median(lat_ms))
             if p50 < 0:
                 # Recebido ANTES de acontecer e' impossivel. Significa que o
                 # timestamp do evento e o relogio local discordam — quase sempre
@@ -114,12 +147,12 @@ def resumir(caminho: Path, stream: str = "trade") -> None:
                 print(f"  latencia feed p50 : {p50:.1f} ms")
 
     if "symbol" in tabela.column_names:
-        print("\n  por simbolo:")
+        _msg("  por simbolo:")
         for row in _agrupar_contando(tabela, "symbol"):
             print(f"    {row['symbol']:<12} {row['count_all']:>12,}")
 
     if "trade_type" in tabela.column_names:
-        print("\n  por tipo de negocio:")
+        _msg("\n  por tipo de negocio:")
         continuo = 0
         for row in sorted(_agrupar_contando(tabela, "trade_type"), key=lambda r: -r["count_all"]):
             codigo = row["trade_type"]
@@ -153,6 +186,7 @@ def resumir(caminho: Path, stream: str = "trade") -> None:
             print("    fica inviavel nesta conta/segmento. Confirme no manual se o")
             print("    campo e' disseminado para o seu perfil.")
 
+    _msg("")
     if "trade_id" in tabela.column_names:
         # A sequencia de trade_id reinicia POR SIMBOLO E POR DIA. Duas camadas
         # de falso positivo ja cairam aqui: contar globalmente acusou colisao

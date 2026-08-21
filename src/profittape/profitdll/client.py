@@ -61,6 +61,12 @@ class ProfitClient:
         # em integracao ctypes.
         self._cb: dict[str, Any] = {}
 
+        # Contador diagnostico de pacotes atFullBook descartados (ver
+        # _corpo_offer/_corpo_price). Incremento simples: perder uma unidade
+        # por corrida rara entre threads e' aceitavel para um contador de
+        # diagnostico — nao e' dado, e' metrica.
+        self.full_book_descartados = {"offer": 0, "price": 0}
+
     # ------------------------------------------------------------------
     # Ciclo de vida
     # ------------------------------------------------------------------
@@ -215,8 +221,24 @@ class ProfitClient:
                 ),
             )
 
+        FULL_BOOK = 4   # BookAction.FULL_BOOK — ver domain/enums.py
+
         def _corpo_offer(ativo, action, position, side, qtd, agente, offer_id,
                          preco, has_price, has_qtd, data) -> None:
+            if action == FULL_BOOK:
+                # Manual (TOfferBookCallbackV2): "pArraySell, pArrayBuy: Lista
+                # com as ofertas de compra/venda; (Validos em atFullBook)".
+                # A contrapartida: os campos ESCALARES (preco, data, etc.) nao
+                # sao o payload real aqui — o book completo vem empacotado nos
+                # arrays, que este binding ainda nao decodifica (formato de
+                # registro variavel por causa da data em string; ver
+                # docs/ARQUITETURA.md). Publicar os escalares como se fossem
+                # um delta normal grava LIXO: foi assim que uma sessao real
+                # produziu uma linha com timestamp "1990-01-01" — memoria nao
+                # inicializada/obsoleta lida como se fosse data valida.
+                # Ate o parser de array existir, descartamos e contamos.
+                self.full_book_descartados["offer"] += 1
+                return
             publish(
                 Stream.BOOK_OFFER,
                 BookDelta(
@@ -258,6 +280,13 @@ class ProfitClient:
         @b.TPriceBookCallbackV1
         def _price(ativo, action, position, side, qtd, n_ofertas, preco,
                    arr_sell, arr_buy) -> None:
+            if action == FULL_BOOK:
+                # Mesma ressalva do manual para TPriceBookCallbackV2: os
+                # arrays so sao validos em atFullBook, e os campos escalares
+                # (incluindo dPrice) nao sao garantidos fora de atAdd. Mesmo
+                # descarte do offer book, mesmo motivo.
+                self.full_book_descartados["price"] += 1
+                return
             agora = time.time_ns()
             publish(
                 Stream.BOOK_PRICE,

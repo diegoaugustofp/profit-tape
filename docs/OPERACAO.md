@@ -121,3 +121,35 @@ init, por manual). O doctor passou a checar a presenca do setter.
 DADO A DESCARTAR: o book_price gravado ANTES desta correcao (sessao de
 2026-08-21, ~14 min) pode ter quantidades corrompidas nos bits altos. Nao usar
 em analise; a particao pode ser removida.
+
+## atFullBook: campos escalares descartados (incidente 2026-08-21, parte 2)
+
+O manual documenta, para TOfferBookCallbackV2 e TPriceBookCallbackV2: os
+arrays pArraySell/pArrayBuy "sao validos em atFullBook" (nAction=4). A
+contrapartida — nao dita explicitamente mas confirmada pelo incidente — e' que
+os campos escalares (preco, data, etc.) NAO sao o payload real nesse caso.
+Publica-los como um delta normal grava lixo: uma sessao real produziu uma
+linha com timestamp "1990-01-01", memoria obsoleta lida como se fosse data
+valida — e essa diferenca de tempo, ao ser usada no calculo de latencia,
+tambem derrubava o `inspect` (estouro do cast seguro int64->float64).
+
+Correcao: eventos com action=atFullBook sao descartados na origem (client.py)
+e contados em `full_book_descartados` (aparece no resumo do record). O
+`inspect` tambem ganhou defesa em profundidade: filtra timestamp implausivel
+(nao so ts_ns==0) antes de calcular latencia, e reporta a contagem em vez de
+deixar contaminar a mediana silenciosamente.
+
+DADO A DESCARTAR: as capturas de book_offer/book_price ANTES desta correcao
+(sessoes de 2026-08-21) contem linhas atFullBook com campos escalares
+invalidos misturadas aos deltas validos. Nao usar em analise sem filtrar; o
+mais simples e' re-capturar.
+
+PENDENCIA (Tier 2, nao bloqueia Tier 1): o payload real do atFullBook — o
+livro completo no momento da subscricao — nao e' decodificado. O formato e'
+registro de tamanho VARIAVEL (campo de data e' string com tamanho prefixado),
+documentado no manual nas secoes de TOfferBookCallbackV2/TPriceBookCallbackV2
+("Cabecalho"/"Array"/"Rodape"). Sem isso, o recorder captura corretamente os
+DELTAS a partir da subscricao mas nao o estado inicial do livro — para
+bootstrapar o book seria preciso ou parsear esse payload ou reconstruir so a
+partir dos deltas full-book incrementais em diante (perdendo o snapshot
+inicial). Fica para quando o Tier 2 comecar a reconstrucao de livro.
