@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pyarrow.dataset as ds
@@ -129,12 +130,17 @@ def test_todos_recusados_devolve_2(tmp_raiz: Path) -> None:
     assert rc == 2
 
 
-def test_describe_codigo_desconhecido_da_offset() -> None:
+def test_describe_codigo_agora_nomeado_nao_mais_desconhecido() -> None:
+    """
+    Superado: -2147483602 era 'codigo desconhecido' ate ser identificado no
+    manual como NL_HISTORY_PERIOD_LIMIT (base+46, GetHistoryTrades so' aceita
+    'data inicial' dentro dos ultimos 30 dias corridos). Trava o estado atual.
+    """
     from profittape.profitdll.errors import describe
 
     msg = describe(-2147483602)
-    assert "base+46" in msg
-    assert "0x8000002e" in msg
+    assert "30 dias" in msg
+    assert "desconhecido" not in msg
 
 
 def test_retry_recupera_servidor_nao_pronto(tmp_raiz: Path) -> None:
@@ -249,3 +255,29 @@ def test_por_dia_captura_e_e_retomavel(tmp_raiz: Path) -> None:
                            dll_injetada=fake2)
     assert rc2 == 0
     assert fake2._hist_chamadas == {} and not fake2._subscritos
+
+
+def test_backfill_avisa_dias_fora_da_janela_de_30_dias(tmp_raiz: Path) -> None:
+    """
+    Achado real 2026-08-21: GetHistoryTrades so' aceita 'data inicial' dentro
+    dos ultimos 30 dias corridos. O aviso upfront deve nomear quantos dias do
+    pedido estao fora dessa janela, sem abortar a tentativa.
+    """
+    from profittape.recorder.backfill import executar_por_dia
+
+    cfg = RecorderConfig(
+        ativos=[AtivoConfig(ticker="PETR4")],
+        storage=StorageConfig(raiz=tmp_raiz),
+        pipeline=PipelineConfig(poll_timeout_s=0.1),
+        runtime=RuntimeConfig(),
+    )
+    cred = Credenciais(activation_key="k", user="u", password="p", dll_path="fake")
+    ha_60_dias = (datetime.now() - timedelta(days=60)).strftime("%Y-%m-%d")
+    ha_58_dias = (datetime.now() - timedelta(days=58)).strftime("%Y-%m-%d")
+
+    executar_por_dia(cfg, cred, ha_60_dias, ha_58_dias,
+                     quiesce_s=1.0, timeout_dia_s=10, settle_s=0.0,
+                     dll_injetada=FakeProfitDLL(eventos_por_ativo=10))
+    # Nao afirma sobre o log (capturado so' por caplog se configurado); o
+    # teste de valor aqui e' que a funcao NAO LEVANTA e completa mesmo com
+    # o intervalo inteiro fora da janela.

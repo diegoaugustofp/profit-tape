@@ -31,6 +31,13 @@ _ERRORS: dict[int, str] = {
     -2147483640: "Falta de parametro obrigatorio",
     -2147483639: "Parametro invalido",
     -2147483637: "DLL nao inicializada",
+    # Confirmado no manual (2026-08-21): GetHistoryTrades so' aceita
+    # 'data inicial' dentro dos ultimos 30 dias corridos a partir de hoje.
+    # Nao e' restricao de conta/conexao — e' limite documentado da funcao.
+    # Ver docs/OPERACAO.md para o que isso implica no backfill.
+    -2147483602: "Periodo de historico excede o limite permitido "
+                 "(data inicial com mais de 30 dias) — GetHistoryTrades "
+                 "so' cobre os ultimos ~30 dias corridos a partir de hoje",
 }
 
 

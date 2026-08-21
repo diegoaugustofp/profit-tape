@@ -177,3 +177,37 @@ DELTAS a partir da subscricao mas nao o estado inicial do livro — para
 bootstrapar o book seria preciso ou parsear esse payload ou reconstruir so a
 partir dos deltas full-book incrementais em diante (perdendo o snapshot
 inicial). Fica para quando o Tier 2 comecar a reconstrucao de livro.
+
+## LIMITE CONFIRMADO: GetHistoryTrades so' cobre 30 dias corridos (2026-08-21)
+
+O manual documenta `NL_HISTORY_PERIOD_LIMIT` (0x8000002E, base+46 — o mesmo
+codigo "desconhecido" investigado em incidentes anteriores desta doc):
+"Periodo de historico solicitado excede o limite permitido (data inicial com
+mais de 30 dias)". Confirmado empiricamente: dias com mais de ~30 dias
+corridos antes de hoje sao recusados na hora (a "recusa" de conexao dos
+primeiros incidentes tambem era isto, nao instabilidade do servidor).
+
+IMPLICACAO ESTRATEGICA: um backfill de ~60 pregoes via GetHistoryTrades e'
+estruturalmente IMPOSSIVEL nesta conta/versao. O maximo obtenivel de uma vez
+e' ~20 pregoes (30 dias corridos ~= 20-22 dias uteis). O plano original de
+"backfill grande + pesquisa" precisa virar "backfill do maximo permitido +
+GRAVACAO AO VIVO DIARIA acumulando dali em diante" — sem atalho.
+
+ACAO RECOMENDADA:
+1. Backfill --por-dia com --inicio de ~28-29 dias atras (margem de seguranca
+   contra diferenca de fuso/corte exato do servidor) ate ontem. Produz o
+   maximo de historico imediato disponivel.
+2. Rodar `record` TODO pregao dali em diante (Agendador de Tarefas, ver secao
+   acima) — e' a UNICA forma de acumular alem dos 30 dias, um dia de cada vez.
+   O dataset de pesquisa cresce ~1 pregao/dia; CPCV/DSR com amostra robusta
+   e' questao de semanas, nao de uma noite.
+3. Se precisar de historico mais profundo AGORA, a saida e' fora do
+   ProfitDLL: fontes pagas ja mapeadas (Databento, Economatica) ou B3
+   COTAHIST (publico, mas so' EOD — nao serve para tick/fluxo).
+
+NOTA A PARTE (nao aplica ao GetHistoryTrades usado aqui): o manual documenta
+uma API de series MAIS NOVA (GetSerie, com a_pSerieID/a_pQuoteStart) com
+limites de 1-Trade DIFERENTES por ativo — WIN=8 dias, WDO=30, DOL/IND=180,
+outros=365. Essa API nao esta implementada neste projeto; se um dia for
+adotada, WIN especificamente teria janela AINDA MENOR (8 dias), nao maior.
+Nao e' uma saida para o limite de 30 dias do WIN.

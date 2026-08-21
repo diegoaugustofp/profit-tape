@@ -116,6 +116,25 @@ def executar_por_dia(
     pendentes = [d for d in dias if d not in pulados]
     log.info("backfill_dia.plano", dias_uteis=len(dias),
              ja_capturados=len(pulados), pendentes=len(pendentes))
+
+    # Confirmado no manual (NL_HISTORY_PERIOD_LIMIT, base+46): GetHistoryTrades
+    # so' aceita 'data inicial' dentro dos ultimos 30 dias corridos a partir de
+    # HOJE — nao dias uteis, corridos. Avisa de antemao em vez de deixar o
+    # usuario descobrir olhando dezenas de recusas passarem no log.
+    limite_30d = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+    fora_da_janela = [d for d in pendentes if d < limite_30d]
+    if fora_da_janela:
+        log.warning(
+            "backfill_dia.fora_da_janela_de_30_dias",
+            dias_inatingiveis=len(fora_da_janela),
+            mais_antigo=fora_da_janela[0], limite=limite_30d,
+            aviso="GetHistoryTrades so' entrega 'data inicial' dentro dos "
+                  "ultimos 30 dias corridos (limite documentado no manual, "
+                  "nao restricao de conta). Esses dias serao tentados mas "
+                  "vao recusar rapido (NL_HISTORY_PERIOD_LIMIT). Para "
+                  "historico mais antigo, so' resta gravacao ao vivo diaria "
+                  "acumulando — ver docs/OPERACAO.md.",
+        )
     if not pendentes:
         log.info("backfill_dia.nada_a_fazer")
         return 0
@@ -165,13 +184,23 @@ def executar_por_dia(
             eventos, ok = _aguardar_quiesce(bus, base, quiesce_s, timeout_dia_s)
             if eventos == 0:
                 feriados.append(dia)
-                log.info("backfill_dia.sem_entrega", dia=dia,
-                         nota="provavel feriado/sem pregao")
+                nota = (
+                    "provavel LIMITE DE 30 DIAS do GetHistoryTrades, nao feriado"
+                    if dia < limite_30d else
+                    "provavel feriado/sem pregao"
+                )
+                log.info("backfill_dia.sem_entrega", dia=dia, nota=nota)
             elif not ok:
                 incompletos.append(dia)
                 log.error("backfill_dia.timeout", dia=dia, eventos=eventos,
                           aviso="dia possivelmente parcial — sera re-pedido no "
                                 "proximo run se a particao for removida")
+            elif dia < limite_30d:
+                # Silencio dentro da janela historicamente inatingivel:
+                # mais provavel ser o teto de 30 dias que feriado. O evento
+                # 'sem_entrega' abaixo ja registra isso; nao promover a
+                # 'capturado' evita falso positivo de particao completa.
+                pass
             else:
                 capturados += 1
                 log.info("backfill_dia.ok", dia=dia, eventos=eventos)
