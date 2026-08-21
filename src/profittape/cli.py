@@ -113,7 +113,9 @@ def inspect(
 @app.command()
 def backfill(
     inicio: str = typer.Option(..., "--inicio", help="YYYY-MM-DD"),
-    fim: str = typer.Option(..., "--fim", help="YYYY-MM-DD"),
+    fim: str = typer.Option(..., "--fim",
+                            help="YYYY-MM-DD. EXCLUSIVO (observado em producao): "
+                                 "para incluir o dia X, informe X+1."),
     config: Path = typer.Option(Path("config/recorder.yaml"), "--config", "-c"),
     quiesce: float = typer.Option(15.0, "--quiesce", help="Segundos sem evento novo = fim."),
     timeout: float = typer.Option(3600.0, "--timeout"),

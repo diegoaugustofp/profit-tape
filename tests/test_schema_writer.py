@@ -154,3 +154,24 @@ def test_curate_recusa_rodar_com_inprogress(tmp_path: Path) -> None:
     with _pytest.raises(SystemExit, match="inprogress"):
         curar_trades(raw, tmp_path / "curated")
     sink.close()
+
+
+def test_segundo_processo_nao_colide_nem_sobrescreve(tmp_raiz: Path) -> None:
+    """
+    Regressao de bug latente: a numeracao de arquivo comecava em 0 a cada
+    processo. Um segundo run na mesma particao colidia no rename (Windows) ou
+    sobrescrevia em silencio (antes do rename-on-close). A numeracao agora e'
+    descoberta no disco.
+    """
+    s1 = ParquetSink(tmp_raiz)
+    s1.write(Stream.TRADE, "2024-01-02", "PETR4", _colunas([_trade(i) for i in range(10)]))
+    s1.close()
+
+    s2 = ParquetSink(tmp_raiz)  # processo novo: memoria zerada
+    s2.write(Stream.TRADE, "2024-01-02", "PETR4", _colunas([_trade(i) for i in range(7)]))
+    s2.close()
+
+    nomes = sorted(p.name for p in tmp_raiz.rglob("*.parquet"))
+    assert nomes == ["part-0000.parquet", "part-0001.parquet"]
+    total = ds.dataset(tmp_raiz / "trade", format="parquet", partitioning="hive").to_table()
+    assert total.num_rows == 17  # nada sobrescrito

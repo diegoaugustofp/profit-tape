@@ -85,3 +85,20 @@ ainda nao pronto) e apos queda de conexao. O backfill trata os dois com
 `--settle` (respiro pos-conexao, padrao 5s) e `--tentativas`/`--intervalo`
 (retry por ticker). Se todos os tickers recusarem apos os retries em condicao
 de rede boa e horario comercial, ai sim procure o 46o codigo NL_ no manual.
+
+## Backfill: fatos empiricos da conta em uso (medidos em 2026-08-21)
+
+- `fim` e' EXCLUSIVO: pedir 19..20 entrega so o dia 19 (09:00 as 18:31 BRT
+  do WIN, sessao completa). Para N dias, peca ate o dia seguinte ao ultimo.
+- Vazao observada do servidor de historico: ~27-37 mil eventos/s.
+- Volume de referencia: 1 pregao de WINFUT ~= 5,0M negocios; WDOFUT ~500k;
+  PETR4/VALE3/ITUB4 ~40-47k cada. Dimensione --timeout por ai
+  (ex.: 60 pregoes de WIN ~= 300M eventos ~= 2h30-3h de download).
+- O servidor respondeu de madrugada; a recusa NL base+46 logo apos conectar
+  se resolve com o settle padrao de 5s.
+- ~11% dos trade_id vieram repetidos dentro do proprio feed de historico.
+  E' esperado; o curate resolve. NAO use raw em feature sem curar.
+- A maquina NAO pode suspender durante captura: um cochilo do Windows
+  congelou quiesce, progresso e timeout no meio de um run (deteccao de
+  drift agora avisa, mas nao conserta). Desative a suspensao no plano de
+  energia enquanto grava.

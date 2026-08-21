@@ -130,7 +130,20 @@ class ParquetSink:
             / f"sym={_sanitize(key.symbol)}"
         )
         pasta.mkdir(parents=True, exist_ok=True)
-        seq = self._seq.get(key, 0)
+        seq = self._seq.get(key)
+        if seq is None:
+            # Descobre o proximo indice livre OLHANDO O DISCO, nao a memoria.
+            # Bug latente real: dois processos (ou dois runs) na mesma particao
+            # comecavam ambos em part-0000; o segundo colidia no rename — ou,
+            # antes do rename-on-close, SOBRESCREVIA o dado do primeiro em
+            # silencio. Numeracao pertence ao diretorio, nao ao processo.
+            usados = []
+            for arq in pasta.glob("part-*.parquet*"):
+                try:
+                    usados.append(int(arq.name.split("-")[1].split(".")[0]))
+                except (IndexError, ValueError):
+                    continue
+            seq = max(usados) + 1 if usados else 0
         self._seq[key] = seq + 1
         # Escreve com sufixo .inprogress e renomeia no close. Incidente real:
         # um processo morto a forca deixou um part-0000.parquet sem footer, e

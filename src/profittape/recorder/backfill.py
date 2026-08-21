@@ -159,8 +159,22 @@ def executar(
         anterior = -1
         estavel_desde = time.monotonic()
         proximo_progresso = time.monotonic() + 15.0
+        ancora_wall, ancora_mono = time.time(), time.monotonic()
         while time.monotonic() - t0 < timeout_s:
             time.sleep(1.0)
+            # Suspensao da maquina distorce todo criterio baseado em relogio
+            # (incidente real: timeout de 1h disparou 3h41 depois, sem nenhum
+            # log no intervalo). Drift entre parede e monotonic denuncia.
+            drift = (time.time() - ancora_wall) - (time.monotonic() - ancora_mono)
+            if abs(drift) > 120:
+                log.warning(
+                    "backfill.suspensao_detectada",
+                    drift_s=int(drift),
+                    aviso="a maquina aparentemente dormiu; quiesce/timeout ficam "
+                          "sem sentido neste run — confira o total contra um run "
+                          "limpo e desative a suspensao para capturas",
+                )
+                ancora_wall, ancora_mono = time.time(), time.monotonic()
             atual = bus.stats().total_recebido
             if atual != anterior:
                 anterior = atual

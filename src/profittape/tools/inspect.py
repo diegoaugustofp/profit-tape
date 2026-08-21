@@ -82,6 +82,11 @@ def resumir(caminho: Path, stream: str = "trade") -> None:
                 # de sincronia. Qualquer analise que junte os dois vai errar.
                 print(f"  latencia feed p50 : {p50:,.0f} ms  <-- NEGATIVA, IMPOSSIVEL")
                 print("      Confira runtime.tz_offset_horas e o relogio da maquina.")
+            elif p50 > 3_600_000:
+                # Backfill: ts_recv e' de agora, o evento e' do passado. A
+                # "latencia" vira idade do dado e nao diz nada sobre o feed.
+                print(f"  idade do dado p50 : {p50 / 3_600_000:,.1f} h (backfill; "
+                      f"latencia de feed nao se aplica)")
             elif p50 > 5_000:
                 print(f"  latencia feed p50 : {p50:,.0f} ms  <-- alta demais, investigar")
             else:
@@ -106,6 +111,26 @@ def resumir(caminho: Path, stream: str = "trade") -> None:
             print(f"    {codigo:>4} {nome:<24} {row['count_all']:>12,}")
         print(f"\n  agressao em mercado continuo: {continuo:,} ({continuo/n:.1%})")
         print("  (o resto — leilao, RLP, balcao — deve ser excluido do calculo de OFI)")
+
+    if "agente_comprador" in tabela.column_names:
+        # O gate do Tier 1: sem identificacao de corretora nao ha estrategia
+        # de fluxo por agente. Medimos preenchimento e concentracao.
+        n_validos = tabela.num_rows
+        zer_c = pc.sum(pc.equal(tabela["agente_comprador"], 0)).as_py() or 0
+        zer_v = pc.sum(pc.equal(tabela["agente_vendedor"], 0)).as_py() or 0
+        print("\n  identificacao de corretora (agente):")
+        print(f"    comprador preenchido : {1 - zer_c / n_validos:.1%}")
+        print(f"    vendedor  preenchido : {1 - zer_v / n_validos:.1%}")
+        distintos = pc.count_distinct(tabela["agente_comprador"]).as_py()
+        print(f"    agentes distintos    : {distintos}")
+        top = sorted(_agrupar_contando(tabela, "agente_comprador"),
+                     key=lambda r: -r["count_all"])[:5]
+        print("    top 5 compradores    : "
+              + ", ".join(f"{r['agente_comprador']}({r['count_all']:,})" for r in top))
+        if zer_c / n_validos > 0.5:
+            print("    ATENCAO: maioria sem identificacao — fluxo por corretora")
+            print("    fica inviavel nesta conta/segmento. Confirme no manual se o")
+            print("    campo e' disseminado para o seu perfil.")
 
     if "trade_id" in tabela.column_names:
         unicos = pc.count_distinct(tabela["trade_id"]).as_py()
