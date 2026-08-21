@@ -73,8 +73,28 @@ def resumir(caminho: Path, stream: str = "trade") -> None:
     # o incidente antigo — sem erro, sem aviso, so' silenciosamente errado.
     _msg(f"Escaneando arquivos parquet em {alvo.resolve()} ...")
     corrompidos, _ = relatorio(alvo)
-    extras = {"exclude_invalid_files": True} if corrompidos else {}
-    dataset = ds.dataset(alvo, format="parquet", partitioning="hive", **extras)
+    # ds.dataset varre QUALQUER arquivo no diretorio, inclusive os
+    # .parquet.inprogress (escrita interrompida) — o relatorio acima ja os
+    # detecta e avisa, mas o pyarrow tenta le-los como parquet e morre com
+    # "magic bytes not found". Incidente real: sobras dos dias interrompidos
+    # por Ctrl+C duplo travaram o inspect inteiro. A defesa: enumerar so' os
+    # .parquet exatos e montar o dataset a partir dessa lista, nunca do
+    # diretorio cru (a particao hive dt=/sym= ainda e' inferida do caminho).
+    arquivos_validos = [
+        str(p) for p in alvo.rglob("*.parquet")
+        if not p.name.endswith(".inprogress")
+    ]
+    if not arquivos_validos:
+        raise SystemExit(
+            f"nenhum arquivo .parquet finalizado em {alvo.resolve()} "
+            f"(apenas .inprogress? rode `curate` ou remova as sobras)"
+        )
+    dataset = ds.dataset(
+        arquivos_validos,
+        format=ds.ParquetFileFormat(),
+        partitioning=ds.partitioning(flavor="hive"),
+        exclude_invalid_files=bool(corrompidos),
+    )
     n_arquivos = len(list(dataset.files))
     _msg(f"Carregando {n_arquivos} arquivo(s)...")
     # So as colunas que o resumo usa: numa arvore de milhoes de linhas, carregar

@@ -99,6 +99,8 @@ def executar_por_dia(
     quiesce_s: float = 10.0,
     timeout_dia_s: float = 900.0,
     settle_s: float = 5.0,
+    tentativas_vazio: int = 3,
+    pausa_retry_vazio: float = 20.0,
     dll_injetada: object | None = None,
 ) -> int:
     """
@@ -174,20 +176,45 @@ def executar_por_dia(
             d = datetime.strptime(dia, "%Y-%m-%d")
             ini = d.strftime("%d/%m/%Y")
             fim = (d + timedelta(days=1)).strftime("%d/%m/%Y")
-            base = bus.stats().total_recebido
             log.info("backfill_dia.solicitando", dia=dia, progresso=f"{idx}/{len(pendentes)}")
-            recusas = 0
-            for a in cfg.ativos:
-                try:
-                    client.request_history(a.ticker, ini, fim, a.bolsa)
-                except SubscriptionFailed as exc:
-                    recusas += 1
-                    log.error("backfill_dia.recusado", dia=dia, ticker=a.ticker,
-                              detalhe=str(exc))
-            if recusas == len(cfg.ativos):
+
+            # Padrao descoberto em producao (log de 2026-08-21): TODO dia
+            # pedido logo apos um dia de milhoes de eventos voltava vazio com
+            # timing exato de quiesce (16s) — nao era feriado (30/07, 05/08
+            # sao uteis), era o servidor de historico ainda ocupado despejando
+            # /resetando do dia anterior. A resposta e' esperar e repetir:
+            # dentro da janela de 30 dias, um dia vazio e' quase sempre isso.
+            eventos, ok, recusado = 0, False, False
+            max_tentativas = tentativas_vazio if dia >= limite_30d else 1
+            for tentativa in range(1, max_tentativas + 1):
+                base = bus.stats().total_recebido
+                recusas = 0
+                for a in cfg.ativos:
+                    try:
+                        client.request_history(a.ticker, ini, fim, a.bolsa)
+                    except SubscriptionFailed as exc:
+                        recusas += 1
+                        log.error("backfill_dia.recusado", dia=dia,
+                                  ticker=a.ticker, detalhe=str(exc))
+                if recusas == len(cfg.ativos):
+                    recusado = True
+                    break
+                eventos, ok = _aguardar_quiesce(bus, base, quiesce_s, timeout_dia_s)
+                if eventos > 0:
+                    break
+                if tentativa < max_tentativas:
+                    log.info(
+                        "backfill_dia.vazio_retry",
+                        dia=dia, tentativa=f"{tentativa}/{max_tentativas}",
+                        aguardando_s=pausa_retry_vazio,
+                        nota="dia dentro da janela veio vazio; provavel servidor "
+                             "ainda ocupado do dia anterior — aguardando e repetindo",
+                    )
+                    time.sleep(pausa_retry_vazio)
+
+            if recusado:
                 incompletos.append(dia)
                 continue
-            eventos, ok = _aguardar_quiesce(bus, base, quiesce_s, timeout_dia_s)
             if eventos == 0:
                 feriados.append(dia)
                 nota = (

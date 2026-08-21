@@ -140,6 +140,16 @@ def backfill(
     ),
     timeout_dia: float = typer.Option(900.0, "--timeout-dia",
                                       help="Timeout por pregao no modo --por-dia."),
+    tentativas_vazio: int = typer.Option(
+        3, "--tentativas-vazio",
+        help="Modo --por-dia: quantas vezes repetir um dia que voltou vazio "
+             "estando DENTRO da janela de 30 dias (servidor ocupado do dia "
+             "anterior devolve vazio; repetir costuma resolver).",
+    ),
+    pausa_retry_vazio: float = typer.Option(
+        20.0, "--pausa-retry-vazio",
+        help="Segundos de pausa entre tentativas de um dia vazio.",
+    ),
     log_level: str = typer.Option("INFO", "--log-level"),
     log_file: Path | None = typer.Option(
         None, "--log-file",
@@ -172,7 +182,9 @@ def backfill(
 
         raise typer.Exit(executar_por_dia(cfg, cred, inicio, fim,
                                           quiesce_s=quiesce, timeout_dia_s=timeout_dia,
-                                          settle_s=settle))
+                                          settle_s=settle,
+                                          tentativas_vazio=tentativas_vazio,
+                                          pausa_retry_vazio=pausa_retry_vazio))
     from .recorder.backfill import executar
 
     raise typer.Exit(executar(cfg, cred, inicio, fim, quiesce_s=quiesce, timeout_s=timeout,

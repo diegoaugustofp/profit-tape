@@ -331,3 +331,25 @@ def test_sink_conta_aberturas_de_arquivo(tmp_raiz: Path) -> None:
     sink.write(Stream.TRADE, "2024-01-03", "PETR4", _colunas([_trade(2)]))
     assert sink.aberturas == 2          # particao nova: abre
     sink.close()
+
+
+def test_inspect_ignora_inprogress_em_vez_de_travar(tmp_raiz: Path, capsys) -> None:
+    """
+    Incidente real (2026-08-21): sobras .parquet.inprogress de dias
+    interrompidos por Ctrl+C duplo faziam o ds.dataset tentar le-las como
+    parquet e MORRER ('magic bytes not found'), travando o inspect inteiro.
+    Agora o dataset e' montado so' com os .parquet finalizados.
+    """
+    from profittape.tools.inspect import resumir
+
+    sink = ParquetSink(tmp_raiz)
+    sink.write(Stream.TRADE, "2024-01-02", "PETR4", _colunas([_trade(0)]))
+    sink.close()
+    # Sobra de escrita interrompida, ao lado de um parquet valido.
+    lixo = tmp_raiz / "trade" / "dt=2024-01-03" / "sym=WINFUT"
+    lixo.mkdir(parents=True)
+    (lixo / "part-0000.parquet.inprogress").write_bytes(b"nao sou parquet")
+
+    resumir(tmp_raiz, "trade")            # nao pode levantar
+    out = capsys.readouterr().out
+    assert "linhas" in out                 # chegou a produzir o relatorio

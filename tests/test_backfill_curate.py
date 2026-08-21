@@ -339,3 +339,53 @@ def test_por_dia_interrompido_ainda_reporta_resumo_e_e_retomavel(tmp_raiz: Path)
     assert rc2 == 0
     capturados2 = sorted(p.name for p in (tmp_raiz / "trade").glob("dt=*"))
     assert capturados2 == ["dt=2026-08-17", "dt=2026-08-18", "dt=2026-08-19"]
+
+
+def test_por_dia_repete_dia_vazio_dentro_da_janela(tmp_raiz: Path) -> None:
+    """
+    Padrao real (2026-08-21): dia pedido logo apos um dia pesado voltava vazio
+    (servidor ocupado), com timing exato de quiesce. Dentro da janela de 30
+    dias, um vazio deve ser repetido — este teste faz o fake devolver vazio na
+    1a tentativa e dados na 2a, e exige que o dia seja capturado.
+    """
+    from profittape.recorder import backfill as bf
+
+    hoje = datetime.now()
+    dia_alvo = (hoje - timedelta(days=3)).strftime("%Y-%m-%d")   # dentro dos 30
+
+    cfg = RecorderConfig(
+        ativos=[AtivoConfig(ticker="PETR4")],
+        storage=StorageConfig(raiz=tmp_raiz),
+        pipeline=PipelineConfig(poll_timeout_s=0.1),
+        runtime=RuntimeConfig(),
+    )
+    cred = Credenciais(activation_key="k", user="u", password="p", dll_path="fake")
+
+    fake = FakeProfitDLL(eventos_por_ativo=40)
+
+    # O fake padrao entrega sempre; simulamos "vazio na 1a" monkeypatchando o
+    # quiesce para reportar 0 na primeira chamada e o valor real depois.
+    real_quiesce = bf._aguardar_quiesce
+    chamadas = {"n": 0}
+
+    def quiesce_vazio_primeiro(bus, base, quiesce_s, timeout_s):
+        chamadas["n"] += 1
+        if chamadas["n"] == 1:
+            return 0, True          # vazio, sem timeout
+        return real_quiesce(bus, base, quiesce_s, timeout_s)
+
+    bf._aguardar_quiesce = quiesce_vazio_primeiro
+    try:
+        rc = bf.executar_por_dia(
+            cfg, cred, dia_alvo, dia_alvo,
+            quiesce_s=0.5, timeout_dia_s=10, settle_s=0.0,
+            tentativas_vazio=3, pausa_retry_vazio=0.1,
+            dll_injetada=fake,
+        )
+    finally:
+        bf._aguardar_quiesce = real_quiesce
+
+    assert rc == 0
+    assert chamadas["n"] == 2                       # repetiu uma vez
+    dias = [p.name for p in (tmp_raiz / "trade").glob("dt=*")]
+    assert dias == [f"dt={dia_alvo}"]               # capturado na 2a tentativa
