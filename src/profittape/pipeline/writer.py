@@ -94,11 +94,15 @@ class WriterThread(threading.Thread):
             grupos[(env.stream, _dia_de(ts), ev.symbol)].append(ev)
 
         linhas = 0
+        por_stream: dict[str, int] = {}
         for (stream, dia, symbol), eventos in grupos.items():
             colunas = self._colunizar(stream, eventos)
-            linhas += self.sink.write(stream, dia, symbol, colunas)
+            escritas = self.sink.write(stream, dia, symbol, colunas)
+            linhas += escritas
+            por_stream[stream.value] = por_stream.get(stream.value, 0) + escritas
 
         dt = time.perf_counter() - t0
+        self.metrics.registrar_lote(por_stream)
         self.metrics.registrar_escrita(linhas, dt, self.sink.arquivos_abertos)
 
         if dt > 1.0:

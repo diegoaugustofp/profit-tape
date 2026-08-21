@@ -126,3 +126,28 @@ def test_dll_e_finalizada(tmp_raiz: Path) -> None:
     svc._parar.set()
     t.join(timeout=30)
     assert fake.finalizado
+
+
+def test_metricas_por_stream_e_feed_vivo(tmp_raiz: Path) -> None:
+    """
+    Regressao do monitor mentiroso: sessao real com 769k eventos mostrou
+    sem_evento_ha_s=844 (feed vivissimo) e por_stream vazio, porque o contador
+    por evento nunca era alimentado. Agora o writer alimenta por lote.
+    """
+    fake = FakeProfitDLL(eventos_por_ativo=200)
+    svc = RecorderService(_config(tmp_raiz), _cred(), dll_injetada=fake)
+    t = threading.Thread(target=svc.run, daemon=True)
+    t.start()
+    time.sleep(2.5)
+
+    st = svc.bus.stats()
+    snap = svc.metrics.snapshot(st.profundidade_atual, st.profundidade_maxima,
+                                st.total_descartado, st.total_recebido)
+    assert snap.eventos_por_stream.get("trade", 0) > 0
+    assert snap.eventos_por_stream.get("book_offer", 0) > 0
+    assert snap.ultimo_evento_ha_s < 5.0        # feed vivo = contador recente
+
+    svc._parar.set()
+    t.join(timeout=60)
+    snap2 = svc.metrics.snapshot(0, 0, 0, 1)
+    assert sum(snap2.eventos_por_stream.values()) == svc.bus.stats().total_recebido

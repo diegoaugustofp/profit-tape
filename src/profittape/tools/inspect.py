@@ -37,15 +37,36 @@ def _agrupar_contando(tabela: pa.Table, coluna: str) -> list[dict]:
 
 
 def resumir(caminho: Path, stream: str = "trade") -> None:
-    alvo = caminho / stream if (caminho / stream).exists() else caminho
-    relatorio(alvo)
-    dataset = ds.dataset(
-        alvo, format="parquet", partitioning="hive",
-        # Pula arquivo ilegivel em vez de morrer nele. O relatorio acima ja
-        # gritou QUAIS sao — resiliencia sem silencio.
-        exclude_invalid_files=True,
-    )
-    tabela = dataset.to_table()
+    candidato = caminho / stream
+    if candidato.exists():
+        alvo = candidato
+    elif any(caminho.glob("dt=*")):
+        alvo = caminho          # o proprio caminho ja e' um diretorio de stream
+    else:
+        # Incidente real: o fallback silencioso auditou data/raw INTEIRO —
+        # trade+book+tiny unificados numa tabela sem sentido — e o usuario
+        # levou um relatorio errado sem nenhum aviso. Mistura silenciosa e'
+        # pior que erro: agora falha listando o que existe.
+        disponiveis = (
+            sorted(d.name for d in caminho.iterdir() if d.is_dir())
+            if caminho.exists() else []
+        )
+        raise SystemExit(
+            f"stream '{stream}' nao encontrado em {caminho}. "
+            f"Diretorios disponiveis: {disponiveis or '(nenhum)'}"
+        )
+
+    corrompidos, _ = relatorio(alvo)
+    extras = {"exclude_invalid_files": True} if corrompidos else {}
+    dataset = ds.dataset(alvo, format="parquet", partitioning="hive", **extras)
+    # So as colunas que o resumo usa: numa arvore de milhoes de linhas, carregar
+    # price/quantidade/flags que ninguem le e' o que tornava o inspect lento —
+    # junto com a dupla varredura de footer (exclude_invalid_files repete a
+    # validacao; agora so entra quando a varredura achou podre).
+    desejadas = [c for c in ("ts_ns", "ts_recv_ns", "symbol", "trade_type",
+                             "trade_id", "agente_comprador", "agente_vendedor", "dt")
+                 if c in dataset.schema.names]
+    tabela = dataset.to_table(columns=desejadas)
     n = tabela.num_rows
 
     print("=" * 78)
@@ -133,20 +154,24 @@ def resumir(caminho: Path, stream: str = "trade") -> None:
             print("    campo e' disseminado para o seu perfil.")
 
     if "trade_id" in tabela.column_names:
-        # trade_id e' sequencial POR SIMBOLO: contar distintos globalmente
-        # acusa colisao entre simbolos como se fosse duplicata (bug real:
-        # 621.412 falsos positivos num pregao — exatamente a soma das linhas
-        # nao-WIN, ja que todo id delas cabia na faixa 1..N do WIN).
-        chaves = tabela.select(["symbol", "trade_id"])
-        col = chaves["symbol"]
-        if pa.types.is_dictionary(col.type):
-            chaves = chaves.set_column(0, "symbol", col.cast(pa.string()))
-        pares_distintos = chaves.group_by(["symbol", "trade_id"]).aggregate([]).num_rows
-        repetidos = n - pares_distintos
+        # A sequencia de trade_id reinicia POR SIMBOLO E POR DIA. Duas camadas
+        # de falso positivo ja cairam aqui: contar globalmente acusou colisao
+        # entre simbolos (621.412 num pregao), e contar por (symbol, trade_id)
+        # acusou colisao entre DIAS (214.349 — os ids de hoje dentro da faixa
+        # de ontem). A chave de unicidade e' (symbol, dt, trade_id) — a mesma
+        # que o curate sempre usou, por deduplicar dentro da particao de dia.
+        nomes = ["symbol", "trade_id"] + (["dt"] if "dt" in tabela.column_names else [])
+        chaves = tabela.select(nomes)
+        for idx, nome in enumerate(nomes):
+            col = chaves[nome]
+            if pa.types.is_dictionary(col.type):
+                chaves = chaves.set_column(idx, nome, col.cast(pa.string()))
+        distintos = chaves.group_by(nomes).aggregate([]).num_rows
+        repetidos = n - distintos
         if repetidos:
-            print(f"\n  ATENCAO: {repetidos:,} pares (symbol, trade_id) repetidos.")
+            print(f"\n  ATENCAO: {repetidos:,} chaves {tuple(nomes)} repetidas.")
             print("  Pode ser edicao de negocio (is_edit) ou reentrega no reconnect.")
             print("  O curate deduplica mantendo a versao de maior ts_recv.")
         else:
-            print("\n  trade_id: sem duplicidade por (symbol, trade_id).")
+            print(f"\n  trade_id: sem duplicidade por {tuple(nomes)}.")
     print("=" * 78)

@@ -195,3 +195,34 @@ def test_colisao_de_trade_id_entre_simbolos_nao_e_duplicata(tmp_raiz: Path, caps
     out = capsys.readouterr().out
     assert "sem duplicidade" in out
     assert "ATENCAO" not in out
+
+
+def test_stream_inexistente_falha_listando_os_disponiveis(tmp_raiz: Path) -> None:
+    """Regressao: o fallback silencioso auditou a arvore inteira misturada."""
+    import pytest as _pytest
+
+    from profittape.tools.inspect import resumir
+
+    sink = ParquetSink(tmp_raiz)
+    sink.write(Stream.TRADE, "2024-01-02", "PETR4", _colunas([_trade(0)]))
+    sink.close()
+
+    with _pytest.raises(SystemExit, match=r"book_offer.*trade"):
+        resumir(tmp_raiz, "book_offer")
+
+
+def test_mesmo_trade_id_em_dias_diferentes_nao_e_duplicata(tmp_raiz: Path, capsys) -> None:
+    """
+    Regressao (camada 2 da cebola): trade_id reinicia por dia; ids de hoje
+    dentro da faixa de ontem acusavam 214.349 falsos positivos.
+    """
+    from profittape.tools.inspect import resumir
+
+    sink = ParquetSink(tmp_raiz)
+    for dia in ("2024-01-02", "2024-01-03"):
+        sink.write(Stream.TRADE, dia, "WINFUT", _colunas([_trade(i) for i in range(15)]))
+    sink.close()
+
+    resumir(tmp_raiz, "trade")
+    out = capsys.readouterr().out
+    assert "sem duplicidade" in out and "ATENCAO" not in out

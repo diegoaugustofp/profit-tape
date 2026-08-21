@@ -26,7 +26,6 @@ class Snapshot:
     fila_pico: int
     arquivos_abertos: int
     ultimo_evento_ha_s: float
-    latencia_feed_ms_p50: float
     escrita_s_total: float
 
 
@@ -40,19 +39,22 @@ class Metrics:
     _escrita_s: float = 0.0
     _arquivos: int = 0
     _ultimo_evento: float = field(default_factory=time.monotonic)
-    # Amostra de latencia: guardamos poucos milhares e tiramos mediana. Manter
-    # tudo custaria memoria no caminho quente sem melhorar a leitura.
-    _lat_amostra: list[float] = field(default_factory=list)
-    _lat_max_amostras: int = 4096
 
-    def registrar_evento(self, stream: str, symbol: str, latencia_ms: float | None = None) -> None:
-        """Chamado pelo dispatcher, fora do callback da DLL."""
+    def registrar_lote(self, por_stream: dict[str, int]) -> None:
+        """
+        Chamado pelo WRITER a cada lote processado — custo zero no callback.
+
+        Bug historico: existia um registrar_evento por evento que NINGUEM
+        chamava; sem_evento_ha_s subia linearmente com o feed vivo (observado:
+        844s "sem evento" com 769k linhas escritas) e por_stream saia vazio.
+        Um detector de feed morto que mente e' pior que nenhum — no dia do
+        feed morrer de verdade, ninguem acredita nele.
+        """
         with self._lock:
-            self._por_stream[stream] += 1
-            self._por_simbolo[symbol] += 1
-            self._ultimo_evento = time.monotonic()
-            if latencia_ms is not None and len(self._lat_amostra) < self._lat_max_amostras:
-                self._lat_amostra.append(latencia_ms)
+            for stream, n in por_stream.items():
+                self._por_stream[stream] += n
+            if por_stream:
+                self._ultimo_evento = time.monotonic()
 
     def registrar_escrita(self, linhas: int, segundos: float, arquivos_abertos: int) -> None:
         with self._lock:
@@ -64,8 +66,6 @@ class Metrics:
         self, fila_atual: int, fila_pico: int, descartados: int, recebidos: int
     ) -> Snapshot:
         with self._lock:
-            amostra = sorted(self._lat_amostra)
-            p50 = amostra[len(amostra) // 2] if amostra else 0.0
             return Snapshot(
                 uptime_s=time.monotonic() - self.inicio,
                 eventos_por_stream=dict(self._por_stream),
@@ -77,6 +77,5 @@ class Metrics:
                 fila_pico=fila_pico,
                 arquivos_abertos=self._arquivos,
                 ultimo_evento_ha_s=time.monotonic() - self._ultimo_evento,
-                latencia_feed_ms_p50=p50,
                 escrita_s_total=self._escrita_s,
             )
