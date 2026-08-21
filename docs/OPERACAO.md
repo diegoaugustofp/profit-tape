@@ -69,3 +69,19 @@ df = con.execute("""
 
 O filtro por `trade_type` nao e' detalhe. Leilao, RLP e balcao no meio do
 calculo de OFI produzem um numero que parece razoavel e nao mede nada.
+
+## Comportamento sob queda de conexao (aprendido em producao)
+
+Se a internet cair durante uma chamada da DLL, a chamada pode BLOQUEAR por
+muitos minutos (observado: 21) e nao ha como interromper com seguranca — nem
+Ctrl+C acorda a thread presa dentro da DLL ate a chamada retornar. O log
+`backfill.solicitando` imediatamente antes de cada chamada diz onde parou;
+`backfill.estado_conexao` registra a queda quando o callback de estado dispara.
+Se precisar abortar de verdade, feche o processo pelo gerenciador de tarefas —
+o raw do dia continua legivel porque os arquivos rotacionam por ociosidade.
+
+A recusa NL base+46 apareceu em dois contextos: logo apos conectar (historico
+ainda nao pronto) e apos queda de conexao. O backfill trata os dois com
+`--settle` (respiro pos-conexao, padrao 5s) e `--tentativas`/`--intervalo`
+(retry por ticker). Se todos os tickers recusarem apos os retries em condicao
+de rede boa e horario comercial, ai sim procure o 46o codigo NL_ no manual.

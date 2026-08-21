@@ -53,6 +53,7 @@ class FakeProfitDLL:
         self._subscritos: list[tuple[str, str, str]] = []
         self._threads: list[threading.Thread] = []
         self.erros: list[BaseException] = []
+        self._hist_chamadas: dict[str, int] = {}
         self._parar = threading.Event()
         self.finalizado = False
 
@@ -104,6 +105,13 @@ class FakeProfitDLL:
         """
         if ticker.startswith("FAILHIST"):
             return -2147483602
+        if ticker.startswith("FLAKYHIST"):
+            # Imita o padrao real de "servidor de historico ainda nao pronto":
+            # recusa a primeira chamada e aceita a partir da segunda.
+            n = self._hist_chamadas.get(ticker, 0) + 1
+            self._hist_chamadas[ticker] = n
+            if n == 1:
+                return -2147483602
         return self._get_history_ok(ticker, bolsa, ini, fim)
 
     def _get_history_ok(self, ticker, bolsa, ini, fim):

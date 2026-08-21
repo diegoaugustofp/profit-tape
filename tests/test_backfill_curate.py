@@ -40,7 +40,7 @@ def test_backfill_ponta_a_ponta(tmp_raiz: Path) -> None:
     fake = FakeProfitDLL(eventos_por_ativo=300)
 
     rc = executar(cfg, cred, "2026-08-18", "2026-08-19",
-                  quiesce_s=1.5, timeout_s=20, dll_injetada=fake)
+                  quiesce_s=1.5, timeout_s=20, settle_s=0.0, dll_injetada=fake)
     assert not fake.erros, f"thread emissora do fake morreu: {fake.erros[0]!r}"
     assert rc == 0
 
@@ -105,7 +105,8 @@ def test_ticker_recusado_nao_aborta_os_demais(tmp_raiz: Path) -> None:
     fake = FakeProfitDLL(eventos_por_ativo=100)
 
     rc = executar(cfg, cred, "2026-08-18", "2026-08-19",
-                  quiesce_s=1.5, timeout_s=20, dll_injetada=fake)
+                  quiesce_s=1.5, timeout_s=20, settle_s=0.0,
+                  tentativas=1, dll_injetada=fake)
     assert rc == 0
 
     tabela = ds.dataset(tmp_raiz / "trade", format="parquet", partitioning="hive").to_table()
@@ -123,6 +124,7 @@ def test_todos_recusados_devolve_2(tmp_raiz: Path) -> None:
     cred = Credenciais(activation_key="k", user="u", password="p", dll_path="fake")
     rc = executar(cfg, cred, "2026-08-18", "2026-08-19",
                   quiesce_s=1.0, timeout_s=10,
+                  settle_s=0.0, tentativas=2, intervalo_retry_s=0.1,
                   dll_injetada=FakeProfitDLL(eventos_por_ativo=10))
     assert rc == 2
 
@@ -133,3 +135,28 @@ def test_describe_codigo_desconhecido_da_offset() -> None:
     msg = describe(-2147483602)
     assert "base+46" in msg
     assert "0x8000002e" in msg
+
+
+def test_retry_recupera_servidor_nao_pronto(tmp_raiz: Path) -> None:
+    """
+    Padrao observado em producao: recusa NL logo apos conectar, que some numa
+    segunda tentativa. O retry precisa recuperar o ticker sem intervencao.
+    """
+    cfg = RecorderConfig(
+        ativos=[AtivoConfig(ticker="FLAKYHIST_PETR4")],
+        storage=StorageConfig(raiz=tmp_raiz),
+        pipeline=PipelineConfig(poll_timeout_s=0.1),
+        runtime=RuntimeConfig(),
+    )
+    cred = Credenciais(activation_key="k", user="u", password="p", dll_path="fake")
+    fake = FakeProfitDLL(eventos_por_ativo=80)
+
+    rc = executar(cfg, cred, "2026-08-18", "2026-08-19",
+                  quiesce_s=1.0, timeout_s=20,
+                  settle_s=0.0, tentativas=3, intervalo_retry_s=0.2,
+                  dll_injetada=fake)
+    assert rc == 0
+    assert fake._hist_chamadas["FLAKYHIST_PETR4"] == 2  # recusou, retry aceitou
+
+    tabela = ds.dataset(tmp_raiz / "trade", format="parquet", partitioning="hive").to_table()
+    assert tabela.num_rows == 80

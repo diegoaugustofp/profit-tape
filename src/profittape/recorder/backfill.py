@@ -6,19 +6,26 @@ O QUE DA E O QUE NAO DA PARA PEDIR
 Trades: sim, via GetHistoryTrades. Book: nao — e' realtime puro, e nenhum
 backfill traz o livro de ontem de volta.
 
-A PROFUNDIDADE E' UMA PERGUNTA EMPIRICA
----------------------------------------
-Quanto historico intradiario o servidor entrega varia por corretora e conta,
-e a documentacao nao promete nada. A mesma licao do data_audit do MT5 vale
-aqui: peca um intervalo longo e MECA o que veio, em vez de assumir. O resumo
-final imprime o primeiro e o ultimo timestamp recebidos por ativo justamente
-para isso.
+LICOES DOS PRIMEIROS RUNS REAIS (2026-08-21)
+--------------------------------------------
+1. `conectado` no market data NAO significa historico pronto: houve recusa
+   NL base+46 dois milissegundos depois do estado conectar. Por isso existe
+   `settle_s` (respiro pos-conexao) e retry com intervalo.
+2. O mesmo base+46 apareceu para TODOS os tickers apos queda de conexao.
+   Um codigo, duas situacoes, uma leitura: "servidor de historico
+   indisponivel". E' hipotese empirica, nao manual — mas retry e' a resposta
+   certa para ela nos dois casos.
+3. Uma chamada da DLL pode BLOQUEAR por muitos minutos se a conexao cair no
+   meio (observado: 21 min). Nao ha como impor timeout a uma chamada ctypes
+   bloqueante sem corromper o estado da DLL. O que se pode fazer — e este
+   modulo faz — e' logar ANTES da chamada, para o travamento ter nome, e
+   registrar toda mudanca de estado de conexao no meio do caminho.
 
 COMO SABER QUE ACABOU
 ---------------------
-A DLL nao emite "fim do historico" confiavel entre versoes. O criterio aqui e'
-quiesce: se nenhum evento novo chega por `quiesce_s` segundos depois do
-primeiro lote, consideramos completo. Conservador e a prova de versao.
+A DLL nao emite "fim do historico" confiavel entre versoes. O criterio e'
+quiesce: sem evento novo por `quiesce_s` segundos apos o primeiro lote,
+consideramos completo. Conservador e a prova de versao.
 """
 
 from __future__ import annotations
@@ -54,6 +61,9 @@ def executar(
     fim_iso: str,
     quiesce_s: float = 15.0,
     timeout_s: float = 3600.0,
+    settle_s: float = 5.0,
+    tentativas: int = 3,
+    intervalo_retry_s: float = 15.0,
     dll_injetada: object | None = None,
 ) -> int:
     inicio = _iso_para_dll(inicio_iso)
@@ -72,41 +82,79 @@ def executar(
         batch_max=cfg.pipeline.batch_max,
         poll_timeout=cfg.pipeline.poll_timeout_s,
     )
+
+    def _log_estado(tipo: int, valor: int) -> None:
+        # A queda de conexao no meio do backfill foi invisivel no primeiro
+        # incidente real. Nunca mais: todo estado vira linha de log.
+        log.info("backfill.estado_conexao", tipo=tipo, valor=valor)
+
     client = ProfitClient(
         dll_path=cred.dll_path, activation_key=cred.activation_key,
         user=cred.user, password=cred.password, bus=bus,
-        tz_offset_horas=cfg.runtime.tz_offset_horas, dll=dll_injetada,
+        tz_offset_horas=cfg.runtime.tz_offset_horas,
+        on_state=_log_estado, dll=dll_injetada,
     )
 
     writer.start()
     aceitos: list[str] = []
-    recusados: list[tuple[str, str]] = []
+    recusas: dict[str, str] = {}
     try:
         client.connect()
-        # Um ticker recusado NAO aborta os demais. O padrao de quem falha e de
-        # quem passa e' informacao de diagnostico: se PETR4 aceita e WINFUT
-        # recusa, o problema e' o ticker (continuo x contrato especifico), nao
-        # a conta. Abortar no primeiro erro joga esse dado fora.
-        for a in cfg.ativos:
-            try:
-                client.request_history(a.ticker, inicio, fim, a.bolsa)
-            except SubscriptionFailed as exc:
-                recusados.append((a.ticker, str(exc)))
-                log.error("backfill.recusado", ticker=a.ticker, detalhe=str(exc))
-                continue
-            aceitos.append(a.ticker)
-            log.info("backfill.pedido", ticker=a.ticker, inicio=inicio, fim=fim)
+        if settle_s > 0:
+            # Market data conectado != historico pronto (visto em producao:
+            # recusa 2ms apos o connect). Um respiro barato evita um round
+            # inteiro de retry.
+            log.info("backfill.settle", segundos=settle_s)
+            time.sleep(settle_s)
+
+        pendentes = list(cfg.ativos)
+        for rodada in range(1, tentativas + 1):
+            if rodada > 1:
+                log.info("backfill.retry", rodada=rodada,
+                         pendentes=[a.ticker for a in pendentes],
+                         aguardando_s=intervalo_retry_s)
+                time.sleep(intervalo_retry_s)
+                if not client.conectado_market:
+                    log.warning("backfill.sem_conexao_no_retry",
+                                acao="aguardando reconectar")
+                    limite = time.monotonic() + intervalo_retry_s
+                    while time.monotonic() < limite and not client.conectado_market:
+                        time.sleep(0.5)
+
+            falharam: list = []
+            for a in pendentes:
+                # Log ANTES da chamada: se a DLL bloquear (observado: 21 min
+                # apos queda de conexao), esta e' a linha que diz ONDE.
+                log.info("backfill.solicitando", ticker=a.ticker,
+                         inicio=inicio, fim=fim, rodada=rodada)
+                try:
+                    client.request_history(a.ticker, inicio, fim, a.bolsa)
+                except SubscriptionFailed as exc:
+                    recusas[a.ticker] = str(exc)
+                    log.error("backfill.recusado", ticker=a.ticker,
+                              rodada=rodada, detalhe=str(exc))
+                    falharam.append(a)
+                    continue
+                aceitos.append(a.ticker)
+                recusas.pop(a.ticker, None)
+                log.info("backfill.aceito", ticker=a.ticker)
+            pendentes = falharam
+            if not pendentes:
+                break
 
         if not aceitos:
-            log.error("backfill.todos_recusados",
-                      dica="teste um periodo curto e recente com --ticker; "
-                           "para futuro, tente o CONTRATO (ex: WINV26), nao o continuo")
+            log.error(
+                "backfill.todos_recusados",
+                dica="mesmo codigo em todos os tickers tem padrao de servidor "
+                     "de historico indisponivel — verifique a conexao e re-rode; "
+                     "se persistir em horario comercial, o offset NL no manual "
+                     "e' a pista decisiva",
+            )
             return 2
 
-        # Quiesce so faz sentido se algo foi aceito.
-        # Mesma logica do seu
-        # data_audit no MT5 — a primeira resposta de download assincrono e'
-        # sempre parcial, e quem le cedo demais subestima o que existe.
+        # Quiesce: espera o total parar de crescer. Mesma logica do download
+        # assincrono do MT5 — a primeira resposta e' sempre parcial, e quem le
+        # cedo demais subestima o que existe.
         t0 = time.monotonic()
         anterior = -1
         estavel_desde = time.monotonic()
@@ -125,9 +173,9 @@ def executar(
 
         if anterior <= 0:
             log.error(
-                "backfill.vazio",
-                hipoteses="servidor fora do ar (tente em horario comercial), "
-                          "conta sem historico provisionado, ou intervalo sem pregao",
+                "backfill.aceito_mas_vazio",
+                aviso="o servidor aceitou o pedido e nao entregou nada — "
+                      "intervalo sem pregao, ou conta sem historico provisionado",
             )
     except Exception:
         log.exception("backfill.erro")
@@ -140,7 +188,7 @@ def executar(
     st = bus.stats()
     log.info(
         "backfill.resumo",
-        aceitos=aceitos, recusados=[t for t, _ in recusados],
+        aceitos=sorted(set(aceitos)), recusados=sorted(recusas),
         eventos=st.total_recebido, descartados=st.total_descartado,
         raiz=str(cfg.storage.raiz),
         proximo_passo="profit-tape inspect para ver a profundidade REAL entregue, "

@@ -117,6 +117,10 @@ def backfill(
     config: Path = typer.Option(Path("config/recorder.yaml"), "--config", "-c"),
     quiesce: float = typer.Option(15.0, "--quiesce", help="Segundos sem evento novo = fim."),
     timeout: float = typer.Option(3600.0, "--timeout"),
+    settle: float = typer.Option(5.0, "--settle",
+                                 help="Respiro apos conectar; historico pode nao estar pronto."),
+    tentativas: int = typer.Option(3, "--tentativas"),
+    intervalo: float = typer.Option(15.0, "--intervalo", help="Segundos entre tentativas."),
     ticker: list[str] = typer.Option(
         [], "--ticker",
         help="Sobrepoe os ativos do config. Formato TICKER ou TICKER:BOLSA. Repetivel.",
@@ -144,7 +148,9 @@ def backfill(
     cred.validar()
     from .recorder.backfill import executar
 
-    raise typer.Exit(executar(cfg, cred, inicio, fim, quiesce_s=quiesce, timeout_s=timeout))
+    raise typer.Exit(executar(cfg, cred, inicio, fim, quiesce_s=quiesce, timeout_s=timeout,
+                              settle_s=settle, tentativas=tentativas,
+                              intervalo_retry_s=intervalo))
 
 
 @app.command()
