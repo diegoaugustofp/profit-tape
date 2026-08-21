@@ -33,6 +33,7 @@ from ..health.metrics import Metrics
 from ..pipeline.bus import EventBus
 from ..pipeline.writer import WriterThread
 from ..profitdll.client import ProfitClient
+from ..profitdll.errors import SubscriptionFailed
 from ..storage.parquet_sink import ParquetSink
 
 log = structlog.get_logger(__name__)
@@ -78,13 +79,32 @@ def executar(
     )
 
     writer.start()
+    aceitos: list[str] = []
+    recusados: list[tuple[str, str]] = []
     try:
         client.connect()
+        # Um ticker recusado NAO aborta os demais. O padrao de quem falha e de
+        # quem passa e' informacao de diagnostico: se PETR4 aceita e WINFUT
+        # recusa, o problema e' o ticker (continuo x contrato especifico), nao
+        # a conta. Abortar no primeiro erro joga esse dado fora.
         for a in cfg.ativos:
-            client.request_history(a.ticker, inicio, fim, a.bolsa)
+            try:
+                client.request_history(a.ticker, inicio, fim, a.bolsa)
+            except SubscriptionFailed as exc:
+                recusados.append((a.ticker, str(exc)))
+                log.error("backfill.recusado", ticker=a.ticker, detalhe=str(exc))
+                continue
+            aceitos.append(a.ticker)
             log.info("backfill.pedido", ticker=a.ticker, inicio=inicio, fim=fim)
 
-        # Quiesce: espera o total parar de crescer. Mesma logica do seu
+        if not aceitos:
+            log.error("backfill.todos_recusados",
+                      dica="teste um periodo curto e recente com --ticker; "
+                           "para futuro, tente o CONTRATO (ex: WINV26), nao o continuo")
+            return 2
+
+        # Quiesce so faz sentido se algo foi aceito.
+        # Mesma logica do seu
         # data_audit no MT5 — a primeira resposta de download assincrono e'
         # sempre parcial, e quem le cedo demais subestima o que existe.
         t0 = time.monotonic()
@@ -120,6 +140,7 @@ def executar(
     st = bus.stats()
     log.info(
         "backfill.resumo",
+        aceitos=aceitos, recusados=[t for t, _ in recusados],
         eventos=st.total_recebido, descartados=st.total_descartado,
         raiz=str(cfg.storage.raiz),
         proximo_passo="profit-tape inspect para ver a profundidade REAL entregue, "

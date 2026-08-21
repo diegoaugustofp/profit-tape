@@ -98,6 +98,16 @@ class FakeProfitDLL:
 
     def GetHistoryTrades(self, ticker, bolsa, ini, fim):
         """
+        Ticker comecando com "FAILHIST" e' recusado com codigo NL, imitando a
+        recusa sincrona observada em producao (ex: continuo de futuro sem
+        historico). Permite testar que um recusado nao derruba os demais.
+        """
+        if ticker.startswith("FAILHIST"):
+            return -2147483602
+        return self._get_history_ok(ticker, bolsa, ini, fim)
+
+    def _get_history_ok(self, ticker, bolsa, ini, fim):
+        """
         Emite historico pelo callback proprio, como a DLL real: a chamada
         retorna imediatamente e os eventos chegam depois, de outra thread.
         E' esse formato assincrono que o quiesce do backfill precisa tratar.

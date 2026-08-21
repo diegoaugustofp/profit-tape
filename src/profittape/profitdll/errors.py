@@ -34,8 +34,19 @@ _ERRORS: dict[int, str] = {
 }
 
 
+_NL_BASE = -2147483648  # 0x80000000
+
+
 def describe(code: int) -> str:
-    return _ERRORS.get(code, f"codigo desconhecido {code}")
+    if code in _ERRORS:
+        return _ERRORS[code]
+    # Codigo fora da tabela: dar tudo que ajuda a acha-lo no manual. Os NL_*
+    # sao sequenciais a partir da base, entao o OFFSET e' o indice na lista
+    # de constantes da sua versao da documentacao.
+    offset = code - _NL_BASE
+    return (f"codigo desconhecido {code} (hex {code & 0xFFFFFFFF:#010x}, "
+            f"NL base+{offset}) — procure o {offset}o codigo NL_ no manual "
+            f"da sua versao e acrescente-o em profitdll/errors.py")
 
 
 def check(code: int, contexto: str) -> None:

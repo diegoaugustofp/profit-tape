@@ -117,6 +117,10 @@ def backfill(
     config: Path = typer.Option(Path("config/recorder.yaml"), "--config", "-c"),
     quiesce: float = typer.Option(15.0, "--quiesce", help="Segundos sem evento novo = fim."),
     timeout: float = typer.Option(3600.0, "--timeout"),
+    ticker: list[str] = typer.Option(
+        [], "--ticker",
+        help="Sobrepoe os ativos do config. Formato TICKER ou TICKER:BOLSA. Repetivel.",
+    ),
     log_level: str = typer.Option("INFO", "--log-level"),
 ) -> None:
     """
@@ -128,6 +132,14 @@ def backfill(
     """
     configurar(log_level)
     cfg = RecorderConfig.from_yaml(config)
+    if ticker:
+        from .config import AtivoConfig
+
+        novos = []
+        for t in ticker:
+            nome, _, bolsa = t.partition(":")
+            novos.append(AtivoConfig(ticker=nome.upper(), bolsa=bolsa.upper() or "B"))
+        cfg = cfg.model_copy(update={"ativos": novos})
     cred = Credenciais()
     cred.validar()
     from .recorder.backfill import executar

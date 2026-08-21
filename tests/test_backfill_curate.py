@@ -84,3 +84,52 @@ def test_curadoria_deduplica_e_exclui_ts_invalido(tmp_path: Path) -> None:
     assert 0 not in tabela["ts_ns"].to_pylist()
     linha_1 = tabela.to_pylist()[0]
     assert linha_1["price"] == pytest.approx(30.01)  # a EDICAO venceu, nao a original
+
+
+def test_ticker_recusado_nao_aborta_os_demais(tmp_raiz: Path) -> None:
+    """
+    Regressao do incidente real: GetHistoryTrades devolveu NL desconhecido para
+    WINFUT e o backfill abortou sem tentar PETR4/VALE3 — jogando fora justamente
+    o padrao diferencial que diagnostica a causa.
+    """
+    cfg = RecorderConfig(
+        ativos=[
+            AtivoConfig(ticker="FAILHIST_WINFUT", bolsa="F"),
+            AtivoConfig(ticker="PETR4"),
+        ],
+        storage=StorageConfig(raiz=tmp_raiz),
+        pipeline=PipelineConfig(poll_timeout_s=0.1),
+        runtime=RuntimeConfig(),
+    )
+    cred = Credenciais(activation_key="k", user="u", password="p", dll_path="fake")
+    fake = FakeProfitDLL(eventos_por_ativo=100)
+
+    rc = executar(cfg, cred, "2026-08-18", "2026-08-19",
+                  quiesce_s=1.5, timeout_s=20, dll_injetada=fake)
+    assert rc == 0
+
+    tabela = ds.dataset(tmp_raiz / "trade", format="parquet", partitioning="hive").to_table()
+    assert set(tabela["symbol"].to_pylist()) == {"PETR4"}
+    assert tabela.num_rows == 100
+
+
+def test_todos_recusados_devolve_2(tmp_raiz: Path) -> None:
+    cfg = RecorderConfig(
+        ativos=[AtivoConfig(ticker="FAILHIST_A"), AtivoConfig(ticker="FAILHIST_B")],
+        storage=StorageConfig(raiz=tmp_raiz),
+        pipeline=PipelineConfig(poll_timeout_s=0.1),
+        runtime=RuntimeConfig(),
+    )
+    cred = Credenciais(activation_key="k", user="u", password="p", dll_path="fake")
+    rc = executar(cfg, cred, "2026-08-18", "2026-08-19",
+                  quiesce_s=1.0, timeout_s=10,
+                  dll_injetada=FakeProfitDLL(eventos_por_ativo=10))
+    assert rc == 2
+
+
+def test_describe_codigo_desconhecido_da_offset() -> None:
+    from profittape.profitdll.errors import describe
+
+    msg = describe(-2147483602)
+    assert "base+46" in msg
+    assert "0x8000002e" in msg
