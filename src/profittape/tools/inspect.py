@@ -65,7 +65,13 @@ def resumir(caminho: Path, stream: str = "trade") -> None:
             f"Diretorios disponiveis: {disponiveis or '(nenhum)'}"
         )
 
-    _msg(f"Escaneando arquivos parquet em {alvo} ...")
+    # Caminho RESOLVIDO e absoluto: um caminho relativo aqui e' a origem mais
+    # provavel de auditar o diretorio ERRADO quando storage.raiz muda (ex.:
+    # dado movido para outro volume). Incidente real: apos mover a captura
+    # para G:\data\raw, `inspect data/raw` continuou lendo o C:\...\data\raw
+    # antigo, esquecido, e devolveu um relatorio de dado JA CORRIGIDO parecendo
+    # o incidente antigo — sem erro, sem aviso, so' silenciosamente errado.
+    _msg(f"Escaneando arquivos parquet em {alvo.resolve()} ...")
     corrompidos, _ = relatorio(alvo)
     extras = {"exclude_invalid_files": True} if corrompidos else {}
     dataset = ds.dataset(alvo, format="parquet", partitioning="hive", **extras)
@@ -84,7 +90,7 @@ def resumir(caminho: Path, stream: str = "trade") -> None:
     _msg(f"Carregado. Calculando estatisticas sobre {n:,} linhas...\n")
 
     print("=" * 78)
-    print(f"AUDITORIA — {alvo}")
+    print(f"AUDITORIA — {alvo.resolve()}")
     print("=" * 78)
     print(f"  linhas            : {n:,}")
     if n == 0:

@@ -293,3 +293,23 @@ def test_inspect_distingue_sem_data_por_design_de_erro(tmp_raiz: Path, capsys) -
     assert "sem data por evento : 18" in out
     assert "94" in out or "90.0%" in out
     assert "TIMESTAMP INVALIDO" not in out
+
+
+def test_inspect_mostra_caminho_absoluto(tmp_raiz: Path, capsys, monkeypatch) -> None:
+    """
+    Regressao: apos mover storage.raiz para outro volume, `inspect data/raw`
+    (caminho relativo, esquecido) continuou lendo o diretorio antigo em
+    silencio, devolvendo um relatorio de dado ja corrigido com cara de
+    incidente antigo. Caminho absoluto no cabecalho torna o descompasso
+    imediatamente visivel.
+    """
+    from profittape.tools.inspect import resumir
+
+    sink = ParquetSink(tmp_raiz)
+    sink.write(Stream.TRADE, "2024-01-02", "PETR4", _colunas([_trade(0)]))
+    sink.close()
+
+    monkeypatch.chdir(tmp_raiz.parent)
+    resumir(Path(tmp_raiz.name), "trade")
+    out = capsys.readouterr().out
+    assert str(tmp_raiz.resolve()) in out
