@@ -196,3 +196,62 @@ arquivado — o proprio operador o invalidou ao ver os agent_id reais.
 Cada eixo testado formalmente = trials adicionais no DSR (nao e' "so' mais
 uma classificacao para ver de graca" — mistura de eixos data-snooping se
 todos forem testados na mesma rodada sem contabilizar).
+
+## Classificacao final de 2 camadas (2026-08-22, operador)
+
+Estrutura decidida: `perfil_corretora.csv` ganha DUAS colunas derivadas de
+UMA classificacao de base, para nao forcar tudo num eixo so'.
+
+  COLUNA 1 (grupo, 5 categorias, granular):
+    HFT | ESTRANGEIROS | INSTITUCIONAIS | VAREJO | OUTROS
+
+  COLUNA 2 (eixo_nac_estr, BINARIO, DERIVADO da coluna 1 por regra fixa):
+    VAREJO          -> NACIONAL
+    ESTRANGEIROS    -> ESTRANGEIRO
+    INSTITUCIONAIS  -> ver PROCEDIMENTO DE DUAS ETAPAS abaixo (nao e' auto)
+    HFT             -> EXCLUIDO do eixo binario (nem nacional nem estrangeiro;
+                        participa SO' do eixo discricionario-vs-algoritmico,
+                        que e' o dele — nao forcar Ideal numa direcao que
+                        ninguem consegue justificar)
+    OUTROS          -> EXCLUIDO (baixa confianca, nao entra em nenhum eixo
+                        ate' virar um dos quatro acima)
+
+PROCEDIMENTO DE DUAS ETAPAS para o grupo INSTITUCIONAIS no eixo binario
+(travado ANTES de qualquer correlacao ser calculada — a fuga de um erro
+metodologico real: "considerar Institucionais como proxy parcial" so' e'
+valido se o peso for decidido por evidencia, nao ajustado para bater com o
+gabarito oficial):
+
+  ETAPA 1 — proxy ESTREITO: Estrangeiro = so' grupo ESTRANGEIROS (nomes
+    inequivocamente estrangeiros: Goldman, Morgan Stanley, JP Morgan, UBS).
+    Calcula fluxo liquido diario desse grupo, correlaciona contra o saldo
+    OFICIAL de estrangeiro da B3/CVM (via Trade Hunter flow-foreign) nos
+    mesmos pregoes. Registra o coeficiente ANTES de ir para a etapa 2.
+
+  ETAPA 2 — teste INDEPENDENTE do grupo INSTITUCIONAIS: calcula fluxo
+    liquido diario do grupo INSTITUCIONAIS SEPARADAMENTE (nao somado ao
+    proxy), e correlaciona ele TAMBEM contra o mesmo saldo oficial B3/CVM.
+      - SE correlacionar significativamente -> evidencia EMPIRICA (nao
+        intuicao) de que essas mesas carregam fluxo estrangeiro relevante;
+        amplia-se o proxy (Estrangeiro = ESTRANGEIROS + INSTITUCIONAIS) e
+        registra-se o motivo com o coeficiente que justificou.
+      - SE NAO correlacionar -> Institucionais fica DE FORA do eixo binario
+        (mas continua existindo na coluna 1, disponivel para outras
+        perguntas). Nao se ajusta peso fracionario para forcar correlacao —
+        e' binario incluir/excluir, decidido pelo proprio dado.
+
+    Isto e' EXPLORATORIO (2 correlacoes contra serie externa, nao contra
+    retorno) — nao conta como trial de previsao no DSR (DSR conta trials de
+    IC-vs-retorno, nao de validacao de classificacao contra serie oficial).
+    Mas fica registrado e versionado como parte do metodo, nao descartado
+    como "so' um teste rapido".
+
+CHECAGEM EMPIRICA ANTES DE CONSTRUIR O PIPELINE INTEIRO: computar % do
+volume total por grupo (coluna 1) assim que o CSV for preenchido. Risco
+identificado: o grupo ESTRANGEIROS estreito (so' nomes inequivocos) pode ser
+uma fatia pequena do volume observado nos agentes de maior volume do WINFUT
+(o top 5 hoje e' XP/BTG/Ideal/Genial/UBS-ou-Agora — so' UBS cai limpo em
+ESTRANGEIROS). Se a fatia for muito pequena (ex. <2% do volume), 19 pregoes
+podem nao ter poder estatistico para detectar correlacao alguma contra o
+saldo B3/CVM, e vale saber isso ANTES de montar o pipeline completo, nao
+depois de rodar tudo e nao achar nada.
