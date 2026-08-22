@@ -105,7 +105,51 @@ def resumir(caminho: Path, stream: str = "trade") -> None:
                              "trade_id", "agente_comprador", "agente_vendedor",
                              "has_date", "dt")
                  if c in dataset.schema.names]
-    tabela = dataset.to_table(columns=desejadas)
+    # to_table sobre a arvore inteira assume schema uniforme — inferido do
+    # PRIMEIRO arquivo. Incidente real: 19 dias vindos de rodadas diferentes
+    # (backfill de hoje + sobras da rodada interrompida) podem ter schema
+    # sutilmente divergente (coluna a mais/menos, tipo diferente), e ai o
+    # to_table morre com um traceback cru no meio de 100 arquivos, sem dizer
+    # QUAL arquivo. Lemos fragmento a fragmento: o que casa entra, o que
+    # diverge e' reportado por nome e pulado — auditoria nao pode morrer por
+    # causa de um arquivo torto entre noventa e nove sadios.
+    fragmentos_ok = []
+    problemas: list[tuple[str, str]] = []
+    import re as _re
+
+    import pyarrow as _pa
+    for frag in dataset.get_fragments():
+        try:
+            # Cada fragmento pode ter schema proprio (rodadas diferentes). Pede
+            # so' as colunas que ELE tem, entre as desejadas — evita derrubar o
+            # arquivo inteiro por causa de uma coluna ausente (has_date/
+            # trade_type surgiram em versoes diferentes do gravador).
+            cols_frag = frag.physical_schema.names
+            pedir = [c for c in desejadas if c in cols_frag]
+            t = frag.to_table(columns=pedir)
+            # 'dt' e 'sym' vem do CAMINHO (particao hive), nao do arquivo — ao
+            # ler fragmento a fragmento eles nao se materializam sozinhos.
+            # Recupera 'dt' do path para as estatisticas por dia funcionarem.
+            if "dt" in desejadas and "dt" not in t.column_names:
+                m = _re.search(r"dt=([0-9-]+)", frag.path)
+                if m:
+                    t = t.append_column(
+                        "dt", _pa.array([m.group(1)] * t.num_rows, _pa.string())
+                    )
+            fragmentos_ok.append(t)
+        except Exception as exc:
+            problemas.append((frag.path, type(exc).__name__ + ": " + str(exc)[:120]))
+    if problemas:
+        print(f"\n  ATENCAO: {len(problemas)} arquivo(s) ilegiveis, PULADOS:")
+        for caminho, erro in problemas[:10]:
+            print(f"    {caminho}\n      -> {erro}")
+        if len(problemas) > 10:
+            print(f"    ... e mais {len(problemas) - 10}.")
+        print("  (arquivo corrompido na interrupcao. Mova para quarentena ou "
+              "remova a particao do dia e re-rode o backfill dela.)")
+    if not fragmentos_ok:
+        raise SystemExit("nenhum arquivo legivel apos filtrar os problematicos.")
+    tabela = _pa.concat_tables(fragmentos_ok, promote_options="permissive")
     n = tabela.num_rows
     _msg(f"Carregado. Calculando estatisticas sobre {n:,} linhas...\n")
 
@@ -197,6 +241,12 @@ def resumir(caminho: Path, stream: str = "trade") -> None:
         continuo = 0
         for row in sorted(_agrupar_contando(tabela, "trade_type"), key=lambda r: -r["count_all"]):
             codigo = row["trade_type"]
+            if codigo is None:
+                # Linhas de arquivos gravados antes da coluna trade_type
+                # existir (rodada antiga). Contamos como sem-classificacao em
+                # vez de quebrar a formatacao.
+                print(f"    {'?':>4} {'(sem trade_type gravado)':<24} {row['count_all']:>12,}")
+                continue
             try:
                 nome = TradeType(codigo).name
                 if TradeType(codigo).is_agressao_continua:

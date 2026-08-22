@@ -353,3 +353,26 @@ def test_inspect_ignora_inprogress_em_vez_de_travar(tmp_raiz: Path, capsys) -> N
     resumir(tmp_raiz, "trade")            # nao pode levantar
     out = capsys.readouterr().out
     assert "linhas" in out                 # chegou a produzir o relatorio
+
+
+def test_inspect_pula_arquivo_corrompido_e_continua(tmp_raiz: Path, capsys) -> None:
+    """
+    Incidente real (2026-08-21): com 100 arquivos de 19 dias vindos de rodadas
+    diferentes, um part corrompido pela interrupcao derrubava o inspect
+    inteiro no to_table, com traceback cru sem dizer QUAL arquivo. Agora le
+    fragmento a fragmento: reporta o problematico por nome e segue com o resto.
+    """
+    from profittape.tools.inspect import resumir
+
+    sink = ParquetSink(tmp_raiz)
+    sink.write(Stream.TRADE, "2024-01-02", "WINFUT", _colunas([_trade(i) for i in range(20)]))
+    sink.close()
+    # part corrompido ao lado de um valido
+    ruim = tmp_raiz / "trade" / "dt=2024-01-03" / "sym=WINFUT"
+    ruim.mkdir(parents=True)
+    (ruim / "part-0000.parquet").write_bytes(b"PAR1 isto nao e parquet valido")
+
+    resumir(tmp_raiz, "trade")          # nao pode levantar
+    out = capsys.readouterr().out
+    assert "linhas" in out               # produziu o relatorio
+    assert "CORROMPIDO" in out or "ilegiveis" in out   # avisou do arquivo ruim
