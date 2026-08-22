@@ -296,20 +296,28 @@ def agents(
     )
     client.connect()
     try:
-        linhas = [(i, client.agent_name(i) or "") for i in ids]
+        linhas = [
+            (i, client.agent_name(i, curto=True) or "",
+             client.agent_name(i) or "")
+            for i in ids
+        ]
     finally:
         client.disconnect()
 
     saida.parent.mkdir(parents=True, exist_ok=True)
     with saida.open("w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
-        w.writerow(["agent_id", "nome"])
-        w.writerows(linhas)
+        # Coluna 'perfil' vem VAZIA de proposito: e' curadoria manual do
+        # operador (nacional/estrangeiro, varejo/institucional, ou o que a
+        # pesquisa decidir), congelada ANTES do IC para nao virar p-hacking.
+        w.writerow(["agent_id", "short_name", "nome", "perfil"])
+        w.writerows((i, curto, longo, "") for i, curto, longo in linhas)
 
-    sem_nome = sum(1 for _, nome in linhas if not nome)
+    sem_nome = sum(1 for _, curto, longo in linhas if not curto and not longo)
     typer.echo(f"gravado: {saida}  ({len(linhas)} agentes, {sem_nome} sem nome)")
-    for i, nome in linhas[:10]:
-        typer.echo(f"  {i:>6}  {nome}")
+    typer.echo("  coluna 'perfil' vazia — preencha manualmente antes do research")
+    for i, curto, longo in linhas[:10]:
+        typer.echo(f"  {i:>6}  {curto or '(sem short)':<12} {longo}")
 
 
 @app.command()

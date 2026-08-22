@@ -169,14 +169,25 @@ class ProfitClient:
             f"GetHistoryTrades {ticker}",
         )
 
-    def agent_name(self, agent_id: int) -> str | None:
+    def agent_name(self, agent_id: int, curto: bool = False) -> str | None:
         """
-        Nome da corretora pelo codigo, via GetAgentNameById (grafia varia).
+        Nome da corretora pelo codigo. curto=True usa GetAgentShortNameById
+        (ex.: 'XP', 'BTG', 'Ideal') em vez do nome juridico completo — muito
+        mais util para classificacao de perfil, como o operador observou
+        (2026-08-22). Cai no nome longo se o short name nao existir.
 
         Devolve None se a DLL nao expuser o export ou nao conhecer o codigo —
         quem chama decide se isso e' erro (para o CSV de referencia, nao e':
         codigo sem nome vira linha com nome vazio, ainda util para o join).
         """
+        if curto:
+            for nome in ("GetAgentShortNameByID", "GetAgentShortNameById"):
+                fn = getattr(self._dll, nome, None)
+                if fn is not None:
+                    resultado = fn(int(agent_id))
+                    if resultado:
+                        return resultado
+            # sem short name: cai no longo abaixo
         for nome in ("GetAgentNameByID", "GetAgentNameById"):
             fn = getattr(self._dll, nome, None)
             if fn is not None:

@@ -79,3 +79,57 @@ CUIDADOS METODOLOGICOS registrados:
   - [ ] agents rodado -> agentes.csv com nomes reais
   - [ ] operador preenche perfil_corretora.csv (curadoria manual)
   - [ ] features rodado sobre curated
+
+## REVISAO DA HIPOTESE DE PERFIL (2026-08-22, operador)
+
+O operador puxou os SHORT NAMES (GetAgentShortNameById, mais util que o nome
+juridico) dos agentes de maior volume:
+    3    -> XP
+    85   -> BTG
+    1618 -> Ideal
+    120  -> Genial
+    8    -> UBS
+    39   -> Agora
+
+INSIGHT METODOLOGICO: o operador REJEITOU a classificacao varejo/institucional
+simples ao ver os nomes — XP, BTG, Ideal, Genial atendem varejo E tem mesa
+institucional/estrangeira sob o MESMO codigo de agente. Rotular XP como
+"varejo" seria forcar os dados numa hipotese conveniente. Recuar disso e' a
+decisao certa.
+
+NOVA HIPOTESE (mais forte): NACIONAL vs ESTRANGEIRO, nao varejo/institucional.
+Motivacao ancorada em evento REAL e datado: agosto/2026 registrou grande
+saida de capital estrangeiro da B3. Se esse foi o fluxo dominante na janela de
+dados, entao nacional/estrangeiro nao e' classificacao arbitraria — e' a
+variavel que de fato movia o mercado nesses pregoes.
+
+VANTAGENS desta hipotese sobre a anterior:
+  1. Ancorada em evento macro real (saida de estrangeiro em agosto), nao
+     numa taxonomia generica — menos sujeita a ser artefato estatistico.
+  2. VERIFICAVEL contra dado externo independente: B3/CVM publicam saldo
+     diario de investidor estrangeiro, e o Trade Hunter MCP (flow-foreign)
+     traz fluxo estrangeiro/institucional/varejo consolidado. Isso permite
+     VALIDAR a classificacao de corretora ANTES de testar previsao:
+       - classificar corretoras por perfil nacional/estrangeiro
+       - agregar fluxo liquido por perfil no dado tick-a-tick
+       - checar se correlaciona com o saldo estrangeiro OFICIAL da B3 nos
+         mesmos dias
+       - se correlaciona -> classificacao validada; se nao -> esta errada,
+         descoberto SEM gastar trial de p-hacking em previsao de retorno
+  3. Alinha com a stack do operador (Trade Hunter flow-foreign ja' mapeado).
+
+RISCO desta hipotese, registrado honestamente:
+  - Classificar uma corretora como "estrangeira" ou "nacional" e' aproximado:
+    a corretora e' o CANAL, nao o investidor final. XP pode rotear tanto
+    pessoa fisica brasileira quanto fundo estrangeiro. O codigo de agente
+    identifica a corretora, nao a origem do capital. Entao "fluxo via
+    corretoras com forte presenca estrangeira" e' uma PROXY, nao a verdade.
+    A validacao contra o saldo oficial da B3 (item 2 acima) e' o que mede
+    quao boa e' essa proxy — se for ruim, a hipotese cai por dado, nao por
+    opiniao.
+
+ACAO: operador vai pesquisar a melhor forma de classificar (o proprio
+reconheceu que precisa investigar mais). perfil_corretora.csv permanece
+CONGELADO antes do IC, seja qual for o eixo escolhido. GetAgentShortNameById
+agora exposto (client.agent_name(id, curto=True)); comando `agents` grava
+short_name + nome + coluna 'perfil' vazia para curadoria manual.
