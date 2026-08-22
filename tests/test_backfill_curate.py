@@ -389,3 +389,42 @@ def test_por_dia_repete_dia_vazio_dentro_da_janela(tmp_raiz: Path) -> None:
     assert chamadas["n"] == 2                       # repetiu uma vez
     dias = [p.name for p in (tmp_raiz / "trade").glob("dt=*")]
     assert dias == [f"dt={dia_alvo}"]               # capturado na 2a tentativa
+
+
+def test_diagnostico_duplicatas_distingue_edicao_de_reentrega(tmp_raiz: Path, capsys) -> None:
+    """
+    Ferramenta de decisao (2026-08-22): 50% de trade_id repetido num unico dia.
+    Precisa distinguir edicao de negocio (campos diferem -> exige callback V2)
+    de reentrega benigna (identico -> curate deduplica a vontade).
+    """
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    from profittape.tools.duplicatas import diagnosticar
+
+    d = tmp_raiz / "trade" / "dt=2026-08-14" / "sym=WINFUT"
+    d.mkdir(parents=True)
+    rows = [
+        # edicao: preco difere
+        dict(ts_ns=1, ts_recv_ns=1, symbol="WINFUT", exchange="F", trade_id=1,
+             price=100.0, volume_financeiro=500.0, quantidade=5,
+             agente_comprador=3, agente_vendedor=85, trade_type=2, is_edit=False),
+        dict(ts_ns=1, ts_recv_ns=2, symbol="WINFUT", exchange="F", trade_id=1,
+             price=101.0, volume_financeiro=505.0, quantidade=5,
+             agente_comprador=3, agente_vendedor=85, trade_type=2, is_edit=False),
+        # reentrega: identico exceto ts_recv
+        dict(ts_ns=1, ts_recv_ns=1, symbol="WINFUT", exchange="F", trade_id=2,
+             price=300.0, volume_financeiro=2100.0, quantidade=7,
+             agente_comprador=120, agente_vendedor=39, trade_type=2, is_edit=False),
+        dict(ts_ns=1, ts_recv_ns=2, symbol="WINFUT", exchange="F", trade_id=2,
+             price=300.0, volume_financeiro=2100.0, quantidade=7,
+             agente_comprador=120, agente_vendedor=39, trade_type=2, is_edit=False),
+    ]
+    cols = {k: [r[k] for r in rows] for k in rows[0]}
+    pq.write_table(pa.table(cols), d / "part-0000.parquet")
+
+    diagnosticar(tmp_raiz, "WINFUT", "2026-08-14", amostras=5)
+    out = capsys.readouterr().out
+    assert "DIFERE" in out          # pegou a edicao
+    assert "IDENTICO" in out        # pegou a reentrega
+    assert "MISTO" in out or "EDICAO" in out

@@ -117,6 +117,22 @@ def inspect(
 
 
 @app.command()
+def duplicatas(
+    caminho: Path = typer.Argument(..., help="Raiz dos dados (ex.: G:\\data\\raw)."),
+    symbol: str = typer.Argument(..., help="Ativo a diagnosticar (ex.: WINFUT)."),
+    dia: str | None = typer.Option(None, "--dia", help="Restringe a um dt=YYYY-MM-DD."),
+    amostras: int = typer.Option(10, "--amostras", help="Quantos pares mostrar lado a lado."),
+) -> None:
+    """
+    Diagnostica trade_id repetido: edicao de negocio (campos diferem) x
+    reentrega benigna (campos identicos). Decide se e' preciso o callback V2.
+    """
+    from .tools.duplicatas import diagnosticar
+
+    diagnosticar(caminho, symbol.upper(), dia, amostras)
+
+
+@app.command()
 def backfill(
     inicio: str = typer.Option(..., "--inicio", help="YYYY-MM-DD"),
     fim: str = typer.Option(..., "--fim",
