@@ -217,8 +217,15 @@ class RecorderService:
             fila_pico=st.profundidade_maxima,
             por_stream=snap.eventos_por_stream,
             full_book_descartados=self.client.full_book_descartados,
+            arquivos_verificados=self.writer.sink.arquivos_verificados,
+            falhas_verificacao=len(self.writer.sink.falhas_verificacao),
             raiz=str(Path(self.cfg.storage.raiz).resolve()),
         )
+        if self.writer.sink.falhas_verificacao:
+            log.error("recorder.ARQUIVOS_NAO_CONFIAVEIS",
+                      arquivos=self.writer.sink.falhas_verificacao,
+                      acao="permanecem .inprogress; investigue o volume antes "
+                           "de confiar em qualquer dado desta sessao")
         if st.total_descartado:
             log.error(
                 "recorder.DADO_PERDIDO",

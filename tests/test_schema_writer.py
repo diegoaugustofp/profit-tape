@@ -435,3 +435,38 @@ def test_quarentena_acha_fossil_preserva_bom(tmp_raiz: Path, capsys) -> None:
     varrer(tmp_raiz, remover=True)
     assert not (d / "part-0000.parquet").exists()   # fossil apagado
     assert (d / "part-0001.parquet").exists()        # bom preservado
+
+
+def test_verificacao_de_footer_bloqueia_promocao(tmp_raiz: Path, monkeypatch) -> None:
+    """
+    INVARIANTE DA REVISAO (2026-08-22): '.parquet' so' existe se o footer foi
+    verificado RELENDO o disco. Se a releitura falha, o arquivo permanece
+    .inprogress (estruturalmente nao-confiavel) e a falha e' contada — no
+    disco que apodrecia footers, isso gritaria no PRIMEIRO arquivo, nao 96
+    arquivos depois.
+    """
+    sink = ParquetSink(tmp_raiz)
+    sink.write(Stream.TRADE, "2026-08-14", "WINFUT", _colunas([_trade(0)]))
+    monkeypatch.setattr(ParquetSink, "_footer_ok", staticmethod(lambda _p: False))
+    caminhos = sink.close()
+
+    assert caminhos == [] or all(".inprogress" in str(c) for c in caminhos)
+    assert sink.arquivos_verificados == 0
+    assert len(sink.falhas_verificacao) == 1
+    sobras = list(tmp_raiz.rglob("*.inprogress"))
+    assert len(sobras) == 1                      # ficou marcado, nao promovido
+    assert not list(tmp_raiz.rglob("*.parquet")) or all(
+        p.name.endswith(".inprogress") for p in tmp_raiz.rglob("*")
+        if p.is_file()
+    )
+
+
+def test_verificacao_ok_promove_e_conta(tmp_raiz: Path) -> None:
+    """Caminho feliz: footer confere, arquivo promovido, verificado contado."""
+    sink = ParquetSink(tmp_raiz)
+    sink.write(Stream.TRADE, "2026-08-14", "WINFUT", _colunas([_trade(0)]))
+    sink.close()
+    assert sink.arquivos_verificados == 1
+    assert sink.falhas_verificacao == []
+    assert len(list(tmp_raiz.rglob("*.parquet"))) == 1
+    assert not list(tmp_raiz.rglob("*.inprogress"))

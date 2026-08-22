@@ -288,10 +288,18 @@ def executar_por_dia(
     log.info("backfill_dia.resumo",
              capturados=capturados, ja_existiam=len(pulados),
              sem_entrega=feriados, incompletos=incompletos,
+             arquivos_verificados=sink.arquivos_verificados,
+             falhas_verificacao=len(sink.falhas_verificacao),
              eventos=st.total_recebido, descartados=st.total_descartado)
     if incompletos:
         log.error("backfill_dia.ATENCAO_incompletos", dias=incompletos,
                   acao="remova as particoes desses dias e re-rode para completar")
+    if sink.falhas_verificacao:
+        log.error("backfill_dia.ARQUIVOS_NAO_CONFIAVEIS",
+                  arquivos=sink.falhas_verificacao,
+                  acao="permanecem .inprogress; NAO use esta captura sem "
+                       "investigar o volume")
+        return 4
     if interrompido:
         restantes = len(pendentes) - capturados - len(feriados) - len(incompletos)
         log.warning(

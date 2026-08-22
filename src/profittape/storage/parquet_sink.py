@@ -108,6 +108,8 @@ class ParquetSink:
         # depois de cada lote para distinguir lote lento por CRIACAO de
         # arquivo (spin-up de HDD USB: esperado) de lote lento por vazao.
         self.aberturas = 0
+        self.arquivos_verificados = 0
+        self.falhas_verificacao: list[str] = []
 
     # ------------------------------------------------------------------
     def write(self, stream: Stream, dia: str, symbol: str, colunas: dict[str, list[Any]]) -> int:
@@ -197,15 +199,47 @@ class ParquetSink:
             # (funciona no Linux — por isso passou nos testes de CI). A correcao
             # e' abrir em modo read-write binario ("rb+"), que garante o direito
             # de escrita que o flush precisa, em qualquer plataforma.
+            fsync_ok = True
             try:
                 with open(aberto.path_tmp, "rb+") as fh:
                     fh.flush()
                     os.fsync(fh.fileno())
             except OSError as exc:
-                log.warning("sink.fsync_falhou", arquivo=str(aberto.path_tmp),
-                            erro=str(exc),
-                            aviso="footer pode nao estar duravel; risco em USB")
-            aberto.path_tmp.rename(aberto.path_final)
+                fsync_ok = False
+                log.error("sink.fsync_falhou", arquivo=str(aberto.path_tmp),
+                          erro=str(exc))
+
+            # INVARIANTE DA REVISAO (2026-08-22, pedido do operador apos tres
+            # incidentes de corrupcao silenciosa): ".parquet" so' existe se o
+            # footer foi VERIFICADO relendo o disco. O rename e' uma promocao
+            # de confianca — e confianca aqui se ganha por releitura, nao por
+            # fe' no retorno do close(). Se a verificacao falha, o arquivo
+            # FICA como .inprogress: estruturalmente marcado como
+            # nao-confiavel, visivel em qualquer listagem, contado no resumo.
+            # No G: (o disco que apodrecia footers), isso teria gritado no
+            # PRIMEIRO arquivo em vez de aparecer 96 arquivos depois.
+            if fsync_ok and self._footer_ok(aberto.path_tmp):
+                aberto.path_tmp.rename(aberto.path_final)
+                self.arquivos_verificados += 1
+            else:
+                self.falhas_verificacao.append(str(aberto.path_tmp))
+                log.error(
+                    "sink.VERIFICACAO_FALHOU",
+                    arquivo=str(aberto.path_tmp),
+                    acao="arquivo NAO promovido a .parquet — permanece "
+                         ".inprogress; o disco nao confirmou o footer que o "
+                         "close() alegou ter escrito. Investigue o volume.",
+                )
+
+    @staticmethod
+    def _footer_ok(caminho: Path) -> bool:
+        """Rele os 4 bytes finais do DISCO e confere os magic bytes PAR1."""
+        try:
+            with caminho.open("rb") as f:
+                f.seek(-4, 2)
+                return f.read(4) == b"PAR1"
+        except OSError:
+            return False
 
     def close_idle(self, idade_maxima_s: float) -> list[Path]:
         """
@@ -219,15 +253,23 @@ class ParquetSink:
         for key in list(self._abertos):
             aberto = self._abertos[key]
             if (agora - aberto.opened_at).total_seconds() >= idade_maxima_s:
-                fechados.append(aberto.path_final)
+                destino = aberto.path_final
                 self._close_one(key)
+                if destino.exists():          # so' conta promocao verificada
+                    fechados.append(destino)
         return fechados
 
     def close(self) -> list[Path]:
-        caminhos = [a.path_final for a in self._abertos.values()]
+        # A lista de retorno so' pode conter arquivos REALMENTE promovidos —
+        # montar antecipadamente assumia que toda promocao sucede, o que o
+        # invariante de verificacao tornou falso. Devolver caminho de arquivo
+        # nao-promovido seria repetir, na API, a mentira que a revisao matou
+        # no disco. destino.exists() e' a verdade final: so' existe .parquet
+        # se a promocao aconteceu.
+        candidatos = [a.path_final for a in self._abertos.values()]
         for key in list(self._abertos):
             self._close_one(key)
-        return caminhos
+        return [destino for destino in candidatos if destino.exists()]
 
     @property
     def arquivos_abertos(self) -> int:

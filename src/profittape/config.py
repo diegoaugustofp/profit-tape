@@ -50,21 +50,24 @@ class StorageConfig(BaseModel):
 
     @field_validator("raiz")
     @classmethod
-    def _resolver_e_avisar(cls, v: Path) -> Path:
-        # ARMADILHA REAL (2026-08-22): 'raiz: \data\raw' no yaml — barra
-        # inicial SEM letra de unidade — e' caminho "relativo a unidade" no
-        # Windows: resolve para a RAIZ DO DRIVE do terminal que lancou o
-        # processo. Uma recaptura inteira foi parar em G:\data\raw (o disco
-        # que corrompe) porque o terminal estava com drive corrente em G:.
-        # Defesa dupla: avisar alto no caso Windows drive-relativo, e resolver
-        # para absoluto JA' NO LOAD — congela o destino contra mudancas de CWD.
+    def _resolver_e_recusar_ambiguidade(cls, v: Path) -> Path:
+        # ARMADILHA REAL (2026-08-22): 'raiz: \data\raw' (barra inicial SEM
+        # letra de unidade) e' "relativo a unidade" no Windows — resolve para
+        # a raiz do DRIVE CORRENTE do terminal. Uma recaptura de 20 dias foi
+        # para G:\ (o disco que corrompe) e outra para C:\data\raw (fora do
+        # projeto), ambas em silencio. A 1a versao desta defesa era um AVISO —
+        # insuficiente: print antes do logging se perde, e o operador ja'
+        # tinha perdido horas. REVISAO DO MODULO (pedido do operador):
+        # ambiguidade de destino de dado irrecuperavel nao merece aviso,
+        # merece RECUSA com instrucao de correcao.
         import os as _os
         if _os.name == "nt" and v.root and not v.drive:
-            print(f"AVISO: storage.raiz '{v}' e' relativo-a-unidade (barra "
-                  f"inicial sem letra de drive) — resolve para a raiz do "
-                  f"drive ATUAL do terminal, que pode nao ser o que voce "
-                  f"quer. Use caminho relativo simples (data/raw) ou "
-                  f"absoluto completo (C:\\projetos\\...).")
+            raise ValueError(
+                f"storage.raiz '{v}' e' relativo-a-unidade (comeca com \\ sem "
+                f"letra de drive): o destino dependeria do drive corrente do "
+                f"terminal. Use relativo simples (data/raw) ou absoluto "
+                f"completo (C:\\projetos\\profit-tape\\data\\raw)."
+            )
         return v.resolve()
     compressao: Literal["zstd", "snappy", "gzip", "lz4"] = "zstd"
     nivel_compressao: int = 3

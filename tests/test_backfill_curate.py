@@ -503,3 +503,21 @@ def test_raiz_resolvida_no_load_congela_contra_cwd(tmp_path, monkeypatch) -> Non
     assert str(cfg.raiz).startswith(str(tmp_path))
     os.chdir("/")                                   # muda o CWD depois do load
     assert str(cfg.raiz).startswith(str(tmp_path))  # destino nao se move
+
+
+def test_raiz_relativa_a_unidade_e_recusada_no_windows(monkeypatch) -> None:
+    """
+    REVISAO (2026-08-22): '\\data\\raw' (drive-relativo) mandou uma recaptura
+    para G:\\ e outra para C:\\data\\raw, em silencio. Aviso nao bastou —
+    agora e' recusa fatal com instrucao. So' se aplica no Windows; no Linux
+    '/x' e' absoluto legitimo (o teste simula nt).
+    """
+    import os
+
+    import pytest as _pt
+
+    from profittape import config as cfg_mod
+
+    monkeypatch.setattr(os, "name", "nt")
+    with _pt.raises(Exception, match="relativo-a-unidade"):
+        cfg_mod.StorageConfig(raiz=Path("\\data\\raw"))
