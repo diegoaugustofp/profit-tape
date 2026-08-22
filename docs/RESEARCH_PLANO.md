@@ -133,3 +133,66 @@ reconheceu que precisa investigar mais). perfil_corretora.csv permanece
 CONGELADO antes do IC, seja qual for o eixo escolhido. GetAgentShortNameById
 agora exposto (client.agent_name(id, curto=True)); comando `agents` grava
 short_name + nome + coluna 'perfil' vazia para curadoria manual.
+
+## Revisao critica da taxonomia de 6 niveis (2026-08-22, operador pesquisou)
+
+Operador trouxe uma taxonomia de 6 categorias de corretoras B3 (varejo puro,
+banco tradicional integrado, banco digital, institucional/atacado, private/
+alta renda, especializada em trading/HFT).
+
+TENSAO IDENTIFICADA: essa taxonomia classifica por FAIXA DE PATRIMONIO/PERFIL
+DE CLIENTE, nao por NACIONAL/ESTRANGEIRO (a hipotese da secao anterior). Sao
+eixos diferentes. Aplicando aos agentes reais de maior volume:
+
+  3    XP     -> cat.1 varejo puro         (encaixe limpo, alta confianca)
+  39   Agora  -> cat.2 banco varejo        (encaixe limpo, alta confianca)
+  85   BTG    -> cat.5 private             (BAIXA confianca — BTG e' dono da
+                                             Warren, tem mesa institucional
+                                             E app de varejo digital; e'
+                                             provavelmente o mais MISTO da
+                                             lista, nao o mais "private")
+  120  Genial -> cat.5 private             (media confianca — tambem tem
+                                             plataforma de varejo digital)
+  8    UBS    -> AUSENTE da taxonomia dada; por analogia a Goldman/Morgan
+                 Stanley seria cat.4 (institucional estrangeiro) — decisao
+                 do operador, nao inferida aqui
+  1618 Ideal  -> cat.6 trading/HFT         (a mais reveladora, ver abaixo)
+
+INSIGHT: Ideal (agente 1618, alto volume) e' descrita na propria pesquisa do
+operador como "infraestrutura eletronica avancada, algoritmos, execucao
+automatizada" — isso NAO e' um perfil de investidor (rico/pobre, nacional/
+estrangeiro). E' um perfil de ESTILO DE EXECUCAO: fluxo algoritmico/HFT,
+provavelmente market-making ou arbitragem. Comportamento esperado
+qualitativamente diferente de fluxo direcional humano: algo/HFT tende a
+REVERSAO (provisao de liquidez, gestao de inventario) enquanto fluxo
+direcional informado tende a CONTINUACAO.
+
+TERCEIRO EIXO CANDIDATO (emergiu da pesquisa, nao buscado deliberadamente):
+  3. DISCRICIONARIO vs ALGORITMICO/HFT — teoricamente pode ser o eixo MAIS
+     relevante para order flow em WIN futures especificamente, dado o
+     background do operador em trading sistematico.
+
+TRES EIXOS CANDIDATOS agora, nao um:
+  1. Varejo vs institucional        — REJEITADO pelo operador (mistura
+                                       demais nos codigos reais de maior
+                                       volume: XP/BTG/Ideal/Genial atendem
+                                       ambos sob o mesmo agent_id)
+  2. Nacional vs estrangeiro         — motivado pelo evento real de saida de
+                                       estrangeiro em ago/2026; UNICO eixo
+                                       verificavel contra dado externo
+                                       (saldo B3/CVM, Trade Hunter
+                                       flow-foreign) ANTES de gastar trial
+                                       em previsao de retorno
+  3. Discricionario vs algoritmico   — emergiu do caso Ideal; sem validacao
+                                       externa facil, mas apelo teorico
+                                       forte para order flow especificamente
+
+DECISAO PENDENTE (operador): qual eixo roda PRIMEIRO na rodada 1 do research.
+Recomendacao registrada: eixo 2 primeiro (tem o crivo de validacao externa
+que os outros nao tem — filtra hipotese ruim ANTES do IC custar trial). Eixo
+3 como candidato natural para rodada 2, nao descartado. Eixo 1 fica
+arquivado — o proprio operador o invalidou ao ver os agent_id reais.
+
+Cada eixo testado formalmente = trials adicionais no DSR (nao e' "so' mais
+uma classificacao para ver de graca" — mistura de eixos data-snooping se
+todos forem testados na mesma rodada sem contabilizar).
