@@ -47,6 +47,25 @@ class AtivoConfig(BaseModel):
 
 class StorageConfig(BaseModel):
     raiz: Path = Path("data/raw")
+
+    @field_validator("raiz")
+    @classmethod
+    def _resolver_e_avisar(cls, v: Path) -> Path:
+        # ARMADILHA REAL (2026-08-22): 'raiz: \data\raw' no yaml — barra
+        # inicial SEM letra de unidade — e' caminho "relativo a unidade" no
+        # Windows: resolve para a RAIZ DO DRIVE do terminal que lancou o
+        # processo. Uma recaptura inteira foi parar em G:\data\raw (o disco
+        # que corrompe) porque o terminal estava com drive corrente em G:.
+        # Defesa dupla: avisar alto no caso Windows drive-relativo, e resolver
+        # para absoluto JA' NO LOAD — congela o destino contra mudancas de CWD.
+        import os as _os
+        if _os.name == "nt" and v.root and not v.drive:
+            print(f"AVISO: storage.raiz '{v}' e' relativo-a-unidade (barra "
+                  f"inicial sem letra de drive) — resolve para a raiz do "
+                  f"drive ATUAL do terminal, que pode nao ser o que voce "
+                  f"quer. Use caminho relativo simples (data/raw) ou "
+                  f"absoluto completo (C:\\projetos\\...).")
+        return v.resolve()
     compressao: Literal["zstd", "snappy", "gzip", "lz4"] = "zstd"
     nivel_compressao: int = 3
     max_rows_per_file: int = 5_000_000

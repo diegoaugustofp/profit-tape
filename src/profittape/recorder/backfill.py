@@ -118,6 +118,14 @@ def executar_por_dia(
     dias = [d for d in _dias_uteis(inicio_iso, fim_iso)]
     pulados = [d for d in dias if _dia_ja_capturado(cfg.storage.raiz, d)]
     pendentes = [d for d in dias if d not in pulados]
+    import shutil as _sh
+    raiz_resolvida = Path(cfg.storage.raiz).resolve()
+    try:
+        livre_gb = _sh.disk_usage(raiz_resolvida.anchor or ".").free / 1e9
+    except OSError:
+        livre_gb = -1.0
+    log.info("backfill_dia.destino", raiz=str(raiz_resolvida),
+             livre_gb=round(livre_gb, 1))
     log.info("backfill_dia.plano", dias_uteis=len(dias),
              ja_capturados=len(pulados), pendentes=len(pendentes))
 

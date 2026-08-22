@@ -485,3 +485,21 @@ def test_quarentena_profundo_pega_corrupcao_interna(tmp_raiz: Path, capsys) -> N
     varrer(tmp_raiz, remover=False, profundo=True)
     out = capsys.readouterr().out
     assert "SEM footer" in out or "part-0000" in out
+
+
+def test_raiz_resolvida_no_load_congela_contra_cwd(tmp_path, monkeypatch) -> None:
+    """
+    Armadilha real (2026-08-22): raiz relativa resolvida tarde mudava de
+    destino conforme o CWD do processo. Agora o load resolve para absoluto
+    imediatamente — mudar de diretorio DEPOIS nao muda o destino.
+    """
+    import os
+
+    from profittape.config import StorageConfig
+
+    monkeypatch.chdir(tmp_path)
+    cfg = StorageConfig(raiz=Path("data/raw"))
+    assert cfg.raiz.is_absolute()
+    assert str(cfg.raiz).startswith(str(tmp_path))
+    os.chdir("/")                                   # muda o CWD depois do load
+    assert str(cfg.raiz).startswith(str(tmp_path))  # destino nao se move
