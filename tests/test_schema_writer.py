@@ -378,14 +378,22 @@ def test_inspect_pula_arquivo_corrompido_e_continua(tmp_raiz: Path, capsys) -> N
     assert "CORROMPIDO" in out or "ilegiveis" in out   # avisou do arquivo ruim
 
 
-def test_fsync_no_close_garante_footer_duravel(tmp_raiz: Path) -> None:
+def test_fsync_no_close_garante_footer_duravel(tmp_raiz: Path, caplog) -> None:
     """
     Incidente critico (2026-08-21): 96 arquivos ficaram sem footer no G: USB
     porque o footer escrito por writer.close() ficou no cache do SO e o rename
-    seguinte "teve sucesso" sobre conteudo nao-duravel. Este teste confirma que
-    o fsync agora forca o footer ao disco antes do rename — o arquivo final
-    sempre termina com os magic bytes PAR1.
+    seguinte "teve sucesso" sobre conteudo nao-duravel. O fsync forca o footer
+    ao disco antes do rename — o arquivo final sempre termina com PAR1.
+
+    Bug de follow-up (2026-08-22): a 1a versao abria O_RDONLY para o fsync, o
+    que falha no Windows com [Errno 9] Bad file descriptor (FlushFileBuffers
+    exige direito de escrita) — mas PASSA no Linux do CI, entao escapou ate'
+    producao. A correcao abre 'rb+'. O assert de ausencia de sink.fsync_falhou
+    ao menos trava a validade da chamada na plataforma de teste.
     """
+    import logging
+    caplog.set_level(logging.WARNING)
+
     sink = ParquetSink(tmp_raiz)
     sink.write(Stream.TRADE, "2026-08-14", "WINFUT",
               _colunas([_trade(i) for i in range(20)]))
@@ -395,3 +403,4 @@ def test_fsync_no_close_garante_footer_duravel(tmp_raiz: Path) -> None:
         dados = Path(c).read_bytes()
         assert list(dados[-4:]) == [80, 65, 82, 49], f"{c} sem footer PAR1"
         assert list(dados[:4]) == [80, 65, 82, 49]
+    assert "sink.fsync_falhou" not in caplog.text

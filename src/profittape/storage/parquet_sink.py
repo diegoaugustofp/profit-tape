@@ -190,16 +190,18 @@ class ParquetSink:
             # Defesa: fsync do arquivo ANTES do rename, forcando o footer ao
             # disco fisico. rename-on-close so' e' atomico se o conteudo ja'
             # estiver duravel — senao a atomicidade e' do nome, nao do dado.
+            #
+            # ARMADILHA DO WINDOWS (2026-08-22): os.fsync mapeia para
+            # FlushFileBuffers, que EXIGE um handle com direito de ESCRITA. Um
+            # fd O_RDONLY falha com [Errno 9] Bad file descriptor no Windows
+            # (funciona no Linux — por isso passou nos testes de CI). A correcao
+            # e' abrir em modo read-write binario ("rb+"), que garante o direito
+            # de escrita que o flush precisa, em qualquer plataforma.
             try:
-                fd = os.open(aberto.path_tmp, os.O_RDONLY)
-                try:
-                    os.fsync(fd)
-                finally:
-                    os.close(fd)
+                with open(aberto.path_tmp, "rb+") as fh:
+                    fh.flush()
+                    os.fsync(fh.fileno())
             except OSError as exc:
-                # fsync pode falhar em alguns sistemas de arquivo; nao mascara
-                # o dado, mas registra para o operador saber que a durabilidade
-                # nao foi confirmada neste arquivo.
                 log.warning("sink.fsync_falhou", arquivo=str(aberto.path_tmp),
                             erro=str(exc),
                             aviso="footer pode nao estar duravel; risco em USB")
