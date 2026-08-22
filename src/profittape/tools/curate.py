@@ -61,10 +61,33 @@ def curar_trades(raiz_raw: Path, raiz_curated: Path) -> dict[str, int]:
 
     for pasta_dia in sorted(origem.glob("dt=*")):
         dia = pasta_dia.name.split("=", 1)[1]
-        tabela = ds.dataset(
-            pasta_dia, format="parquet", partitioning="hive",
-            exclude_invalid_files=True,
-        ).to_table()
+        # Le so' os .parquet finalizados, fragmento a fragmento. Dois modos de
+        # falha ja' vistos em producao: (1) arquivo sem footer — exclude_
+        # invalid_files pula; (2) footer VALIDO mas row group internamente
+        # corrompido (ZSTD decompression failed) — passa pelo filtro de footer
+        # e explode no to_table. So' lendo fragmento a fragmento da' pra isolar
+        # o arquivo podre e pular, salvando os sadios do mesmo dia.
+        arquivos_dia = [
+            str(p) for p in pasta_dia.rglob("*.parquet")
+            if not p.name.endswith(".inprogress")
+        ]
+        if not arquivos_dia:
+            continue
+        dataset = ds.dataset(
+            arquivos_dia, format=ds.ParquetFileFormat(),
+            partitioning=ds.partitioning(flavor="hive"),
+        )
+        partes_ok = []
+        for frag in dataset.get_fragments():
+            try:
+                partes_ok.append(frag.to_table())
+            except Exception as exc:
+                print(f"  PULADO (corrompido): {frag.path}")
+                print(f"    -> {type(exc).__name__}: {str(exc)[:100]}")
+        if not partes_ok:
+            print(f"  dia {dia}: nenhum arquivo legivel, pulado.")
+            continue
+        tabela = pa.concat_tables(partes_ok, promote_options="permissive")
         if tabela.num_rows == 0:
             continue
         df = tabela.to_pandas()

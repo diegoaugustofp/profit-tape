@@ -215,15 +215,22 @@ def quarentena(
         False, "--remover",
         help="Apaga os arquivos sem footer. Sem esta flag, apenas LISTA (dry-run).",
     ),
+    profundo: bool = typer.Option(
+        False, "--profundo",
+        help="Tambem descomprime cada arquivo para pegar corrupcao INTERNA "
+             "(ZSTD failed) que o footer intacto esconde. Mais lento, mas pega "
+             "o que derruba o curate.",
+    ),
 ) -> None:
     """
-    Acha (e opcionalmente remove) arquivos .parquet sem footer — fosseis da era
-    do fsync quebrado, que a recaptura deixou ao lado dos arquivos novos e bons.
-    Dry-run por padrao: nunca apaga sem --remover.
+    Acha (e opcionalmente remove) arquivos .parquet corrompidos — fosseis sem
+    footer da era do fsync quebrado, ou (com --profundo) row groups internamente
+    corrompidos que passam pelo footer. Dry-run por padrao: nunca apaga sem
+    --remover.
     """
     from .tools.quarentena import varrer
 
-    varrer(raiz, remover)
+    varrer(raiz, remover, profundo)
 
 
 @app.command()

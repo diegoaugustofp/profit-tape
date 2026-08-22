@@ -428,3 +428,60 @@ def test_diagnostico_duplicatas_distingue_edicao_de_reentrega(tmp_raiz: Path, ca
     assert "DIFERE" in out          # pegou a edicao
     assert "IDENTICO" in out        # pegou a reentrega
     assert "MISTO" in out or "EDICAO" in out
+
+
+def test_curate_pula_arquivo_com_zstd_corrompido(tmp_raiz: Path, capsys) -> None:
+    """
+    Incidente (2026-08-22): 'ZSTD decompression failed' derrubava o curate
+    inteiro. Diferente de sem-footer: o arquivo TEM footer valido (passa pelo
+    exclude_invalid_files) mas um row group esta corrompido por dentro. So'
+    lendo fragmento a fragmento da' pra isolar o podre e salvar os sadios.
+    """
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    from profittape.tools.curate import curar_trades
+
+    curated = tmp_raiz.parent / "curated"
+    d = tmp_raiz / "trade" / "dt=2026-08-14" / "sym=WINFUT"
+    d.mkdir(parents=True)
+    cols = dict(ts_ns=[1000, 2000], ts_recv_ns=[1, 2], symbol=["WINFUT"] * 2,
+                exchange=["F"] * 2, trade_id=[1, 2], price=[1.0, 2.0],
+                volume_financeiro=[1.0, 2.0], quantidade=[1, 1],
+                agente_comprador=[3, 3], agente_vendedor=[85, 85],
+                trade_type=[2, 2], is_edit=[False] * 2)
+    pq.write_table(pa.table(cols), d / "part-0001.parquet")   # bom
+
+    # corrompido: footer valido, row group estragado
+    ruim = d / "part-0000.parquet"
+    pq.write_table(pa.table(cols), ruim)
+    b = bytearray(ruim.read_bytes())
+    for i in range(50, min(80, len(b) - 8)):
+        b[i] = 0xFF
+    ruim.write_bytes(bytes(b))
+
+    totais = curar_trades(tmp_raiz, curated)   # nao pode crashar
+    assert totais["gravadas"] == 2             # curou o arquivo bom
+    out = capsys.readouterr().out
+    assert "PULADO" in out
+
+
+def test_quarentena_profundo_pega_corrupcao_interna(tmp_raiz: Path, capsys) -> None:
+    """--profundo descomprime e pega o que o footer intacto esconde."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    from profittape.tools.quarentena import varrer
+
+    d = tmp_raiz / "trade" / "dt=2026-08-14" / "sym=WINFUT"
+    d.mkdir(parents=True)
+    ruim = d / "part-0000.parquet"
+    pq.write_table(pa.table({"a": list(range(100))}), ruim)
+    b = bytearray(ruim.read_bytes())
+    for i in range(50, min(90, len(b) - 8)):
+        b[i] = 0xFF
+    ruim.write_bytes(bytes(b))
+
+    varrer(tmp_raiz, remover=False, profundo=True)
+    out = capsys.readouterr().out
+    assert "SEM footer" in out or "part-0000" in out

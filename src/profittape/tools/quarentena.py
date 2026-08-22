@@ -34,10 +34,31 @@ def _sem_footer(arquivo: Path) -> bool:
         return True                      # ilegivel conta como suspeito
 
 
-def varrer(raiz: Path, remover: bool = False) -> None:
+def _corrompido_profundo(arquivo: Path) -> bool:
+    """
+    True se o arquivo tem footer valido mas falha ao DESCOMPRIMIR — o modo de
+    falha 'ZSTD decompression failed: Data corruption detected'. Mais caro que
+    _sem_footer (le e descomprime o arquivo inteiro), so' usado com --profundo.
+    Um footer intacto sobre um row group podre passa por _sem_footer mas
+    derruba qualquer leitura real.
+    """
+    import pyarrow.parquet as pq
+
+    try:
+        pq.read_table(arquivo)   # forca a descompressao de todos os row groups
+        return False
+    except Exception:
+        return True
+
+
+def varrer(raiz: Path, remover: bool = False, profundo: bool = False) -> None:
     """
     Lista (e opcionalmente remove) todos os .parquet sem footer sob a raiz.
     Ignora .inprogress (sao escrita em andamento legitima, nao fossil).
+
+    profundo=True tambem descomprime cada arquivo para pegar corrupcao INTERNA
+    (ZSTD failed) que o footer intacto esconde — mais lento, mas e' o unico
+    jeito de achar os arquivos que passam pelo footer e derrubam o curate.
     """
     if not raiz.exists():
         raise SystemExit(f"caminho nao existe: {raiz.resolve()}")
@@ -46,9 +67,16 @@ def varrer(raiz: Path, remover: bool = False) -> None:
         p for p in raiz.rglob("*.parquet")
         if not p.name.endswith(".inprogress")
     ]
-    print(f"Varrendo {len(candidatos)} arquivo(s) .parquet em {raiz.resolve()} ...")
+    modo = "footer + descompressao (profundo)" if profundo else "footer"
+    print(f"Varrendo {len(candidatos)} arquivo(s) .parquet em {raiz.resolve()} "
+          f"[{modo}] ...")
 
-    fosseis = [p for p in candidatos if _sem_footer(p)]
+    def _suspeito(p: Path) -> bool:
+        if _sem_footer(p):
+            return True
+        return bool(profundo and _corrompido_profundo(p))
+
+    fosseis = [p for p in candidatos if _suspeito(p)]
 
     if not fosseis:
         print("Nenhum arquivo sem footer. Tudo integro.")
