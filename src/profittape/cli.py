@@ -209,6 +209,24 @@ def backfill(
 
 
 @app.command()
+def quarentena(
+    raiz: Path = typer.Argument(..., help="Raiz dos dados (ex.: G:\\data\\raw)."),
+    remover: bool = typer.Option(
+        False, "--remover",
+        help="Apaga os arquivos sem footer. Sem esta flag, apenas LISTA (dry-run).",
+    ),
+) -> None:
+    """
+    Acha (e opcionalmente remove) arquivos .parquet sem footer — fosseis da era
+    do fsync quebrado, que a recaptura deixou ao lado dos arquivos novos e bons.
+    Dry-run por padrao: nunca apaga sem --remover.
+    """
+    from .tools.quarentena import varrer
+
+    varrer(raiz, remover)
+
+
+@app.command()
 def curate(
     raw: Path = typer.Option(Path("data/raw"), "--raw"),
     curated: Path = typer.Option(Path("data/curated"), "--curated"),

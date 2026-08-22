@@ -278,3 +278,29 @@ para dado fora da janela e insubstituivel.
 LICAO PARA O RECORD DIARIO: sem o fsync, o record agendado sofreria o mesmo em
 TODO pregao gravado no G:, e a perda so' apareceria semanas depois. O fsync
 torna cada arquivo duravel no momento em que fecha.
+
+## Fosseis sem footer da era do fsync quebrado (2026-08-22)
+
+Os part-0000 gravados antes do fsync corrigido (v0.27) ficaram sem footer. A
+recaptura com v0.27+ NAO os sobrescreve — a numeracao de part e' descoberta no
+disco e incrementa (part-0001, part-0002) para nunca sobrescrever dado bom.
+Resultado: dias recapturados ficaram com o part-0000 fossil ao lado do
+part-0001 novo. curate/inspect leem o bom e reportam o fossil como corrompido.
+
+NAO E' bug de captura multi-dia (a captura de multiplos dias funciona). E' lixo
+acumulado. Limpeza segura:
+    profit-tape quarentena G:\data\raw            # dry-run, so' lista
+    profit-tape quarentena G:\data\raw --remover  # apaga os sem-footer
+A ferramenta avisa quais dias ficam SO' com fossil (precisam recaptura) antes
+de apagar. Depois de limpar, recapture os dias sinalizados.
+
+## Instabilidade da origem no historico (2026-08-22)
+
+Alguns dias DENTRO da janela de 30 dias vieram sem_entrega mesmo apos o retry,
+com o servidor oscilando de estado (conexao tipo=2 valor 0->1->2->4) durante os
+pedidos. Nao e' o limite de 30 dias nem bug local — e' instabilidade da origem
+naquela sessao (os MESMOS dias baixaram em rodadas anteriores). O retry de 3
+tentativas ajuda mas nao cobre instabilidade prolongada. Resposta correta: como
+o backfill --por-dia e' retomavel (pula dias ja capturados), basta RE-RODAR o
+mesmo comando mais tarde — de madrugada o servidor de historico costuma estar
+mais estavel (fato observado desde as primeiras sessoes).

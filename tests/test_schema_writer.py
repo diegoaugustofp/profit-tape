@@ -404,3 +404,34 @@ def test_fsync_no_close_garante_footer_duravel(tmp_raiz: Path, caplog) -> None:
         assert list(dados[-4:]) == [80, 65, 82, 49], f"{c} sem footer PAR1"
         assert list(dados[:4]) == [80, 65, 82, 49]
     assert "sink.fsync_falhou" not in caplog.text
+
+
+def test_quarentena_acha_fossil_preserva_bom(tmp_raiz: Path, capsys) -> None:
+    """
+    Ferramenta de limpeza (2026-08-22): a era do fsync quebrado deixou
+    part-0000 sem footer, e a recaptura criou part-0001 novos AO LADO (a
+    numeracao incrementa para nao colidir). A quarentena acha os fosseis sem
+    tocar nos bons, e avisa quais dias ficam sem dado.
+    """
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    from profittape.tools.quarentena import varrer
+
+    # dia com bom + fossil
+    d = tmp_raiz / "trade" / "dt=2026-08-14" / "sym=WINFUT"
+    d.mkdir(parents=True)
+    pq.write_table(pa.table({"a": [1, 2, 3]}), d / "part-0001.parquet")
+    (d / "part-0000.parquet").write_bytes(b"PAR1" + b"\x00" * 500)
+
+    varrer(tmp_raiz, remover=False)
+    out = capsys.readouterr().out
+    assert "1 arquivo(s) SEM footer" in out
+    assert "part-0000.parquet" in out
+    assert "dry-run" in out
+    # o bom continua la'
+    assert (d / "part-0001.parquet").exists()
+
+    varrer(tmp_raiz, remover=True)
+    assert not (d / "part-0000.parquet").exists()   # fossil apagado
+    assert (d / "part-0001.parquet").exists()        # bom preservado
