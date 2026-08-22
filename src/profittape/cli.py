@@ -346,6 +346,33 @@ def agents(
 
 
 @app.command()
+def research(
+    features: Path = typer.Option(Path("data/features"), "--features"),
+    symbol: str = typer.Option("WINFUT", "--symbol"),
+    saida: Path = typer.Option(Path("data/research"), "--saida"),
+    treino_min: int = typer.Option(3, "--treino-min", help="Dias minimos de treino."),
+    teste_dias: int = typer.Option(2, "--teste-dias", help="Dias por bloco de teste."),
+) -> None:
+    """
+    IC walk-forward das features com veredito deflacionado por trials
+    acumulados. Metodo pre-registrado em docs/RESEARCH_PLANO.md.
+    """
+    from .research.pipeline import rodar
+
+    arquivo = features / f"sym={symbol.upper()}" / "features.parquet"
+    if not arquivo.exists():
+        raise SystemExit(f"nao achei {arquivo} — rode `profit-tape features` antes")
+    r = rodar(arquivo, saida, treino_min=treino_min, teste_dias=teste_dias)
+    typer.echo("=" * 62)
+    typer.echo("RESEARCH — IC walk-forward")
+    typer.echo("=" * 62)
+    for k in ("dias", "folds", "features", "trials_rodada", "trials_acumulados",
+              "limiar_deflacionado", "segue", "descarta", "inconclusivo"):
+        typer.echo(f"  {k:20}: {r[k]}")
+    typer.echo(f"  relatorio           : {r['relatorio']}")
+
+
+@app.command()
 def bench(
     ativos: int = typer.Option(5, "--ativos"),
     duracao: float = typer.Option(15.0, "--duracao", help="Segundos de simulacao."),

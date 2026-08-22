@@ -255,3 +255,23 @@ ESTRANGEIROS). Se a fatia for muito pequena (ex. <2% do volume), 19 pregoes
 podem nao ter poder estatistico para detectar correlacao alguma contra o
 saldo B3/CVM, e vale saber isso ANTES de montar o pipeline completo, nao
 depois de rodar tudo e nao achar nada.
+
+## IMPLEMENTADO (2026-08-22) — regras finais do veredito, pos teste de honestidade
+
+O modulo research/ foi implementado com teste de honestidade obrigatorio:
+feature preditiva POR CONSTRUCAO deve sair 'segue', ruido puro deve sair
+'descarta'. O teste pegou DOIS furos antes de qualquer dado real:
+
+1. E[max Z] para N pequeno fica ABAIXO de 1.96 (N=2 -> 0.56) — usar a formula
+   pura DILUIA o criterio. Corrigido: barra = max(1.96, E[max Z]).
+2. t-stat de 5 folds tem cauda de Student (4 g.l.), nao de Z — e um azar de
+   seed produziu ruido com IC -0.05 consistente em TODOS os folds, passando
+   por t+consistencia. Corrigido com a barra de MAGNITUDE.
+
+REGRAS FINAIS (tres barras cumulativas para 'segue'):
+  1. MAGNITUDE   |IC medio| >= 2/sqrt(n_obs de teste)
+  2. ESTABILIDADE |t entre folds| >= t-critico(limiar deflacionado, k-1 g.l.)
+  3. DIRECAO     mesmo sinal em >= 70% dos folds
+  + inconclusivo se folds < 4; trials acumulados em data/research/trials.json.
+
+Comando: profit-tape research --features data/features --symbol WINFUT
