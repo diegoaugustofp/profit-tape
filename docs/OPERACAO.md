@@ -247,3 +247,34 @@ MITIGACOES, em ordem de custo/beneficio:
 
 O que NAO ajuda: reduzir nivel_compressao (zstd e' custo de CPU, nao de
 latencia de disco); aumentar poll_timeout (so' atrasa a deteccao).
+
+## INCIDENTE CRITICO: 96 arquivos sem footer no G: USB (2026-08-21)
+
+SINTOMA: apos backfill que reportou backfill_dia.ok com conservacao exata, o
+inspect marcou 96 de 100 arquivos como corrompidos. Diagnostico por bytes:
+arquivos comecam com PAR1 (magic inicial) mas terminam em 00 00 00 00 em vez
+de PAR1 (magic final). Ou seja: os DADOS (row groups, ~135 MB/arquivo) estao
+gravados, mas o FOOTER (indice no fim, alguns KB) nunca chegou ao disco.
+
+CAUSA RAIZ: writer.close() escreve o footer, mas em disco USB externo com
+spin-down o footer fica no cache de escrita do Windows. O rename-on-close
+seguinte "tem sucesso" — renomeia um arquivo cujo footer ainda esta em RAM. O
+rename e' atomico para o NOME, nao para o CONTEUDO. Quando o disco dorme ou
+desconecta antes do flush, o footer se perde. Confirmado: o fluxo close+rename
+produz footer perfeito em disco local; o problema e' especifico do USB.
+
+CORRECAO: fsync do arquivo ANTES do rename (parquet_sink._close_one), forcando
+o footer ao disco fisico. rename-on-close so' garante atomicidade se o conteudo
+ja' estiver duravel.
+
+RECUPERACAO DOS 96 ARQUIVOS EXISTENTES: os row groups estao fisicamente no
+disco, mas sem o footer o pyarrow nao os le. Reconstruir o footer exige
+reparsear os page headers Thrift arquivo a arquivo — possivel, mas trabalhoso e
+sem garantia. Como TODOS os pregoes afetados (24/07 a 19/08) ainda estao dentro
+da janela de 30 dias do GetHistoryTrades, a rota recomendada e' RECAPTURAR com
+o writer corrigido, nao reconstruir. Recuperacao forense so' se justificaria
+para dado fora da janela e insubstituivel.
+
+LICAO PARA O RECORD DIARIO: sem o fsync, o record agendado sofreria o mesmo em
+TODO pregao gravado no G:, e a perda so' apareceria semanas depois. O fsync
+torna cada arquivo duravel no momento em que fecha.

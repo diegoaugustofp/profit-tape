@@ -376,3 +376,22 @@ def test_inspect_pula_arquivo_corrompido_e_continua(tmp_raiz: Path, capsys) -> N
     out = capsys.readouterr().out
     assert "linhas" in out               # produziu o relatorio
     assert "CORROMPIDO" in out or "ilegiveis" in out   # avisou do arquivo ruim
+
+
+def test_fsync_no_close_garante_footer_duravel(tmp_raiz: Path) -> None:
+    """
+    Incidente critico (2026-08-21): 96 arquivos ficaram sem footer no G: USB
+    porque o footer escrito por writer.close() ficou no cache do SO e o rename
+    seguinte "teve sucesso" sobre conteudo nao-duravel. Este teste confirma que
+    o fsync agora forca o footer ao disco antes do rename — o arquivo final
+    sempre termina com os magic bytes PAR1.
+    """
+    sink = ParquetSink(tmp_raiz)
+    sink.write(Stream.TRADE, "2026-08-14", "WINFUT",
+              _colunas([_trade(i) for i in range(20)]))
+    caminhos = sink.close()
+    assert caminhos
+    for c in caminhos:
+        dados = Path(c).read_bytes()
+        assert list(dados[-4:]) == [80, 65, 82, 49], f"{c} sem footer PAR1"
+        assert list(dados[:4]) == [80, 65, 82, 49]

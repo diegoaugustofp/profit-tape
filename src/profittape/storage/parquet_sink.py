@@ -31,15 +31,19 @@ as 17h transforma o pregao inteiro em arquivo corrompido.
 
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import pyarrow as pa
 import pyarrow.parquet as pq
+import structlog
 
 from ..domain.enums import Stream
 from ..domain.schema import schema_for
+
+log = structlog.get_logger(__name__)
 
 
 def _sanitize(valor: str) -> str:
@@ -175,6 +179,30 @@ class ParquetSink:
         aberto = self._abertos.pop(key, None)
         if aberto is not None:
             aberto.writer.close()
+            # INCIDENTE CRITICO (2026-08-21): 96 arquivos ficaram sem footer no
+            # G: USB. Causa: writer.close() escreve o footer, mas em disco
+            # externo/USB com spin-down o footer fica no cache de escrita do SO
+            # e o rename seguinte "tem sucesso" renomeando um arquivo cujo
+            # footer ainda esta em RAM. Quando o disco dorme/desconecta, o
+            # footer se perde e o parquet fica ilegivel — os dados (row groups)
+            # sobrevivem, mas sem o indice final nenhuma ferramenta le.
+            #
+            # Defesa: fsync do arquivo ANTES do rename, forcando o footer ao
+            # disco fisico. rename-on-close so' e' atomico se o conteudo ja'
+            # estiver duravel — senao a atomicidade e' do nome, nao do dado.
+            try:
+                fd = os.open(aberto.path_tmp, os.O_RDONLY)
+                try:
+                    os.fsync(fd)
+                finally:
+                    os.close(fd)
+            except OSError as exc:
+                # fsync pode falhar em alguns sistemas de arquivo; nao mascara
+                # o dado, mas registra para o operador saber que a durabilidade
+                # nao foi confirmada neste arquivo.
+                log.warning("sink.fsync_falhou", arquivo=str(aberto.path_tmp),
+                            erro=str(exc),
+                            aviso="footer pode nao estar duravel; risco em USB")
             aberto.path_tmp.rename(aberto.path_final)
 
     def close_idle(self, idade_maxima_s: float) -> list[Path]:
