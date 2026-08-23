@@ -30,7 +30,8 @@ def top_agentes(df: pd.DataFrame, n: int = 10) -> list[int]:
     return [int(a) for a in volume.head(n).index]
 
 
-def calcular(df: pd.DataFrame, agentes: list[int], tick: float) -> pd.DataFrame:
+def calcular(df: pd.DataFrame, agentes: list[int], tick: float,
+            agentes_nacionais: set[int] | None = None) -> pd.DataFrame:
     """
     Uma linha por bar_id. Colunas:
 
@@ -42,6 +43,14 @@ def calcular(df: pd.DataFrame, agentes: list[int], tick: float) -> pd.DataFrame:
                        (muito volume andando pouco preco = absorcao alta)
       rlp_frac       = vol_rlp / (vol_rlp + vol_agr)            proxy varejo
       agf_{id}       = (comprado - vendido pelo agente id) / vol_agr
+      fluxo_nacional = (comprado - vendido pelos agentes NACIONAL) / vol_agr
+                       So' calculada se agentes_nacionais for passado — feature
+                       de PERFIL validada contra a serie oficial da B3 antes de
+                       entrar aqui (docs/RESEARCH_PLANO.md, 2026-08-23):
+                       ESTRANGEIRO nao validou (baixo volume nos codigos
+                       classificados) e fica de fora; NACIONAL validou
+                       (pearson 0.524) e e' a unica agregacao de perfil que
+                       entra no research por ora.
 
     Fluxo por agente usa APENAS negocios de agressao: em RLP o "agente" da
     ponta provedora e' o internalizador e misturaria dois fenomenos distintos.
@@ -96,5 +105,21 @@ def calcular(df: pd.DataFrame, agentes: list[int], tick: float) -> pd.DataFrame:
             .reindex(barras.index, fill_value=0)
         )
         barras[f"agf_{aid}"] = (comprado - vendido) / barras["vol_agr"]
+
+    if agentes_nacionais:
+        # Mesma logica do agf_id, mas somando TODOS os agentes do perfil de
+        # uma vez (nao precisa que estejam no top-N individual — um agente
+        # pequeno mas classificado ainda entra na soma do perfil).
+        mask_compra_nac = agr["agente_comprador"].isin(agentes_nacionais)
+        mask_venda_nac = agr["agente_vendedor"].isin(agentes_nacionais)
+        comprado_nac = (
+            agr[mask_compra_nac].groupby("bar_id", observed=True)["quantidade"].sum()
+            .reindex(barras.index, fill_value=0)
+        )
+        vendido_nac = (
+            agr[mask_venda_nac].groupby("bar_id", observed=True)["quantidade"].sum()
+            .reindex(barras.index, fill_value=0)
+        )
+        barras["fluxo_nacional"] = (comprado_nac - vendido_nac) / barras["vol_agr"]
 
     return barras.reset_index()

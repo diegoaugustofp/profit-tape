@@ -219,9 +219,18 @@ def test_streaming_equivale_ao_monolitico(tmp_path) -> None:
         linhas_todas.append(df_dia)
         ts += n * 10**8 + 10**12
 
+    import csv as _csv
+    perfis_csv = tmp_path / "agentes.csv"
+    with perfis_csv.open("w", newline="", encoding="utf-8") as f:
+        w = _csv.writer(f)
+        w.writerow(["agent_id", "short_name", "nome", "perfil"])
+        w.writerow([3, "A", "Agente 3", "NACIONAL"])
+        w.writerow([120, "B", "Agente 120", "NACIONAL"])
+
     # STREAMING (o pipeline real)
     r = gerar(curated, tmp_path / "features", "WINFUT",
-              barras_por_dia=40, top_n_agentes=3, janela_z=20)
+              barras_por_dia=40, top_n_agentes=3, janela_z=20,
+              perfis_csv=perfis_csv)
     streaming = pd.read_parquet(r["arquivo"])
 
     # MONOLITICO (referencia inline, o caminho antigo)
@@ -231,8 +240,10 @@ def test_streaming_equivale_ao_monolitico(tmp_path) -> None:
     tick = bars.inferir_tick(df)
     dfb, _ = bars.atribuir_barras(df, vb)
     ag = flow.top_agentes(dfb, 3)
-    ref = flow.calcular(dfb, ag, tick)
-    ref = normalize.aplicar(ref, COLUNAS_Z + [f"agf_{a}" for a in ag], 20)
+    ref = flow.calcular(dfb, ag, tick, {3, 120})
+    ref = normalize.aplicar(
+        ref, [*COLUNAS_Z, *(f"agf_{a}" for a in ag), "fluxo_nacional"], 20
+    )
     ref = labels.triple_barrier(ref, k=2.0, h=10)
 
     assert r["volume_barra"] == vb
@@ -243,3 +254,92 @@ def test_streaming_equivale_ao_monolitico(tmp_path) -> None:
         streaming.reset_index(drop=True), ref.reset_index(drop=True),
         check_dtype=False, check_categorical=False,
     )
+
+
+def test_fluxo_nacional_soma_agentes_do_perfil(tmp_path) -> None:
+    """
+    fluxo_nacional = (comprado - vendido) pelos agentes NACIONAL, mesma
+    formula do agf_id mas agregada — inclui agentes pequenos classificados
+    que nao entrariam no top-N individual.
+    """
+    import csv as _csv
+
+    import numpy as np
+    import pandas as pd
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    from profittape.features.pipeline import gerar
+
+    rng = np.random.default_rng(5)
+    curated = tmp_path / "curated"
+    n = 3000
+    df = pd.DataFrame({
+        "ts_ns": np.arange(n, dtype=np.int64) * 10**8,
+        "symbol": "WINFUT", "exchange": "F", "trade_id": np.arange(n),
+        "price": 140000 + np.cumsum(rng.choice([-5, 0, 5], n)).astype(float),
+        "volume_financeiro": 1.0,
+        "quantidade": rng.integers(1, 20, n),
+        # 3 = top volume (NACIONAL), 999 = pequeno (tambem NACIONAL, fora do
+        # top-N se so' 1 for pedido), 85 = ESTRANGEIRO (nao entra na soma)
+        "agente_comprador": rng.choice([3, 999, 85], n, p=[0.5, 0.3, 0.2]),
+        "agente_vendedor": rng.choice([3, 999, 85], n, p=[0.5, 0.3, 0.2]),
+        "trade_type": rng.choice([2, 3], n),
+        "is_edit": False,
+    })
+    d = curated / "trade" / "dt=2026-08-14" / "sym=WINFUT"
+    d.mkdir(parents=True)
+    pq.write_table(pa.table(df), d / "part-0000.parquet")
+
+    perfis_csv = tmp_path / "agentes.csv"
+    with perfis_csv.open("w", newline="", encoding="utf-8") as f:
+        w = _csv.writer(f)
+        w.writerow(["agent_id", "short_name", "nome", "perfil"])
+        w.writerow([3, "A", "Agente 3", "NACIONAL"])
+        w.writerow([999, "B", "Agente 999", "NACIONAL"])
+        w.writerow([85, "C", "Agente 85", "ESTRANGEIRO"])
+
+    r = gerar(curated, tmp_path / "features", "WINFUT",
+              barras_por_dia=20, top_n_agentes=1, janela_z=5,
+              perfis_csv=perfis_csv)
+    saida = pd.read_parquet(r["arquivo"])
+
+    assert r["fluxo_nacional_agentes"] == [3, 999]
+    assert "fluxo_nacional" in saida.columns
+    assert "z_fluxo_nacional" in saida.columns
+    # agf_3 sozinho (top-1) NAO deve ser identico a fluxo_nacional (que soma
+    # 3 + 999) — senao a agregacao nao esta somando nada de fato.
+    assert not np.allclose(saida["agf_3"].fillna(0), saida["fluxo_nacional"].fillna(0))
+
+
+def test_features_sem_perfis_csv_nao_quebra(tmp_path) -> None:
+    """Sem --perfis (ou arquivo ausente), o pipeline roda igual, sem a coluna."""
+    import numpy as np
+    import pandas as pd
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    from profittape.features.pipeline import gerar
+
+    rng = np.random.default_rng(6)
+    curated = tmp_path / "curated"
+    n = 1000
+    df = pd.DataFrame({
+        "ts_ns": np.arange(n, dtype=np.int64), "symbol": "WINFUT",
+        "exchange": "F", "trade_id": np.arange(n),
+        "price": 140000.0 + rng.normal(0, 1, n).cumsum(),
+        "volume_financeiro": 1.0, "quantidade": rng.integers(1, 10, n),
+        "agente_comprador": rng.choice([3, 85], n),
+        "agente_vendedor": rng.choice([3, 85], n),
+        "trade_type": rng.choice([2, 3], n), "is_edit": False,
+    })
+    d = curated / "trade" / "dt=2026-08-14" / "sym=WINFUT"
+    d.mkdir(parents=True)
+    pq.write_table(pa.table(df), d / "part-0000.parquet")
+
+    r = gerar(curated, tmp_path / "features", "WINFUT",
+              barras_por_dia=10, top_n_agentes=2, janela_z=5,
+              perfis_csv=tmp_path / "nao_existe.csv")
+    assert r["fluxo_nacional_agentes"] is None
+    saida = pd.read_parquet(r["arquivo"])
+    assert "fluxo_nacional" not in saida.columns

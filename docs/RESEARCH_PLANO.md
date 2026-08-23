@@ -339,3 +339,14 @@ Testavel quando houver volume suficiente de PETR4/VALE3/ITUB4 no curated
 (mesmo comando perfil-validar, symbol=PETR4 etc.) — SEM custar trial, e' a
 mesma validacao pre-IC, so' aplicada a outro simbolo. Nao e' acao imediata;
 registrado para quando o record diario acumular dado de acoes suficiente.
+
+## fluxo_nacional implementado (2026-08-23)
+
+Feature agregada de perfil, unica que passou na validacao (NACIONAL,
+pearson=0.524). flow.calcular ganhou parametro opcional agentes_nacionais:
+mesma formula do agf_id ((comprado-vendido)/vol_agr), mas somando TODOS os
+agentes classificados NACIONAL — inclui agentes pequenos que nao entrariam
+no top-N individual. pipeline.gerar carrega data/ref/agentes.csv por padrao
+(--perfis para apontar outro, ou vazio para omitir; roda igual sem o CSV).
+z_fluxo_nacional entra automaticamente no research (qualquer coluna z_*).
+ESTRANGEIRO deliberadamente NAO implementado (nao validou). 101 testes.

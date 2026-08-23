@@ -24,6 +24,7 @@ import numpy as np
 import pandas as pd
 import pyarrow.dataset as ds
 
+from ..research.perfil import carregar_perfis
 from . import bars, flow, labels, normalize
 
 COLUNAS_Z = ["imbalance", "tick_imbalance", "absorcao", "rlp_frac"]
@@ -66,6 +67,7 @@ def gerar(
     janela_z: int = 50,
     label_k: float = 2.0,
     label_h: int = 10,
+    perfis_csv: Path | None = None,
 ) -> dict:
     origem = curated / "trade"
     dias = _dias_do_symbol(origem, symbol)
@@ -106,6 +108,15 @@ def gerar(
     agentes = [a for a, _ in sorted(soma_agente.items(),
                                     key=lambda kv: -kv[1])[:top_n_agentes]]
 
+    # Feature de PERFIL (docs/RESEARCH_PLANO.md, 2026-08-23): so' NACIONAL
+    # validou contra a serie oficial da B3 (pearson 0.524); ESTRANGEIRO nao
+    # validou (baixo volume nos 8 codigos classificados) e fica de fora. O
+    # CSV e' opcional — sem ele o pipeline roda igual, so' sem fluxo_nacional.
+    agentes_nacionais: set[int] = set()
+    if perfis_csv and perfis_csv.exists():
+        perfis = carregar_perfis(perfis_csv)
+        agentes_nacionais = {a for a, p in perfis.items() if p == "NACIONAL"}
+
     # ---- Passada 2: barras + features por dia, bar_id continuo ------------
     partes: list[pd.DataFrame] = []
     parciais_total = 0
@@ -117,7 +128,8 @@ def gerar(
         if df_barrado.empty:
             del df, df_barrado
             continue
-        barras_dia = flow.calcular(df_barrado, agentes, tick)
+        barras_dia = flow.calcular(df_barrado, agentes, tick,
+                                   agentes_nacionais or None)
         barras_dia["bar_id"] = barras_dia["bar_id"] + offset_bar
         offset_bar = int(barras_dia["bar_id"].max()) + 1
         partes.append(barras_dia)
@@ -128,6 +140,8 @@ def gerar(
     barras_df = pd.concat(partes, ignore_index=True)
 
     colunas_z = COLUNAS_Z + [f"agf_{a}" for a in agentes]
+    if agentes_nacionais:
+        colunas_z = [*colunas_z, "fluxo_nacional"]
     barras_df = normalize.aplicar(barras_df, colunas_z, janela_z)
     barras_df = labels.triple_barrier(barras_df, k=label_k, h=label_h)
 
@@ -145,6 +159,7 @@ def gerar(
         "barras": len(barras_df),
         "barras_parciais_descartadas": parciais_total,
         "agentes_top": agentes,
+        "fluxo_nacional_agentes": sorted(agentes_nacionais) if agentes_nacionais else None,
         "labels": barras_df.loc[barras_df["label_valida"], "label"]
                   .value_counts().to_dict(),
         "ambiguas": int(barras_df["label_ambigua"].sum()),

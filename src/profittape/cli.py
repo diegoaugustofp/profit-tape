@@ -261,6 +261,11 @@ def features(
     janela_z: int = typer.Option(50, "--janela-z"),
     label_k: float = typer.Option(2.0, "--label-k"),
     label_h: int = typer.Option(10, "--label-h"),
+    perfis: Path | None = typer.Option(
+        Path("data/ref/agentes.csv"), "--perfis",
+        help="CSV classificado (agents); adiciona fluxo_nacional se existir "
+             "e tiver algum agente rotulado NACIONAL. Passe vazio para omitir.",
+    ),
 ) -> None:
     """
     Gera barras de volume (relogio de agressao) com features de fluxo Tier 1,
@@ -270,7 +275,7 @@ def features(
     from .features.pipeline import gerar
 
     r = gerar(curated, saida, symbol.upper(), volume_barra, barras_por_dia,
-              top_agentes, janela_z, label_k, label_h)
+              top_agentes, janela_z, label_k, label_h, perfis)
     typer.echo("=" * 60)
     typer.echo(f"FEATURES — {r['symbol']}")
     typer.echo("=" * 60)
