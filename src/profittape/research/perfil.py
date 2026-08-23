@@ -29,7 +29,12 @@ LIMIAR_CORRELACAO = 0.4          # pre-registrado: valida direcao, nao precisao
 def carregar_perfis(agentes_csv: Path) -> dict[int, str]:
     """agent_id -> perfil (vazio = nao classificado)."""
     perfis: dict[int, str] = {}
-    with agentes_csv.open(encoding="utf-8") as f:
+    # utf-8-sig: o operador classifica no Excel, que ao salvar CSV no Windows
+    # tipicamente antepoe um BOM. Com "utf-8" puro o BOM gruda no nome da
+    # PRIMEIRA coluna ('\ufeffagent_id' != 'agent_id') e o DictReader nunca
+    # bate a chave — KeyError real em producao. utf-8-sig descarta o BOM se
+    # existir e e' identico a utf-8 se nao existir; funciona nos dois casos.
+    with agentes_csv.open(encoding="utf-8-sig") as f:
         for linha in csv.DictReader(f):
             perfis[int(linha["agent_id"])] = (linha.get("perfil") or "").strip().upper()
     return perfis

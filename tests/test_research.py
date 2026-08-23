@@ -192,3 +192,21 @@ def test_perfil_validacao_distingue_classificacao_certa_de_errada(tmp_path) -> N
     r2 = validar(fluxo2, ref)
     t2 = r2["tabela"].set_index("perfil")
     assert t2.loc["ESTRANGEIRO", "veredito"] == "NAO_VALIDA"
+
+
+def test_carregar_perfis_tolera_bom_do_excel(tmp_path) -> None:
+    """
+    Bug real (2026-08-23): operador classifica o CSV no Excel, que ao salvar
+    antepoe um BOM UTF-8. Com encoding 'utf-8' puro o BOM gruda no nome da
+    PRIMEIRA coluna ('\\ufeffagent_id' != 'agent_id') e o DictReader nunca
+    bate a chave -> KeyError em producao, so' visivel com arquivo real do
+    Excel (um CSV escrito em utf-8 puro nao reproduz).
+    """
+    from profittape.research.perfil import carregar_perfis
+
+    p = tmp_path / "agentes_excel.csv"
+    conteudo = "agent_id,short_name,nome,perfil\n3,XP,XP Investimentos,NACIONAL\n"
+    p.write_bytes(b"\xef\xbb\xbf" + conteudo.encode("utf-8"))   # BOM + utf-8
+
+    perfis = carregar_perfis(p)
+    assert perfis == {3: "NACIONAL"}
