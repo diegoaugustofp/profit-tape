@@ -70,9 +70,23 @@ def _dias_uteis(inicio_iso: str, fim_iso: str) -> list[str]:
     return dias
 
 
-def _dia_ja_capturado(raiz: Path, dia: str) -> bool:
-    pasta = Path(raiz) / "trade" / f"dt={dia}"
-    return pasta.exists() and any(pasta.rglob("*.parquet"))
+def _dia_ja_capturado(raiz: Path, dia: str, tickers: list[str]) -> bool:
+    """
+    Um dia so' conta como capturado se TODOS os tickers configurados tiverem
+    ao menos um .parquet naquele dia. Bug real (2026-08-23): a versao anterior
+    checava so' 'existe .parquet de QUALQUER simbolo nesse dt=' — rodar
+    WINFUT-only, marcar os dias como feitos, e depois ampliar o yaml para
+    WDOFUT+acoes fazia o backfill PULAR o dia inteiro em silencio, porque
+    achava que 'esse dia ja tem parquet' sem checar QUAL simbolo. O operador
+    pediu WDO+acoes e o comando disse 'ja capturado' sem nunca as pedir.
+    """
+    pasta_dia = Path(raiz) / "trade" / f"dt={dia}"
+    if not pasta_dia.exists():
+        return False
+    return all(
+        any((pasta_dia / f"sym={t}").rglob("*.parquet"))
+        for t in tickers
+    )
 
 
 def _aguardar_quiesce(bus, base: int, quiesce_s: float, timeout_s: float) -> tuple[int, bool]:
@@ -116,7 +130,8 @@ def executar_por_dia(
     loop segue — a B3 tem ~10 por ano e nao vale manter tabela.
     """
     dias = [d for d in _dias_uteis(inicio_iso, fim_iso)]
-    pulados = [d for d in dias if _dia_ja_capturado(cfg.storage.raiz, d)]
+    tickers = [a.ticker for a in cfg.ativos]
+    pulados = [d for d in dias if _dia_ja_capturado(cfg.storage.raiz, d, tickers)]
     pendentes = [d for d in dias if d not in pulados]
     import shutil as _sh
     raiz_resolvida = Path(cfg.storage.raiz).resolve()
@@ -184,7 +199,16 @@ def executar_por_dia(
             d = datetime.strptime(dia, "%Y-%m-%d")
             ini = d.strftime("%d/%m/%Y")
             fim = (d + timedelta(days=1)).strftime("%d/%m/%Y")
-            log.info("backfill_dia.solicitando", dia=dia, progresso=f"{idx}/{len(pendentes)}")
+            # So' pede os ativos que ESTE dia ainda nao tem — evita re-baixar
+            # um simbolo ja capturado quando o dia so' ficou pendente por
+            # causa de outro simbolo novo (ex.: WINFUT ja existe, WDOFUT nao).
+            pasta_dia = Path(cfg.storage.raiz) / "trade" / f"dt={dia}"
+            ativos_do_dia = [
+                a for a in cfg.ativos
+                if not any((pasta_dia / f"sym={a.ticker}").rglob("*.parquet"))
+            ] or cfg.ativos   # fallback defensivo: nunca fica vazio
+            log.info("backfill_dia.solicitando", dia=dia, progresso=f"{idx}/{len(pendentes)}",
+                     ativos=[a.ticker for a in ativos_do_dia])
 
             # Padrao descoberto em producao (log de 2026-08-21): TODO dia
             # pedido logo apos um dia de milhoes de eventos voltava vazio com
@@ -197,14 +221,14 @@ def executar_por_dia(
             for tentativa in range(1, max_tentativas + 1):
                 base = bus.stats().total_recebido
                 recusas = 0
-                for a in cfg.ativos:
+                for a in ativos_do_dia:
                     try:
                         client.request_history(a.ticker, ini, fim, a.bolsa)
                     except SubscriptionFailed as exc:
                         recusas += 1
                         log.error("backfill_dia.recusado", dia=dia,
                                   ticker=a.ticker, detalhe=str(exc))
-                if recusas == len(cfg.ativos):
+                if recusas == len(ativos_do_dia):
                     recusado = True
                     break
                 eventos, ok = _aguardar_quiesce(bus, base, quiesce_s, timeout_dia_s)

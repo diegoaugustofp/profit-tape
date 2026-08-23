@@ -521,3 +521,68 @@ def test_raiz_relativa_a_unidade_e_recusada_no_windows(monkeypatch) -> None:
     monkeypatch.setattr(os, "name", "nt")
     with _pt.raises(Exception, match="relativo-a-unidade"):
         cfg_mod.StorageConfig(raiz=Path("\\data\\raw"))
+
+
+def test_dia_com_um_simbolo_falta_outro_fica_pendente(tmp_raiz: Path) -> None:
+    """
+    Bug real (2026-08-23): o operador baixou WINFUT, depois ampliou o yaml
+    para WDOFUT+acoes e rodou de novo — o backfill disse 'ja capturado' sem
+    NUNCA pedir WDOFUT/acoes, porque a checagem antiga era 'existe QUALQUER
+    .parquet nesse dt=', nao 'existe .parquet de CADA ticker configurado'.
+    """
+    from profittape.recorder.backfill import _dia_ja_capturado
+
+    dia = "2026-08-14"
+    pasta_win = tmp_raiz / "trade" / f"dt={dia}" / "sym=WINFUT"
+    pasta_win.mkdir(parents=True)
+    (pasta_win / "part-0000.parquet").write_bytes(b"PAR1" + b"\x00" * 100 + b"PAR1")
+
+    # Com so' WINFUT configurado: dia esta completo.
+    assert _dia_ja_capturado(tmp_raiz, dia, ["WINFUT"]) is True
+    # Ampliando para WINFUT+WDOFUT: falta WDOFUT, dia NAO pode estar completo.
+    assert _dia_ja_capturado(tmp_raiz, dia, ["WINFUT", "WDOFUT"]) is False
+
+    # Depois de capturar WDOFUT tambem, aí sim completo.
+    pasta_wdo = tmp_raiz / "trade" / f"dt={dia}" / "sym=WDOFUT"
+    pasta_wdo.mkdir(parents=True)
+    (pasta_wdo / "part-0000.parquet").write_bytes(b"PAR1" + b"\x00" * 100 + b"PAR1")
+    assert _dia_ja_capturado(tmp_raiz, dia, ["WINFUT", "WDOFUT"]) is True
+
+
+def test_backfill_pede_so_o_ticker_faltante_no_dia(tmp_raiz: Path, capsys) -> None:
+    """
+    Alem de nao pular o dia, o backfill deve pedir SO' o ticker que falta —
+    nao re-baixar um simbolo ja presente so' porque outro do mesmo dia
+    esta faltando (desperdicio de tempo e de janela de historico).
+    """
+    cfg = RecorderConfig(
+        ativos=[AtivoConfig(ticker="WINFUT"), AtivoConfig(ticker="WDOFUT")],
+        storage=StorageConfig(raiz=tmp_raiz),
+        pipeline=PipelineConfig(poll_timeout_s=0.1),
+        runtime=RuntimeConfig(),
+    )
+    cred = Credenciais(activation_key="k", user="u", password="p", dll_path="fake")
+
+    hoje = datetime.now()
+    dia_alvo = (hoje - timedelta(days=3)).strftime("%Y-%m-%d")
+
+    # Pre-existe SO' o WINFUT para esse dia (simulando a rodada anterior).
+    pasta_win = tmp_raiz / "trade" / f"dt={dia_alvo}" / "sym=WINFUT"
+    pasta_win.mkdir(parents=True)
+    (pasta_win / "part-0000.parquet").write_bytes(b"PAR1" + b"\x00" * 100 + b"PAR1")
+
+    from profittape.recorder import backfill as bf
+
+    fake = FakeProfitDLL(eventos_por_ativo=30)
+    rc = bf.executar_por_dia(
+        cfg, cred, dia_alvo, dia_alvo,
+        quiesce_s=0.3, timeout_dia_s=10, settle_s=0.0,
+        dll_injetada=fake,
+    )
+    assert rc == 0
+
+    # O log estruturado de 'solicitando' registra os ativos efetivamente
+    # pedidos — evidencia direta, sem depender de instrumentar o cliente DLL.
+    saida = capsys.readouterr().out
+    assert "'WDOFUT'" in saida            # o que faltava foi pedido
+    assert "'WINFUT'" not in saida        # o que ja existia NAO foi re-pedido

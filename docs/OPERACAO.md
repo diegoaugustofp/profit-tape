@@ -304,3 +304,22 @@ tentativas ajuda mas nao cobre instabilidade prolongada. Resposta correta: como
 o backfill --por-dia e' retomavel (pula dias ja capturados), basta RE-RODAR o
 mesmo comando mais tarde — de madrugada o servidor de historico costuma estar
 mais estavel (fato observado desde as primeiras sessoes).
+
+## Backfill pulava dia inteiro ao ampliar a lista de ativos (2026-08-23)
+
+SINTOMA: baixou WINFUT completo, ampliou o yaml para WDOFUT+acoes e rodou o
+mesmo backfill — reportou os dias como 'ja capturados' sem NUNCA pedir
+WDOFUT/acoes ao servidor.
+
+CAUSA: _dia_ja_capturado checava so' 'existe QUALQUER .parquet nesse dt=',
+nao 'existe .parquet de CADA ticker configurado'. Um dia com so' WINFUT ja
+marcava o dia inteiro como feito para qualquer combinacao de ativos.
+
+CORRECAO: a checagem agora exige .parquet de TODOS os tickers configurados
+para o dia contar como capturado. E o pedido por dia so' solicita os tickers
+que AINDA FALTAM naquele dia especifico — nao re-baixa um simbolo ja presente
+so' porque outro do mesmo dia esta pendente.
+
+Efeito pratico: ao ampliar `cfg.ativos` no yaml e re-rodar o MESMO comando de
+backfill, ele agora completa os simbolos que faltam em cada dia ja iniciado,
+em vez de pular o dia inteiro.
