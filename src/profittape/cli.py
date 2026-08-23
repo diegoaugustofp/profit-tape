@@ -407,6 +407,49 @@ def perfil_validar(
 
 
 @app.command()
+def quintis(
+    pares: str = typer.Argument(
+        ..., help='Pares "feature:h" separados por virgula, ex.: '
+                   '"z_agf_3:3,z_agf_4090:1" (os vereditos \'segue\' do research).'),
+    custo_pontos: float = typer.Option(
+        5.0, "--custo-pontos",
+        help="Custo de ida-e-volta em PONTOS de indice (spread+corretagem+"
+             "slippage). AJUSTE para o custo real do seu book — o default "
+             "e' um placeholder, nao uma estimativa real."),
+    features: Path = typer.Option(Path("data/features"), "--features"),
+    symbol: str = typer.Option("WINFUT", "--symbol"),
+    saida: Path = typer.Option(Path("data/research"), "--saida"),
+    treino_min: int = typer.Option(3, "--treino-min"),
+    teste_dias: int = typer.Option(2, "--teste-dias"),
+) -> None:
+    """
+    Tabela de quintis: traducao economica dos vereditos 'segue' do IC — sinal
+    estatisticamente real pode ser economicamente morto pelo custo de
+    transacao. NAO gasta trial (leitura sobre feature ja' avaliada).
+    """
+    from .research.quintis import avaliar_pares
+
+    lista = []
+    for item in pares.split(","):
+        feat, h = item.strip().split(":")
+        lista.append((feat.strip(), int(h)))
+
+    arquivo = features / f"sym={symbol.upper()}" / "features.parquet"
+    if not arquivo.exists():
+        raise SystemExit(f"nao achei {arquivo} — rode `profit-tape features` antes")
+    r = avaliar_pares(arquivo, lista, saida, custo_pontos,
+                      treino_min=treino_min, teste_dias=teste_dias)
+    typer.echo("=" * 62)
+    typer.echo(f"QUINTIS — custo assumido {custo_pontos:.1f} pts, "
+               f"{r['dias_out_of_sample']} dias out-of-sample")
+    typer.echo("=" * 62)
+    for (feat, h), tabela in r["tabelas"].items():
+        typer.echo(f"\n{feat} @ h={h}")
+        typer.echo(tabela.to_string(index=False, float_format=lambda v: f"{v:.3f}"))
+    typer.echo(f"\nrelatorio: {r['relatorio']}")
+
+
+@app.command()
 def bench(
     ativos: int = typer.Option(5, "--ativos"),
     duracao: float = typer.Option(15.0, "--duracao", help="Segundos de simulacao."),
