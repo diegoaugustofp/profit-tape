@@ -151,6 +151,13 @@ def _escrever_relatorio(caminho: Path, resultados: dict, custo_pontos: float,
         "regime ainda faltam.\n"
         "- O custo assumido e' um NUMERO UNICO fixo; custo real varia com "
         "book (liquidez do momento) e piora em volatilidade — trate este "
-        "spread como um teto otimista, nao uma promessa."
+        "spread como um teto otimista, nao uma promessa.\n"
+        "- DUAS leituras possiveis, escolha a que corresponde a estrategia "
+        "real: **par long-short** (compra Q1 E vende Q5 ao mesmo tempo) usa "
+        "o 'Spread Q1-Qn LIQUIDO' acima (desconta 2x o custo — duas pernas). "
+        "**Direcional de um so' extremo** (ex.: EA que so' desvanece o "
+        "quintil mais extremo, sem posicao simultanea no oposto) usa a "
+        "coluna `ret_liquido_pontos` do quintil operado DIRETAMENTE na "
+        "tabela acima (ja' liquida de UM round-trip) — nao o spread do par."
     )
     caminho.write_text("\n".join(linhas), encoding="utf-8")
