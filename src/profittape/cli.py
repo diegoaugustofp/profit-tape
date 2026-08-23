@@ -373,6 +373,35 @@ def research(
 
 
 @app.command()
+def perfil_validar(
+    curated: Path = typer.Option(Path("data/curated"), "--curated"),
+    symbol: str = typer.Option("WINFUT", "--symbol"),
+    agentes_csv: Path = typer.Option(Path("data/ref/agentes.csv"), "--agentes"),
+    referencia: Path = typer.Option(
+        Path("data/ref/fluxo_participantes_b3_oficial.csv"), "--referencia"),
+) -> None:
+    """
+    Valida a classificacao de corretoras contra a serie oficial da B3 —
+    ANTES de gastar trials de IC em features de perfil (pre-registrado).
+    """
+    from .research.perfil import carregar_perfis, fluxo_diario_por_perfil, validar
+
+    perfis = carregar_perfis(agentes_csv)
+    classificados = sum(1 for v in perfis.values() if v)
+    typer.echo(f"{len(perfis)} agentes no CSV, {classificados} classificados")
+    fluxo = fluxo_diario_por_perfil(curated, symbol.upper(), perfis)
+    r = validar(fluxo, referencia)
+    typer.echo("=" * 62)
+    typer.echo(f"VALIDACAO DE PERFIL x SERIE OFICIAL ({r['dias_em_comum']} dias)")
+    typer.echo("=" * 62)
+    typer.echo(r["tabela"].to_string(index=False,
+               float_format=lambda v: f"{v:.3f}"))
+    typer.echo("-" * 62)
+    typer.echo("Ressalva pre-registrada: oficial = mercado a vista; nosso = WIN.")
+    typer.echo("Proxy contra proxy — pearson >= 0.4 valida a DIRECAO.")
+
+
+@app.command()
 def bench(
     ativos: int = typer.Option(5, "--ativos"),
     duracao: float = typer.Option(15.0, "--duracao", help="Segundos de simulacao."),

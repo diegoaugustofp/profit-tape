@@ -275,3 +275,31 @@ REGRAS FINAIS (tres barras cumulativas para 'segue'):
   + inconclusivo se folds < 4; trials acumulados em data/research/trials.json.
 
 Comando: profit-tape research --features data/features --symbol WINFUT
+
+## PRIMEIRA RODADA REAL + IDENTIFICACAO DO CLUSTER (2026-08-23)
+
+42 trials, limiar 2.209. Dois 'segue', ambos IC NEGATIVO (contrarian):
+z_agf_3 (XP) h=3 e z_agf_4090 h=1. Identificacao do operador: 4090 =
+Santander/Toro, canal SO-VAREJO (o 27 e' o codigo misto com tesouraria);
+92 = Warren (varejo); 114 = Itau-varejo; 88 = CM Capital (nao conhecido,
+vazio honesto).
+
+LEITURA: o cluster de IC negativo e' quase todo canal de varejo nacional
+(XP, Toro, Warren, Itau, BTG); o de IC positivo (fraco, nenhum passou) e'
+DMA/institucional (Ideal, Agora, Genial, UBS). Os dois 'segue' sao os dois
+canais mais PUROS de varejo — onde a hipotese previa. Serie oficial da B3
+(data/ref/fluxo_participantes_b3_oficial.csv) confirma por fonte
+independente: PF comprou durante o exodo estrangeiro de agosto (todos os
+pregoes negativos de 04/08 a 19/08, pico -4.7bi em 11/08).
+
+RESSALVA DE REGIME (registrada): a janela contem uma quebra (jul entrada ->
+ago exodo). Nao da' para distinguir 'varejo e' contrarian sempre' de
+'comprar contra exodo foi contrarian em agosto'. RETESTE OBRIGATORIO quando
+o record diario acumular semanas de regime diferente. O z_agf_3 h=1 falhou
+SO na barra de magnitude (0.0414 < 0.0487) — a regra fica como esta;
+afrouxar depois de ver resultado seria p-hacking.
+
+PROXIMO: comando `perfil-validar` implementado — correlaciona fluxo diario
+por perfil (tick nosso) com a serie oficial ANTES do IC de perfil.
+Ressalva: oficial = a vista, nosso = WIN; proxy x proxy, >=0.4 valida
+direcao. Depois: quintis em pontos vs custo para os dois 'segue'.

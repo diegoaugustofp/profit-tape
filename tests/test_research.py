@@ -122,3 +122,73 @@ def test_relatorio_escrito_com_vereditos(tmp_path) -> None:
     assert "z_sinal_bom" in conteudo
     assert "segue" in conteudo
     assert "limiar deflacionado" in conteudo
+
+
+def test_perfil_validacao_distingue_classificacao_certa_de_errada(tmp_path) -> None:
+    """
+    O validador precisa APROVAR uma classificacao correta (fluxo do perfil
+    ESTRANGEIRO acompanha a serie oficial) e REPROVAR uma errada (agentes
+    trocados) — senao o filtro pre-IC nao filtra nada.
+    """
+    import csv as _csv
+    from pathlib import Path
+
+    import numpy as np
+    import pandas as pd
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    from profittape.research.perfil import (
+        carregar_perfis,
+        fluxo_diario_por_perfil,
+        validar,
+    )
+
+    rng = np.random.default_rng(3)
+    curated = tmp_path / "curated"
+    dias = [f"2026-08-{d:02d}" for d in range(4, 16) if d not in (8, 9, 15)]
+    oficial = []
+    for i, dia in enumerate(dias):
+        # agente 100 = estrangeiro VENDENDO cada vez mais; 200 = nacional comprando
+        venda_gringo = 1000 + 300 * i + int(rng.integers(0, 100))
+        n = venda_gringo
+        df = pd.DataFrame({
+            "ts_ns": np.arange(n, dtype=np.int64),
+            "symbol": "WINFUT", "exchange": "F", "trade_id": np.arange(n),
+            "price": 140000.0, "volume_financeiro": 1.0,
+            "quantidade": 1,
+            "agente_comprador": 200, "agente_vendedor": 100,
+            "trade_type": 2, "is_edit": False,
+        })
+        d = curated / "trade" / f"dt={dia}" / "sym=WINFUT"
+        d.mkdir(parents=True)
+        pq.write_table(pa.table(df), d / "part-0000.parquet")
+        oficial.append({"data": dia,
+                        "estrangeiro_rs_mil": -venda_gringo * 3,   # escala != contratos
+                        "institucional_rs_mil": venda_gringo * 2,
+                        "pessoa_fisica_rs_mil": venda_gringo,
+                        "inst_financeiras_rs_mil": 0, "outros_rs_mil": 0})
+    ref = tmp_path / "oficial.csv"
+    pd.DataFrame(oficial).to_csv(ref, index=False)
+
+    def _csv_agentes(mapa: dict[int, str]) -> Path:
+        p = tmp_path / f"agentes_{id(mapa)}.csv"
+        with p.open("w", newline="", encoding="utf-8") as f:
+            w = _csv.writer(f)
+            w.writerow(["agent_id", "short_name", "nome", "perfil"])
+            for ag, perfil in mapa.items():
+                w.writerow([ag, f"A{ag}", f"Agente {ag}", perfil])
+        return p
+
+    certa = carregar_perfis(_csv_agentes({100: "ESTRANGEIRO", 200: "NACIONAL"}))
+    fluxo = fluxo_diario_por_perfil(curated, "WINFUT", certa)
+    r = validar(fluxo, ref)
+    t = r["tabela"].set_index("perfil")
+    assert t.loc["ESTRANGEIRO", "veredito"] == "VALIDA"
+    assert t.loc["ESTRANGEIRO", "pearson"] > 0.9      # construido para casar
+
+    errada = carregar_perfis(_csv_agentes({100: "NACIONAL", 200: "ESTRANGEIRO"}))
+    fluxo2 = fluxo_diario_por_perfil(curated, "WINFUT", errada)
+    r2 = validar(fluxo2, ref)
+    t2 = r2["tabela"].set_index("perfil")
+    assert t2.loc["ESTRANGEIRO", "veredito"] == "NAO_VALIDA"
