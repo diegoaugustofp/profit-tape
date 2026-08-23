@@ -173,3 +173,69 @@ def test_toque_ambiguo_vira_zero_marcado() -> None:
     b = labels.triple_barrier(barras_df, k=2.0, h=5, janela_vol=20)
     assert b.loc[29, "label"] == 0
     assert bool(b.loc[29, "label_ambigua"])
+
+
+def test_streaming_equivale_ao_monolitico(tmp_path) -> None:
+    """
+    REFATORO DE MEMORIA (2026-08-23): o pipeline passou a processar dia a dia
+    (21 pregoes estouraram >20GB no monolitico). Este teste trava a promessa
+    de ZERO mudanca semantica: o resultado do streaming deve ser IDENTICO ao
+    que o caminho monolitico (carregar tudo, barrar tudo) produziria.
+    """
+    import numpy as np
+    import pandas as pd
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    from profittape.features import bars, flow, labels, normalize
+    from profittape.features.pipeline import COLUNAS_Z, gerar
+
+    rng = np.random.default_rng(11)
+    curated = tmp_path / "curated"
+    linhas_todas = []
+    ts = 1_700_000_000_000_000_000
+    for dia in ("2026-08-11", "2026-08-12", "2026-08-13"):
+        n = 4000
+        df_dia = pd.DataFrame({
+            "ts_ns": ts + np.arange(n) * 10**8,
+            "symbol": "WINFUT", "exchange": "F",
+            "trade_id": np.arange(n),
+            "price": 140000 + np.cumsum(rng.choice([-5, 0, 5], n)).astype(float),
+            "volume_financeiro": 1.0,
+            "quantidade": rng.integers(1, 30, n),
+            "agente_comprador": rng.choice([3, 85, 1618, 120], n),
+            "agente_vendedor": rng.choice([3, 85, 1618, 120], n),
+            "trade_type": rng.choice([2, 3, 13], n, p=[0.4, 0.4, 0.2]),
+            "is_edit": False,
+            "dt": dia,
+        })
+        d = curated / "trade" / f"dt={dia}" / "sym=WINFUT"
+        d.mkdir(parents=True)
+        pq.write_table(pa.table(df_dia), d / "part-0000.parquet")
+        linhas_todas.append(df_dia)
+        ts += n * 10**8 + 10**12
+
+    # STREAMING (o pipeline real)
+    r = gerar(curated, tmp_path / "features", "WINFUT",
+              barras_por_dia=40, top_n_agentes=3, janela_z=20)
+    streaming = pd.read_parquet(r["arquivo"])
+
+    # MONOLITICO (referencia inline, o caminho antigo)
+    df = pd.concat(linhas_todas, ignore_index=True)
+    df["dt"] = pd.Categorical(df["dt"])
+    vb = bars.sugerir_volume_barra(df, 40)
+    tick = bars.inferir_tick(df)
+    dfb, _ = bars.atribuir_barras(df, vb)
+    ag = flow.top_agentes(dfb, 3)
+    ref = flow.calcular(dfb, ag, tick)
+    ref = normalize.aplicar(ref, COLUNAS_Z + [f"agf_{a}" for a in ag], 20)
+    ref = labels.triple_barrier(ref, k=2.0, h=10)
+
+    assert r["volume_barra"] == vb
+    assert r["tick_inferido"] == tick
+    assert r["agentes_top"] == ag
+    assert len(streaming) == len(ref)
+    pd.testing.assert_frame_equal(
+        streaming.reset_index(drop=True), ref.reset_index(drop=True),
+        check_dtype=False, check_categorical=False,
+    )
