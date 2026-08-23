@@ -303,3 +303,39 @@ PROXIMO: comando `perfil-validar` implementado — correlaciona fluxo diario
 por perfil (tick nosso) com a serie oficial ANTES do IC de perfil.
 Ressalva: oficial = a vista, nosso = WIN; proxy x proxy, >=0.4 valida
 direcao. Depois: quintis em pontos vs custo para os dois 'segue'.
+
+## CONCLUSAO DA VALIDACAO DE PERFIL (2026-08-23, aceita pelo operador)
+
+Resultado de `perfil-validar` sobre os 21 pregoes de WIN, classificacao real
+(8 codigos ESTRANGEIRO: UBS, Merrill, JP Morgan, Necton, Morgan Stanley,
+Citigroup, Goldman, Stonex):
+
+  NACIONAL     pearson=0.524  concordancia=0.684  VALIDA
+  ESTRANGEIRO  pearson=0.212  concordancia=0.737  NAO_VALIDA
+
+Causa identificada (nao e' erro de rotulo): dos 8 codigos ESTRANGEIRO, so' o
+UBS(8) aparece no top-10 de volume do WIN — os outros sete (Merrill, JP
+Morgan, Necton, Morgan Stanley, Citigroup, Goldman, Stonex) tem volume baixo
+demais para carregar sinal. O Pearson de 0.212 e' quase todo UBS diluido por
+ruido de baixo volume.
+
+CONCLUSAO ACEITA: no WIN, capital estrangeiro nao e' capturavel via
+classificacao de corretora com os dados de agente disponiveis — a corretora
+identifica quem EXECUTA, nao quem e' o beneficiario final, e essa distancia
+parece maior no futuro de indice que no a vista (onde a serie oficial da B3
+mede o saldo por exigencia de identificacao na liquidacao). Isto e' um
+resultado de pesquisa legitimo, obtido SEM gastar trial de IC — a validacao
+pre-registrada funcionou exatamente como desenhada.
+
+DECISAO: NACIONAL segue para o IC (validado). ESTRANGEIRO fica de fora nesta
+forma — na pratica, o teste de perfil vira NACIONAL vs RESTO, preservando a
+motivacao original (varejo nacional comprando contra o exodo).
+
+HIPOTESE FUTURA (operador, especulativa, registrada para nao se perder):
+capital estrangeiro pode ser mais capturavel via classificacao de corretora
+no mercado A VISTA (acoes) que no WIN — a serie oficial mede exatamente esse
+mercado, entao a granularidade de identificacao deveria ser maior ali.
+Testavel quando houver volume suficiente de PETR4/VALE3/ITUB4 no curated
+(mesmo comando perfil-validar, symbol=PETR4 etc.) — SEM custar trial, e' a
+mesma validacao pre-IC, so' aplicada a outro simbolo. Nao e' acao imediata;
+registrado para quando o record diario acumular dado de acoes suficiente.
