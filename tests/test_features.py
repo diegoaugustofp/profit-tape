@@ -211,7 +211,11 @@ def test_streaming_equivale_ao_monolitico(tmp_path) -> None:
         })
         d = curated / "trade" / f"dt={dia}" / "sym=WINFUT"
         d.mkdir(parents=True)
-        pq.write_table(pa.table(df_dia), d / "part-0000.parquet")
+        # Fiel a producao: o curate NAO grava dt como coluna fisica — vive
+        # so' no caminho. Foi exatamente essa diferenca que escondeu o bug
+        # do FieldRef.Name(dt) do teste original.
+        pq.write_table(pa.table(df_dia.drop(columns=["dt"])),
+                       d / "part-0000.parquet")
         linhas_todas.append(df_dia)
         ts += n * 10**8 + 10**12
 

@@ -28,8 +28,13 @@ from . import bars, flow, labels, normalize
 
 COLUNAS_Z = ["imbalance", "tick_imbalance", "absorcao", "rlp_frac"]
 _AGRESSAO = (2, 3)
+# SEM "dt": o curate nao grava dt como coluna fisica — ele vive so' no
+# CAMINHO (particao hive). Ao montar o dataset a partir da pasta do dia,
+# dt= e' a raiz e deixa de ser coluna de particao (bug real: ArrowInvalid
+# "No match for FieldRef.Name(dt)" na primeira rodada de producao). O dia
+# e' derivado do nome da pasta em _carregar_dia.
 _COLS = ["ts_ns", "symbol", "trade_id", "price", "quantidade",
-         "agente_comprador", "agente_vendedor", "trade_type", "dt"]
+         "agente_comprador", "agente_vendedor", "trade_type"]
 
 
 def _dias_do_symbol(origem: Path, symbol: str) -> list[Path]:
@@ -45,7 +50,10 @@ def _carregar_dia(pasta_dia: Path, symbol: str) -> pd.DataFrame:
     df = dataset.to_table(
         filter=ds.field("sym") == symbol, columns=_COLS
     ).to_pandas()
-    return df.sort_values("ts_ns", kind="stable").reset_index(drop=True)
+    df = df.sort_values("ts_ns", kind="stable").reset_index(drop=True)
+    dia = pasta_dia.name.split("=", 1)[1]
+    df["dt"] = pd.Categorical([dia] * len(df))
+    return df
 
 
 def gerar(
