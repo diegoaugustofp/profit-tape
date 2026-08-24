@@ -307,3 +307,39 @@ def test_segundo_sinal_durante_encerramento_avisa_e_nao_quebra(tmp_raiz: Path) -
     assert svc._parar.is_set()
     handler(_s.SIGINT, None)              # 2o: so avisa, nao levanta
     assert svc._parar.is_set()
+
+
+def test_contrato_exit_code_para_o_nssm(tmp_raiz: Path) -> None:
+    """
+    O NSSM (docs/NSSM_SERVICO.md) diferencia crash de parada limpa SO' pelo
+    exit code de run(): 0 nao reinicia (dia acabou normalmente OU pedido
+    externo de parada), qualquer outro codigo reinicia (crash de verdade).
+    Este teste TRAVA esse contrato — se um dia alguem mudar o retorno de
+    run() sem querer, o NSSM comecaria a reiniciar o servico TODO dia as
+    18:30 (exit 0 tratado como sucesso mas por engano virasse outro codigo),
+    ou pior, pararia de reiniciar apos crash real.
+    """
+    # Caminho 1: parada externa (sinal / _parar.set()) -> exit 0.
+    fake = FakeProfitDLL(eventos_por_ativo=50, intervalo_s=0.0)
+    svc = RecorderService(_config(tmp_raiz), _cred(), dll_injetada=fake)
+    resultado = {}
+
+    def _rodar():
+        resultado["codigo"] = svc.run()
+
+    t = threading.Thread(target=_rodar, daemon=True)
+    t.start()
+    time.sleep(1.0)
+    svc._parar.set()
+    t.join(timeout=60)
+    assert resultado["codigo"] == 0, "parada externa deve devolver 0 (NSSM nao reinicia)"
+
+    # Caminho 2: excecao nao tratada na conexao -> exit 1.
+    class _DLLQuebrada:
+        def __getattr__(self, nome):
+            raise RuntimeError("simulando DLL quebrada / crash real")
+
+    svc2 = RecorderService(_config(tmp_raiz / "outra"), _cred(),
+                           dll_injetada=_DLLQuebrada())
+    codigo2 = svc2.run()
+    assert codigo2 == 1, "excecao nao tratada deve devolver 1 (NSSM reinicia)"
