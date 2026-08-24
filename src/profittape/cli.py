@@ -237,13 +237,21 @@ def quarentena(
 def curate(
     raw: Path = typer.Option(Path("data/raw"), "--raw"),
     curated: Path = typer.Option(Path("data/curated"), "--curated"),
+    log_level: str = typer.Option("INFO", "--log-level"),
+    log_file: Path | None = typer.Option(
+        None, "--log-file",
+        help="Grava o log em arquivo alem do console — util pra acompanhar "
+             "com Get-Content -Wait numa curadoria longa (muitos dias/simbolos).",
+    ),
 ) -> None:
     """
     Deduplica e ordena raw -> curated. Rode SEMPRE antes de calcular features.
 
-    Idempotente: reprocessar sobrescreve a mesma saida.
+    Idempotente: reprocessar sobrescreve a mesma saida. Loga progresso por dia
+    (curate.processando / curate.dia_ok) — uma curadoria de 20+ dias fica
+    muda por minutos sem isso, indistinguivel de travada.
     """
-    configurar("WARNING")
+    configurar(log_level, log_file)
     from .tools.curate import curar_trades, imprimir_relatorio
 
     imprimir_relatorio(curar_trades(raw, curated))

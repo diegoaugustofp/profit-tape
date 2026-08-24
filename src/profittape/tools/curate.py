@@ -25,13 +25,17 @@ nao de curadoria. O curated preserva tudo que e' valido.
 from __future__ import annotations
 
 import importlib.util
+import time
 from pathlib import Path
 
 import pyarrow as pa
 import pyarrow.dataset as ds
 import pyarrow.parquet as pq
+import structlog
 
 from ..storage.validacao import relatorio
+
+log = structlog.get_logger(__name__)
 
 
 def curar_trades(raiz_raw: Path, raiz_curated: Path) -> dict[str, int]:
@@ -57,10 +61,15 @@ def curar_trades(raiz_raw: Path, raiz_curated: Path) -> dict[str, int]:
             "remova) antes de curar."
         )
 
+    dias_totais = sorted(origem.glob("dt=*"))
+    log.info("curate.destino", raiz_raw=str(raiz_raw.resolve()),
+             raiz_curated=str(raiz_curated.resolve()), dias_encontrados=len(dias_totais))
+
     totais = {"lidas": 0, "duplicatas": 0, "ts_invalido": 0, "gravadas": 0, "particoes": 0}
 
-    for pasta_dia in sorted(origem.glob("dt=*")):
+    for idx, pasta_dia in enumerate(dias_totais, 1):
         dia = pasta_dia.name.split("=", 1)[1]
+        t0 = time.monotonic()
         # Le so' os .parquet finalizados, fragmento a fragmento. Dois modos de
         # falha ja' vistos em producao: (1) arquivo sem footer — exclude_
         # invalid_files pula; (2) footer VALIDO mas row group internamente
@@ -73,6 +82,8 @@ def curar_trades(raiz_raw: Path, raiz_curated: Path) -> dict[str, int]:
         ]
         if not arquivos_dia:
             continue
+        log.info("curate.processando", dia=dia, progresso=f"{idx}/{len(dias_totais)}",
+                 arquivos=len(arquivos_dia))
         dataset = ds.dataset(
             arquivos_dia, format=ds.ParquetFileFormat(),
             partitioning=ds.partitioning(flavor="hive"),
@@ -82,10 +93,10 @@ def curar_trades(raiz_raw: Path, raiz_curated: Path) -> dict[str, int]:
             try:
                 partes_ok.append(frag.to_table())
             except Exception as exc:
-                print(f"  PULADO (corrompido): {frag.path}")
-                print(f"    -> {type(exc).__name__}: {str(exc)[:100]}")
+                log.warning("curate.arquivo_pulado", dia=dia, arquivo=frag.path,
+                           erro=f"{type(exc).__name__}: {str(exc)[:100]}")
         if not partes_ok:
-            print(f"  dia {dia}: nenhum arquivo legivel, pulado.")
+            log.warning("curate.dia_sem_arquivo_legivel", dia=dia)
             continue
         tabela = pa.concat_tables(partes_ok, promote_options="permissive")
         if tabela.num_rows == 0:
@@ -120,6 +131,8 @@ def curar_trades(raiz_raw: Path, raiz_curated: Path) -> dict[str, int]:
             )
             totais["gravadas"] += len(grupo)
         totais["particoes"] += 1
+        log.info("curate.dia_ok", dia=dia, linhas_lidas=len(df),
+                 duplicatas=antes - len(df), segundos=round(time.monotonic() - t0, 1))
 
     return totais
 

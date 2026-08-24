@@ -463,7 +463,7 @@ def test_curate_pula_arquivo_com_zstd_corrompido(tmp_raiz: Path, capsys) -> None
     totais = curar_trades(tmp_raiz, curated)   # nao pode crashar
     assert totais["gravadas"] == 2             # curou o arquivo bom
     out = capsys.readouterr().out
-    assert "PULADO" in out
+    assert "curate.arquivo_pulado" in out
 
 
 def test_quarentena_profundo_pega_corrupcao_interna(tmp_raiz: Path, capsys) -> None:
@@ -586,3 +586,31 @@ def test_backfill_pede_so_o_ticker_faltante_no_dia(tmp_raiz: Path, capsys) -> No
     saida = capsys.readouterr().out
     assert "'WDOFUT'" in saida            # o que faltava foi pedido
     assert "'WINFUT'" not in saida        # o que ja existia NAO foi re-pedido
+
+
+def test_curate_loga_progresso_por_dia_nao_so_resumo_final(tmp_raiz: Path, capsys) -> None:
+    """
+    Pedido real do operador (2026-08-24): com 20+ dias e 9 simbolos, o curate
+    ficava mudo por minutos ate' o resumo final — indistinguivel de travado.
+    Agora loga curate.destino no inicio e curate.dia_ok POR DIA processado.
+    """
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    from profittape.tools.curate import curar_trades
+
+    cols = dict(ts_ns=[1000], ts_recv_ns=[1], symbol=["WINFUT"], exchange=["F"],
+                trade_id=[1], price=[1.0], volume_financeiro=[1.0],
+                quantidade=[1], agente_comprador=[3], agente_vendedor=[85],
+                trade_type=[2], is_edit=[False])
+    for dia in ("2026-08-11", "2026-08-12", "2026-08-13"):
+        d = tmp_raiz / "trade" / f"dt={dia}" / "sym=WINFUT"
+        d.mkdir(parents=True)
+        pq.write_table(pa.table(cols), d / "part-0000.parquet")
+
+    curar_trades(tmp_raiz, tmp_raiz.parent / "curated")
+    out = capsys.readouterr().out
+    assert "curate.destino" in out
+    assert out.count("curate.dia_ok") == 3       # um log por dia, nao so' no fim
+    for dia in ("2026-08-11", "2026-08-12", "2026-08-13"):
+        assert dia in out
