@@ -23,6 +23,7 @@ from pathlib import Path
 
 import structlog
 
+from ..alertas import ConfigAlertas, enviar
 from ..config import Credenciais, RecorderConfig
 from ..health.metrics import Metrics
 from ..pipeline.bus import EventBus, nivel_ocupacao
@@ -43,6 +44,10 @@ class RecorderService:
         self.cfg = cfg
         self.cred = cred
         self.metrics = Metrics()
+        # Alertas sao OPCIONAIS: sem config/alertas.yaml, self.alertas fica
+        # None e enviar() vira no-op silencioso — o record roda igual, so'
+        # sem notificacao remota.
+        self.alertas = ConfigAlertas.carregar(Path("config/alertas.yaml"))
         self.bus = EventBus(maxsize=cfg.pipeline.fila_maxsize)
         self.sink = ParquetSink(
             raiz=cfg.storage.raiz,
@@ -103,9 +108,15 @@ class RecorderService:
         try:
             self.client.connect()
             self._subscrever()
+            enviar(
+                f"✅ record iniciado — {len(self.cfg.ativos)} ativo(s) "
+                f"({', '.join(a.ticker for a in self.cfg.ativos)})",
+                self.alertas,
+            )
             self._loop_monitoramento()
-        except Exception:
+        except Exception as exc:
             log.exception("recorder.erro")
+            enviar(f"🔴 record CAIU com erro: {type(exc).__name__}: {exc}", self.alertas)
             return 1
         finally:
             self._encerrar()
@@ -176,6 +187,11 @@ class RecorderService:
                 log.error("recorder.fila_critica",
                           ocupacao=f"{st.profundidade_atual / self.bus.maxsize:.0%}",
                           aviso="descarte iminente se a tendencia continuar")
+                enviar(
+                    f"🟠 fila CRITICA ({st.profundidade_atual / self.bus.maxsize:.0%}) "
+                    f"— descarte iminente. Ver OPERACAO.md 'Disco lento'.",
+                    self.alertas,
+                )
             if st.taxa_descarte > limite_descarte:
                 log.error(
                     "recorder.descarte_acima_do_limite",
@@ -226,6 +242,12 @@ class RecorderService:
                       arquivos=self.writer.sink.falhas_verificacao,
                       acao="permanecem .inprogress; investigue o volume antes "
                            "de confiar em qualquer dado desta sessao")
+            enviar(
+                f"🔴 {len(self.writer.sink.falhas_verificacao)} arquivo(s) NAO "
+                f"verificado(s) (footer nao confirmado) — investigue o disco "
+                f"antes de confiar no dado de hoje.",
+                self.alertas,
+            )
         if st.total_descartado:
             log.error(
                 "recorder.DADO_PERDIDO",
@@ -233,3 +255,16 @@ class RecorderService:
                 aviso="as particoes deste dia tem buraco. Registre isso antes de "
                       "usar o dado em backtest.",
             )
+
+        # Alerta de encerramento SEMPRE dispara (graceful ou nao) — e' o que
+        # confirma remotamente que o dia foi capturado, sem precisar abrir o
+        # notebook a noite. status separado do alerta de erro do run(): aqui
+        # e' sempre o ultimo aviso da sessao, com os numeros que importam.
+        status = "⚠️ com PROBLEMAS" if (self.writer.sink.falhas_verificacao
+                                       or st.total_descartado) else "✅ OK"
+        enviar(
+            f"{status} record encerrado — {snap.linhas_escritas:,} linhas, "
+            f"{st.total_descartado} descartado(s), fila_pico={st.profundidade_maxima}, "
+            f"{self.writer.sink.arquivos_verificados} arquivo(s) verificado(s).",
+            self.alertas,
+        )

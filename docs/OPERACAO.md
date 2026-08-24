@@ -323,3 +323,48 @@ so' porque outro do mesmo dia esta pendente.
 Efeito pratico: ao ampliar `cfg.ativos` no yaml e re-rodar o MESMO comando de
 backfill, ele agora completa os simbolos que faltam em cada dia ja iniciado,
 em vez de pular o dia inteiro.
+
+## Alertas via Telegram (2026-08-24)
+
+Opcional — sem config/alertas.yaml, tudo roda normalmente sem notificar.
+
+### Configurar
+1. Fale com @BotFather no Telegram, `/newbot`, copie o token.
+2. Mande qualquer mensagem para o bot recem-criado.
+3. Abra `https://api.telegram.org/bot<TOKEN>/getUpdates` e leia `chat.id`.
+4. Copie `config/alertas.example.yaml` para `config/alertas.yaml` (gitignored)
+   e preencha os dois campos.
+
+### O que dispara alerta (hooks DENTRO do record, tempo real)
+- inicio do pregao (confirmacao de que subiu e subscreveu)
+- fim do pregao (resumo: linhas, descartes, fila_pico, arquivos verificados)
+- erro fatal (`recorder.erro`, processo caindo com excecao)
+- fila CRITICA (nao "atencao" — esse so' loga, para nao gerar ruido)
+- arquivos NAO verificados (footer nao confirmado — o tipo de incidente que
+  custou um dia inteiro de recaptura nesta semana)
+
+### O que o vigia cobre (processo EXTERNO, watchdog)
+Os hooks acima so' alertam se o record chegou a RODAR. Se ele nunca iniciar
+(schtasks ausente, notebook desligado, DLL rejeitando login), ninguem alerta
+sobre si mesmo — por isso o vigia existe como processo separado:
+
+```
+profit-tape vigia
+```
+
+Agende via schtasks proprio, a cada 5 minutos, das 09:00 as 18:35:
+```powershell
+schtasks /Create /TN "profit-tape-vigia" /SC MINUTE /MO 5 `
+  /ST 09:00 /ET 18:40 `
+  /TR "C:\projetos\profit-tape\.venv\Scripts\profit-tape.exe vigia" `
+  /RL LIMITED /F
+```
+Cooldown por tipo de alerta evita spam (30min para "nao iniciou", 15min para
+"travado", etc — ver vigia.py). Estado em logs/vigia_estado.json (gitignored).
+
+## Log em arquivo agora e' JSON de verdade (2026-08-24)
+
+Bug corrigido: --log-file gravava o MESMO texto formatado do console, nunca
+JSON, apesar do nome .jsonl. Console continua legivel/colorido; arquivo agora
+e' JSON valido, uma linha por evento — o vigia (e qualquer ferramenta futura)
+depende disso para parsear o log programaticamente.

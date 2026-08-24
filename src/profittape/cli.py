@@ -487,6 +487,30 @@ def quintis(
 
 
 @app.command()
+def vigia(
+    log_file: Path = typer.Option(Path("logs/record_diario.jsonl"), "--log-file"),
+    alertas: Path = typer.Option(Path("config/alertas.yaml"), "--alertas"),
+    estado: Path = typer.Option(Path("logs/vigia_estado.json"), "--estado"),
+    abertura: str = typer.Option(
+        "09:05", "--abertura",
+        help="Apos este horario local, exige que o record ja tenha iniciado."),
+    fechamento: str = typer.Option(
+        "18:35", "--fechamento",
+        help="Apos este horario, o vigia nao verifica mais (pregao encerrado)."),
+    limite_parado_min: float = typer.Option(6.0, "--limite-parado-min"),
+) -> None:
+    """
+    Watchdog EXTERNO ao record — roda via schtasks proprio a cada poucos
+    minutos. Cobre o que o record nao pode alertar sobre si mesmo: nunca ter
+    iniciado, ou ter travado sem chegar a emitir o alerta de erro.
+    """
+    from .vigia import checar
+
+    veredito = checar(log_file, alertas, estado, abertura, fechamento, limite_parado_min)
+    typer.echo(f"vigia: {veredito}")
+
+
+@app.command()
 def bench(
     ativos: int = typer.Option(5, "--ativos"),
     duracao: float = typer.Option(15.0, "--duracao", help="Segundos de simulacao."),

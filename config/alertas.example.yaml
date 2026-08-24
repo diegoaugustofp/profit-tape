@@ -1,0 +1,10 @@
+# Copie para config/alertas.yaml (gitignored — NUNCA versione o token real).
+# Sem este arquivo, alertas ficam desligados e o record roda normalmente.
+#
+# Como criar o bot: fale com @BotFather no Telegram, /newbot, copie o token.
+# Como achar o chat_id: fale com o bot, depois abra
+#   https://api.telegram.org/bot<SEU_TOKEN>/getUpdates
+# e leia "chat":{"id": ...} na resposta.
+telegram:
+  bot_token: "SEU_TOKEN_AQUI"
+  chat_id: "SEU_CHAT_ID_AQUI"
