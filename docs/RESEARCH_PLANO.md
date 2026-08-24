@@ -365,3 +365,32 @@ veredito DIFEREM/indistinguivel a 5%. Decide se a nao-monotonicidade
 observada e' estrutura real (operar no Q4, nao esperar o Q5) ou ruido de
 amostra pequena (~330 obs/quintil, 18 dias) que nao deve guiar a entrada do
 EA.
+
+## Resultado do teste de diferenca entre quintis (2026-08-23)
+
+Rodado sobre os dois 'segue' com custo real informado (11 pts round-trip
+automatizado, R$2,19/contrato a R$0,20/pt):
+
+CONCLUSAO: a nao-monotonicidade Q4-pior-que-Q5 observada no relatorio
+anterior e' RUIDO, nao estrutura. Q4 vs Q5 saiu 'indistinguivel' nos dois
+sinais (z_agf_3 p=0.738; z_agf_4090 p=0.756) — com ~330-340 obs/quintil, a
+diferenca entre extremo (Q5) e quase-extremo (Q4) esta dentro do que acaso
+produz. NAO desenhar a entrada do EA em torno do Q4 esperando capturar algo
+que o Q5 nao capturaria; a regra simples 'sinal no extremo -> opera' segue
+sendo a escolha defensavel.
+
+UNICA estrutura interna real encontrada: z_agf_4090 (Toro/Santander-varejo)
+tem transicao Q3->Q4 estatisticamente significativa (t=-3.13, p=0.002) — Q3
+(sinal neutro, ~0) tem retorno liquido POSITIVO (+4.18pts), Q4 (sinal
+moderado, ~0.5) ja e' claramente negativo (-34.96pts). Sugere um "gatilho":
+o edge liga de forma abrupta ao sair da zona neutra, nao escala
+proporcionalmente ao valor do sinal. Pode informar uma regra de entrada por
+THRESHOLD (operar quando |sinal| > lim proximo do limite Q3/Q4) em vez de
+proporcional — mas e' desenho de EA, etapa futura; 341 obs/perna ainda e'
+cedo para fixar o threshold exato. z_agf_3 (XP) nao mostrou nenhuma
+transicao interna distinguivel — tratar como aproximadamente monotonico
+dentro do erro, sem otimizar ponto de entrada alem de "extremo".
+
+Resultado NEGATIVO da hipotese motivadora (Q4>Q5) e' o metodo funcionando:
+evitou levar um padrao que pareceria insight na tabela bruta para o desenho
+do EA sem base estatistica.
