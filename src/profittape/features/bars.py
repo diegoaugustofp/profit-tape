@@ -49,7 +49,7 @@ def sugerir_volume_barra(df: pd.DataFrame, barras_por_dia: int = 100) -> int:
     if alvo <= 0:
         raise ValueError("sem volume de agressao no dataset")
     magnitude = 10 ** (int(np.floor(np.log10(alvo))) - 1)
-    return int(round(alvo / magnitude) * magnitude)
+    return max(1, int(round(alvo / magnitude) * magnitude))
 
 
 def atribuir_barras(df: pd.DataFrame, volume_barra: int) -> tuple[pd.DataFrame, int]:

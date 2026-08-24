@@ -343,3 +343,37 @@ def test_features_sem_perfis_csv_nao_quebra(tmp_path) -> None:
     assert r["fluxo_nacional_agentes"] is None
     saida = pd.read_parquet(r["arquivo"])
     assert "fluxo_nacional" not in saida.columns
+
+
+def test_volume_barra_nunca_fica_zero_com_dado_escasso(tmp_path) -> None:
+    """
+    Bug pego rodando 'features todos' com um simbolo de pouquissimo volume
+    (ex.: acao recem-adicionada com so' poucos trades/dia): a formula da
+    mediana podia arredondar para volume_barra=0, causando divisao por zero
+    em bars.atribuir_barras. Piso minimo de 1 elimina a classe de erro.
+    """
+    import numpy as np
+    import pandas as pd
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    from profittape.features.pipeline import gerar
+
+    curated = tmp_path / "curated"
+    d = curated / "trade" / "dt=2026-08-14" / "sym=MGLU3"
+    d.mkdir(parents=True)
+    df = pd.DataFrame({
+        "ts_ns": np.arange(3, dtype=np.int64), "symbol": "MGLU3", "exchange": "B",
+        "trade_id": np.arange(3), "price": [10.0, 10.1, 10.0],
+        "volume_financeiro": 1.0, "quantidade": [1, 1, 1],
+        "agente_comprador": [3, 3, 3], "agente_vendedor": [85, 85, 85],
+        "trade_type": [2, 3, 2], "is_edit": False,
+    })
+    pq.write_table(pa.table(df), d / "part-0000.parquet")
+
+    # Antes do piso minimo: RuntimeWarning de divisao por zero (volume_barra
+    # arredondava para 0). Agora processa sem crash — com barras minusculas
+    # se necessario, o que e' estritamente melhor que erro nao tratado.
+    r = gerar(curated, tmp_path / "features", "MGLU3",
+              barras_por_dia=100, janela_z=5, perfis_csv=None)
+    assert r["volume_barra"] >= 1

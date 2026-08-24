@@ -251,7 +251,10 @@ def curate(
 
 @app.command()
 def features(
-    symbol: str = typer.Argument(..., help="Ex.: WINFUT"),
+    symbol: str = typer.Argument(
+        ..., help="Ex.: WINFUT — ou lista separada por virgula (WINFUT,WDOFUT,"
+                   "PETR4) ou 'todos' para processar cada sym= presente no "
+                   "curated. QoL para nao repetir o comando 9x manualmente."),
     curated: Path = typer.Option(Path("data/curated"), "--curated"),
     saida: Path = typer.Option(Path("data/features"), "--saida"),
     volume_barra: int | None = typer.Option(None, "--volume-barra",
@@ -274,15 +277,34 @@ def features(
     configurar("WARNING")
     from .features.pipeline import gerar
 
-    r = gerar(curated, saida, symbol.upper(), volume_barra, barras_por_dia,
-              top_agentes, janela_z, label_k, label_h, perfis)
-    typer.echo("=" * 60)
-    typer.echo(f"FEATURES — {r['symbol']}")
-    typer.echo("=" * 60)
-    for chave in ("trades", "volume_barra", "tick_inferido", "barras",
-                  "barras_parciais_descartadas", "agentes_top", "labels",
-                  "ambiguas", "arquivo"):
-        typer.echo(f"  {chave:<28}: {r[chave]}")
+    if symbol.strip().lower() == "todos":
+        simbolos = sorted({
+            p.name.split("=", 1)[1]
+            for p in (curated / "trade").glob("dt=*/sym=*")
+        })
+        if not simbolos:
+            raise SystemExit(f"nenhum symbol encontrado em {curated / 'trade'}")
+    else:
+        simbolos = [s.strip().upper() for s in symbol.split(",") if s.strip()]
+
+    falhas = []
+    for i, sym in enumerate(simbolos, 1):
+        typer.echo(f"\n[{i}/{len(simbolos)}] {sym}")
+        try:
+            r = gerar(curated, saida, sym, volume_barra, barras_por_dia,
+                      top_agentes, janela_z, label_k, label_h, perfis)
+        except SystemExit as exc:
+            # Simbolo com pouco dado (ex.: MGLU3 com 200 trades/dia nao
+            # forma barra alguma) nao pode derrubar o lote inteiro — os
+            # outros 8 simbolos continuam valendo a pena.
+            typer.echo(f"  PULADO: {exc}")
+            falhas.append(sym)
+            continue
+        typer.echo(f"  barras={r['barras']} volume_barra={r['volume_barra']} "
+                   f"tick={r['tick_inferido']} arquivo={r['arquivo']}")
+    if falhas:
+        typer.echo(f"\n{len(falhas)} simbolo(s) pulado(s) (dado insuficiente): "
+                   f"{falhas}")
 
 
 @app.command()

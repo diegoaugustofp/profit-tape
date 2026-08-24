@@ -101,7 +101,7 @@ def gerar(
         if alvo <= 0:
             raise ValueError("sem volume de agressao no dataset")
         magnitude = 10 ** (int(np.floor(np.log10(alvo))) - 1)
-        volume_barra = int(round(alvo / magnitude) * magnitude)
+        volume_barra = max(1, int(round(alvo / magnitude) * magnitude))
     if not tick_por_dia:
         raise ValueError("impossivel inferir tick: sem variacao de preco")
     tick = float(np.median(tick_por_dia))
