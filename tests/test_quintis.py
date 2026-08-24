@@ -124,3 +124,80 @@ def test_spread_do_par_long_short_desconta_2x_o_custo(tmp_path) -> None:
     texto = (tmp_path / "out" / "quintis.md").read_text(encoding="utf-8")
     # spread bruto ~10pts, custo 8pts/perna x2 = 16pts > spread bruto -> morto
     assert "MORTO PELO CUSTO" in texto
+
+
+def test_diferenca_quintis_detecta_diferenca_real() -> None:
+    """
+    Constroi dados onde Q4 e Q5 tem medias claramente diferentes (a
+    nao-monotonicidade observada em producao) — o teste de Welch precisa
+    detectar isso.
+    """
+    rng = np.random.default_rng(9)
+    linhas = []
+    for d in range(15):
+        dia = f"2026-08-{d + 1:02d}"
+        preco = 140000.0
+        sinal = rng.normal(0, 1, 80)
+        for i in range(80):
+            # Q4 (sinal ~0.5 pos) tem retorno MUITO mais negativo que Q5
+            # (sinal ~1.3 pos) por construcao — nao-monotonico de proposito.
+            if 0.2 < sinal[i] < 0.8:
+                ret = -30 + rng.normal(0, 3)
+            elif sinal[i] >= 0.8:
+                ret = -5 + rng.normal(0, 3)
+            else:
+                ret = rng.normal(0, 3)
+            linhas.append({
+                "ts_close": 1_700_000_000_000_000_000 + i * 60_000_000_000,
+                "close": preco, "dia": dia, "z_sinal": sinal[i],
+            })
+            preco += ret
+    df = pd.DataFrame(linhas)
+    df = adicionar_ret_futuro_pontos(df, [1])
+    dias = sorted(df["dia"].unique())
+    folds = gerar_folds(dias, treino_min=3, teste_dias=2)
+    dias_teste = {dd for _t, teste in folds for dd in teste}
+
+    from profittape.research.quintis import testar_diferenca_quintis
+    t34 = testar_diferenca_quintis(df, "z_sinal", 1, dias_teste, 0.0, 4, 5)
+    assert t34["diferem_5pct"] is True
+    assert t34["p_valor"] < 0.05
+
+
+def test_diferenca_quintis_nao_acusa_diferenca_quando_nao_ha(tmp_path) -> None:
+    """Quintis com a MESMA distribuicao devem sair 'indistinguivel'."""
+    rng = np.random.default_rng(21)
+    linhas = []
+    for d in range(15):
+        dia = f"2026-08-{d + 1:02d}"
+        preco = 140000.0
+        sinal = rng.normal(0, 1, 80)
+        for i in range(80):
+            ret = rng.normal(0, 2)   # retorno IID, sem relacao com o sinal
+            linhas.append({
+                "ts_close": 1_700_000_000_000_000_000 + i * 60_000_000_000,
+                "close": preco, "dia": dia, "z_sinal": sinal[i],
+            })
+            preco += ret
+    df = pd.DataFrame(linhas)
+    df = adicionar_ret_futuro_pontos(df, [1])
+    dias = sorted(df["dia"].unique())
+    folds = gerar_folds(dias, treino_min=3, teste_dias=2)
+    dias_teste = {dd for _t, teste in folds for dd in teste}
+
+    from profittape.research.quintis import testar_diferenca_quintis
+    t = testar_diferenca_quintis(df, "z_sinal", 1, dias_teste, 0.0, 4, 5)
+    assert t["diferem_5pct"] is False
+
+
+def test_avaliar_pares_inclui_diferencas_no_resultado_e_relatorio(tmp_path) -> None:
+    df = _dados_contrarian(spread_pts=10.0)
+    arq = tmp_path / "features.parquet"
+    df.to_parquet(arq, index=False)
+
+    r = avaliar_pares(arq, [("z_sinal", 1)], tmp_path / "out", custo_pontos=1.0)
+    assert ("z_sinal", 1) in r["diferencas"]
+    assert len(r["diferencas"][("z_sinal", 1)]) == 4    # 1v2,2v3,3v4,4v5
+    texto = (tmp_path / "out" / "quintis.md").read_text(encoding="utf-8")
+    assert "Diferenca entre quintis adjacentes" in texto
+    assert "Welch" in texto

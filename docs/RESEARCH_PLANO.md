@@ -350,3 +350,18 @@ no top-N individual. pipeline.gerar carrega data/ref/agentes.csv por padrao
 (--perfis para apontar outro, ou vazio para omitir; roda igual sem o CSV).
 z_fluxo_nacional entra automaticamente no research (qualquer coluna z_*).
 ESTRANGEIRO deliberadamente NAO implementado (nao validou). 101 testes.
+
+## Teste de diferenca entre quintis adjacentes (2026-08-23)
+
+quintis.md dos dois 'segue' (custo 11pts) mostrou NAO-MONOTONICIDADE:
+Q4 mais negativo que Q5 em AMBOS z_agf_3 e z_agf_4090 (Q3 ate positivo em
+z_agf_4090). Implementado teste de Welch (diagnostico, NAO consome trial —
+compara quintil contra quintil da MESMA feature ja avaliada, nao testa
+feature nova contra retorno) entre cada par de quintis adjacentes.
+
+Uso: `profit-tape quintis "feat:h" --custo-pontos N` agora imprime e grava
+Q1v2, Q2v3, Q3v4, Q4v5 com t de Welch, p-valor bicaudal (normal, gl grande) e
+veredito DIFEREM/indistinguivel a 5%. Decide se a nao-monotonicidade
+observada e' estrutura real (operar no Q4, nao esperar o Q5) ou ruido de
+amostra pequena (~330 obs/quintil, 18 dias) que nao deve guiar a entrada do
+EA.

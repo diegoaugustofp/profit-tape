@@ -38,6 +38,73 @@ def _dias_de_teste(dias: list, folds: list[tuple[list, list]]) -> set:
     return fora
 
 
+def _atribuir_quintis(df: pd.DataFrame, feature: str, horizonte: int,
+                      dias_teste: set, n_quintis: int) -> pd.DataFrame:
+    """Sub-dataframe out-of-sample com a coluna 'quintil' atribuida."""
+    col_ret = f"ret_pts_{horizonte}"
+    sub = df[df["dia"].isin(dias_teste)][[feature, col_ret]].dropna()
+    if len(sub) < n_quintis * 5:
+        raise SystemExit(
+            f"apenas {len(sub)} observacoes out-of-sample para {feature}@h{horizonte} "
+            f"— insuficiente para {n_quintis} quintis confiaveis"
+        )
+    sub = sub.copy()
+    sub["quintil"] = pd.qcut(sub[feature], n_quintis, labels=False,
+                             duplicates="drop") + 1
+    return sub
+
+
+def _p_valor_bicaudal(t: float) -> float:
+    """P-valor bicaudal via normal padrao (erf) — valido para o df grande de
+    Welch aqui (n~330/grupo, gl efetivo bem acima de 100: normal e' precisa)."""
+    import math
+    return float(2 * (1 - 0.5 * (1 + math.erf(abs(t) / math.sqrt(2)))))
+
+
+def testar_diferenca_quintis(df: pd.DataFrame, feature: str, horizonte: int,
+                             dias_teste: set, custo_pontos: float,
+                             q_a: int, q_b: int, n_quintis: int = 5) -> dict:
+    """
+    Welch's t-test (variancias desiguais, apropriado — quintis do meio tendem
+    a ter variancia diferente dos extremos) entre o retorno LIQUIDO (1x custo,
+    leitura direcional de perna unica) dos quintis q_a e q_b.
+
+    Pergunta que responde: "e' Q_a estatisticamente diferente de Q_b, ou a
+    nao-monotonicidade observada (ex.: Q4 mais negativo que Q5) e' o tipo de
+    ruido que uma amostra deste tamanho produz por acaso?" Diagnostico, nao
+    hipotese nova — nao consome trial do research (nao e' teste de feature
+    contra retorno, e' teste de quintil contra quintil da MESMA feature ja'
+    avaliada).
+    """
+    sub = _atribuir_quintis(df, feature, horizonte, dias_teste, n_quintis)
+    col_ret = f"ret_pts_{horizonte}"
+    a = sub.loc[sub["quintil"] == q_a, col_ret] - custo_pontos
+    b = sub.loc[sub["quintil"] == q_b, col_ret] - custo_pontos
+    if len(a) < 2 or len(b) < 2:
+        raise SystemExit(f"quintil {q_a} ou {q_b} com menos de 2 observacoes")
+
+    media_a, media_b = float(a.mean()), float(b.mean())
+    var_a, var_b = float(a.var(ddof=1)), float(b.var(ddof=1))
+    na, nb = len(a), len(b)
+    erro_padrao = np.sqrt(var_a / na + var_b / nb)
+    diff = media_b - media_a
+    t = float(diff / erro_padrao) if erro_padrao > 0 else float("nan")
+    gl = (
+        (var_a / na + var_b / nb) ** 2
+        / ((var_a / na) ** 2 / (na - 1) + (var_b / nb) ** 2 / (nb - 1))
+    ) if erro_padrao > 0 else float("nan")
+    p = _p_valor_bicaudal(t) if not np.isnan(t) else float("nan")
+
+    return {
+        "feature": feature, "horizonte": horizonte,
+        "quintil_a": q_a, "quintil_b": q_b,
+        "n_a": na, "n_b": nb,
+        "media_liquida_a": media_a, "media_liquida_b": media_b,
+        "diferenca": diff, "t_welch": t, "gl_welch": gl, "p_valor": p,
+        "diferem_5pct": bool(not np.isnan(p) and p < 0.05),
+    }
+
+
 def tabela_quintis(df: pd.DataFrame, feature: str, horizonte: int,
                    dias_teste: set, custo_pontos: float,
                    n_quintis: int = 5) -> pd.DataFrame:
@@ -79,7 +146,7 @@ def tabela_quintis(df: pd.DataFrame, feature: str, horizonte: int,
 def avaliar_pares(features_parquet: Path, pares: list[tuple[str, int]],
                   saida_dir: Path, custo_pontos: float,
                   treino_min: int = 3, teste_dias: int = 2,
-                  n_quintis: int = 5) -> dict:
+                  n_quintis: int = 5, testar_adjacentes: bool = True) -> dict:
     df = pd.read_parquet(features_parquet)
     if "dia" not in df.columns:
         df["dia"] = pd.to_datetime(df["ts_close"], unit="ns", utc=True).dt.date
@@ -90,21 +157,35 @@ def avaliar_pares(features_parquet: Path, pares: list[tuple[str, int]],
     dias_teste = _dias_de_teste(dias, folds)
 
     resultados = {}
+    diferencas = {}
     for feature, h in pares:
         resultados[(feature, h)] = tabela_quintis(
             df, feature, h, dias_teste, custo_pontos, n_quintis
         )
+        if testar_adjacentes:
+            # Compara CADA par de quintis adjacentes (1v2, 2v3, ..., (n-1)vn)
+            # — nao so' o extremo (1 vs n). A nao-monotonicidade observada em
+            # producao (Q4 mais negativo que Q5) so' e' visivel comparando
+            # vizinhos, nao so' as pontas.
+            testes = [
+                testar_diferenca_quintis(df, feature, h, dias_teste,
+                                         custo_pontos, q, q + 1, n_quintis)
+                for q in range(1, n_quintis)
+            ]
+            diferencas[(feature, h)] = testes
 
     saida_dir.mkdir(parents=True, exist_ok=True)
     caminho = saida_dir / "quintis.md"
-    _escrever_relatorio(caminho, resultados, custo_pontos, len(dias_teste))
+    _escrever_relatorio(caminho, resultados, custo_pontos, len(dias_teste),
+                        diferencas)
     return {"pares": list(resultados.keys()), "custo_pontos": custo_pontos,
             "dias_out_of_sample": len(dias_teste),
-            "tabelas": resultados, "relatorio": str(caminho)}
+            "tabelas": resultados, "diferencas": diferencas,
+            "relatorio": str(caminho)}
 
 
 def _escrever_relatorio(caminho: Path, resultados: dict, custo_pontos: float,
-                        n_dias: int) -> None:
+                        n_dias: int, diferencas: dict | None = None) -> None:
     linhas = [
         "# Tabela de quintis — traducao economica dos vereditos 'segue'\n",
         f"- custo de ida-e-volta assumido: {custo_pontos:.1f} pontos "
@@ -144,6 +225,22 @@ def _escrever_relatorio(caminho: Path, resultados: dict, custo_pontos: float,
         veredito = "ECONOMICAMENTE VIVO (spread liquido positivo)" if spread_liquido > 0 \
             else "MORTO PELO CUSTO (spread bruto nao sobrevive a transacao)"
         linhas.append(f"**{veredito}**")
+
+        if diferencas and (feature, h) in diferencas:
+            linhas.append(
+                "\n**Diferenca entre quintis adjacentes** (Welch, ret liquido "
+                "1x custo — diagnostico, nao consome trial):"
+            )
+            linhas.append("| Qa vs Qb | media A | media B | diferenca | t (Welch) | p-valor | |")
+            linhas.append("|---|---|---|---|---|---|---|")
+            for teste in diferencas[(feature, h)]:
+                marca = "DIFEREM" if teste["diferem_5pct"] else "indistinguivel"
+                linhas.append(
+                    f"| Q{teste['quintil_a']} vs Q{teste['quintil_b']} "
+                    f"| {teste['media_liquida_a']:+.2f} | {teste['media_liquida_b']:+.2f} "
+                    f"| {teste['diferenca']:+.2f} | {teste['t_welch']:.2f} "
+                    f"| {teste['p_valor']:.3f} | {marca} |"
+                )
     linhas.append(
         "\n## Leitura honesta\n"
         "- Esta tabela NAO decide se vira estrategia — decide se o sinal "

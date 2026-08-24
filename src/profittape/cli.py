@@ -446,6 +446,13 @@ def quintis(
     for (feat, h), tabela in r["tabelas"].items():
         typer.echo(f"\n{feat} @ h={h}")
         typer.echo(tabela.to_string(index=False, float_format=lambda v: f"{v:.3f}"))
+        for teste in r["diferencas"].get((feat, h), []):
+            marca = "DIFEREM" if teste["diferem_5pct"] else "indistinguivel"
+            typer.echo(
+                f"  Q{teste['quintil_a']} vs Q{teste['quintil_b']}: "
+                f"diff={teste['diferenca']:+.2f}pts t={teste['t_welch']:.2f} "
+                f"p={teste['p_valor']:.3f} [{marca}]"
+            )
     typer.echo(f"\nrelatorio: {r['relatorio']}")
 
 
