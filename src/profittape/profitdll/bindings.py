@@ -179,6 +179,61 @@ THistoryTradeCallback = WINFUNCTYPE(
     c_int,
 )
 
+# --------------------------------------------------------------------------
+# Callbacks EXCLUSIVOS do login completo (DLLInitializeLogin, roteamento).
+# O record nunca usa estes — so' o utilitario de diagnostico ea/contas.py
+# (GetAccount) precisa deles, e so' passa no-ops para os que nao usa.
+# --------------------------------------------------------------------------
+
+TAccountCallback = WINFUNCTYPE(
+    None,
+    c_int,      # nCorretora
+    c_wchar_p,  # CorretoraNomeCompleto
+    c_wchar_p,  # AccountID
+    c_wchar_p,  # NomeTitular
+)
+
+TOrderChangeCallback = WINFUNCTYPE(
+    None,
+    TAssetIDRec,  # rAssetID
+    c_int,        # nCorretora
+    c_int,        # nQtd
+    c_int,        # nTradedQtd
+    c_int,        # nLeavesQtd
+    c_int,        # nSide
+    c_double,     # dPrice
+    c_double,     # dStopPrice
+    c_double,     # dAvgPrice
+    c_int64,      # nProfitID
+    c_wchar_p,    # TipoOrdem
+    c_wchar_p,    # Conta
+    c_wchar_p,    # Titular
+    c_wchar_p,    # ClOrdID
+    c_wchar_p,    # Status
+    c_wchar_p,    # Date
+    c_wchar_p,    # TextMessage
+)
+
+THistoryCallback = WINFUNCTYPE(
+    None,
+    TAssetIDRec,  # rAssetID
+    c_int,        # nCorretora
+    c_int,        # nQtd
+    c_int,        # nTradedQtd
+    c_int,        # nLeavesQtd
+    c_int,        # nSide
+    c_double,     # dPrice
+    c_double,     # dStopPrice
+    c_double,     # dAvgPrice
+    c_int64,      # nProfitID
+    c_wchar_p,    # TipoOrdem
+    c_wchar_p,    # Conta
+    c_wchar_p,    # Titular
+    c_wchar_p,    # ClOrdID
+    c_wchar_p,    # Status
+    c_wchar_p,    # Date
+)
+
 
 def load_dll(path: str | Path) -> Any:
     """
@@ -227,6 +282,30 @@ def _declare(dll: Any) -> None:
         TTinyBookCallback,
     ]
     dll.DLLInitializeMarketLogin.restype = c_int
+
+    # Login COMPLETO (roteamento) — so' declarado se o export existir; DLLs
+    # mais antigas/so'-market-data podem nao ter. Usado exclusivamente pelo
+    # utilitario de diagnostico (ea/contas.py), nunca pelo record.
+    if hasattr(dll, "DLLInitializeLogin"):
+        dll.DLLInitializeLogin.argtypes = [
+            c_wchar_p, c_wchar_p, c_wchar_p,
+            TStateCallback,
+            THistoryCallback,
+            TOrderChangeCallback,
+            TAccountCallback,
+            TNewTradeCallback,
+            TNewDailyCallback,
+            TPriceBookCallbackV1,
+            TOfferBookCallbackV1,
+            THistoryTradeCallback,
+            TProgressCallback,
+            TTinyBookCallback,
+        ]
+        dll.DLLInitializeLogin.restype = c_int
+
+    if hasattr(dll, "GetAccount"):
+        dll.GetAccount.argtypes = []
+        dll.GetAccount.restype = c_int
 
     for nome in ("SubscribeTicker", "UnsubscribeTicker",
                  "SubscribeOfferBook", "UnsubscribeOfferBook",

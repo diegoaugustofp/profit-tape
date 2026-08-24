@@ -538,6 +538,47 @@ def vigia(
 
 
 @app.command()
+def ea_contas(
+    timeout: float = typer.Option(15.0, "--timeout"),
+    log_level: str = typer.Option("INFO", "--log-level"),
+) -> None:
+    """
+    DIAGNOSTICO (nao operacional): conecta com login completo e lista as
+    contas de roteamento (GetAccount) -- demo e real. Use o resultado para
+    preencher ROTEAMENTO_ID_ACCOUNT_DEMO/REAL no .env.
+
+    READ-ONLY: nao envia ordem, nao modifica nada. Rode de preferencia FORA
+    do horario de pregao, com o record PARADO -- ver docs/EA_ARQUITETURA.md.
+    """
+    configurar(log_level)
+    from .config import Credenciais
+    from .ea.contas import listar_contas
+
+    cred = Credenciais()
+    cred.validar()
+
+    typer.echo("Conectando (login completo)...")
+    contas = listar_contas(cred, timeout_s=timeout)
+
+    if not contas:
+        typer.echo("Nenhuma conta retornada. Confira se GetAccount() e' "
+                   "suportado nesta versao da DLL, ou aumente --timeout.")
+        raise typer.Exit(1)
+
+    typer.echo(f"\n{len(contas)} conta(s) encontrada(s):")
+    typer.echo("-" * 70)
+    for c in contas:
+        typer.echo(f"  corretora_id={c.corretora_id:<6} corretora={c.corretora_nome}")
+        typer.echo(f"  account_id={c.account_id!r:<12} titular={c.titular}")
+        typer.echo("-" * 70)
+    typer.echo("\nAnote qual account_id e' DEMO e qual e' REAL, e preencha:")
+    typer.echo("  ROTEAMENTO_ID_ACCOUNT_DEMO=<...>")
+    typer.echo("  ROTEAMENTO_ID_ACCOUNT_REAL=<...>")
+    typer.echo("  ROTEAMENTO_ID_CORRETORA=<corretora_id acima>")
+    typer.echo("no seu .env (nunca no yaml versionado).")
+
+
+@app.command()
 def bench(
     ativos: int = typer.Option(5, "--ativos"),
     duracao: float = typer.Option(15.0, "--duracao", help="Segundos de simulacao."),
