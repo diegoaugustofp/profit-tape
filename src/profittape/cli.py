@@ -487,6 +487,33 @@ def quintis(
 
 
 @app.command()
+def alertas_testar(
+    alertas: Path = typer.Option(Path("config/alertas.yaml"), "--alertas"),
+) -> None:
+    """
+    Manda uma mensagem de teste ao Telegram configurado — confirma
+    bot_token/chat_id ANTES de depender disso durante o pregao.
+    """
+    from .alertas import ConfigAlertas, enviar
+
+    cfg = ConfigAlertas.carregar(alertas)
+    if cfg is None:
+        typer.echo(f"SEM CONFIG: {alertas} nao existe ou esta incompleto "
+                   f"(precisa de telegram.bot_token e telegram.chat_id).")
+        raise typer.Exit(1)
+
+    ok = enviar("🧪 teste do profit-tape — se voce recebeu isso, "
+               "bot_token e chat_id estao corretos.", cfg)
+    if ok:
+        typer.echo("Enviado. Confira o Telegram.")
+    else:
+        typer.echo("FALHOU ao enviar — o motivo apareceu na linha acima "
+                   "(alertas.envio_falhou). Confira bot_token, chat_id, e se "
+                   "a rede alcanca api.telegram.org.")
+        raise typer.Exit(1)
+
+
+@app.command()
 def vigia(
     log_file: Path = typer.Option(Path("logs/record_diario.jsonl"), "--log-file"),
     alertas: Path = typer.Option(Path("config/alertas.yaml"), "--alertas"),
