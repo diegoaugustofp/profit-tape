@@ -497,3 +497,41 @@ def test_quarentena_loga_progresso_nao_so_resultado_final(tmp_raiz: Path, capsys
     assert "quarentena.varredura_concluida" in out
     # throttle por contagem: relatou pelo menos em 100 e no final (150)
     assert out.count("quarentena.progresso") >= 2
+
+
+def test_book_offer_sem_data_nao_vai_para_particao_1970(tmp_raiz: Path) -> None:
+    """
+    BUG REAL ativo desde sempre, achado pelo operador revisando a pasta
+    data/raw (2026-08-26): deltas de offer book sem bHasDate tem ts_ns=0
+    (nao None) — datetime.fromtimestamp(0) e' literalmente 1970-01-01. O
+    writer so' checava "ts is None" (cobria tiny_book, que nem tem o campo)
+    mas ts_ns=0 passava direto, gerando uma particao FOSSIL nova TODO DIA
+    que uma limpeza manual anterior tratou como residuo de versao antiga —
+    na verdade era gerada continuamente. Corrigido: 0 tambem cai no
+    fallback de ts_recv_ns.
+    """
+    from datetime import UTC, datetime
+
+    from profittape.health.metrics import Metrics
+    from profittape.pipeline.bus import Envelope, EventBus
+    from profittape.pipeline.writer import WriterThread
+
+    agora_ns = 1_756_150_000_000_000_000   # ~2025-08 em ns, so' precisa ser "hoje" plausivel
+    dia_esperado = datetime.fromtimestamp(agora_ns / 1e9, tz=UTC).strftime("%Y-%m-%d")
+
+    sink = ParquetSink(tmp_raiz)
+    bus = EventBus(maxsize=100)
+    writer = WriterThread(bus=bus, sink=sink, metrics=Metrics())
+
+    delta_sem_data = BookDelta(
+        ts_ns=0, ts_recv_ns=agora_ns, symbol="WINFUT", exchange="F",
+        action=0, side=0, position=1, offer_id=1, price=100.0, quantidade=10,
+        agente=3, has_price=True, has_qtd=True, has_date=False,
+    )
+    writer._processar([Envelope(Stream.BOOK_OFFER, delta_sem_data)])
+    sink.close()
+
+    fossil = tmp_raiz / "book_offer" / "dt=1970-01-01"
+    correta = tmp_raiz / "book_offer" / f"dt={dia_esperado}"
+    assert not fossil.exists(), "evento sem data ainda esta caindo em 1970-01-01"
+    assert correta.exists(), f"evento deveria ter ido para dt={dia_esperado} (via ts_recv_ns)"

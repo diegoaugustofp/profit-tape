@@ -368,3 +368,51 @@ Bug corrigido: --log-file gravava o MESMO texto formatado do console, nunca
 JSON, apesar do nome .jsonl. Console continua legivel/colorido; arquivo agora
 e' JSON valido, uma linha por evento — o vigia (e qualquer ferramenta futura)
 depende disso para parsear o log programaticamente.
+
+## BUG CRITICO: particao book_offer/dt=1970-01-01 era gerada TODO DIA (2026-08-26)
+
+O operador achou, revisando data/raw manualmente, uma pasta
+book_offer/dt=1970-01-01 sendo escrita HOJE, com arquivos numerados em
+sequencia continuando de sessoes anteriores (WINFUT comecando do part-0013,
+nao 0000) — ou seja, essa particao vinha crescendo desde muito antes de
+hoje, nao era coisa nova.
+
+HISTORICO DO ENGANO: uma sessao anterior (2026-08-22) encontrou
+book_offer/dt=1970-01-01 e dt=1990-01-01 no disco e concluiu que eram
+"residuo do bug atFullBook/bHasDate de uma versao antiga, corrigida" —
+mandamos apagar as duas particoes como limpeza pontual. ERRADO: a causa
+nunca tinha sido corrigida no writer, so' os arquivos acumulados foram
+apagados uma vez. O bug continuou gerando lixo novo todo santo dia desde
+entao, silenciosamente, sem nenhum alerta.
+
+CAUSA RAIZ: deltas de offer book sem bHasDate (a MAIORIA dos deltas, por
+design do protocolo — ver profitdll/client.py) tem ts_ns=0, nao None. O
+pipeline/writer.py so' checava `if ts is None: ts = ts_recv_ns` — esse
+fallback cobria o tiny_book (que nem tem o campo ts_ns), mas ts_ns=0 do
+offer book passava direto por essa checagem. `datetime.fromtimestamp(0)`
+e' literalmente 1970-01-01T00:00:00 UTC (epoch) — toda vez que um delta de
+book chegava sem data (a maioria), ia parar numa particao fossil em vez da
+particao do dia real.
+
+IMPACTO: uma fracao desconhecida (provavelmente grande, dado "a maioria
+dos deltas nao carrega data") do offer_book de TODOS os dias capturados
+ate agora foi parar em dt=1970-01-01 em vez do dia correto — isto e', uma
+fatia significativa do book historico esta MISTURADA numa particao unica
+e sem separacao por dia, ou pode ter sido descartada nas limpezas
+anteriores (a quarentena nao verifica isso — footer/descompressao ficam
+OK, o problema e' semantico, nao estrutural).
+
+CORRECAO (v0.55): pipeline/writer.py agora trata ts_ns == 0 IGUAL a None —
+cai no fallback de ts_recv_ns. Teste de regressao criado e confirmado
+falhando SEM a correcao, passando COM ela (tests/test_schema_writer.py::
+test_book_offer_sem_data_nao_vai_para_particao_1970).
+
+ACAO NECESSARIA NO DISCO DO OPERADOR:
+1. Apagar book_offer/dt=1970-01-01 (e dt=1990-01-01 se reaparecer) —
+   dado sem data confiavel de qualquer forma, nao reconstruivel por dia.
+2. Aceitar que o offer_book capturado ATE HOJE tem uma fatia de eventos
+   irremediavelmente sem a data correta (foram para o dia errado ou foram
+   apagados) — nao ha' como recuperar isso retroativamente, so' capturas
+   NOVAS a partir da v0.55 corrigida ficam corretas.
+3. Isso NAO afeta trade (sempre tem ts_ns real) nem price_book (usa
+   time.time_ns() sempre) — so' offer_book era vulneravel.

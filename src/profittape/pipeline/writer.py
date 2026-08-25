@@ -91,7 +91,17 @@ class WriterThread(threading.Thread):
         for env in lote:
             ev = env.event
             ts = getattr(ev, "ts_ns", None)
-            if ts is None:  # tiny book so tem ts_recv_ns
+            # ts_ns=0 e' o caso NORMAL de offer book sem bHasDate (maioria
+            # dos deltas — ver profitdll/client.py) — NAO e' epoch valido.
+            # BUG REAL, ativo desde sempre (2026-08-26): so' checavamos
+            # "ts is None" (cobria tiny_book, que nem tem o campo), mas
+            # ts_ns=0 passava direto e datetime.fromtimestamp(0) produz
+            # literalmente 1970-01-01 — uma particao fossil que a limpeza
+            # manual anterior tratou como resíduo de uma versao velha, mas
+            # na verdade era gerada TODO dia, silenciosamente, por qualquer
+            # delta de offer book sem data. Corrigido: 0 tambem cai no
+            # fallback de ts_recv_ns, igual None ja fazia.
+            if ts is None or ts == 0:
                 ts = ev.ts_recv_ns
             grupos[(env.stream, _dia_de(ts), ev.symbol)].append(ev)
 
