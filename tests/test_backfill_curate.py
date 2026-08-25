@@ -24,6 +24,19 @@ from profittape.testing import FakeProfitDLL
 from profittape.tools.curate import curar_trades
 
 
+def _dia_util_recente(dias_atras_min: int = 3) -> str:
+    """
+    Um dia UTIL (nao sabado/domingo) dentro da janela de 30 dias, pelo menos
+    dias_atras_min dias no passado. hoje-3 fixo e' fragil -- cai em fim de
+    semana dependendo do dia da semana em que os testes rodam (bug real
+    pego 2026-08-25: falhava toda terca/quarta porque hoje-3 caia no
+    sabado anterior). Anda para tras ate achar um dia util.
+    """
+    d = datetime.now() - timedelta(days=dias_atras_min)
+    while d.weekday() >= 5:   # 5=sabado, 6=domingo
+        d -= timedelta(days=1)
+    return d.strftime("%Y-%m-%d")
+
 def test_conversao_de_data() -> None:
     assert _iso_para_dll("2026-08-20") == "20/08/2026"
     with pytest.raises(ValueError, match="YYYY-MM-DD"):
@@ -350,8 +363,7 @@ def test_por_dia_repete_dia_vazio_dentro_da_janela(tmp_raiz: Path) -> None:
     """
     from profittape.recorder import backfill as bf
 
-    hoje = datetime.now()
-    dia_alvo = (hoje - timedelta(days=3)).strftime("%Y-%m-%d")   # dentro dos 30
+    dia_alvo = _dia_util_recente()   # dentro dos 30, sempre dia util
 
     cfg = RecorderConfig(
         ativos=[AtivoConfig(ticker="PETR4")],
@@ -563,8 +575,7 @@ def test_backfill_pede_so_o_ticker_faltante_no_dia(tmp_raiz: Path, capsys) -> No
     )
     cred = Credenciais(activation_key="k", user="u", password="p", dll_path="fake")
 
-    hoje = datetime.now()
-    dia_alvo = (hoje - timedelta(days=3)).strftime("%Y-%m-%d")
+    dia_alvo = _dia_util_recente()
 
     # Pre-existe SO' o WINFUT para esse dia (simulando a rodada anterior).
     pasta_win = tmp_raiz / "trade" / f"dt={dia_alvo}" / "sym=WINFUT"

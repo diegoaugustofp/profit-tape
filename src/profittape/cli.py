@@ -221,13 +221,25 @@ def quarentena(
              "(ZSTD failed) que o footer intacto esconde. Mais lento, mas pega "
              "o que derruba o curate.",
     ),
+    log_level: str = typer.Option("INFO", "--log-level"),
+    log_file: Path | None = typer.Option(
+        None, "--log-file",
+        help="Grava o log em arquivo alem do console — util pra acompanhar "
+             "com Get-Content -Wait numa varredura longa (--profundo em "
+             "milhares de arquivos pode levar horas).",
+    ),
 ) -> None:
     """
     Acha (e opcionalmente remove) arquivos .parquet corrompidos — fosseis sem
     footer da era do fsync quebrado, ou (com --profundo) row groups internamente
     corrompidos que passam pelo footer. Dry-run por padrao: nunca apaga sem
     --remover.
+
+    Loga progresso a cada 5s/100 arquivos (quarentena.progresso) — sem isso,
+    --profundo em milhares de arquivos fica em silencio por horas,
+    indistinguivel de travado.
     """
+    configurar(log_level, log_file)
     from .tools.quarentena import varrer
 
     varrer(raiz, remover, profundo)

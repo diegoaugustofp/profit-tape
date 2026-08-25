@@ -16,7 +16,12 @@ por padrao — nunca apaga sem o operador pedir explicitamente).
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
+
+import structlog
+
+log = structlog.get_logger(__name__)
 
 PAR1 = b"PAR1"
 
@@ -68,6 +73,8 @@ def varrer(raiz: Path, remover: bool = False, profundo: bool = False) -> None:
         if not p.name.endswith(".inprogress")
     ]
     modo = "footer + descompressao (profundo)" if profundo else "footer"
+    log.info("quarentena.plano", raiz=str(raiz.resolve()), arquivos=len(candidatos),
+             modo=modo)
     print(f"Varrendo {len(candidatos)} arquivo(s) .parquet em {raiz.resolve()} "
           f"[{modo}] ...")
 
@@ -76,7 +83,28 @@ def varrer(raiz: Path, remover: bool = False, profundo: bool = False) -> None:
             return True
         return bool(profundo and _corrompido_profundo(p))
 
-    fosseis = [p for p in candidatos if _suspeito(p)]
+    # Sem feedback durante o loop, --profundo em milhares de arquivos fica
+    # SILENCIOSO POR HORAS -- indistinguivel de travado (incidente real:
+    # operador esperou 6h sem nenhuma mensagem e nao sabia se seguia rodando).
+    # Loga a cada arquivo (nivel debug, para --log-level DEBUG acompanhar
+    # arquivo a arquivo) e a cada N arquivos ou T segundos (nivel info, o
+    # ritmo normal de acompanhamento).
+    fosseis: list[Path] = []
+    t0 = time.monotonic()
+    ultimo_relato = t0
+    for i, p in enumerate(sorted(candidatos), 1):
+        log.debug("quarentena.verificando", arquivo=str(p), progresso=f"{i}/{len(candidatos)}")
+        if _suspeito(p):
+            fosseis.append(p)
+        agora = time.monotonic()
+        if i == len(candidatos) or agora - ultimo_relato >= 5.0 or i % 100 == 0:
+            log.info("quarentena.progresso", verificados=i, total=len(candidatos),
+                     suspeitos_ate_agora=len(fosseis),
+                     segundos_decorridos=round(agora - t0, 1))
+            ultimo_relato = agora
+
+    log.info("quarentena.varredura_concluida", verificados=len(candidatos),
+             suspeitos=len(fosseis), segundos=round(time.monotonic() - t0, 1))
 
     if not fosseis:
         print("Nenhum arquivo sem footer. Tudo integro.")

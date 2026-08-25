@@ -470,3 +470,30 @@ def test_verificacao_ok_promove_e_conta(tmp_raiz: Path) -> None:
     assert sink.falhas_verificacao == []
     assert len(list(tmp_raiz.rglob("*.parquet"))) == 1
     assert not list(tmp_raiz.rglob("*.inprogress"))
+
+
+def test_quarentena_loga_progresso_nao_so_resultado_final(tmp_raiz: Path, capsys) -> None:
+    """
+    Pedido real do operador (2026-08-25): --profundo em 1200+ arquivos ficou
+    silencioso por 6h, indistinguivel de travado. Agora loga plano no inicio
+    e progresso periodico (a cada 100 arquivos ou 5s) durante a varredura.
+    """
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    from profittape.logging_setup import configurar
+    from profittape.tools.quarentena import varrer
+
+    configurar("INFO")
+    d = tmp_raiz / "trade" / "dt=2026-08-14" / "sym=WINFUT"
+    d.mkdir(parents=True)
+    for i in range(150):
+        pq.write_table(pa.table({"a": [1, 2, 3]}), d / f"part-{i:04d}.parquet")
+
+    varrer(tmp_raiz, remover=False, profundo=False)
+    out = capsys.readouterr().out
+    assert "quarentena.plano" in out
+    assert "quarentena.progresso" in out
+    assert "quarentena.varredura_concluida" in out
+    # throttle por contagem: relatou pelo menos em 100 e no final (150)
+    assert out.count("quarentena.progresso") >= 2
