@@ -67,3 +67,16 @@ def configurar(nivel: str = "INFO", arquivo: Path | None = None) -> None:
             foreign_pre_chain=_PROCESSORS_COMUNS,
         ))
         root.addHandler(handler)
+
+        # Anuncia o caminho ABSOLUTO resolvido, sempre — mesmo se `arquivo`
+        # foi passado relativo. Incidente real (2026-08-25): --log-file
+        # relativo, rodado de um diretorio de trabalho inesperado (schtasks,
+        # ou um terminal aberto em outro lugar por engano), escreveu o log
+        # num lugar que ninguem olhou depois. Mesmo padrao ja usado para
+        # destinos de dado (curate.destino, backfill_dia.destino,
+        # recorder.destino) — agora tambem para QUALQUER --log-file, de
+        # qualquer comando, presente ou futuro, sem precisar caçar cada
+        # default relativo um por um.
+        structlog.get_logger("profittape.logging_setup").info(
+            "log.destino", arquivo=str(arquivo.resolve())
+        )

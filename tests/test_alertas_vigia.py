@@ -148,13 +148,56 @@ def test_logging_setup_grava_json_valido_em_arquivo(tmp_path: Path) -> None:
         log.info("evento.teste", chave="valor", numero=42)
 
         linhas = arq.read_text(encoding="utf-8").strip().splitlines()
-        assert len(linhas) == 1
-        d = json.loads(linhas[0])   # nao pode levantar
+        # A 1a linha agora e' sempre 'log.destino' (anuncio do caminho
+        # absoluto resolvido — ver logging_setup.py, 2026-08-25); o evento
+        # real do teste e' a ULTIMA linha, nao a unica.
+        assert len(linhas) == 2
+        d_destino = json.loads(linhas[0])
+        assert d_destino["event"] == "log.destino"
+        assert d_destino["arquivo"] == str(arq.resolve())
+        d = json.loads(linhas[-1])   # nao pode levantar
         assert d["event"] == "evento.teste"
         assert d["chave"] == "valor"
         assert d["numero"] == 42
         assert "timestamp" in d
     finally:
+        structlog.reset_defaults()
+        _logging.getLogger().handlers[:] = handlers_antes
+        _logging.getLogger().setLevel(nivel_antes)
+
+
+def test_log_destino_anuncia_caminho_absoluto_mesmo_se_passado_relativo(
+    tmp_path: Path,
+) -> None:
+    """
+    Pedido real do operador (2026-08-25): --log-file relativo, rodado de um
+    diretorio de trabalho inesperado, escreveu o log num lugar que ninguem
+    olhou depois. Agora QUALQUER --log-file (relativo ou nao) anuncia seu
+    caminho ABSOLUTO resolvido na primeira linha — console e arquivo — antes
+    de qualquer outro log do comando.
+    """
+    import logging as _logging
+    import os
+
+    import structlog
+
+    from profittape.logging_setup import configurar
+
+    handlers_antes = list(_logging.getLogger().handlers)
+    nivel_antes = _logging.getLogger().level
+    cwd_antes = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        configurar("INFO", Path("subpasta/log.jsonl"))   # relativo de proposito
+        linhas = (tmp_path / "subpasta" / "log.jsonl").read_text().strip().splitlines()
+        assert len(linhas) == 1
+        d = json.loads(linhas[0])
+        assert d["event"] == "log.destino"
+        # o caminho anunciado tem que ser ABSOLUTO, nao o relativo original
+        assert Path(d["arquivo"]).is_absolute()
+        assert d["arquivo"] == str((tmp_path / "subpasta" / "log.jsonl").resolve())
+    finally:
+        os.chdir(cwd_antes)
         structlog.reset_defaults()
         _logging.getLogger().handlers[:] = handlers_antes
         _logging.getLogger().setLevel(nivel_antes)
