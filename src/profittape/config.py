@@ -46,27 +46,39 @@ class AtivoConfig(BaseModel):
 
 
 class StorageConfig(BaseModel):
-    raiz: Path = Path("data/raw")
+    raiz: Path
 
     @field_validator("raiz")
     @classmethod
-    def _resolver_e_recusar_ambiguidade(cls, v: Path) -> Path:
-        # ARMADILHA REAL (2026-08-22): 'raiz: \data\raw' (barra inicial SEM
+    def _exigir_absoluto(cls, v: Path) -> Path:
+        # ARMADILHA REAL #1 (2026-08-22): 'raiz: \data\raw' (barra inicial SEM
         # letra de unidade) e' "relativo a unidade" no Windows — resolve para
         # a raiz do DRIVE CORRENTE do terminal. Uma recaptura de 20 dias foi
         # para G:\ (o disco que corrompe) e outra para C:\data\raw (fora do
-        # projeto), ambas em silencio. A 1a versao desta defesa era um AVISO —
-        # insuficiente: print antes do logging se perde, e o operador ja'
-        # tinha perdido horas. REVISAO DO MODULO (pedido do operador):
-        # ambiguidade de destino de dado irrecuperavel nao merece aviso,
-        # merece RECUSA com instrucao de correcao.
-        import os as _os
-        if _os.name == "nt" and v.root and not v.drive:
+        # projeto), ambas em silencio.
+        #
+        # ARMADILHA REAL #2 (2026-08-25): mesmo o caso "seguro" recomendado
+        # pela 1a versao desta defesa — 'raiz: data\raw', relativo PURO, sem
+        # barra nenhuma — se mostrou igualmente perigoso. Resolve relativo ao
+        # CWD do PROCESSO no momento em que inicia, nao ao arquivo yaml nem
+        # ao projeto. Rodando manualmente (sempre com `cd` pro projeto antes)
+        # isso sempre acertou por acidente — mas o schtasks nao garante CWD
+        # nenhum, e o mesmo yaml resolveu para C:\data\raw num teste de
+        # reproducao (2026-08-25), fora do projeto inteiro. Nao houve como
+        # confirmar se foi a causa do exit code 1 daquele dia, mas o bug em
+        # si e' real e reproduzivel.
+        #
+        # CORRECAO: exigir absoluto SEMPRE. Nao existe "relativo seguro" pra
+        # um processo cujo CWD de lancamento nao esta sob nosso controle —
+        # so' absoluto elimina a ambiguidade por completo, incondicionalmente.
+        if not v.is_absolute():
             raise ValueError(
-                f"storage.raiz '{v}' e' relativo-a-unidade (comeca com \\ sem "
-                f"letra de drive): o destino dependeria do drive corrente do "
-                f"terminal. Use relativo simples (data/raw) ou absoluto "
-                f"completo (C:\\projetos\\profit-tape\\data\\raw)."
+                f"storage.raiz '{v}' nao e' absoluto. Caminho relativo "
+                f"resolve contra o diretorio de trabalho do PROCESSO no "
+                f"momento em que inicia — que o schtasks nao garante ser o "
+                f"do projeto (confirmado: o mesmo yaml resolveu para "
+                f"C:\\data\\raw rodando de C:\\, 2026-08-25). Use caminho "
+                f"absoluto completo, ex.: C:\\projetos\\profit-tape\\data\\raw."
             )
         return v.resolve()
     compressao: Literal["zstd", "snappy", "gzip", "lz4"] = "zstd"
@@ -107,7 +119,7 @@ class RuntimeConfig(BaseModel):
 
 class RecorderConfig(BaseModel):
     ativos: list[AtivoConfig]
-    storage: StorageConfig = StorageConfig()
+    storage: StorageConfig
     pipeline: PipelineConfig = PipelineConfig()
     runtime: RuntimeConfig = RuntimeConfig()
 

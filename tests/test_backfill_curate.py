@@ -499,30 +499,43 @@ def test_quarentena_profundo_pega_corrupcao_interna(tmp_raiz: Path, capsys) -> N
     assert "SEM footer" in out or "part-0000" in out
 
 
-def test_raiz_resolvida_no_load_congela_contra_cwd(tmp_path, monkeypatch) -> None:
+def test_raiz_relativa_e_sempre_recusada(tmp_path, monkeypatch) -> None:
     """
-    Armadilha real (2026-08-22): raiz relativa resolvida tarde mudava de
-    destino conforme o CWD do processo. Agora o load resolve para absoluto
-    imediatamente — mudar de diretorio DEPOIS nao muda o destino.
+    REVISAO (2026-08-25): a defesa original so' recusava o caso drive-
+    relativo ('\\data\\raw') e RECOMENDAVA relativo puro ('data/raw') como
+    alternativa segura. Provado errado na pratica: o mesmo yaml, lancado de
+    um diretorio de trabalho diferente (como o schtasks pode fazer sem
+    aviso), resolveu 'data\\raw' para C:\\data\\raw — fora do projeto
+    inteiro. Relativo puro NUNCA e' seguro para um processo cujo CWD de
+    lancamento nao esta sob nosso controle. Agora e' recusa incondicional.
     """
+    from profittape.config import StorageConfig
+
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(Exception, match=r"nao e. absoluto"):
+        StorageConfig(raiz=Path("data/raw"))
+
+
+def test_raiz_absoluta_e_imutavel_ao_cwd(tmp_path, monkeypatch) -> None:
+    """Caminho absoluto passa direto e nunca muda, mesmo se o CWD mudar depois."""
     import os
 
     from profittape.config import StorageConfig
 
-    monkeypatch.chdir(tmp_path)
-    cfg = StorageConfig(raiz=Path("data/raw"))
+    alvo = tmp_path / "data" / "raw"
+    cfg = StorageConfig(raiz=alvo)
     assert cfg.raiz.is_absolute()
-    assert str(cfg.raiz).startswith(str(tmp_path))
-    os.chdir("/")                                   # muda o CWD depois do load
-    assert str(cfg.raiz).startswith(str(tmp_path))  # destino nao se move
+    assert str(cfg.raiz) == str(alvo.resolve())
+    os.chdir(tmp_path.anchor)                       # muda o CWD depois do load
+    assert str(cfg.raiz) == str(alvo.resolve())      # destino nao se move
 
 
-def test_raiz_relativa_a_unidade_e_recusada_no_windows(monkeypatch) -> None:
+def test_raiz_drive_relativa_e_recusada_no_windows(monkeypatch) -> None:
     """
-    REVISAO (2026-08-22): '\\data\\raw' (drive-relativo) mandou uma recaptura
-    para G:\\ e outra para C:\\data\\raw, em silencio. Aviso nao bastou —
-    agora e' recusa fatal com instrucao. So' se aplica no Windows; no Linux
-    '/x' e' absoluto legitimo (o teste simula nt).
+    REVISAO (2026-08-22, endurecida em 2026-08-25): '\\data\\raw' (drive-
+    relativo) mandou uma recaptura para G:\\ e outra para C:\\data\\raw, em
+    silencio. Agora a regra e' unica e mais simples: qualquer coisa que nao
+    seja absoluto e' recusada — drive-relativo incluso, sem caso especial.
     """
     import os
 
@@ -531,7 +544,7 @@ def test_raiz_relativa_a_unidade_e_recusada_no_windows(monkeypatch) -> None:
     from profittape import config as cfg_mod
 
     monkeypatch.setattr(os, "name", "nt")
-    with _pt.raises(Exception, match="relativo-a-unidade"):
+    with _pt.raises(Exception, match=r"nao e. absoluto"):
         cfg_mod.StorageConfig(raiz=Path("\\data\\raw"))
 
 

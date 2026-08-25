@@ -33,7 +33,12 @@ ativos:
     trades: true
 
 storage:
-  raiz: data/raw
+  # SEMPRE absoluto — nunca relativo, nem "data/raw" simples. Um processo
+  # agendado (schtasks) nao garante rodar com o diretorio de trabalho do
+  # projeto; caminho relativo resolveu para C:\data\raw (fora do projeto)
+  # num teste real (2026-08-25). O validador RECUSA qualquer coisa que nao
+  # seja absoluto — ajuste o caminho abaixo pro seu projeto.
+  raiz: C:\projetos\profit-tape\data\raw
   compressao: zstd
   nivel_compressao: 3          # 3 e' o joelho da curva; 9 dobra CPU por ~8% de tamanho
   max_rows_per_file: 5000000
