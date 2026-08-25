@@ -614,3 +614,12 @@ def bench(
 
 def main() -> None:  # pragma: no cover
     app()
+
+
+if __name__ == "__main__":  # pragma: no cover
+    # Sem isto, `python -m profittape.cli ...` importa o modulo (define os
+    # comandos) mas NUNCA invoca o app -- o processo simplesmente termina
+    # em silencio, sem erro, sem saida, parecendo que "nao fez nada" (bug
+    # real, 2026-08-25: o operador precisou do fallback `python -m
+    # profittape` -- sem o '.cli' -- que ja funcionava via __main__.py).
+    main()
