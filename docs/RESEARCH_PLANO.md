@@ -468,3 +468,29 @@ caminho mais simples sem entrar em estrategia: pedir ao operador para
 rodar o MESMO simulador de custo da XP com um lote realista de MGLU3/
 ITUB4 no cenario "Day trade + RLP", e converter o R$ resultante para
 pontos dividindo pelo numero de acoes.
+
+## Conclusao final: sinais de acao morrem no teste economico (2026-08-26)
+
+Com o custo real da XP (0.026 pts/acao, RLP+day-trade, lote 500,
+confirmado que RLP vale igual p/ automatizado em acoes — diferente do
+WIN onde automatizado sempre paga taxa fixa extra):
+
+  z_fluxo_nacional h=1 (MGLU3): spread bruto +0.003 pts -- irrelevante
+    frente a qualquer custo. %>0 liquido = 2.7%-4.6% em TODOS os
+    quintis -- perderia dinheiro em ~95-97% das barras, mesmo SEM
+    custo algum. Achado metodologico: t altissimo no IC (-6.45) mediu
+    CONSISTENCIA DE DIRECAO entre folds, nao magnitude nem taxa de
+    acerto -- os dois sao coisas diferentes, e este e' o exemplo mais
+    claro ate agora de direcao consistente com magnitude nula.
+
+  z_tick_imbalance h=10 (ITUB4): mais perto de viver, ainda morre.
+    Spread bruto +0.045 pts vs custo do par 2x0.026=0.052 -- perde por
+    pouco. Taxa de acerto degrada suavemente 42% (Q1) -> 29% (Q5),
+    padrao mais parecido com o WIN, mas sem magnitude suficiente
+    nessa escala de preco.
+
+CONCLUSAO: nenhum sinal de acao testado ate agora sobrevive ao teste
+economico, mesmo com custo real e baixo (RLP). z_agf_3/z_agf_4090 no
+WIN continuam os UNICOS sinais que passaram pelo funil completo (IC +
+quintis + significancia). Isso NAO invalida o metodo -- e' exatamente
+o resultado que o funil existe para produzir.
