@@ -481,18 +481,19 @@ def quintis(
         raise SystemExit(f"nao achei {arquivo} — rode `profit-tape features` antes")
     r = avaliar_pares(arquivo, lista, saida, custo_pontos,
                       treino_min=treino_min, teste_dias=teste_dias)
+    from .research.quintis import _fmt
     typer.echo("=" * 62)
-    typer.echo(f"QUINTIS — custo assumido {custo_pontos:.1f} pts, "
+    typer.echo(f"QUINTIS — custo assumido {_fmt(custo_pontos)} pts, "
                f"{r['dias_out_of_sample']} dias out-of-sample")
     typer.echo("=" * 62)
     for (feat, h), tabela in r["tabelas"].items():
         typer.echo(f"\n{feat} @ h={h}")
-        typer.echo(tabela.to_string(index=False, float_format=lambda v: f"{v:.3f}"))
+        typer.echo(tabela.to_string(index=False, float_format=lambda v: _fmt(v)))
         for teste in r["diferencas"].get((feat, h), []):
             marca = "DIFEREM" if teste["diferem_5pct"] else "indistinguivel"
             typer.echo(
                 f"  Q{teste['quintil_a']} vs Q{teste['quintil_b']}: "
-                f"diff={teste['diferenca']:+.2f}pts t={teste['t_welch']:.2f} "
+                f"diff={_fmt(teste['diferenca'])}pts t={teste['t_welch']:.2f} "
                 f"p={teste['p_valor']:.3f} [{marca}]"
             )
     typer.echo(f"\nrelatorio: {r['relatorio']}")

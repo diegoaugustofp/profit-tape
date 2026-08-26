@@ -201,3 +201,23 @@ def test_avaliar_pares_inclui_diferencas_no_resultado_e_relatorio(tmp_path) -> N
     texto = (tmp_path / "out" / "quintis.md").read_text(encoding="utf-8")
     assert "Diferenca entre quintis adjacentes" in texto
     assert "Welch" in texto
+
+
+def test_relatorio_nao_esconde_custo_pequeno_como_zero(tmp_path) -> None:
+    """
+    Bug real (2026-08-26): formatacao fixa (.1f/.2f) foi desenhada pensando
+    no WIN (custo ~11 pontos) e escondia custo de acoes (ex.: R$0.026/acao)
+    como '0.0 pontos' no cabecalho -- o operador achou que o custo nao
+    tinha sido aplicado, quando na verdade foi (ret_liquido - ret_bruto
+    batia com 0.026, so' a EXIBICAO arredondava para zero).
+    """
+    df = _dados_contrarian(spread_pts=0.1)   # escala de acao, nao de WIN
+    arq = tmp_path / "features.parquet"
+    df.to_parquet(arq, index=False)
+
+    r = avaliar_pares(arq, [("z_sinal", 1)], tmp_path / "out",
+                      custo_pontos=0.02604)
+    texto = (tmp_path / "out" / "quintis.md").read_text(encoding="utf-8")
+    assert "0.0 pontos" not in texto          # nao pode mais colapsar pra zero
+    assert "0.026" in texto                    # casas suficientes pro custo real
+    assert r["custo_pontos"] == 0.02604        # o VALOR interno sempre esteve certo

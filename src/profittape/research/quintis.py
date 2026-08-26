@@ -184,11 +184,31 @@ def avaliar_pares(features_parquet: Path, pares: list[tuple[str, int]],
             "relatorio": str(caminho)}
 
 
+def _fmt(v: float, casas_min: int = 2) -> str:
+    """
+    Casas decimais ADAPTATIVAS — bug real (2026-08-26): formatacao fixa
+    (.1f/.2f) foi desenhada pensando no WIN (custo ~11 pontos, retorno de
+    dezenas de pontos por barra) e ESCONDE a informacao real em ativos de
+    preco baixo por barra (acoes como MGLU3 movem R$0.01-0.03 por barra;
+    ".2f" mostrava "+0.00" para tudo, e o cabecalho de custo mostrava
+    "0.0 pontos" para um custo de 0.026 real, aplicado corretamente por
+    baixo mas invisivel na tela — o operador achou que o custo nao tinha
+    sido usado). Regra: casas suficientes para o numero nao virar zero
+    visualmente (ate um teto razoavel), nunca menos que casas_min.
+    """
+    if v == 0:
+        return f"{v:.{casas_min}f}"
+    casas = casas_min
+    while round(v, casas) == 0 and casas < 6:
+        casas += 1
+    return f"{v:.{casas + 1}f}"
+
+
 def _escrever_relatorio(caminho: Path, resultados: dict, custo_pontos: float,
                         n_dias: int, diferencas: dict | None = None) -> None:
     linhas = [
         "# Tabela de quintis — traducao economica dos vereditos 'segue'\n",
-        f"- custo de ida-e-volta assumido: {custo_pontos:.1f} pontos "
+        f"- custo de ida-e-volta assumido: {_fmt(custo_pontos)} pontos "
         f"(AJUSTE com o custo real do seu book: spread + corretagem + "
         f"slippage — o numero aqui e' um placeholder)",
         f"- dias out-of-sample (uniao dos blocos de teste): {n_dias}",
@@ -212,15 +232,21 @@ def _escrever_relatorio(caminho: Path, resultados: dict, custo_pontos: float,
         linhas.append("|---|---|---|---|---|---|---|")
         for _, r in tabela.iterrows():
             t_txt = "-" if pd.isna(r["t_stat_liquido"]) else f"{r['t_stat_liquido']:.2f}"
+            sinal_bruto = "+" if r["ret_medio_pontos"] >= 0 else "-"
+            sinal_liq = "+" if r["ret_liquido_pontos"] >= 0 else "-"
             linhas.append(
                 f"| {int(r['quintil'])} | {int(r['n'])} | {r['sinal_medio']:.3f} "
-                f"| {r['ret_medio_pontos']:+.2f} | {r['ret_liquido_pontos']:+.2f} "
+                f"| {sinal_bruto}{_fmt(abs(r['ret_medio_pontos']))} "
+                f"| {sinal_liq}{_fmt(abs(r['ret_liquido_pontos']))} "
                 f"| {r['pct_positivo_liquido']:.1%} | {t_txt} |"
             )
+        sinal_b = "+" if spread_bruto >= 0 else "-"
+        sinal_l = "+" if spread_liquido >= 0 else "-"
         linhas.append(
             f"\nSpread Q1-Q{int(tabela['quintil'].max())}: "
-            f"bruto {spread_bruto:+.2f} pts, LIQUIDO {spread_liquido:+.2f} pts "
-            f"apos custo de {custo_pontos:.1f} pts."
+            f"bruto {sinal_b}{_fmt(abs(spread_bruto))} pts, "
+            f"LIQUIDO {sinal_l}{_fmt(abs(spread_liquido))} pts "
+            f"apos custo de {_fmt(custo_pontos)} pts."
         )
         veredito = "ECONOMICAMENTE VIVO (spread liquido positivo)" if spread_liquido > 0 \
             else "MORTO PELO CUSTO (spread bruto nao sobrevive a transacao)"
