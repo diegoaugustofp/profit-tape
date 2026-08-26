@@ -252,3 +252,38 @@ forma). O forward-test de amanha NAO fica bloqueado por este problema.
 O bloqueio genuino que PERMANECE: qualquer coisa que precise de
 roteamento (ea-contas, e eventualmente dry_run=False) continua
 inutilizavel ate' a causa ser identificada e corrigida — via suporte XP.
+
+## Investigacao adicional: por que o client.py (record) nao teve este problema? (2026-08-26)
+
+Pergunta direta do operador: o record usa a classe ProfitClient para
+conectar, o EA nao -- essa diferenca explica o NL_INTERNAL_ERROR?
+
+INVESTIGACAO: ProfitClient.connect() (profitdll/client.py) NUNCA chama
+DLLInitializeLogin -- so' DLLInitializeMarketLogin, sempre. Ou seja, NAO
+EXISTE, em nenhum lugar deste projeto, um precedente de DLLInitializeLogin
+ja' ter funcionado -- contas.py foi a PRIMEIRA vez que este caminho foi
+exercitado. Nao e' "funciona no record e quebra no EA"; e' "nunca
+testamos isso antes de ontem".
+
+Conferido o connect() inteiro: depois do DLLInitializeMarketLogin, so' ha'
+logica especifica de offer book V2 (irrelevante para roteamento). NENHUM
+passo escondido de pre-requisito para DLLInitializeLogin foi encontrado
+no client.py -- porque ele nunca toca essa funcao.
+
+GAP REAL encontrado (nao a causa confirmada, mas defesa que faltava):
+client.py roda check_exports() ANTES de conectar (confere que a DLL expoe
+as funcoes esperadas, falha com mensagem clara se nao). contas.py pulava
+essa checagem inteiramente. Corrigido: check_exports_ea_contas() (nova
+funcao em bindings.py, escopo separado de check_exports -- record nao
+deve exigir funcoes de roteamento que uma DLL so-market-data legitimamente
+nao tem) roda logo antes de GetAccount() ser chamado.
+
+LIMITE HONESTO desta correcao: NL_INTERNAL_ERROR e' um codigo de retorno
+de uma funcao que EXISTE e RODA -- nao um AttributeError de funcao
+ausente. A checagem de exports nao teria pego nem teria corrigido este
+erro especifico; e' defesa contra uma causa DIFERENTE (versao de DLL
+divergente) que tambem nao tinha sido descartada ate agora. Depois desta
+correcao, se o erro persistir, a causa NAO e' export ausente -- reforca
+ainda mais a hipotese de algo do lado da XP (permissao de roteamento).
+
+199 testes (5 novos: check_exports_ea_contas + regressao dedicada).

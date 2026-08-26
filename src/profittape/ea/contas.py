@@ -34,6 +34,7 @@ from ..profitdll.bindings import (
     TProgressCallback,
     TStateCallback,
     TTinyBookCallback,
+    check_exports_ea_contas,
     load_dll,
 )
 
@@ -70,6 +71,10 @@ def listar_contas(cred: Credenciais, timeout_s: float = 15.0,
     dll = dll_injetada if dll_injetada is not None else load_dll(cred.dll_path)
 
     def _on_state(tipo: int, valor: int) -> None:
+        # Log de TODA transicao de estado, nao so' sucesso/erro -- material
+        # forense para um eventual chamado com a XP (NL_INTERNAL_ERROR nao
+        # tem detalhe proprio; a sequencia de estados antes dele e' o que
+        # sobra para investigar).
         log.info("ea_contas.estado", tipo=tipo, valor=valor)
         if tipo == 0 and valor == 0:
             coletor.conectado = True
@@ -121,6 +126,18 @@ def listar_contas(cred: Credenciais, timeout_s: float = 15.0,
         if coletor.erro_estado:
             raise SystemExit(f"Estado de erro reportado: {coletor.erro_estado}")
         if coletor.conectado:
+            # Checagem que faltava (encontrada 2026-08-26 investigando
+            # NL_INTERNAL_ERROR): confere que esta versao da DLL EXPOE
+            # GetAccount antes de chamar -- so' AGORA, nao antes de saber
+            # que a conexao teve sucesso, para nao falsear testes que
+            # verificam outros caminhos de erro (retorno/timeout) que
+            # nunca chegam ate' aqui de qualquer forma.
+            ausentes = check_exports_ea_contas(dll)
+            if ausentes:
+                raise SystemExit(
+                    f"Esta DLL nao expoe {ausentes} -- versao incompativel "
+                    f"com o modulo ea/. Confira o caminho em PROFIT_DLL_PATH."
+                )
             dll.GetAccount()
             break
         time.sleep(0.2)

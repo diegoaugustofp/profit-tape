@@ -99,3 +99,32 @@ def test_nunca_conecta_levanta_apos_timeout() -> None:
 
     with pytest.raises(SystemExit, match="Nao conectou"):
         listar_contas(_cred(), timeout_s=0.3, dll_injetada=_FakeMudo())
+
+
+def test_dll_sem_getaccount_falha_com_mensagem_clara() -> None:
+    """
+    Gap encontrado investigando NL_INTERNAL_ERROR (2026-08-26): antes,
+    nenhum caminho verificava se a DLL EXPOE GetAccount antes de chamar --
+    diferente de client.py (record), que sempre confere exports antes de
+    conectar. Nao explica o NL_INTERNAL_ERROR por si so' (e' erro de
+    RUNTIME de uma funcao presente, nao AttributeError), mas fecha uma
+    lacuna real de defesa contra versao de DLL divergente.
+    """
+    import pytest
+
+    class _FakeConectaMasSemGetAccount:
+        def DLLInitializeLogin(self, activation_key, user, password,
+                               cb_state, cb_history, cb_order_change,
+                               cb_account, cb_new_trade, cb_new_daily,
+                               cb_price_book, cb_offer_book,
+                               cb_history_trade, cb_progress, cb_tiny_book):
+            cb_state(0, 0)   # conecta com sucesso
+            return 0
+
+        def DLLFinalize(self):
+            pass
+        # SEM GetAccount de proposito
+
+    with pytest.raises(SystemExit, match="GetAccount"):
+        listar_contas(Credenciais(activation_key="k", user="u", password="p"),
+                      timeout_s=2.0, dll_injetada=_FakeConectaMasSemGetAccount())

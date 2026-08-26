@@ -388,7 +388,44 @@ EXPORTS_OBRIGATORIOS = (
     "GetHistoryTrades",
 )
 
+# Escopo SEPARADO do record: o modulo ea/ precisa de roteamento, que o
+# record nunca usa. Nao misturar nas duas listas -- forcaria o `doctor`
+# do record a exigir funcoes de ordem que uma DLL so-market-data
+# legitimamente nao tem.
+#
+# E dividido em DOIS, nao um so' -- contas.py so' LE contas (nunca envia
+# ordem); exigir Send*Order ali seria um requisito falso (bug pego ao
+# escrever o teste: o fake de contas.py corretamente nao implementa
+# Send*Order, porque nao precisa).
+EXPORTS_OBRIGATORIOS_EA_CONTAS = (
+    "DLLInitializeLogin",
+    "GetAccount",
+)
+EXPORTS_OBRIGATORIOS_EA_ORDEM = (
+    "SendMarketBuyOrder",
+    "SendMarketSellOrder",
+    "SendZeroPositionAtMarket",
+)
+
 
 def check_exports(dll: Any) -> list[str]:
     """Devolve a lista de exports obrigatorios AUSENTES. Usado por `doctor`."""
     return [nome for nome in EXPORTS_OBRIGATORIOS if not hasattr(dll, nome)]
+
+
+def check_exports_ea_contas(dll: Any) -> list[str]:
+    """
+    Mesma ideia de check_exports, mas para o que ea/contas.py precisa
+    (login completo + leitura de conta) -- NUNCA verificado antes de hoje
+    (2026-08-26, gap real encontrado ao investigar NL_INTERNAL_ERROR em
+    DLLInitializeLogin). Nao explica o erro por si so' (e' um codigo de
+    retorno de uma funcao que EXISTE e roda, nao um AttributeError de
+    funcao ausente) -- mas e' uma defesa legitima contra versao de DLL
+    divergente que faltava.
+    """
+    return [nome for nome in EXPORTS_OBRIGATORIOS_EA_CONTAS if not hasattr(dll, nome)]
+
+
+def check_exports_ea_ordem(dll: Any) -> list[str]:
+    """Mesma ideia, para o que ea/execucao.py precisa (envio de ordem)."""
+    return [nome for nome in EXPORTS_OBRIGATORIOS_EA_ORDEM if not hasattr(dll, nome)]
