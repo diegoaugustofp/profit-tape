@@ -31,10 +31,22 @@ conta de roteamento).
 O QUE AINDA NAO ESTA PRONTO (deliberado, nao esquecido):
   - execucao.py: envio de ordem real. Fica atras de dry_run=True ate'
     forward-test em DEMO confirmar a decisao.py contra dado ao vivo.
-  - service.py: construcao de barra ao vivo a partir de trade tick-a-
-    tick (reaproveitando bars.py/flow.py, mas em streaming continuo
-    em vez de arquivo fechado) -- trabalho novo, nao existe ainda.
+  - service.py: orquestracao (equivalente ao recorder/service.py, mas
+    para trading) -- ainda nao implementado, agora que sinal.py esta
+    pronto e' o proximo passo real.
   - Gestao de risco (stop, tamanho de posicao, limite de perda diaria)
     -- nao desenhada ainda, e' pre-requisito ANTES de qualquer envio
     de ordem real, nao um detalhe para depois.
+
+JA IMPLEMENTADO E TESTADO:
+  - config.py: EAConfig, SinalConfig, RoteamentoConfig
+  - decisao.py: sinal -> acao, pura, testavel
+  - sinal.py: construcao de barra ao vivo (streaming) + z-score, com
+    EQUIVALENCIA EXATA comprovada contra o pipeline batch do research
+    (bars.py+flow.py+normalize.py) -- 1254+ barras comparadas, zero
+    divergencia. Bug real pego no caminho: o fechamento de barra usa
+    contador cumulativo GLOBAL nunca resetado (mesma regra do batch),
+    nao um contador por-barra -- a primeira versao zerava a cada
+    fechamento e o erro se acumulava silenciosamente barra a barra.
+  - contas.py: GetAccount via login completo (diagnostico)
 """

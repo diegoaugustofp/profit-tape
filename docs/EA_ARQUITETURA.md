@@ -79,7 +79,8 @@ ea/
   __init__.py    Doc do escopo e por que e' processo separado do record
   config.py      EAConfig, SinalConfig, RoteamentoConfig (IMPLEMENTADO)
   decisao.py     Sinal -> Acao, pura, testavel, IMPLEMENTADO (11 testes)
-  sinal.py       STUB — construcao de barra ao vivo + calculo do sinal
+  sinal.py       IMPLEMENTADO — streaming trade-a-trade, equivalencia
+                 exata comprovada contra o pipeline batch (ver abaixo)
   execucao.py    STUB atras de dry_run — envio de ordem real bloqueado
   service.py     STUB — orquestracao (equivalente ao recorder/service.py)
 ```
@@ -100,10 +101,14 @@ esses tres exige responder a pergunta de conexao acima, e mais:
 
 ## Pre-requisitos antes de qualquer ordem real (dry_run=False)
 
-1. Resposta a pergunta de conexao simultanea (acima).
-2. sinal.py: construcao de barra ao vivo (streaming), reusando bars.py e
-   flow.py -- trabalho novo, nao trivial (janela rolante de z-score em
-   memoria, nao em batch sobre parquet).
+1. [RESOLVIDO 2026-08-26] Conexao simultanea — record e EA coexistem.
+2. [RESOLVIDO 2026-08-26] sinal.py implementado, com EQUIVALENCIA EXATA
+   comprovada contra o pipeline batch do research (1254+ barras
+   comparadas em teste de escala, zero divergencia). Bug real pego no
+   caminho: fechamento de barra precisa de contador cumulativo GLOBAL
+   nunca resetado (mesma regra de bars.atribuir_barras via cum_prev),
+   nao um contador por-barra — a primeira versao zerava a cada
+   fechamento e o erro se acumulava silenciosamente.
 3. execucao.py: bindings novos no ProfitClient para SendBuyOrder/
    SendSellOrder/SendZeroPosition + OrderChangeCallback/AccountCallback
    (o projeto nunca enviou ordem ate' agora, so' capturou dado).
