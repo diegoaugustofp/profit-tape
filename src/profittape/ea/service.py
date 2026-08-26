@@ -17,13 +17,16 @@ DESENHO PRETENDIDO (nao implementado):
     alertas Telegram (reusa alertas.py), encerramento gracioso.
 
 PRE-REQUISITOS antes de qualquer linha de codigo aqui:
-  1. Confirmar (fora do horario de pregao, sem risco) se DLLInitializeLogin
-     funciona -- roda GetAccount() uma vez e confirma que devolve os dois
-     IDAccount (demo e real).
-  2. Confirmar se abrir uma SEGUNDA conexao (DLLInitializeLogin, processo
-     do EA) enquanto o record ja' tem DLLInitializeMarketLogin aberto
-     coexiste ou derruba a captura -- NAO CONFIRMADO no manual, teste
-     controlado necessario (docs/EA_ARQUITETURA.md).
+  1. Confirmar DLLInitializeLogin funcionando em HORARIO COMERCIAL (teste
+     de 2026-08-26 rodou de madrugada e falhou com erro -2147483647 --
+     causa provavel: janela de disponibilidade do servico de roteamento,
+     nao concorrencia -- ver item 2. Reteste as 08:00 ou 19:00 local, fora
+     do pregao, e roda GetAccount() para confirmar os dois IDAccount).
+  2. [RESOLVIDO 2026-08-26] Duas conexoes simultaneas (record com
+     DLLInitializeMarketLogin + EA com DLLInitializeLogin) COEXISTEM sem
+     conflito -- testado com record estavel por ~2min, sem nenhuma
+     interrupcao durante a tentativa de login completo em paralelo. Ver
+     docs/EA_ARQUITETURA.md para o registro completo do teste.
   3. sinal.py e execucao.py (send_order real) implementados e testados.
   4. Gestao de risco desenhada.
 

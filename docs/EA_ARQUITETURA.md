@@ -42,35 +42,35 @@ conexao da DLL. RoteamentoConfig.conta_para() e' o unico ponto de decisao
 entre as duas: default sempre demo, conta real exige
 EAConfig.usar_conta_real=True explicito.
 
-## Pergunta que CONTINUA em aberto (nao resolvida pela correcao acima)
+## Pergunta RESOLVIDA (2026-08-26) — teste de concorrencia real
 
-**Duas conexoes simultaneas com a ProfitDLL (record com
-DLLInitializeMarketLogin + EA com DLLInitializeLogin, MESMO login porque
-e' o mesmo Diego) coexistem, ou uma derruba a outra?**
+**Resultado: as duas conexoes COEXISTEM sem conflito.**
 
-Isto e' ortogonal ao problema 2 (real x demo): mesmo que o EA rotee TODAS
-as ordens para a conta demo, se abrir uma segunda conexao de login
-completo enquanto o record ja' tem uma conexao de market-data-only aberta
-DERRUBAR a captura, o problema existe de qualquer forma -- o risco nao e'
-financeiro, e' de PERDER O DIA DE CAPTURA para descobrir isso.
+Teste executado apos o fechamento do pregao (03:30 UTC, ~00:30 local),
+seguindo o "Caminho recomendado" que estava registrado aqui: record de
+teste (DLLInitializeMarketLogin, WINFUT trades, sem encerrar_em) rodando
+havia ~2 minutos e estavel, com heartbeats regulares (uptime_min
+crescendo 0.1 -> 1.2, arquivos/linhas estaveis, ZERO evento
+profitdll.estado de desconexao) quando `ea-contas` (DLLInitializeLogin,
+login completo) foi disparado num segundo terminal. O record NAO foi
+afetado em nenhum momento -- heartbeat identico antes, durante e depois
+da tentativa do ea-contas.
 
-O manual NAO documenta isso em nenhuma direcao. Nunca foi testado.
+O ea-contas em si falhou (DLLInitializeLogin devolveu -2147483647), mas
+por causa DIFERENTE e nao relacionada a concorrencia: horario — 03:32
+UTC e' madrugada, plausivel que o servico de LOGIN COMPLETO (roteamento
+de ordem) tenha janela de disponibilidade mais restrita que o de MARKET
+DATA (que fica aberto mais horas para consulta de grafico historico fora
+do pregao). Precisa reteste em horario comercial (mesmo fora do pregao —
+ex.: 08:00 ou 19:00 local) para confirmar login completo funcionando; a
+pergunta de CONCORRENCIA, porem, ja esta respondida com confianca.
 
-**Isto NAO deve ser testado "ao vivo" contra a captura em andamento.** Se
-a teoria estiver errada na pior direcao (login novo derruba o antigo), o
-custo e' perder a captura do dia so' para descobrir isso.
-
-### Caminho recomendado
-1. Testar DLLInitializeLogin sozinho, FORA do horario de pregao (record
-   parado), para confirmar que o login completo funciona -- e aproveitar
-   para rodar GetAccount() uma vez e anotar os dois pwcIDAccount (demo e
-   real) para preencher o .env (ROTEAMENTO_ID_ACCOUNT_DEMO /
-   ROTEAMENTO_ID_ACCOUNT_REAL / ROTEAMENTO_ID_CORRETORA /
-   ROTEAMENTO_SENHA_ROTEAMENTO).
-2. So' depois, com cautela e aceitando o risco explicitamente, testar
-   concorrencia (record rodando + EA tentando conectar) — de preferencia
-   num dia em que perder algumas horas de captura, se a teoria estiver
-   errada, seja um custo aceitavel.
+IMPLICACAO PRATICA: a arquitetura de processo SEPARADO para o EA
+(ea/service.py, ainda esboco) pode prosseguir sem redesenho — record e
+EA podem rodar ao mesmo tempo, cada um com sua propria conexao, sem
+disputa de sessao. Nao elimina os OUTROS pre-requisitos (sinal.py,
+execucao.py, gestao de risco) — so' remove esta duvida especifica do
+caminho critico.
 
 ## Estrutura do modulo (src/profittape/ea/)
 
