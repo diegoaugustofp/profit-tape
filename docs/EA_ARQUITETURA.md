@@ -212,3 +212,43 @@ muito alargado), a zeragem da XP poderia teoricamente disparar ANTES do
 nosso proprio stop. Sem solucao no v1; mitigado na pratica por operar
 tamanho minimo (1 contrato) e capital dentro do minimo recomendado
 (R$5.000) durante todo o forward-test.
+
+## DLLInitializeLogin: NL_INTERNAL_ERROR persistente + correcao de design (2026-08-26)
+
+**O erro decodificado**: -2147483647 e' literalmente `NL_INTERNAL_ERROR`
+("Erro interno"), codigo generico do proprio manual (secao de codigos de
+erro, junto de NL_NOT_INITIALIZED, NL_INVALID_ARGS, NL_WAITING_SERVER,
+NL_NO_LOGIN). Nao e' um erro do Windows, e' do fornecedor -- e o manual
+nao detalha QUANDO ele dispara para DLLInitializeLogin especificamente.
+
+**Duas ocorrencias, horarios bem diferentes**: madrugada (03:32 UTC) e
+noite (20:44 local, apos o fechamento do pregao). Mesmo codigo exato nos
+dois casos. Isso ENFRAQUECE a hipotese anterior ("janela de
+disponibilidade do servico de roteamento") -- horarios tao diferentes com
+o MESMO erro sugerem causa estrutural, nao temporal.
+
+**Hipotese de assinatura de callback DESCARTADA**: conferidas TAccountCallback
+(4 parametros), TOrderChangeCallback (17 parametros) e THistoryCallback (16
+parametros) EXATAMENTE contra o manual, tipo a tipo -- bindings.py bate
+100%. Nao e' bug de ctypes.
+
+**Causa provavel NAO CONFIRMADA**: permissao de roteamento/operacoes pode
+nao estar habilitada para esta chave de ativacao na XP (algo contratual,
+similar a adesao de RLP), ou instabilidade do backend de roteamento
+independente de horario. So' o suporte XP/Nelogade confirma. PROXIMA ACAO:
+abrir chamado com a XP citando NL_INTERNAL_ERROR em DLLInitializeLogin,
+mencionando que DLLInitializeMarketLogin (mesma chave/usuario/senha)
+funciona perfeitamente todo dia -- isola o problema para roteamento
+especificamente.
+
+**CORRECAO DE DESIGN (nao esperar a XP para seguir)**: service.py usava
+DLLInitializeLogin SEMPRE, mesmo em dry_run=True -- desnecessario, ja' que
+dry_run nunca envia ordem, so' precisa de dado de mercado. Corrigido:
+dry_run=True usa DLLInitializeMarketLogin (o MESMO que o record usa todo
+dia, comprovadamente confiavel); DLLInitializeLogin so' e' usado quando
+dry_run=False (que ja' exige ExecutorDeOrdens explicito de qualquer
+forma). O forward-test de amanha NAO fica bloqueado por este problema.
+
+O bloqueio genuino que PERMANECE: qualquer coisa que precise de
+roteamento (ea-contas, e eventualmente dry_run=False) continua
+inutilizavel ate' a causa ser identificada e corrigida — via suporte XP.

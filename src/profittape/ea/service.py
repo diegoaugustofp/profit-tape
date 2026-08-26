@@ -1,11 +1,16 @@
 """
 Orquestracao do EA — a peca que liga sinal.py + decisao.py + execucao.py.
 
-FLUXO: conecta com login COMPLETO (DLLInitializeLogin — mesma conexao
-serve market data e roteamento), assina os trades do simbolo, alimenta um
-ConstrutorDeSinalAoVivo trade a trade; cada BarraFechada passa por
-decisao.decidir() para cada sinal configurado; a Decisao vai para
-execucao.executar() — que em dry_run=True (default) SO' LOGA.
+FLUXO: em dry_run=True (default), conecta com DLLInitializeMarketLogin
+(o MESMO que o record usa todo dia) — nenhuma ordem e' enviada, entao
+nao ha' motivo para exigir roteamento. Assina os trades do simbolo,
+alimenta um ConstrutorDeSinalAoVivo trade a trade; cada BarraFechada
+passa por decisao.decidir() para cada sinal configurado; a Decisao vai
+para execucao.executar() — que em dry_run=True SO' LOGA.
+
+Em dry_run=False, conecta com DLLInitializeLogin (login completo, com
+roteamento) — e nesse caso o __init__ ja' exige um ExecutorDeOrdens
+construido explicitamente.
 
 POSICAO SIMULADA (decisao de escopo do v1, deliberada): a posicao usada
 por decidir() e' atualizada a partir das PROPRIAS decisoes (COMPRAR ->
@@ -166,9 +171,24 @@ class EAService:
               encerrar_em: str | None = None, tz_offset_horas: int = -3,
               heartbeat_s: int = 30, dll_injetada: object | None = None) -> None:
         """
-        Loop real contra a DLL. Conecta (login completo), assina o simbolo,
-        consome trades ate' encerrar_em (ou Ctrl+C). Espelha o padrao do
-        contas.py (callbacks todos declarados, referencias seguradas).
+        Loop real contra a DLL. Consome trades ate' encerrar_em (ou
+        Ctrl+C). Espelha o padrao do contas.py (callbacks todos
+        declarados, referencias seguradas).
+
+        CONEXAO DEPENDE DE dry_run (2026-08-26, correcao de design real):
+        em dry_run=True (default), NENHUMA ordem e' enviada -- so' dados de
+        mercado sao necessarios, entao usa DLLInitializeMarketLogin (o
+        MESMO que o record usa todo dia, sem excecao). DLLInitializeLogin
+        (login completo, com roteamento) so' e' usado quando dry_run=False
+        -- e nesse caso o __init__ ja' exige um ExecutorDeOrdens explicito.
+
+        Motivo pratico: DLLInitializeLogin devolveu NL_INTERNAL_ERROR
+        (-2147483647, codigo generico do fornecedor, ver manual) em DOIS
+        testes manuais em horarios bem diferentes (madrugada e noite) --
+        causa nao confirmada (possivelmente permissao de roteamento nao
+        habilitada para a chave de ativacao; assinaturas dos callbacks
+        conferidas contra o manual, batem exatamente). Isso NAO deveria
+        bloquear o forward-test, que nao precisa de roteamento nenhum.
         """
         from ..profitdll import bindings as b
         from ..profitdll.errors import check
@@ -200,9 +220,6 @@ class EAService:
 
         cb_state = b.TStateCallback(_on_state)
         cb_trade = b.TNewTradeCallback(_on_trade)
-        cb_history = b.THistoryCallback(lambda *a: None)
-        cb_order_change = b.TOrderChangeCallback(lambda *a: None)
-        cb_account = b.TAccountCallback(lambda *a: None)
         cb_new_daily = b.TNewDailyCallback(lambda *a: None)
         cb_price_book = b.TPriceBookCallbackV1(lambda *a: None)
         cb_offer_book = b.TOfferBookCallbackV1(lambda *a: None)
@@ -210,15 +227,27 @@ class EAService:
         cb_progress = b.TProgressCallback(lambda *a: None)
         cb_tiny_book = b.TTinyBookCallback(lambda *a: None)
 
-        ret = dll.DLLInitializeLogin(
-            cred.activation_key, cred.user, cred.password,
-            cb_state, cb_history, cb_order_change, cb_account,
-            cb_trade, cb_new_daily, cb_price_book, cb_offer_book,
-            cb_history_trade, cb_progress, cb_tiny_book)
+        if self.config.dry_run:
+            ret = dll.DLLInitializeMarketLogin(
+                cred.activation_key, cred.user, cred.password,
+                cb_state, cb_trade, cb_new_daily, cb_price_book,
+                cb_offer_book, cb_history_trade, cb_progress, cb_tiny_book)
+            nome_init = "DLLInitializeMarketLogin"
+        else:
+            cb_history = b.THistoryCallback(lambda *a: None)
+            cb_order_change = b.TOrderChangeCallback(lambda *a: None)
+            cb_account = b.TAccountCallback(lambda *a: None)
+            ret = dll.DLLInitializeLogin(
+                cred.activation_key, cred.user, cred.password,
+                cb_state, cb_history, cb_order_change, cb_account,
+                cb_trade, cb_new_daily, cb_price_book, cb_offer_book,
+                cb_history_trade, cb_progress, cb_tiny_book)
+            nome_init = "DLLInitializeLogin"
         if ret != 0:
-            raise SystemExit(f"DLLInitializeLogin devolveu {ret} — confira "
-                             f"credenciais/horario (servico de roteamento tem "
-                             f"janela de disponibilidade propria).")
+            raise SystemExit(f"{nome_init} devolveu {ret} — confira "
+                             f"credenciais em .env, ou o log de "
+                             f"docs/EA_ARQUITETURA.md para o historico "
+                             f"deste erro especifico.")
 
         t0 = time.monotonic()
         while not estado["conectado"]:
