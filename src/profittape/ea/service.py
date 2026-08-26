@@ -34,6 +34,7 @@ from ..config import Credenciais
 from .config import EAConfig, RoteamentoConfig
 from .decisao import Acao, Decisao, decidir
 from .execucao import ExecutorDeOrdens, executar
+from .risco import GestorDeRisco
 from .sinal import BarraFechada, ConstrutorDeSinalAoVivo
 
 log = structlog.get_logger(__name__)
@@ -76,13 +77,16 @@ class EAService:
         self.construtor = ConstrutorDeSinalAoVivo(
             config.volume_barra, config.janela_z, agentes)
         self.stats = EstatisticasEA()
+        self.gestor = GestorDeRisco(config.risco, config.custo_pontos_estimado)
+        self._ultimo_close: float | None = None
 
     # ------------------------------------------------------------ nucleo
     def processar_trade_bruto(self, t: _TradeBruto) -> list[Decisao]:
         """
-        Nucleo puro: um trade entra; se fechar barra, decide para cada
-        sinal configurado e executa. Devolve as decisoes tomadas (para
-        teste e diagnostico) — em dry_run elas ja' foram logadas.
+        Nucleo puro: um trade entra; se fechar barra, o RISCO decide primeiro
+        (posicao aberta -> so' saida forcada ou manter; sinal ignorado); so'
+        zerado e desbloqueado o sinal e' consultado para entrada. Devolve as
+        decisoes tomadas (para teste e diagnostico).
         """
         self.stats.trades += 1
         barra = self.construtor.processar_trade(
@@ -90,19 +94,41 @@ class EAService:
             t.agente_comprador, t.agente_vendedor)
         if barra is None:
             return []
+        self._ultimo_close = barra.close
         return self._decidir_barra(barra)
 
     def _decidir_barra(self, barra: BarraFechada) -> list[Decisao]:
         self.stats.barras += 1
         decisoes: list[Decisao] = []
+
+        # 1. Com posicao aberta, SO' o risco manda (Rota A: sinal ignorado
+        #    ate' a saida por tempo — fiel ao procedimento do research).
+        if self.gestor.em_posicao():
+            motivo = self.gestor.motivo_de_saida(barra.bar_id, barra.close)
+            if motivo is not None:
+                d = Decisao(Acao.ZERAR, motivo, 0.0, "_risco")
+                decisoes.append(d)
+                self._executar_e_simular(d)
+                self.gestor.registrar_fechamento(barra.close)
+            return decisoes
+
+        # 2. Zerado: circuit breaker primeiro, sinal depois.
+        if not self.gestor.pode_abrir():
+            return decisoes
         for sinal_cfg in self.config.sinais:
             valor = barra.agf.get(sinal_cfg.agent_id)
             if valor is None or valor != valor:   # NaN (aquecimento da janela)
                 continue
             d = decidir(sinal_cfg, valor_atual=valor,
                         posicao_atual=self.stats.posicao_simulada)
+            if d.acao not in (Acao.COMPRAR, Acao.VENDER):
+                continue
             decisoes.append(d)
             self._executar_e_simular(d)
+            lado = +1 if d.acao == Acao.COMPRAR else -1
+            self.gestor.registrar_abertura(lado, barra.close, barra.bar_id,
+                                           sinal_cfg.horizonte)
+            break   # UMA posicao por vez — o primeiro sinal que disparar leva
         if decisoes:
             log.info("ea.barra_fechada", bar_id=barra.bar_id,
                      close=barra.close, vol_agr=barra.vol_agr,
@@ -121,13 +147,18 @@ class EAService:
             self.stats.posicao_simulada = 0
 
     def encerrar_dia(self) -> Decisao | None:
-        """ZERAR forcado se houver posicao simulada aberta (fim de pregao)."""
-        if self.stats.posicao_simulada == 0:
+        """ZERAR forcado se houver posicao aberta (fim de pregao). Fecha
+        tambem no gestor (P&L com o ultimo close conhecido) para o
+        circuit breaker e o pnl_dia ficarem consistentes no log final."""
+        if self.stats.posicao_simulada == 0 and not self.gestor.em_posicao():
             return None
         d = Decisao(acao=Acao.ZERAR, motivo="encerramento do dia (posicao aberta)",
                     sinal_valor=0.0, feature="_encerramento")
         self._executar_e_simular(d)
-        log.info("ea.encerramento_dia", posicao_zerada=True)
+        if self.gestor.em_posicao() and self._ultimo_close is not None:
+            self.gestor.registrar_fechamento(self._ultimo_close)
+        log.info("ea.encerramento_dia", posicao_zerada=True,
+                 pnl_dia_pontos=round(self.gestor.pnl_dia_pontos, 1))
         return d
 
     # ------------------------------------------------- conexao e loop real
@@ -229,7 +260,10 @@ class EAService:
     def _hb(self) -> dict:
         return {"trades": self.stats.trades, "barras": self.stats.barras,
                 "decisoes": dict(self.stats.decisoes),
-                "posicao": self.stats.posicao_simulada}
+                "posicao": self.stats.posicao_simulada,
+                "pnl_dia_pontos": round(self.gestor.pnl_dia_pontos, 1),
+                "perdas_seguidas": self.gestor.perdas_consecutivas,
+                "bloqueado": self.gestor.bloqueado}
 
     @staticmethod
     def _hora_de_encerrar(alvo_hhmm: str, tz_offset_horas: int) -> bool:

@@ -29,14 +29,12 @@ o operador identificou que a versao anterior confundia login de DLL com
 conta de roteamento).
 
 O QUE AINDA NAO ESTA PRONTO (deliberado, nao esquecido):
-  - Gestao de risco (stop, tamanho de posicao, limite de perda diaria)
-    -- nao desenhada ainda, e' o ULTIMO pre-requisito antes de
-    dry_run=False; o comando CLI `ea` recusa dry_run=False por design
-    ate' la'.
   - Rastreamento REAL de posicao (OrderChangeCallback/GetPosition com
     reconciliacao) -- a posicao do service e' SIMULADA a partir das
     proprias decisoes, exatamente o que o forward-test precisa; o
-    rastreamento real e' parte da gestao de risco.
+    rastreamento real e' o que falta antes de dry_run=False.
+  - Rota B de risco (alvo/stop payoff 2:1) -- evolucao futura, exige
+    research MAE/MFE pre-registrado antes (ver EA_ARQUITETURA.md).
 
 JA IMPLEMENTADO E TESTADO:
   - config.py: EAConfig, SinalConfig, RoteamentoConfig
@@ -49,6 +47,10 @@ JA IMPLEMENTADO E TESTADO:
     nao um contador por-barra -- a primeira versao zerava a cada
     fechamento e o erro se acumulava silenciosamente barra a barra.
   - contas.py: GetAccount via login completo (diagnostico)
+  - risco.py: GestorDeRisco (Rota A) — saida por TEMPO no horizonte
+    do sinal (fiel ao research), stop catastrofico derivado do capital
+    (500 pts com os defaults), circuit breaker de 3 perdas liquidas
+    consecutivas, sem piramide e mao fixa por construcao.
   - service.py: EAService — orquestracao completa: login completo,
     assina trades, alimenta ConstrutorDeSinalAoVivo, decide por barra
     fechada, executa (dry_run default), posicao simulada, ZERAR forcado

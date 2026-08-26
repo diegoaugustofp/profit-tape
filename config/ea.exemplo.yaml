@@ -23,3 +23,13 @@ sinais:
     agent_id: 3
     threshold_entrada: 1.4    # ~sinal medio do Q5 na tabela de quintis
     direcao: contrarian
+
+risco:
+  capital: 5000.0            # capital DESTINADO ao day trade de futuros
+  risco_max_pct: 0.02        # 2% = R$100 por operacao
+  valor_ponto_reais: 0.20    # WIN
+  max_perdas_consecutivas: 3 # regra de ouro: 3 perdas liquidas -> para ate amanha
+  # stop catastrofico derivado: 2% x 5000 / 0.20 = 500 pts (1 contrato).
+  # NAO e' stop tatico — a saida normal e' por TEMPO (horizonte do sinal),
+  # fiel ao procedimento validado. Rota B (alvo/payoff 2:1) = evolucao
+  # futura com research proprio (MAE/MFE pre-registrado).

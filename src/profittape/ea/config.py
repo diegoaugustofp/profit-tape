@@ -82,6 +82,28 @@ class SinalConfig(BaseModel):
     direcao: str                    # "contrarian" ou "momentum"
 
 
+class RiscoConfig(BaseModel):
+    """
+    Framework de gestao de risco do operador (2026-08-26, registrado em
+    docs/EA_ARQUITETURA.md): preservacao de capital, mao fixa, expectativa
+    matematica sobre taxa de acerto. Defaults = day trade de futuros
+    (capital minimo R$5.000, risco max 2%, WIN a R$0,20/ponto).
+    """
+    capital: float = 5000.0
+    risco_max_pct: float = 0.02
+    valor_ponto_reais: float = 0.20      # WIN; acoes seria 1.0 (R$/ponto=R$)
+    max_perdas_consecutivas: int = 3     # regra de ouro: 3 perdas -> para ate amanha
+
+    @property
+    def stop_catastrofico_pontos(self) -> float:
+        """Derivado, nao configurado: 2% de R$5.000 = R$100 = 500 pts com
+        1 contrato de WIN. E' o SEGURO do capital (cenario de cauda), NAO
+        um stop tatico -- a saida normal da Rota A e' por TEMPO (horizonte
+        do sinal), fiel ao procedimento que o research validou."""
+        return (self.capital * self.risco_max_pct) / self.valor_ponto_reais
+
+
+
 class EAConfig(BaseModel):
     symbol: str
     volume_barra: int               # CONGELADO do features.parquet que validou
@@ -93,6 +115,7 @@ class EAConfig(BaseModel):
     dry_run: bool = True            # NUNCA False sem decisao explicita
     usar_conta_real: bool = False   # NUNCA True sem decisao explicita e
                                     # documentada -- default e' SEMPRE demo
+    risco: RiscoConfig = RiscoConfig()
 
     @classmethod
     def from_yaml(cls, caminho: Path) -> EAConfig:

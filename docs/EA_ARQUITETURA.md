@@ -100,6 +100,56 @@ que resta de esboco e' apenas a gestao de risco -- cada modulo tem
 NotImplementedError explicito e docstring listando o que falta. Implementar
 esses tres exige responder a pergunta de conexao acima, e mais:
 
+## Gestao de risco — DESENHADA E IMPLEMENTADA (2026-08-26, ea/risco.py)
+
+Framework do operador registrado na integra: preservacao de capital,
+expectativa matematica favoravel sobre taxa de acerto, mao fixa.
+
+DECISAO CENTRAL — Rota A escolhida pelo operador:
+
+A tensao real: o framework do operador mede sucesso por payoff (alvo >=
+2x o stop), mas o sinal validado (z_agf_3 h=3, +18.14 pts liquidos) foi
+medido com saida por TEMPO — entra no fechamento da barra extrema, sai
+exatamente 3 barras depois, sem stop tatico nem alvo. O pct_positivo do
+Q5 e' ~43%: o sinal ERRA a maioria e ganha por MAGNITUDE — alvo fixo
+2:1 cortaria exatamente as caudas ganhadoras que pagam a conta.
+
+  ROTA A (escolhida): fidelidade ao procedimento validado. Saida por
+  tempo (horizonte do sinal) + stop CATASTROFICO largo derivado da conta
+  de capital do operador (2% de R$5.000 = R$100 = 500 pts com 1 contrato
+  WIN) — quase nunca tocado, existe como seguro de cauda, nao distorce a
+  expectativa medida.
+
+  ROTA B (evolucao futura, NAO implementada): overlay de alvo/stop com
+  payoff 2:1. Exige research proprio ANTES: analise MAE/MFE dos trades
+  do Q5 (quanto andou contra/a favor antes do horizonte), grid de
+  stop/alvo PRE-REGISTRADO, consumindo trials. So' substitui a saida
+  por tempo se MEDIR melhora sobre os +18.14 — nunca por suposicao.
+
+O que traduziu para codigo (ea/risco.py, GestorDeRisco):
+  - Circuit breaker: 3 perdas LIQUIDAS consecutivas -> bloqueia novas
+    entradas ate' o proximo dia (ganho liquido zera a sequencia; ganho
+    bruto menor que o custo CONTA como perda).
+  - Saida por tempo no horizonte exato do sinal que abriu a posicao.
+  - Stop catastrofico com prioridade sobre a saida por tempo.
+  - Sem piramide por construcao (abertura com posicao aberta = excecao).
+  - Mao fixa por construcao (nenhum codigo de escalonamento existe).
+  - P&L do dia acumulado e logado (heartbeat + encerramento).
+
+O que do framework NAO precisa de codigo (ja garantido por design):
+  - Sem preco medio / sem parciais: decisao.py nunca piramida, saida e'
+    sempre integral.
+  - Sem meta diaria de ganho: nao existe contador de lucro que pare o EA.
+  - Stop inalteravel: o catastrofico e' fixo na entrada, nao ha codigo
+    que o mova.
+  - "Mesma mao por >= 100 trades": tamanho_posicao fixo no config;
+    mudanca e' decisao humana explicita de config, nunca automatica.
+
+FLUXO POR BARRA (Rota A): com posicao aberta, o SINAL E' IGNORADO — so'
+o risco manda (saida por tempo ou catastrofica). decidir() so' e'
+consultado zerado e desbloqueado. E' a versao executavel mais fiel ao
+que o research mediu (sem posicoes sobrepostas).
+
 ## Pre-requisitos antes de qualquer ordem real (dry_run=False)
 
 1. [RESOLVIDO 2026-08-26] Conexao simultanea — record e EA coexistem.
@@ -120,9 +170,9 @@ esses tres exige responder a pergunta de conexao acima, e mais:
    conferida: SendZeroPositionAtMarket tem senha em 5o lugar, nao 3o.
    10 testes com DLL falsa verificando inclusive a ordem exata dos
    argumentos de cada chamada.
-4. Gestao de risco: stop por posicao, limite de perda diaria, o que fazer
-   com ordem rejeitada. NAO DESENHADA AINDA -- nao e' detalhe para depois,
-   e' bloqueador.
+4. [RESOLVIDO 2026-08-26] Gestao de risco desenhada e implementada
+   (ea/risco.py, ver secao acima). Rota A: saida por tempo + stop
+   catastrofico + circuit breaker de 3 perdas.
 5. Forward-test em DEMO com dry_run=True primeiro (decisoes logadas, ordem
    NENHUMA enviada) -- comparar as decisoes logadas contra o que o research
    preveria, por dias suficientes, antes de sequer cogitar dry_run=False.
