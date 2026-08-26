@@ -29,12 +29,14 @@ o operador identificou que a versao anterior confundia login de DLL com
 conta de roteamento).
 
 O QUE AINDA NAO ESTA PRONTO (deliberado, nao esquecido):
-  - service.py: orquestracao (equivalente ao recorder/service.py, mas
-    para trading) -- proximo passo real, agora que sinal.py e
-    execucao.py estao prontos.
   - Gestao de risco (stop, tamanho de posicao, limite de perda diaria)
-    -- nao desenhada ainda, e' pre-requisito ANTES de qualquer envio
-    de ordem real, nao um detalhe para depois.
+    -- nao desenhada ainda, e' o ULTIMO pre-requisito antes de
+    dry_run=False; o comando CLI `ea` recusa dry_run=False por design
+    ate' la'.
+  - Rastreamento REAL de posicao (OrderChangeCallback/GetPosition com
+    reconciliacao) -- a posicao do service e' SIMULADA a partir das
+    proprias decisoes, exatamente o que o forward-test precisa; o
+    rastreamento real e' parte da gestao de risco.
 
 JA IMPLEMENTADO E TESTADO:
   - config.py: EAConfig, SinalConfig, RoteamentoConfig
@@ -47,6 +49,11 @@ JA IMPLEMENTADO E TESTADO:
     nao um contador por-barra -- a primeira versao zerava a cada
     fechamento e o erro se acumulava silenciosamente barra a barra.
   - contas.py: GetAccount via login completo (diagnostico)
+  - service.py: EAService — orquestracao completa: login completo,
+    assina trades, alimenta ConstrutorDeSinalAoVivo, decide por barra
+    fechada, executa (dry_run default), posicao simulada, ZERAR forcado
+    no encerramento (nunca carrega overnight). Nucleo puro testavel sem
+    DLL (processar_trade_bruto). CLI: `profit-tape ea -c config/ea.yaml`.
   - execucao.py: ExecutorDeOrdens traduz Decisao -> SendMarketBuyOrder/
     SendMarketSellOrder/SendZeroPositionAtMarket (funcoes legadas planas,
     ordens A MERCADO por design do v1). Trava em camadas: dry_run=True

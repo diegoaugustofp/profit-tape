@@ -551,6 +551,52 @@ def vigia(
 
 
 @app.command()
+def ea(
+    config: Path = typer.Option(Path("config/ea.yaml"), "-c", "--config"),
+    encerrar_em: str = typer.Option("18:20", "--encerrar-em",
+                                    help="HH:MM local para zerar e parar."),
+    bolsa: str = typer.Option("F", "--bolsa"),
+    heartbeat_s: int = typer.Option(30, "--heartbeat-s"),
+    log_file: Path | None = typer.Option(None, "--log-file"),
+    log_level: str = typer.Option("INFO", "--log-level"),
+) -> None:
+    """
+    FORWARD-TEST do EA (dry_run por default no config): conecta com login
+    completo, assina o simbolo, constroi barras ao vivo e LOGA cada decisao
+    que o EA teria tomado. NENHUMA ordem e' enviada enquanto dry_run=True
+    no yaml -- e dry_run=False continua bloqueado por design ate' gestao
+    de risco existir (ver docs/EA_ARQUITETURA.md).
+
+    Encerra sozinho em --encerrar-em (default 18:20, ANTES do fechamento
+    do pregao -- o EA nunca carrega posicao overnight por design).
+    """
+    configurar(log_level, log_file)
+    from .config import Credenciais
+    from .ea.config import EAConfig
+    from .ea.service import EAService
+
+    if not config.exists():
+        raise SystemExit(f"nao achei {config} -- crie a partir de "
+                         f"config/ea.exemplo.yaml")
+    ea_cfg = EAConfig.from_yaml(config)
+    if not ea_cfg.dry_run:
+        raise SystemExit(
+            "dry_run=False no yaml, mas o comando `ea` do CLI so' roda "
+            "forward-test por enquanto -- gestao de risco ainda nao existe "
+            "(pre-requisito 5 em docs/EA_ARQUITETURA.md). Deliberado."
+        )
+
+    cred = Credenciais()
+    cred.validar()
+
+    typer.echo(f"EA forward-test: {ea_cfg.symbol} dry_run={ea_cfg.dry_run} "
+               f"sinais={[s.feature for s in ea_cfg.sinais]}")
+    svc = EAService(ea_cfg)
+    svc.rodar(cred, bolsa=bolsa, encerrar_em=encerrar_em,
+              heartbeat_s=heartbeat_s)
+
+
+@app.command()
 def ea_contas(
     timeout: float = typer.Option(15.0, "--timeout"),
     log_level: str = typer.Option("INFO", "--log-level"),

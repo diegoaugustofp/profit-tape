@@ -1,0 +1,25 @@
+# Config do EA — copie para config/ea.yaml e ajuste.
+#
+# REGRA DE OURO: todo valor aqui vem do que o research VALIDOU. volume_barra
+# e janela_z sao os do features.parquet que gerou o veredito; threshold e'
+# o extremo (Q5/Q1) da tabela de quintis, NUNCA um meio-termo "mais
+# sensivel". Sinal so' entra se passou no funil completo:
+# IC (deflacionado) -> quintis com custo real -> significancia Q4 vs Q5.
+
+symbol: WINFUT
+volume_barra: 120000     # CONGELADO do features/sym=WINFUT (nao recalcular)
+janela_z: 50
+tamanho_posicao: 1       # contratos; fixo ate gestao de risco existir
+custo_pontos_estimado: 11.0
+dry_run: true            # NUNCA mude sem ler docs/EA_ARQUITETURA.md
+usar_conta_real: false   # NUNCA mude sem decisao explicita documentada
+
+sinais:
+  # z_agf_3 (XP) h=3: +18.14 pts liquidos no par, Q3->Q4 p=0.043
+  # (relatorio de quintis 2026-08-26). Contrarian: fluxo forte do XP
+  # numa direcao -> operar contra.
+  - feature: z_agf_3
+    horizonte: 3
+    agent_id: 3
+    threshold_entrada: 1.4    # ~sinal medio do Q5 na tabela de quintis
+    direcao: contrarian

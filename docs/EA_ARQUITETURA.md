@@ -66,7 +66,7 @@ ex.: 08:00 ou 19:00 local) para confirmar login completo funcionando; a
 pergunta de CONCORRENCIA, porem, ja esta respondida com confianca.
 
 IMPLICACAO PRATICA: a arquitetura de processo SEPARADO para o EA
-(ea/service.py, ainda esboco) pode prosseguir sem redesenho — record e
+(ea/service.py, hoje implementado) pode prosseguir sem redesenho — record e
 EA podem rodar ao mesmo tempo, cada um com sua propria conexao, sem
 disputa de sessao. Nao elimina os OUTROS pre-requisitos (sinal.py,
 execucao.py, gestao de risco) — so' remove esta duvida especifica do
@@ -82,7 +82,7 @@ ea/
   sinal.py       IMPLEMENTADO — streaming trade-a-trade, equivalencia
                  exata comprovada contra o pipeline batch (ver abaixo)
   execucao.py    IMPLEMENTADO — ExecutorDeOrdens, ordens a mercado atras de dry_run — envio de ordem real bloqueado
-  service.py     STUB — orquestracao (equivalente ao recorder/service.py)
+  service.py     IMPLEMENTADO — EAService, forward-test via CLI `ea` — orquestracao (equivalente ao recorder/service.py)
 ```
 
 ### Por que decisao.py ja' tem logica real e o resto e' esboco
@@ -95,7 +95,8 @@ entrada usa o EXTREMO (o quintil mais distante), nao um threshold no meio
 que pareceria "mais sensivel" mas na verdade estaria operando numa
 diferenca que a propria pesquisa mostrou ser ruido.
 
-sinal.py, execucao.py, service.py sao esboco de proposito -- cada um tem
+sinal.py, execucao.py e service.py estao IMPLEMENTADOS (2026-08-26); o
+que resta de esboco e' apenas a gestao de risco -- cada modulo tem
 NotImplementedError explicito e docstring listando o que falta. Implementar
 esses tres exige responder a pergunta de conexao acima, e mais:
 
