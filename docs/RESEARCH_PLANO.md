@@ -394,3 +394,29 @@ dentro do erro, sem otimizar ponto de entrada alem de "extremo".
 Resultado NEGATIVO da hipotese motivadora (Q4>Q5) e' o metodo funcionando:
 evitou levar um padrao que pareceria insight na tabela bruta para o desenho
 do EA sem base estatistica.
+
+## Segunda rodada de quintis — z_agf_3 h=1 passa no IC mas morre pelo custo (2026-08-26)
+
+Com 23 dias (2 a mais), z_agf_3 passou a "segue" tambem em h=1 (antes so'
+h=3/h=10), com t=-3.95 e consistencia=1.00 (10/10 folds na mesma direcao).
+Tabela de quintis (custo real 11pts) revelou hierarquia clara entre os
+quatro pares testados:
+
+  z_agf_3   h=10 : spread liquido +52.55 pts -- MAIS ROBUSTO, ~5x o custo
+  z_agf_3   h=3  : spread liquido +18.14 pts -- solido, Q3->Q4 significativo (p=0.043)
+  z_agf_4090 h=1 : spread liquido +0.20 pts  -- vivo mas SEM MARGEM nenhuma
+  z_agf_3   h=1  : spread bruto so +10.15 pts -- MORTO, nem chega no custo de 1 perna
+
+CONCLUSAO: z_agf_3 h=1 passa no IC (estatistica) mas morre no teste
+economico (quintis) -- exemplo pratico de por que os dois testes sao
+necessarios e nenhum substitui o outro. NAO entra em nenhuma implementacao
+de EA apesar do "segue" no relatorio de IC.
+
+LEITURA SOBRE O SINAL: z_agf_3 parece ficar mais forte com o horizonte —
+plausivel que a reversao contra o fluxo de varejo (XP) nao se manifeste
+de imediato, precisando de mais tempo para o mercado corrigir o excesso.
+h=1 e' o mais marginal dos tres, e foi o ultimo a cruzar o limiar
+deflacionado (que so' subiu com mais trials acumulados).
+
+DECISAO: qualquer EA futuro baseado em z_agf_3 deve usar h=3 ou h=10,
+nunca h=1 -- apesar do "segue" na tabela de IC.
