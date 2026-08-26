@@ -178,3 +178,37 @@ que o research mediu (sem posicoes sobrepostas).
    preveria, por dias suficientes, antes de sequer cogitar dry_run=False.
 6. So' entao considerar mais sinais alem de z_agf_3/z_agf_4090 -- e so'
    apos passarem pelo MESMO funil (IC -> DSR -> quintis -> significancia).
+
+## Zeragem automatica da XP — pesquisa e decisao de horario (2026-08-26)
+
+Pergunta do operador: quando a corretora zera automaticamente posicoes de
+day trade que ficam abertas demais? No simulador (dry_run) isso nunca
+acontece; no real, importa muito -- custo de zeragem compulsoria e' alto.
+
+FONTES (Manual de Risco XP + relato de atendimento oficial da XP no
+Reclame Aqui):
+  1. Garantia de day trade e' calculada ate' 15 min antes do fechamento do
+     pregao regular no segmento BMF (onde WIN/WDO operam) -- ou 10 min
+     antes quando ha' leilao.
+  2. A zeragem automatica de RISCO ocorre em 3 situacoes: garantia
+     consumida por resultado negativo, posicao de day trade levada ao
+     leilao de fechamento, ou saldo negativo -- SEM aviso previo, a
+     mercado.
+
+Confirmado pelo operador (2026-08-26): pregao 9h-18h; em dia de
+vencimento de serie, fecha 15 min mais cedo (~17:45).
+
+DECISAO: --encerrar-em default do comando `ea` mudou de 18:20 para
+**17:30** -- folga de seguranca generosa sobre o cenario mais apertado
+(vencimento, ~17:45), nao apenas o dia normal (~17:45 tambem, calculando
+do fechamento as 18:00). Nunca depender de precisao de minuto contra o
+risco da corretora.
+
+RESIDUAL NAO RESOLVIDO: o stop catastrofico (500 pts) e o circuit
+breaker (3 perdas) protegem contra a causa "garantia consumida por
+resultado negativo", mas em PONTOS DE PRECO, nao em GARANTIA DISPONIVEL
+NA CONTA calculada pela XP -- num cenario de estresse extremo (spread
+muito alargado), a zeragem da XP poderia teoricamente disparar ANTES do
+nosso proprio stop. Sem solucao no v1; mitigado na pratica por operar
+tamanho minimo (1 contrato) e capital dentro do minimo recomendado
+(R$5.000) durante todo o forward-test.

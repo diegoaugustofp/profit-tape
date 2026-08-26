@@ -553,8 +553,12 @@ def vigia(
 @app.command()
 def ea(
     config: Path = typer.Option(Path("config/ea.yaml"), "-c", "--config"),
-    encerrar_em: str = typer.Option("18:20", "--encerrar-em",
-                                    help="HH:MM local para zerar e parar."),
+    encerrar_em: str = typer.Option(
+        "17:30", "--encerrar-em",
+        help="HH:MM local para zerar e parar. Default 17:30: folga de "
+             "seguranca sobre a zeragem automatica da XP, que ocorre 15min "
+             "antes do fechamento do BMF (18:00, ou 17:45 em dia de "
+             "vencimento de serie) -- ver docs/EA_ARQUITETURA.md."),
     bolsa: str = typer.Option("F", "--bolsa"),
     heartbeat_s: int = typer.Option(30, "--heartbeat-s"),
     log_file: Path | None = typer.Option(None, "--log-file"),
