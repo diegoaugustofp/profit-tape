@@ -420,3 +420,38 @@ deflacionado (que so' subiu com mais trials acumulados).
 
 DECISAO: qualquer EA futuro baseado em z_agf_3 deve usar h=3 ou h=10,
 nunca h=1 -- apesar do "segue" na tabela de IC.
+
+## Custo de transacao em ACOES na XP — ponderacao do operador (2026-08-26)
+
+Antes de rodar quintis sobre os sinais novos de acao (MGLU3, ITUB4),
+registrado um ponto real de custo que precisa ser resolvido primeiro:
+
+Tabela de custo XP fornecida pelo operador (Bruto fixo R$97,37 em todos):
+  Day trade + RLP                              : custo R$22,34  (23% do bruto)
+  Swing 1 dia, autoatendimento                  : custo R$72,18  (74% do bruto)
+  Swing 5 dias c/ financiamento (BTC 20% a.a.)  : custo R$108,88 (LIQUIDO NEGATIVO)
+  Swing 1 dia via escritorio credenciado        : custo R$136,88 (LIQUIDO NEGATIVO)
+
+CONCLUSAO PARCIAL: manter posicao overnight em acao e' inviavel para o
+tipo de IC fino que estamos encontrando (0.05-0.09) -- custo de
+carregamento (BTC + custodia) cresce mais rapido que o sinal sustenta.
+
+MAS os sinais achados (MGLU3 z_fluxo_nacional h=1, ITUB4 z_tick_imbalance
+h=10) sao em HORIZONTE DE BARRA, no ~100-120 barras/dia -- h=10 e' uma
+fracao pequena de UM pregao. Se o EA sempre zera antes do fechamento
+(mesma disciplina do encerrar_em do record), esses sinais sao day trade
+por natureza, nao swing.
+
+PERGUNTA EM ABERTO, decide se os sinais de acao sao viaveis ou nao: a
+XP exclui RLP para "estrategias automatizadas" tambem em ACOES, como ja'
+documentado que faz em FUTUROS (WIN paga R$1,00/contrato/ordem
+automatizado vs <R$1 manual)? Se sim, o custo real de um EA em acoes fica
+perto dos 74% (autoatendimento), nao dos 23% (day trade+RLP) -- e' o
+mesmo padrao do WIN se repetindo. NAO CONFIRMADO — precisa checar com a
+XP ou documentacao de conta antes de assumir qualquer custo para o
+--custo-pontos do quintis em acoes.
+
+Custo em pontos (R$/acao) tambem depende do TAMANHO DE LOTE pretendido —
+diferente do WIN (custo ~fixo por contrato), corretagem de acao tem
+componente fixo por ordem que dilui com lote maior. Nao rodar quintis em
+MGLU3/ITUB4 com custo chutado ate esses dois pontos serem esclarecidos.
