@@ -29,11 +29,9 @@ o operador identificou que a versao anterior confundia login de DLL com
 conta de roteamento).
 
 O QUE AINDA NAO ESTA PRONTO (deliberado, nao esquecido):
-  - execucao.py: envio de ordem real. Fica atras de dry_run=True ate'
-    forward-test em DEMO confirmar a decisao.py contra dado ao vivo.
   - service.py: orquestracao (equivalente ao recorder/service.py, mas
-    para trading) -- ainda nao implementado, agora que sinal.py esta
-    pronto e' o proximo passo real.
+    para trading) -- proximo passo real, agora que sinal.py e
+    execucao.py estao prontos.
   - Gestao de risco (stop, tamanho de posicao, limite de perda diaria)
     -- nao desenhada ainda, e' pre-requisito ANTES de qualquer envio
     de ordem real, nao um detalhe para depois.
@@ -49,4 +47,11 @@ JA IMPLEMENTADO E TESTADO:
     nao um contador por-barra -- a primeira versao zerava a cada
     fechamento e o erro se acumulava silenciosamente barra a barra.
   - contas.py: GetAccount via login completo (diagnostico)
+  - execucao.py: ExecutorDeOrdens traduz Decisao -> SendMarketBuyOrder/
+    SendMarketSellOrder/SendZeroPositionAtMarket (funcoes legadas planas,
+    ordens A MERCADO por design do v1). Trava em camadas: dry_run=True
+    default so' loga; dry_run=False sem executor explicito recusa;
+    conta default e' SEMPRE demo. ARMADILHA conferida no manual: a ordem
+    dos argumentos de SendZeroPositionAtMarket e' diferente (senha em
+    5o lugar, nao 3o).
 """

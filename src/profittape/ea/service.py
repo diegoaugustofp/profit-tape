@@ -32,8 +32,12 @@ PRE-REQUISITOS antes de qualquer linha de codigo aqui:
      uma instancia de ConstrutorDeSinalAoVivo por simbolo, alimentada
      trade a trade pelo callback da DLL; cada BarraFechada devolvida vai
      direto para decisao.decidir().
-  4. execucao.py (send_order real) implementado e testado.
-  5. Gestao de risco desenhada.
+  4. [RESOLVIDO 2026-08-26] execucao.py implementado e testado (10
+     testes com DLL falsa). Uso pretendido aqui: um ExecutorDeOrdens por
+     simbolo, construido com a dll conectada e RoteamentoConfig; cada
+     Decisao devolvida por decisao.decidir() vai para executar(decisao,
+     dry_run, executor).
+  5. Gestao de risco desenhada — ULTIMO bloqueador antes do forward-test.
 
 Ate' la', este arquivo existe so' para documentar o formato que o service
 do EA vai ter -- nao instancie.

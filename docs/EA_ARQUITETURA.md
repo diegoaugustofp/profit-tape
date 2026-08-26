@@ -81,7 +81,7 @@ ea/
   decisao.py     Sinal -> Acao, pura, testavel, IMPLEMENTADO (11 testes)
   sinal.py       IMPLEMENTADO — streaming trade-a-trade, equivalencia
                  exata comprovada contra o pipeline batch (ver abaixo)
-  execucao.py    STUB atras de dry_run — envio de ordem real bloqueado
+  execucao.py    IMPLEMENTADO — ExecutorDeOrdens, ordens a mercado atras de dry_run — envio de ordem real bloqueado
   service.py     STUB — orquestracao (equivalente ao recorder/service.py)
 ```
 
@@ -109,9 +109,16 @@ esses tres exige responder a pergunta de conexao acima, e mais:
    nunca resetado (mesma regra de bars.atribuir_barras via cum_prev),
    nao um contador por-barra — a primeira versao zerava a cada
    fechamento e o erro se acumulava silenciosamente.
-3. execucao.py: bindings novos no ProfitClient para SendBuyOrder/
-   SendSellOrder/SendZeroPosition + OrderChangeCallback/AccountCallback
-   (o projeto nunca enviou ordem ate' agora, so' capturou dado).
+3. [RESOLVIDO 2026-08-26] execucao.py implementado: ExecutorDeOrdens
+   com as funcoes LEGADAS planas (SendMarketBuyOrder/SendMarketSellOrder/
+   SendZeroPositionAtMarket — o manual as marca obsoletas em favor de
+   SendOrder V2 struct-based, mas menos partes moveis > future-proofing
+   para a primeira ordem do projeto; migracao V2 registrada como evolucao
+   futura). Ordens A MERCADO por design do v1. Trava em camadas: dry_run
+   default, executor explicito obrigatorio, conta demo default. ARMADILHA
+   conferida: SendZeroPositionAtMarket tem senha em 5o lugar, nao 3o.
+   10 testes com DLL falsa verificando inclusive a ordem exata dos
+   argumentos de cada chamada.
 4. Gestao de risco: stop por posicao, limite de perda diaria, o que fazer
    com ordem rejeitada. NAO DESENHADA AINDA -- nao e' detalhe para depois,
    e' bloqueador.

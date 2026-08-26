@@ -77,19 +77,20 @@ def test_execucao_dry_run_apenas_loga(capsys) -> None:
     assert "ea.decisao_dry_run" in saida
 
 
-def test_execucao_real_recusa_ate_estar_implementada() -> None:
+def test_execucao_real_recusa_sem_executor_explicito() -> None:
     """
-    Protecao contra ativacao acidental: dry_run=False hoje SEMPRE levanta
-    NotImplementedError -- nao existe caminho de codigo que envie ordem
-    real ainda. Isso e' intencional ate' os pre-requisitos do
-    docs/EA_ARQUITETURA.md serem cumpridos.
+    Protecao contra ativacao acidental (camada 2 de execucao.py):
+    dry_run=False SEM um ExecutorDeOrdens construido explicitamente
+    RECUSA — construir um exige RoteamentoConfig valido + dll conectada,
+    de proposito. Antes era NotImplementedError (stub); agora que
+    execucao.py e' real, a trava continua existindo, so' mudou de forma.
     """
     import pytest
 
     from profittape.ea.execucao import executar
 
     d = decidir(_SINAL, valor_atual=1.5, posicao_atual=0)
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(RuntimeError, match="sem ExecutorDeOrdens"):
         executar(d, dry_run=False)
 
 

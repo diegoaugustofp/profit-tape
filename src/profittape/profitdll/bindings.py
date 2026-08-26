@@ -307,6 +307,41 @@ def _declare(dll: Any) -> None:
         dll.GetAccount.argtypes = []
         dll.GetAccount.restype = c_int
 
+    # ----------------------------------------------------------------------
+    # Envio de ordem (modulo ea/execucao.py) — funcoes LEGADAS planas.
+    # O manual as marca "obsoleta em favor da nova funcao SendOrder" (V2,
+    # struct TConnectorSendOrder com records aninhados + versionamento).
+    # DECISAO DE DESIGN (2026-08-26): para a PRIMEIRA ordem que este projeto
+    # envia na vida, menos partes moveis > future-proofing — argumentos
+    # planos sao verificaveis 1:1 contra o manual, struct aninhada via
+    # ctypes e' exatamente o tipo de layout-de-memoria que corrompe em
+    # silencio. Migracao para SendOrder V2 registrada como evolucao futura.
+    #
+    # ARMADILHA REAL do manual: a ordem dos argumentos de SendZeroPosition*
+    # e' DIFERENTE das Send*Order — pwcSenha vem em 5o (depois de Ticker/
+    # Bolsa), nao em 3o. Conferido caractere a caractere no manual.
+    # ----------------------------------------------------------------------
+    if hasattr(dll, "SendMarketBuyOrder"):
+        for nome in ("SendMarketBuyOrder", "SendMarketSellOrder"):
+            fn = getattr(dll, nome)
+            fn.argtypes = [c_wchar_p, c_wchar_p, c_wchar_p,   # conta, corretora, senha
+                           c_wchar_p, c_wchar_p,              # ticker, bolsa
+                           c_int]                             # quantidade
+            fn.restype = c_int64
+        for nome in ("SendBuyOrder", "SendSellOrder"):
+            fn = getattr(dll, nome)
+            fn.argtypes = [c_wchar_p, c_wchar_p, c_wchar_p,
+                           c_wchar_p, c_wchar_p,
+                           c_double,                          # preco limite
+                           c_int]
+            fn.restype = c_int64
+        dll.SendZeroPositionAtMarket.argtypes = [
+            c_wchar_p, c_wchar_p,          # conta, corretora
+            c_wchar_p, c_wchar_p,          # ticker, bolsa
+            c_wchar_p,                     # senha (5o lugar — ver aviso acima)
+        ]
+        dll.SendZeroPositionAtMarket.restype = c_int64
+
     for nome in ("SubscribeTicker", "UnsubscribeTicker",
                  "SubscribeOfferBook", "UnsubscribeOfferBook",
                  "SubscribePriceBook", "UnsubscribePriceBook"):
