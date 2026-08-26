@@ -451,7 +451,20 @@ mesmo padrao do WIN se repetindo. NAO CONFIRMADO — precisa checar com a
 XP ou documentacao de conta antes de assumir qualquer custo para o
 --custo-pontos do quintis em acoes.
 
-Custo em pontos (R$/acao) tambem depende do TAMANHO DE LOTE pretendido —
-diferente do WIN (custo ~fixo por contrato), corretagem de acao tem
-componente fixo por ordem que dilui com lote maior. Nao rodar quintis em
-MGLU3/ITUB4 com custo chutado ate esses dois pontos serem esclarecidos.
+RESPOSTA PARCIAL DO OPERADOR (2026-08-26): ele ADERIU ao RLP na conta,
+tanto para acoes quanto para indice — mas isso e' preferencia de
+ROTEAMENTO DA CONTA (vale para ordem manual). A pergunta que continua
+sem resposta e' mais especifica: ordem marcada como vinda de sistema
+AUTOMATIZADO (API/DLL) e' excluida do RLP pela XP independente da
+adesao da conta — exatamente como ja documentado acontecer no WIN? So'
+a XP/assessor confirma isso, nao e' algo que a adesao geral ao RLP
+resolve sozinha.
+
+Dimensionamento de posicao (operador, 2026-08-26): capital R$20.000 para
+acoes, risco maximo 1% por operacao = R$200. Lote calculado por
+risco/distancia-do-stop, que ainda nao foi definida (design de EA,
+propositalmente adiado). Custo em pontos por acao depende do lote —
+caminho mais simples sem entrar em estrategia: pedir ao operador para
+rodar o MESMO simulador de custo da XP com um lote realista de MGLU3/
+ITUB4 no cenario "Day trade + RLP", e converter o R$ resultante para
+pontos dividindo pelo numero de acoes.
