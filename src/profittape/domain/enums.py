@@ -93,6 +93,52 @@ class ConnState(IntEnum):
     ATIVACAO = 3
 
 
+class LoginResult(IntEnum):
+    """nResult quando ConnState.LOGIN — manual, secao TStateCallback."""
+
+    CONNECTED = 0
+    INVALID = 1
+    INVALID_PASS = 2
+    BLOCKED_PASS = 3
+    EXPIRED_PASS = 4
+    UNKNOWN_ERR = 200
+
+
+class RoteamentoResult(IntEnum):
+    """nResult quando ConnState.ROTEAMENTO — manual, secao TStateCallback.
+    Distingue o SERVIDOR de roteamento (CONNECTED=2) da CORRETORA/conta
+    especifica (BROKER_CONNECTED=5) -- GetAccount() depende do segundo,
+    nao so' do primeiro (bug real pego em 2026-08-26: contas.py chamava
+    GetAccount cedo demais, so' com o login basico, nunca com o broker
+    de fato conectado)."""
+
+    DISCONNECTED = 0
+    CONNECTING = 1
+    CONNECTED = 2
+    BROKER_DISCONNECTED = 3
+    BROKER_CONNECTING = 4
+    BROKER_CONNECTED = 5
+
+
+class MarketDataResult(IntEnum):
+    """nResult quando ConnState.MARKET_DATA."""
+
+    DISCONNECTED = 0
+    CONNECTING = 1
+    WAITING = 2
+    NOT_LOGGED = 3
+    CONNECTED = 4
+    PERFORMANCE_WARNING = 5
+    PARTIAL_CONNECTED = 6
+
+
+class AtivacaoResult(IntEnum):
+    """nResult quando ConnState.ATIVACAO."""
+
+    VALID = 0
+    INVALID = 1
+
+
 class Stream(StrEnum):
     """Fluxos gravaveis. O valor vira nome de diretorio na particao."""
 

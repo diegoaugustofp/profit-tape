@@ -36,6 +36,7 @@ from datetime import datetime, timedelta, timezone
 import structlog
 
 from ..config import Credenciais
+from ..domain.enums import AtivacaoResult, ConnState, MarketDataResult
 from .config import EAConfig, RoteamentoConfig
 from .decisao import Acao, Decisao, decidir
 from .execucao import ExecutorDeOrdens, executar
@@ -201,10 +202,24 @@ class EAService:
 
         def _on_state(tipo: int, valor: int) -> None:
             log.info("ea.estado", tipo=tipo, valor=valor)
-            if tipo == 0 and valor == 0:
+            # BUG REAL corrigido (2026-08-26, mesmo achado de ea/contas.py):
+            # "tipo==LOGIN e valor==0" e' so' o PRIMEIRO dos sinais de
+            # conexao documentados no manual, nao "pronto". O sinal certo
+            # para dado de mercado e' MARKET_DATA -- mesmo padrao que
+            # client.py (record) ja' usa ha' semanas sem problema
+            # (valor in 2,3,4 = WAITING/NOT_LOGGED/CONNECTED, tolerante).
+            # "valor < 0" tambem nunca disparava -- todo codigo de erro
+            # documentado e' NAO-NEGATIVO.
+            if tipo == ConnState.MARKET_DATA and valor in (
+                MarketDataResult.WAITING, MarketDataResult.NOT_LOGGED,
+                MarketDataResult.CONNECTED,
+            ):
                 estado["conectado"] = True
-            elif valor < 0:
-                estado["erro"] = f"tipo={tipo} valor={valor}"
+            elif tipo == ConnState.ATIVACAO and valor == AtivacaoResult.INVALID:
+                estado["erro"] = (
+                    "ATIVACAO INVALIDADA (CONNECTION_ACTIVATE_INVALID) -- "
+                    "sessao aceita e depois invalidada pelo servidor."
+                )
 
         def _on_trade(ativo, data, numero, preco, vol, qtd, comp, vend,
                       tipo, edit) -> None:

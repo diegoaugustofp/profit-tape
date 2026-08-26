@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 import structlog
 
 from ..config import Credenciais
+from ..domain.enums import AtivacaoResult, ConnState, LoginResult, RoteamentoResult
 from ..profitdll.bindings import (
     TAccountCallback,
     THistoryCallback,
@@ -40,6 +41,14 @@ from ..profitdll.bindings import (
 
 log = structlog.get_logger(__name__)
 
+_LOGIN_ERROS = {
+    LoginResult.INVALID: "login invalido",
+    LoginResult.INVALID_PASS: "senha invalida",
+    LoginResult.BLOCKED_PASS: "senha bloqueada",
+    LoginResult.EXPIRED_PASS: "senha expirada",
+    LoginResult.UNKNOWN_ERR: "erro interno de login (LOGIN_UNKNOWN_ERR)",
+}
+
 
 @dataclass
 class ContaEncontrada:
@@ -54,7 +63,14 @@ class _Coletor:
     """Guarda o resultado dos callbacks. Precisa sobreviver ate' o fim da
     funcao (ctypes nao segura referencia sozinho — ver aviso em bindings.py)."""
     contas: list[ContaEncontrada] = field(default_factory=list)
-    conectado: bool = False
+    # BUG REAL corrigido (2026-08-26): antes, "conectado" virava True so'
+    # com tipo=LOGIN valor=CONNECTED -- o PRIMEIRO dos 4 sinais de conexao
+    # documentados no manual, nao "tudo pronto". GetAccount() depende do
+    # ROTEAMENTO com a CORRETORA conectada (RoteamentoResult.
+    # BROKER_CONNECTED=5), nao so' do login basico. client.py (record) ja'
+    # fazia isso certo para market data (checa tipo==MARKET_DATA, nao
+    # tipo==LOGIN) -- contas.py copiou o padrao errado.
+    pronto_para_contas: bool = False
     erro_estado: str | None = None
 
 
@@ -72,14 +88,40 @@ def listar_contas(cred: Credenciais, timeout_s: float = 15.0,
 
     def _on_state(tipo: int, valor: int) -> None:
         # Log de TODA transicao de estado, nao so' sucesso/erro -- material
-        # forense para um eventual chamado com a XP (NL_INTERNAL_ERROR nao
-        # tem detalhe proprio; a sequencia de estados antes dele e' o que
-        # sobra para investigar).
+        # forense para um eventual chamado com a XP (o manual nao detalha
+        # POR QUE cada erro acontece, so' o codigo).
         log.info("ea_contas.estado", tipo=tipo, valor=valor)
-        if tipo == 0 and valor == 0:
-            coletor.conectado = True
-        elif valor < 0:
-            coletor.erro_estado = f"tipo={tipo} valor={valor}"
+
+        if tipo == ConnState.LOGIN:
+            if valor in _LOGIN_ERROS:
+                coletor.erro_estado = f"login: {_LOGIN_ERROS[valor]} (codigo {valor})"
+
+        elif tipo == ConnState.ROTEAMENTO:
+            if valor == RoteamentoResult.BROKER_CONNECTED:
+                coletor.pronto_para_contas = True
+            elif coletor.pronto_para_contas and valor in (
+                RoteamentoResult.DISCONNECTED, RoteamentoResult.BROKER_DISCONNECTED,
+            ):
+                # Regressao APOS ja ter conectado -- a sessao caiu sozinha,
+                # nao e' um erro nosso de configuracao.
+                coletor.erro_estado = (
+                    f"roteamento caiu DEPOIS de conectar (codigo {valor}) -- "
+                    f"sessao invalidada pelo servidor, nao pela nossa config."
+                )
+
+        elif tipo == ConnState.ATIVACAO and valor == AtivacaoResult.INVALID:
+            # BUG REAL corrigido (2026-08-26): o codigo antigo so' tratava
+            # "valor < 0" como erro -- mas TODOS os codigos de erro
+            # documentados no manual (LOGIN_INVALID=1, ROTEAMENTO_
+            # DISCONNECTED=0, ATIVACAO_INVALID=1, etc.) sao NAO-NEGATIVOS.
+            # "valor < 0" NUNCA disparava para nenhum estado real -- a
+            # deteccao de erro estava, na pratica, morta desde sempre.
+            coletor.erro_estado = (
+                "ATIVACAO INVALIDADA (CONNECTION_ACTIVATE_INVALID) apos a "
+                "sessao ter sido aceita inicialmente -- reportar a XP: a "
+                "chave de ativacao pode nao ter permissao de roteamento/"
+                "operacoes habilitada para esta conta."
+            )
 
     def _on_account(n_corretora: int, corretora_nome, account_id, titular) -> None:
         coletor.contas.append(ContaEncontrada(
@@ -125,7 +167,7 @@ def listar_contas(cred: Credenciais, timeout_s: float = 15.0,
     while time.monotonic() - t0 < timeout_s:
         if coletor.erro_estado:
             raise SystemExit(f"Estado de erro reportado: {coletor.erro_estado}")
-        if coletor.conectado:
+        if coletor.pronto_para_contas:
             # Checagem que faltava (encontrada 2026-08-26 investigando
             # NL_INTERNAL_ERROR): confere que esta versao da DLL EXPOE
             # GetAccount antes de chamar -- so' AGORA, nao antes de saber
@@ -143,13 +185,28 @@ def listar_contas(cred: Credenciais, timeout_s: float = 15.0,
         time.sleep(0.2)
     else:
         raise SystemExit(
-            f"Nao conectou em {timeout_s}s. Rede lenta? Servidor Nelogade "
-            f"fora do ar? Confira o log acima para o ultimo estado reportado."
+            f"Roteamento/corretora nao conectou em {timeout_s}s. Rede lenta? "
+            f"Servidor Nelogica fora do ar? Confira o log acima para o "
+            f"ultimo estado reportado."
         )
 
     # Espera as contas chegarem (callback assincrono) -- GetAccount() nao
-    # bloqueia, o(s) AccountCallback(s) chegam depois, em thread da DLL.
-    time.sleep(3.0)
+    # bloqueia. CONTINUA observando erro_estado durante a espera: visto na
+    # pratica (2026-08-26) a sessao pode ser invalidada DEPOIS de
+    # GetAccount() ja ter sido chamado (tudo conectou, GetAccount foi
+    # chamado, ~2.5s depois ATIVACAO_INVALIDA e nenhuma conta chegou) --
+    # sem isso, o operador so' veria "nenhuma conta retornada", sem saber
+    # que a sessao caiu sozinha logo depois.
+    t1 = time.monotonic()
+    while time.monotonic() - t1 < 3.0:
+        if coletor.erro_estado:
+            raise SystemExit(
+                f"A sessao caiu enquanto esperava as contas chegarem: "
+                f"{coletor.erro_estado}"
+            )
+        if coletor.contas:
+            break
+        time.sleep(0.1)
 
     dll.DLLFinalize()
     return coletor.contas

@@ -287,3 +287,70 @@ correcao, se o erro persistir, a causa NAO e' export ausente -- reforca
 ainda mais a hipotese de algo do lado da XP (permissao de roteamento).
 
 199 testes (5 novos: check_exports_ea_contas + regressao dedicada).
+
+## ACHADO CRITICO: dois bugs reais na deteccao de estado (2026-08-26, 23:46)
+
+Nova execucao de `ea-contas` produziu uma sequencia RICA de estados (a
+sessao conectou de verdade desta vez) que, decodificada pela tabela do
+manual (secao TStateCallback), revelou:
+
+```
+tipo=3 valor=0   ATIVACAO_VALIDA
+tipo=0 valor=0   LOGIN_CONNECTED
+tipo=1 valor=1   ROTEAMENTO_CONNECTING
+tipo=1 valor=2   ROTEAMENTO_CONNECTED
+tipo=2 valor=1   MARKET_CONNECTING
+tipo=2 valor=2   MARKET_WAITING
+tipo=1 valor=4   ROTEAMENTO_BROKER_CONNECTING
+tipo=1 valor=5   ROTEAMENTO_BROKER_CONNECTED  (x4)
+tipo=0 valor=0   LOGIN_CONNECTED (repetido)
+tipo=2 valor=4   MARKET_CONNECTED
+--- ~2.5s depois, tudo cai sozinho: ---
+tipo=0 valor=1   LOGIN_INVALID
+tipo=1 valor=0   ROTEAMENTO_DISCONNECTED
+tipo=2 valor=0   MARKET_DISCONNECTED
+tipo=3 valor=1   ATIVACAO_INVALIDA
+```
+
+**A sessao conectou TOTALMENTE (login, roteamento, corretora x4, market
+data) e ~2.5s depois foi derrubada por inteiro, terminando em
+ATIVACAO_INVALIDA.** Isto e' NOVO e MELHOR informacao que o
+NL_INTERNAL_ERROR generico de antes -- aponta fortemente para o servidor
+aceitar a conexao inicialmente e depois REVOGAR por alguma checagem de
+permissao/entitlement que so' completa alguns segundos depois (hipotese:
+a chave de ativacao pode nao ter roteamento/operacoes habilitado, e o
+backend valida isso de forma assincrona, tarde).
+
+**DOIS BUGS REAIS encontrados e corrigidos no nosso codigo ao investigar
+isto** (nao explicam a causa raiz do lado da XP, mas eram bugs de
+verdade):
+
+1. **contas.py chamava GetAccount() cedo demais.** So' esperava
+   tipo=LOGIN valor=0 (o PRIMEIRO dos 4 sinais de conexao) -- nao
+   tipo=ROTEAMENTO valor=BROKER_CONNECTED(5), que e' o que de fato indica
+   que a corretora/conta esta pronta. client.py (record) ja' fazia isso
+   certo para market data (checa tipo==MARKET_DATA, nao tipo==LOGIN) --
+   contas.py nao seguiu o mesmo padrao. Corrigido: agora espera
+   BROKER_CONNECTED antes de chamar GetAccount().
+
+2. **Deteccao de erro de estado NUNCA disparava, em lugar nenhum do
+   projeto** (contas.py E service.py): o codigo checava "valor < 0" como
+   sinal de erro -- mas TODOS os codigos de erro documentados no manual
+   (LOGIN_INVALID=1, ROTEAMENTO_DISCONNECTED=0, ATIVACAO_INVALIDA=1, etc.)
+   sao NAO-NEGATIVOS. Essa checagem estava morta desde sempre. Corrigido:
+   decodificacao propria por tipo, usando os enums novos (LoginResult,
+   RoteamentoResult, MarketDataResult, AtivacaoResult em domain/enums.py),
+   com ATIVACAO_INVALIDA tratada como erro real e decodificado (nao mais
+   silenciosa).
+
+**PROXIMA ACAO CONCRETA**: com a correcao aplicada, rode `ea-contas` de
+novo. Se a mensagem agora for "ATIVACAO INVALIDADA" de forma clara (em
+vez de "Nenhuma conta retornada" generico), confirma exatamente esta
+hipotese -- e da' a informacao EXATA para o chamado com a XP: "a sessao
+conecta totalmente (login, roteamento, corretora, market data) e e'
+invalidada ~2-3s depois com CONNECTION_ACTIVATE_INVALID -- a chave de
+ativacao tem permissao de roteamento/operacoes habilitada para esta
+conta?"
+
+200 testes (6 novos/atualizados em test_ea_contas.py, incluindo replay
+exato desta sequencia real).

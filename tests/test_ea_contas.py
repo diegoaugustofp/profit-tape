@@ -40,7 +40,11 @@ class _FakeLoginCompleto:
 
         def _emitir():
             time.sleep(0.05)
-            cb_state(0, 0)   # conectado
+            cb_state(0, 0)   # LOGIN_CONNECTED
+            cb_state(1, 5)   # ROTEAMENTO_BROKER_CONNECTED -- o sinal que
+                             # de fato importa para GetAccount() (bug real
+                             # corrigido 2026-08-26: antes bastava so' o
+                             # login basico, cedo demais).
 
         threading.Thread(target=_emitir, daemon=True).start()
         return 0
@@ -97,7 +101,7 @@ def test_nunca_conecta_levanta_apos_timeout() -> None:
         def DLLInitializeLogin(self, *a, **kw):
             return 0   # aceita mas NUNCA chama cb_state
 
-    with pytest.raises(SystemExit, match="Nao conectou"):
+    with pytest.raises(SystemExit, match="nao conectou"):
         listar_contas(_cred(), timeout_s=0.3, dll_injetada=_FakeMudo())
 
 
@@ -118,7 +122,8 @@ def test_dll_sem_getaccount_falha_com_mensagem_clara() -> None:
                                cb_account, cb_new_trade, cb_new_daily,
                                cb_price_book, cb_offer_book,
                                cb_history_trade, cb_progress, cb_tiny_book):
-            cb_state(0, 0)   # conecta com sucesso
+            cb_state(0, 0)   # LOGIN_CONNECTED
+            cb_state(1, 5)   # ROTEAMENTO_BROKER_CONNECTED
             return 0
 
         def DLLFinalize(self):
@@ -128,3 +133,48 @@ def test_dll_sem_getaccount_falha_com_mensagem_clara() -> None:
     with pytest.raises(SystemExit, match="GetAccount"):
         listar_contas(Credenciais(activation_key="k", user="u", password="p"),
                       timeout_s=2.0, dll_injetada=_FakeConectaMasSemGetAccount())
+
+
+def test_ativacao_invalidada_apos_conectar_da_mensagem_clara() -> None:
+    """
+    Cenario REAL vivido pelo operador (2026-08-26): login conecta,
+    roteamento conecta, broker conecta (4x), market data conecta -- tudo
+    parece bem -- e ~2.5s depois a ATIVACAO e' invalidada
+    (CONNECTION_ACTIVATE_INVALID) e nenhuma conta chega. Antes, isso virava
+    silenciosamente "Nenhuma conta retornada" (mensagem generica, sem
+    pista nenhuma do que aconteceu). Agora deve reportar a causa real.
+    """
+    import pytest
+
+    class _FakeInvalidaDepoisDeConectar:
+        def __init__(self):
+            self._cb_state = None
+
+        def DLLInitializeLogin(self, activation_key, user, password,
+                               cb_state, cb_history, cb_order_change,
+                               cb_account, cb_new_trade, cb_new_daily,
+                               cb_price_book, cb_offer_book,
+                               cb_history_trade, cb_progress, cb_tiny_book):
+            self._cb_state = cb_state
+
+            def _sequencia_real():
+                cb_state(3, 0)   # ATIVACAO valida
+                cb_state(0, 0)   # LOGIN_CONNECTED
+                cb_state(1, 2)   # ROTEAMENTO_CONNECTED
+                cb_state(1, 5)   # ROTEAMENTO_BROKER_CONNECTED
+                cb_state(2, 4)   # MARKET_CONNECTED
+                time.sleep(0.1)
+                cb_state(3, 1)   # ATIVACAO INVALIDADA -- o problema real
+
+            threading.Thread(target=_sequencia_real, daemon=True).start()
+            return 0
+
+        def GetAccount(self):
+            return 0   # nunca dispara AccountCallback -- sessao ja caiu
+
+        def DLLFinalize(self):
+            pass
+
+    with pytest.raises(SystemExit, match="ATIVACAO INVALIDADA"):
+        listar_contas(_cred(), timeout_s=3.0,
+                      dll_injetada=_FakeInvalidaDepoisDeConectar())
