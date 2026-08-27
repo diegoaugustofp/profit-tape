@@ -429,3 +429,33 @@ fazer os dois lados discordarem sobre qual e' "o dia de hoje". Nao
 corrigido ainda -- registrar para nao confundir com regressao real numa
 proxima falha. Se reaparecer LONGE da meia-noite UTC, aí sim e' bug de
 verdade, nao fuso.
+
+## Triagem automatizada de .inprogress orfaos (2026-08-27)
+
+Incidente real: maquina travou durante o pregao, exigiu reinicio. TODOS
+os writers abertos naquele instante (um por stream x simbolo) ficaram
+orfaos SIMULTANEAMENTE, mesmo sequencial, em todos os streams e ativos --
+passos manuais um por um nao escalam para esse padrao.
+
+Comando `profit-tape triagem-inprogress`:
+1. Acha todo *.parquet.inprogress sob a raiz.
+2. So' mexe em arquivos mais VELHOS que --idade-min-min (default 15min) --
+   mais recente pode ter escritor vivo, NUNCA tocado.
+3. Confere o footer (4 bytes finais, magic PAR1 -- mesma checagem de
+   parquet_sink.py): se tem, PROMOVE (rename, dado recuperado -- crash
+   aconteceu depois do footer, antes do rename); se nao tem, QUARENTENA
+   (move para fora da arvore, preserva caminho relativo, NUNCA apaga).
+4. Dry-run por padrao (--mover para aplicar de verdade).
+5. Gera bloco markdown pronto para colar em INTEGRIDADE_DOS_DADOS.md,
+   agrupado por stream/dia/simbolo.
+
+Uso apos um travamento:
+```powershell
+profit-tape triagem-inprogress data\raw --idade-min-min 15
+# confere a lista, depois:
+profit-tape triagem-inprogress data\raw --idade-min-min 15 --mover --log-file logs\triagem_20260827.log
+```
+
+6 testes (recente pulado, sem footer -> quarentena, com footer ->
+recuperado, dry-run nao move, multiplos streams/simbolos de uma vez,
+resumo vazio). 264 testes.

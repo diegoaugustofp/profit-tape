@@ -1030,6 +1030,49 @@ def mae_analise(
 
 
 @app.command()
+def triagem_inprogress(
+    raiz_raw: Path = typer.Argument(..., help="Raiz do dado (ex.: data/raw)."),
+    destino_quarentena: Path = typer.Option(
+        Path("_inprogress_orfaos"), "--destino-quarentena",
+        help="Pasta FORA de raiz_raw onde os arquivos sem footer sao "
+             "movidos (nunca apagados). Estrutura relativa preservada."),
+    idade_min_min: float = typer.Option(
+        15.0, "--idade-min-min",
+        help="So' mexe em .inprogress mais VELHO que isto (minutos). Um "
+             "arquivo mais recente pode ter escritor vivo -- nunca tocado."),
+    mover: bool = typer.Option(
+        False, "--mover",
+        help="Sem isso, so' LISTA o que faria (dry-run). Com isso, "
+             "promove (footer valido) ou quarentena (sem footer) de verdade."),
+    log_level: str = typer.Option("INFO", "--log-level"),
+    log_file: Path | None = typer.Option(None, "--log-file"),
+) -> None:
+    """
+    Triagem de .parquet.inprogress orfaos apos travamento de maquina
+    (2026-08-27) -- um travamento derruba TODOS os writers abertos no
+    instante, um por stream/simbolo, simultaneamente. Automatiza achar,
+    verificar footer, e mover (nunca apagar) o que nao tem recuperacao --
+    ou promover (rename) o que teve a sorte de ja ter o footer escrito
+    antes do crash.
+
+    Dry-run por padrao -- roda sem --mover primeiro para conferir a lista.
+    """
+    configurar(log_level, log_file)
+    from .tools.triagem_inprogress import gerar_resumo_para_integridade, triagem
+
+    r = triagem(raiz_raw, destino_quarentena, idade_min_min=idade_min_min, mover=mover)
+
+    typer.echo(f"pulados (recentes, intocados): {len(r.pulados_recentes)}")
+    typer.echo(f"recuperados (tinham footer)   : {len(r.recuperados)}")
+    typer.echo(f"quarentenados (sem footer)    : {len(r.quarentenados)}")
+    if not mover and (r.recuperados or r.quarentenados):
+        typer.echo("\nDRY-RUN -- nada foi movido. Rode de novo com --mover para aplicar.")
+    if r.quarentenados:
+        typer.echo("\n" + gerar_resumo_para_integridade(r, raiz_raw))
+        typer.echo("\nCopie o bloco acima para docs/INTEGRIDADE_DOS_DADOS.md.")
+
+
+@app.command()
 def ea_contas(
     timeout: float = typer.Option(15.0, "--timeout"),
     log_level: str = typer.Option("INFO", "--log-level"),
