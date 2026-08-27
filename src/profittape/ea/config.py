@@ -80,6 +80,15 @@ class SinalConfig(BaseModel):
     threshold_entrada: float        # o EXTREMO validado, nao um meio-termo
                                     # "mais sensivel" -- ver decisao.py
     direcao: str                    # "contrarian" ou "momentum"
+    # Restricao de lado (2026-08-27, decisao PRE-REGISTRADA -- ver
+    # docs/RESEARCH_PLANO.md, secao "Restricao de direcao: venda apenas"):
+    # z_agf_3 h=3 mostrou assimetria real e convergente (MAE n=300 OOS +
+    # EA replay n=163/295) -- lado de venda com edge (+16 a +20 pts/op),
+    # lado de compra SEM edge (-25 a -29 pts/op). "ambos" preserva o
+    # comportamento historico (default, nunca muda sozinho); "venda" ou
+    # "compra" restringe -- NUNCA mudar sem essa mesma disciplina de
+    # pre-registro para outro sinal/decisao.
+    lado_permitido: str = "ambos"   # "ambos" | "compra" | "venda"
 
 
 class RiscoConfig(BaseModel):

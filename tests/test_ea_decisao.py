@@ -142,3 +142,53 @@ def test_eaconfig_default_usar_conta_real_e_falso() -> None:
     )
     assert cfg.usar_conta_real is False
     assert cfg.dry_run is True
+
+
+def test_lado_permitido_venda_suprime_compra_mas_nao_zerar() -> None:
+    """
+    PRE-REGISTRADO (2026-08-27, docs/RESEARCH_PLANO.md 'Restricao de
+    direcao: venda apenas'). Compra suprimida (vira NADA); ZERAR de uma
+    posicao comprada existente NUNCA e' suprimido -- e' seguranca, nao
+    abertura de posicao nova.
+    """
+    sinal = SinalConfig(feature="z_agf_3", horizonte=3, agent_id=3,
+                        threshold_entrada=1.0, direcao="contrarian",
+                        lado_permitido="venda")
+    d = decidir(sinal, valor_atual=-1.5, posicao_atual=0)   # quer comprar
+    assert d.acao == Acao.NADA
+    assert "compra suprimida" in d.motivo
+
+    # venda continua normal
+    d2 = decidir(sinal, valor_atual=1.5, posicao_atual=0)
+    assert d2.acao == Acao.VENDER
+
+    # ZERAR de posicao comprada existente (caso de borda, nao deveria
+    # organicamente acontecer se a restricao sempre funcionou, mas o
+    # ZERAR em si nunca pode ser suprimido)
+    d3 = decidir(sinal, valor_atual=1.5, posicao_atual=3)
+    assert d3.acao == Acao.ZERAR
+
+
+def test_lado_permitido_compra_suprime_venda_mas_nao_zerar() -> None:
+    sinal = SinalConfig(feature="z_agf_3", horizonte=3, agent_id=3,
+                        threshold_entrada=1.0, direcao="contrarian",
+                        lado_permitido="compra")
+    d = decidir(sinal, valor_atual=1.5, posicao_atual=0)   # quer vender
+    assert d.acao == Acao.NADA
+    assert "venda suprimida" in d.motivo
+
+    d2 = decidir(sinal, valor_atual=-1.5, posicao_atual=0)
+    assert d2.acao == Acao.COMPRAR
+
+    d3 = decidir(sinal, valor_atual=-1.5, posicao_atual=-3)
+    assert d3.acao == Acao.ZERAR
+
+
+def test_lado_permitido_ambos_e_o_default_e_nao_muda_nada() -> None:
+    """Retrocompatibilidade explicita: omitir lado_permitido continua
+    identico ao comportamento de sempre."""
+    sinal = SinalConfig(feature="z_agf_3", horizonte=3, agent_id=3,
+                        threshold_entrada=1.0, direcao="contrarian")
+    assert sinal.lado_permitido == "ambos"
+    assert decidir(sinal, valor_atual=-1.5, posicao_atual=0).acao == Acao.COMPRAR
+    assert decidir(sinal, valor_atual=1.5, posicao_atual=0).acao == Acao.VENDER

@@ -72,10 +72,24 @@ def decidir(sinal_config: SinalConfig, valor_atual: float,
         return Decisao(Acao.ZERAR, "sinal virou contra posicao vendida",
                        valor_atual, sinal_config.feature)
     if quer_vender and posicao_atual == 0:
+        # Restricao de lado (2026-08-27, PRE-REGISTRADA -- ver
+        # docs/RESEARCH_PLANO.md "Restricao de direcao: venda apenas").
+        # So' suprime ABERTURA de posicao nova -- ZERAR (acima) nunca e'
+        # suprimido, e' seguranca, nao entrada.
+        if sinal_config.lado_permitido == "compra":
+            return Decisao(Acao.NADA,
+                           f"venda suprimida por lado_permitido=compra "
+                           f"({sinal_config.feature}={valor_atual:.2f})",
+                           valor_atual, sinal_config.feature)
         return Decisao(Acao.VENDER, f"{sinal_config.feature}={valor_atual:.2f} "
                        f">= limiar {limiar:.2f} (contrarian: vende no extremo alto)",
                        valor_atual, sinal_config.feature)
     if quer_comprar and posicao_atual == 0:
+        if sinal_config.lado_permitido == "venda":
+            return Decisao(Acao.NADA,
+                           f"compra suprimida por lado_permitido=venda "
+                           f"({sinal_config.feature}={valor_atual:.2f})",
+                           valor_atual, sinal_config.feature)
         return Decisao(Acao.COMPRAR, f"{sinal_config.feature}={valor_atual:.2f} "
                        f"<= -{limiar:.2f} (contrarian: compra no extremo baixo)",
                        valor_atual, sinal_config.feature)

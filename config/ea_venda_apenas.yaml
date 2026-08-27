@@ -1,0 +1,30 @@
+# Variante PRE-REGISTRADA (2026-08-27) restrita ao lado de venda -- ver
+# docs/RESEARCH_PLANO.md "Restricao de direcao: venda apenas" para a
+# justificativa completa e as regras de decisao definidas ANTES de rodar.
+#
+# NAO e' validacao out-of-sample nova -- roda sobre o MESMO periodo (23-24
+# dias) que revelou a assimetria. E' confirmacao de engenharia sobre um
+# padrao ja observado, nao um teste estatistico independente. So' dias
+# NOVOS, capturados depois de 2026-08-27, validam isto de verdade.
+
+symbol: WINFUT
+volume_barra: 120000
+janela_z: 50
+tamanho_posicao: 1
+custo_pontos_estimado: 11.0
+dry_run: true
+usar_conta_real: false
+
+sinais:
+  - feature: z_agf_3
+    horizonte: 3
+    agent_id: 3
+    threshold_entrada: 1.4
+    direcao: contrarian
+    lado_permitido: venda    # UNICA diferenca do ea.yaml original
+
+risco:
+  capital: 5000.0
+  risco_max_pct: 0.02
+  valor_ponto_reais: 0.20
+  max_perdas_consecutivas: 3

@@ -596,3 +596,57 @@ geral do operador, nao derivada da pesquisa de z_agf_3).
 
 5 testes novos (nova flag + validacao de combinacao invalida). 251
 testes.
+
+## PRE-REGISTRO: Restricao de direcao — venda apenas (2026-08-27)
+
+Registrado ANTES de rodar o teste, pela mesma disciplina de sempre —
+metodologia congelada antes de olhar o numero final.
+
+### Motivacao
+Tres fontes independentes convergiram na mesma assimetria: MAE (300
+triggers OOS, 2026-08-27) mostrou compra bruto -3.7pts/op, venda
++22.0pts/op. EA replay em 163 operacoes reais (24 dias, 2026-07-24 a
+2026-08-26) confirmou: compra -28.9pts/op liquido (n=78), venda
++20.2pts/op liquido (n=85) — e o resultado se manteve estavel mesmo
+ampliando para 295 operacoes (compra -25.0, venda +16.1) ao incluir os
+dias em que o circuit breaker bloqueou entradas.
+
+### O QUE NAO E' este teste
+NAO e' validacao out-of-sample nova. Roda sobre o MESMO periodo (23-24
+dias) que revelou a assimetria -- e' confirmacao de engenharia sobre
+padrao ja' observado, mesma categoria que mae.py/quintis.py (nao
+consome trial de significancia do IC, porque nao e' uma nova hipotese
+sobre se z_agf_3 preve preco -- isso ja' esta validado; e' uma decisao
+de QUAL PARTE do sinal ja' validado operar). Circular por construcao se
+tratado como "prova" -- e' engenharia, nao prova.
+
+### Implementado
+- SinalConfig.lado_permitido: "ambos" (default, nunca muda o
+  comportamento historico) | "compra" | "venda".
+- decidir() suprime a ABERTURA do lado restrito (vira Acao.NADA) --
+  NUNCA suprime ZERAR (protecao de posicao existente continua sempre
+  ativa, independente da restricao).
+- config/ea_venda_apenas.yaml: mesma config do ea.yaml, so'
+  lado_permitido: venda.
+
+### Regra de decisao (congelada ANTES de ver o resultado)
+Comparar `ea-replay-lote --comparar-circuit-breaker` do ea.yaml
+(baseline, ambos os lados) contra ea_venda_apenas.yaml, no MESMO
+periodo de dias:
+  - Favoravel a restringir: pnl total da variante venda-apenas > pnl
+    total do baseline, E razao ganho/perda >= a do baseline.
+  - Inconclusivo: diferenca pequena, dentro do que amostra de ~85-148
+    operacoes poderia gerar por variancia sozinha -- NAO decide nada,
+    so' registra.
+  - Contra restringir: pnl da variante pior que o baseline (indicaria
+    que o circuit breaker/interacao entre os dois lados tem efeito
+    protetor que a analise isolada por lado nao capturava).
+
+### O que NAO muda so' com este teste
+dry_run continua True. Nenhuma decisao de usar isto em producao
+(dry_run=False) decorre deste teste sozinho -- gestao de risco e
+forward-test em DEMO continuam pre-requisitos, ja' documentados em
+EA_ARQUITETURA.md.
+
+3 testes novos de decisao.py (lado_permitido venda/compra/ambos,
+confirmando que ZERAR nunca e' suprimido). 257 testes.
