@@ -459,3 +459,45 @@ profit-tape triagem-inprogress data\raw --idade-min-min 15 --mover --log-file lo
 6 testes (recente pulado, sem footer -> quarentena, com footer ->
 recuperado, dry-run nao move, multiplos streams/simbolos de uma vez,
 resumo vazio). 264 testes.
+
+## Politica de retencao: disco local vs backup (2026-08-27)
+
+Registrado apos uma surpresa real: `ea-replay-lote` sem `--raiz-raw`
+explicito rodou sobre so' 2 dias, porque o resto do historico ja tinha
+sido movido para o disco de backup e removido do local -- sem estar
+documentado em lugar nenhum QUANDO isso acontece nem o que fica onde.
+
+### O que existe hoje
+
+- **Disco local** (`data/raw`): dias recentes, capturados pelo `record`.
+  Volume cresce rapido (streams book_offer/tiny_book sao o grosso).
+- **Disco de backup** (SSD externo, `D:\backup_raw\data\raw` no momento
+  deste registro -- confira sempre o caminho atual, pode mudar de letra
+  de unidade entre sessoes): copia via robocopy + `quarentena --profundo`
+  validando, DEPOIS removido do local para liberar espaco.
+
+### Regra pratica (o que falta formalizar de verdade)
+
+NAO HA' uma regra fixa de "apos N dias, mover" documentada -- a remocao
+do local ate agora foi decisao manual, caso a caso, quando o disco
+enchia. Isso e' o que causa a surpresa: nenhum jeito de saber, so'
+olhando `data/raw`, se um dia especifico ainda esta la' ou so' no
+backup, sem checar as duas arvores.
+
+RECOMENDACAO (nao implementada ainda, registrar como decisao futura):
+- Sempre que rodar `ea-replay`/`ea-replay-lote`/`mae-analise` (ou
+  qualquer ferramenta que leia raw bruto, nao curated), CONFERIR
+  primeiro `Get-ChildItem data\raw\trade -Directory` para saber quais
+  dias estao localmente disponiveis antes de assumir `--raiz-raw`
+  default.
+- Considerar, quando fizer sentido, uma convencao simples tipo "mantem
+  os ultimos N dias uteis localmente, sempre" -- mas isso e' decisao do
+  operador sobre espaco de disco disponivel, nao algo para o codigo
+  decidir sozinho.
+
+### O que JA existe e ajuda
+
+- `quarentena --dia`/`--desde`/`--ate` (v0.74): nao precisa mais varrer
+  o historico completo a cada validacao incremental.
+- Path do backup sempre passado explicitamente via `--raiz-raw` nas
+  ferramentas de replay -- nunca assumido implicitamente.

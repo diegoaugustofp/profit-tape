@@ -17,6 +17,31 @@ pregao (DLL travou, excecao nao tratada, o que for), reinicia sozinho em
 segundos — sem esperar ate' o dia seguinte, que e' o que aconteceria hoje
 sem NSSM.
 
+## VALIDADO em producao (2026-08-27)
+
+Instalado, testado e ativo. Registro do que aconteceu de verdade, para
+quem reler este documento depois nao precisar adivinhar:
+
+- **Conexao com LocalSystem funcionou de primeira** -- a preocupacao de
+  que a ProfitDLL exigisse sessao de desktop interativa (levantada por
+  analogia ao problema do schtasks/Modo de Logon do mesmo dia) NAO se
+  confirmou aqui. `-ContaServico` nao foi necessario.
+- **Encerramento limpo as 18:30 nao reiniciou** -- primeiro teste real
+  em producao rodou depois do horario agendado, o record conectou,
+  percebeu que ja' passou de `encerrar_em`, encerrou sozinho
+  (`writer.encerrado`, 0 falhas de verificacao), e o `AppExit 0 -> Exit`
+  funcionou exatamente como desenhado: `SERVICE_STOPPED`, sem tentativa
+  de restart. Comportamento CORRETO, nao falha.
+- **Teste de resiliencia (kill -9 do processo real) passou**: matou o
+  PID do python, o NSSM reiniciou em **segundos** (bem dentro do teto de
+  `RestartDelayMs=30000`) -- novo ciclo completo de conexao
+  (`profitdll.conectado`, `recorder.subscrito`, heartbeat com
+  `uptime_min` do zero) confirmado no log.
+- **schtasks trocado** para `nssm.exe start profit-tape-record` --
+  confirmado via `schtasks /Query` que "Tarefa a ser executada" mudou e
+  que o Modo de Logon continua correto (pediu senha na hora da troca,
+  nao confirmacao de sessao interativa).
+
 ## Instalacao
 
 1. Baixe o NSSM em https://nssm.cc/download (pegue a versao estavel, extraia
