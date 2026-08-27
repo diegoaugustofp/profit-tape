@@ -653,9 +653,16 @@ def ea_replay_lote(
              "como configuracao de producao -- e' flag explicita de "
              "diagnostico, nao vem do ea.yaml."),
     saida: Path = typer.Option(Path("data/research"), "--saida"),
+    log_file: Path | None = typer.Option(
+        None, "--log-file",
+        help="Grava o log DETALHADO (cada barra/decisao de TODOS os "
+             "dias) neste arquivo -- sem isso, so' o resumo final vai "
+             "para data/research/*.md; o detalhe por decisao se perde."),
     log_level: str = typer.Option("WARNING", "--log-level",
                                   help="WARNING p/ nao afogar o console "
-                                       "com o log de cada barra de cada dia."),
+                                       "com o log de cada barra de cada dia. "
+                                       "Vale so' para a TELA -- o --log-file "
+                                       "sempre grava tudo em INFO."),
 ) -> None:
     """
     Roda ea-replay em TODOS os dias ja' capturados (uma instancia NOVA de
@@ -675,7 +682,7 @@ def ea_replay_lote(
     from .ea.config import EAConfig
     from .ea.service import EAService
 
-    configurar(log_level, None)
+    configurar(log_level, log_file, nivel_arquivo="INFO")
     ea_cfg = EAConfig.from_yaml(config)
     raiz_symbol = raiz_raw / "trade"
     dias = sorted(p.name.removeprefix("dt=") for p in raiz_symbol.glob("dt=*")

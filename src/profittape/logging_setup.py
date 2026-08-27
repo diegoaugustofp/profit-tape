@@ -33,8 +33,22 @@ _PROCESSORS_COMUNS = [
 ]
 
 
-def configurar(nivel: str = "INFO", arquivo: Path | None = None) -> None:
-    nivel_num = getattr(logging, nivel.upper(), logging.INFO)
+def configurar(nivel: str = "INFO", arquivo: Path | None = None,
+               nivel_arquivo: str | None = None) -> None:
+    """
+    nivel_arquivo: se None (default), usa o MESMO nivel do console --
+    comportamento identico ao de sempre, nenhum chamador existente muda.
+    Se informado, permite consola quieto + arquivo com detalhe completo
+    (caso real: ea-replay-lote quer WARNING na tela, rodando 23 dias de
+    uma vez, mas INFO completo no --log-file para auditoria posterior).
+    """
+    nivel_console_num = getattr(logging, nivel.upper(), logging.INFO)
+    nivel_arquivo_num = getattr(logging, (nivel_arquivo or nivel).upper(), logging.INFO)
+    # O filtro do structlog/logger-raiz precisa ser o MAIS PERMISSIVO dos
+    # dois -- senao um evento que so' o arquivo queria (nivel mais baixo)
+    # seria descartado antes de chegar em QUALQUER handler. Cada Handler
+    # entao filtra de volta para o nivel que ele especificamente quer.
+    nivel_efetivo_num = min(nivel_console_num, nivel_arquivo_num)
 
     structlog.configure(
         processors=[
@@ -43,16 +57,17 @@ def configurar(nivel: str = "INFO", arquivo: Path | None = None) -> None:
             # cada Handler decide como renderizar (console x arquivo).
             structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
         ],
-        wrapper_class=structlog.make_filtering_bound_logger(nivel_num),
+        wrapper_class=structlog.make_filtering_bound_logger(nivel_efetivo_num),
         logger_factory=structlog.stdlib.LoggerFactory(),
         cache_logger_on_first_use=True,
     )
 
     root = logging.getLogger()
-    root.setLevel(nivel_num)
+    root.setLevel(nivel_efetivo_num)
     root.handlers.clear()  # configurar() pode ser chamado 2x (CLI + testes)
 
     console = logging.StreamHandler(sys.stdout)
+    console.setLevel(nivel_console_num)
     console.setFormatter(structlog.stdlib.ProcessorFormatter(
         processor=structlog.dev.ConsoleRenderer(colors=sys.stdout.isatty()),
         foreign_pre_chain=_PROCESSORS_COMUNS,
@@ -62,6 +77,7 @@ def configurar(nivel: str = "INFO", arquivo: Path | None = None) -> None:
     if arquivo is not None:
         arquivo.parent.mkdir(parents=True, exist_ok=True)
         handler = logging.FileHandler(arquivo, encoding="utf-8")
+        handler.setLevel(nivel_arquivo_num)
         handler.setFormatter(structlog.stdlib.ProcessorFormatter(
             processor=structlog.processors.JSONRenderer(),
             foreign_pre_chain=_PROCESSORS_COMUNS,

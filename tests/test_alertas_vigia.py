@@ -201,3 +201,62 @@ def test_log_destino_anuncia_caminho_absoluto_mesmo_se_passado_relativo(
         structlog.reset_defaults()
         _logging.getLogger().handlers[:] = handlers_antes
         _logging.getLogger().setLevel(nivel_antes)
+
+
+def test_nivel_arquivo_independente_do_console(tmp_path: Path) -> None:
+    """
+    Pedido real (2026-08-27, ea-replay-lote): console quieto (WARNING,
+    rodando 23 dias de uma vez) mas arquivo com detalhe completo (INFO)
+    para auditoria posterior. Sem isso, o filtro global descartaria o
+    INFO antes de chegar em QUALQUER handler, inclusive o arquivo.
+    """
+    import logging as _logging
+
+    import structlog
+
+    from profittape.logging_setup import configurar
+
+    handlers_antes = list(_logging.getLogger().handlers)
+    nivel_antes = _logging.getLogger().level
+    try:
+        arq = tmp_path / "log.jsonl"
+        configurar("WARNING", arq, nivel_arquivo="INFO")
+        log = structlog.get_logger("teste")
+        log.info("evento.info", chave="valor")   # NAO deveria ir pro console
+        log.warning("evento.warning")             # deveria ir pros dois
+
+        linhas = arq.read_text(encoding="utf-8").strip().splitlines()
+        eventos = [json.loads(linha)["event"] for linha in linhas]
+        # log.destino (sempre) + os dois eventos, INFO incluso no arquivo
+        assert "evento.info" in eventos
+        assert "evento.warning" in eventos
+    finally:
+        structlog.reset_defaults()
+        _logging.getLogger().handlers[:] = handlers_antes
+        _logging.getLogger().setLevel(nivel_antes)
+
+
+def test_sem_nivel_arquivo_comportamento_identico_ao_de_sempre(tmp_path: Path) -> None:
+    """Retrocompatibilidade: omitir nivel_arquivo tem que dar EXATAMENTE
+    o mesmo resultado de antes -- nenhum chamador existente muda."""
+    import logging as _logging
+
+    import structlog
+
+    from profittape.logging_setup import configurar
+
+    handlers_antes = list(_logging.getLogger().handlers)
+    nivel_antes = _logging.getLogger().level
+    try:
+        arq = tmp_path / "log.jsonl"
+        configurar("WARNING", arq)   # sem nivel_arquivo
+        log = structlog.get_logger("teste")
+        log.info("evento.info")      # deve ser FILTRADO, igual sempre foi
+
+        linhas = arq.read_text(encoding="utf-8").strip().splitlines()
+        eventos = [json.loads(linha)["event"] for linha in linhas]
+        assert "evento.info" not in eventos
+    finally:
+        structlog.reset_defaults()
+        _logging.getLogger().handlers[:] = handlers_antes
+        _logging.getLogger().setLevel(nivel_antes)
