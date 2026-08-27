@@ -331,23 +331,43 @@ class EAService:
 
         import pyarrow.dataset as ds
 
+        # Instrumentacao da fase de LEITURA (2026-08-27, achado real: um
+        # replay ficou 3+ horas com o log tendo SO' a primeira linha --
+        # ou seja, nem chegava a "ea.replay_iniciado", que so' aparece
+        # DEPOIS de ler+ordenar o parquet inteiro. O gargalo NAO estava no
+        # loop trade-a-trade (bancada: 5 milhoes de trades sinteticos
+        # processam em ~11s) -- estava ANTES dele, numa etapa sem
+        # visibilidade nenhuma. Cada passo agora e' cronometrado e logado
+        # separadamente, para a proxima tentativa apontar exatamente ONDE.
+        t_glob = _time.monotonic()
         arquivos = sorted(raiz_raw.glob("*.parquet"))
         if not arquivos:
             raise SystemExit(f"nenhum parquet em {raiz_raw}")
+        tamanho_total_mb = sum(a.stat().st_size for a in arquivos) / 1e6
+        log.info("ea.replay_arquivos_encontrados", n_arquivos=len(arquivos),
+                 tamanho_mb=round(tamanho_total_mb, 1),
+                 decorrido_s=round(_time.monotonic() - t_glob, 2))
 
-        # Projecao de colunas (2026-08-27): antes lia TODAS as colunas do
-        # parquet (symbol, exchange, trade_id, volume_financeiro, is_edit,
-        # ts_recv_ns...), desperdicando tempo/memoria com o que nunca e'
-        # usado -- so' as 6 abaixo entram em _TradeBruto.
         colunas = ["ts_ns", "price", "quantidade", "trade_type",
                   "agente_comprador", "agente_vendedor"]
+        t_leitura = _time.monotonic()
         tabela = ds.dataset(arquivos, format="parquet").to_table(columns=colunas)
+        log.info("ea.replay_leitura_concluida", linhas=tabela.num_rows,
+                 decorrido_s=round(_time.monotonic() - t_leitura, 2))
+
+        t_sort = _time.monotonic()
         tabela = tabela.sort_by("ts_ns")
+        log.info("ea.replay_sort_concluido",
+                 decorrido_s=round(_time.monotonic() - t_sort, 2))
+
         log.info("ea.replay_iniciado", arquivo=str(raiz_raw), linhas=tabela.num_rows,
                  dry_run=self.config.dry_run,
                  sinais=[s.feature for s in self.config.sinais])
 
+        t_pydict = _time.monotonic()
         cols = tabela.to_pydict()
+        log.info("ea.replay_pydict_concluido",
+                 decorrido_s=round(_time.monotonic() - t_pydict, 2))
         n = tabela.num_rows
         t0 = _time.monotonic()
         # Instrumentacao fina (2026-08-27, pedido real: um replay de dia
