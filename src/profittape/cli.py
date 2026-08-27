@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
+import structlog
 import typer
 
 from . import __version__
 from .config import Credenciais, RecorderConfig
 from .logging_setup import configurar
 
+log = structlog.get_logger(__name__)
 app = typer.Typer(add_completion=False, help="Gravador de tape e book da B3 (ProfitDLL).")
 
 
@@ -712,7 +715,20 @@ def ea_replay_lote(
 
     por_dia = []
     todas_operacoes: list[float] = []
-    for dia in dias:
+    t0_lote = time.monotonic()
+    for i, dia in enumerate(dias, 1):
+        # Visibilidade de progresso (2026-08-27, pedido real do operador):
+        # rodando dezenas de dias sem nenhum marcador claro de "dia X
+        # terminou, comecando dia Y", nao da' pra saber, olhando so' a
+        # tela ou so' o log, quantos ja passaram e quantos faltam --
+        # sobretudo se o operador nao estiver olhando o terminal no
+        # momento exato. log.info() (vai pro --log-file, sempre em INFO
+        # desde a v0.73) E typer.echo() (tela, sempre visivel) juntos --
+        # funciona tanto acompanhando ao vivo quanto via Get-Content -Wait
+        # depois. Boa pratica a repetir em qualquer processo longo futuro.
+        log.info("ea.replay_lote_dia_iniciando", dia=dia, numero=i, de=len(dias))
+        typer.echo(f"\n[{i}/{len(dias)}] {dia} — iniciando...")
+
         caminho = raiz_symbol / f"dt={dia}" / f"sym={ea_cfg.symbol}"
         svc = EAService(ea_cfg, ignorar_circuit_breaker=ignorar_circuit_breaker)
         svc.rodar_replay(caminho)
@@ -725,9 +741,20 @@ def ea_replay_lote(
             "bloqueado": svc.gestor.bloqueado,
         })
         todas_operacoes.extend(svc.gestor.historico_pnl)
-        typer.echo(f"  {dia}: pnl={por_dia[-1]['pnl_dia']:+.1f} pts  "
+
+        decorrido_s = time.monotonic() - t0_lote
+        media_por_dia_s = decorrido_s / i
+        eta_s = media_por_dia_s * (len(dias) - i)
+        log.info("ea.replay_lote_dia_concluido", dia=dia, numero=i, de=len(dias),
+                 pnl_dia=por_dia[-1]["pnl_dia"], operacoes=por_dia[-1]["n_operacoes"],
+                 bloqueado=por_dia[-1]["bloqueado"],
+                 decorrido_s=round(decorrido_s, 1), eta_s=round(eta_s, 1))
+        typer.echo(f"[{i}/{len(dias)}] {dia} concluido: "
+                   f"pnl={por_dia[-1]['pnl_dia']:+.1f} pts  "
                    f"operacoes={por_dia[-1]['n_operacoes']}  "
-                   f"bloqueado={por_dia[-1]['bloqueado']}")
+                   f"bloqueado={por_dia[-1]['bloqueado']}  "
+                   f"(decorrido={decorrido_s / 60:.1f}min  "
+                   f"restante~={eta_s / 60:.1f}min)")
 
     ganhos = [p for p in todas_operacoes if p > 0]
     perdas = [p for p in todas_operacoes if p <= 0]

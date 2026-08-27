@@ -59,7 +59,20 @@ def configurar(nivel: str = "INFO", arquivo: Path | None = None,
         ],
         wrapper_class=structlog.make_filtering_bound_logger(nivel_efetivo_num),
         logger_factory=structlog.stdlib.LoggerFactory(),
-        cache_logger_on_first_use=True,
+        # cache_logger_on_first_use=False (2026-08-27, causa raiz real de
+        # vazamento entre testes): com cache=True, o structlog vincula o
+        # logger de um modulo (ex.: `log = structlog.get_logger(__name__)`
+        # no topo de execucao.py) na PRIMEIRA vez que ele e' usado -- e
+        # `structlog.reset_defaults()` depois NAO invalida esse cache
+        # especifico por logger, so' a config global para loggers ainda
+        # nao resolvidos. Um teste que chama configurar() e outro que usa
+        # um logger de modulo pela primeira vez ficam vinculados um ao
+        # outro, mesmo com reset no meio -- exatamente o que quebrou
+        # test_execucao_dry_run_apenas_loga so' quando a suite inteira
+        # rodava, nunca isolado. Custo de performance de nao cachear e'
+        # irrelevante no volume de log deste projeto (milhares de linhas
+        # por pregao, nao milhoes por segundo).
+        cache_logger_on_first_use=False,
     )
 
     root = logging.getLogger()
