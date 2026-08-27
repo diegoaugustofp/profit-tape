@@ -491,3 +491,42 @@ profit-tape ea-replay-lote -c config/ea.yaml --ignorar-circuit-breaker
 ```
 
 3 testes novos (modo diagnostico, historico de pnl). 212 testes.
+
+## Analise de MAE — stop catastrofico e' seguro de cauda ou ja morde? (2026-08-27)
+
+Motivado por um dado do proprio operador: barra a barra (sem relacao com
+operacao), WINFUT tem p99 de 563 pts e 1.31% das barras isoladas ja
+superam os 500 pts do stop catastrofico -- bem mais apertado que o caso
+das acoes (20x de folga la', aqui so' 0.9x no p99).
+
+Isso NAO decide a pergunta certa: o numero que importa e' o MAE (Maximum
+Adverse Excursion) DENTRO da janela real de holding (h barras, contadas a
+partir de quando o sinal de fato dispara), nao o movimento de qualquer
+barra aleatoria do dia.
+
+IMPLEMENTADO: research/mae.py + comando `profit-tape mae-analise`.
+Reproduz a MESMA regra de entrada de ea/decisao.py (contrarian/momentum,
+extremo do threshold), sobre TODO o historico disponivel (nao gasta
+trial -- e' engenharia de risco, nao hipotese nova). Para cada trigger,
+mede:
+  - MAE_close: pior excursao usando CLOSE de cada barra da janela -- o
+    que GestorDeRisco.motivo_de_saida() de fato avalia HOJE (checagem so'
+    no fechamento de barra, nao intrabar continuo). Numero PRIMARIO.
+  - MAE_intrabar: pior excursao usando low/high -- limite teorico mais
+    severo, NAO monitorado pelo sistema atual. So' referencia.
+  - Quantas operacoes teriam batido o stop antes do horizonte natural, e
+    o efeito no P&L medio se o stop tivesse mesmo disparado nesses casos
+    (comparando pnl medio COM vs SEM o stop hipotetico).
+
+Purge estrutural identico a retornos.py: trigger perto do fim do dia sem
+janela completa e' descartado, nunca atravessa para o dia seguinte.
+
+USO:
+```
+profit-tape mae-analise --feature z_agf_3 --horizonte 3 \
+  --threshold-entrada 1.4 --direcao contrarian \
+  --stop-catastrofico-pontos 500
+```
+
+8 testes (valores conferidos a mao: compra, venda, purge de fim-de-dia,
+purge de fronteira entre dias, sem trigger). 235 testes.

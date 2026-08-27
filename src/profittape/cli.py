@@ -817,6 +817,53 @@ def ea_replay_lote(
 
 
 @app.command()
+def mae_analise(
+    symbol: str = typer.Option("WINFUT", "--symbol"),
+    features: Path = typer.Option(Path("data/features"), "--features"),
+    feature: str = typer.Option(..., "--feature", help="ex.: z_agf_3"),
+    horizonte: int = typer.Option(..., "--horizonte", help="mesmo h do sinal, ex.: 3"),
+    threshold_entrada: float = typer.Option(..., "--threshold-entrada"),
+    direcao: str = typer.Option("contrarian", "--direcao"),
+    stop_catastrofico_pontos: float = typer.Option(
+        500.0, "--stop-catastrofico-pontos",
+        help="Deve bater com RiscoConfig.stop_catastrofico_pontos do "
+             "ea.yaml (derivado de capital x risco_max_pct / valor_ponto)."),
+    saida: Path = typer.Option(Path("data/research"), "--saida"),
+) -> None:
+    """
+    MAE (Maximum Adverse Excursion) por operacao -- responde se o stop
+    catastrofico e' so' seguro de cauda (raramente tocado) ou ja esta
+    mordendo de verdade dentro da janela real de holding do sinal.
+
+    NAO consome trial: engenharia de risco sobre sinal JA' validado, mesmo
+    espirito de `quintis`, nao uma hipotese estatistica nova.
+    """
+    from .research.mae import analisar_mae
+
+    arquivo = features / f"sym={symbol.upper()}" / "features.parquet"
+    if not arquivo.exists():
+        raise SystemExit(f"nao achei {arquivo} — rode `profit-tape features` antes")
+
+    r = analisar_mae(arquivo, feature, horizonte, threshold_entrada, direcao,
+                     stop_catastrofico_pontos, saida)
+    typer.echo("=" * 62)
+    typer.echo(f"MAE — {feature}@h{horizonte}  stop={stop_catastrofico_pontos:.0f}pts  "
+               f"n={r['n_triggers']}")
+    typer.echo("=" * 62)
+    typer.echo(f"  MAE_close   media={r['mae_close_media']:.1f}  "
+               f"mediana={r['mae_close_mediana']:.1f}  p90={r['mae_close_p90']:.1f}  "
+               f"p99={r['mae_close_p99']:.1f}  max={r['mae_close_max']:.1f}")
+    typer.echo(f"  MAE_intrabar (teorico) p90={r['mae_intrabar_p90']:.1f}  "
+               f"p99={r['mae_intrabar_p99']:.1f}  max={r['mae_intrabar_max']:.1f}")
+    typer.echo(f"  teria batido o stop: {r['n_teria_batido_stop']}/{r['n_triggers']} "
+               f"({r['pct_teria_batido_stop']:.1%})")
+    typer.echo(f"  pnl medio SEM stop : {r['pnl_medio_sem_stop']:+.1f} pts")
+    typer.echo(f"  pnl medio COM stop hipotetico: "
+               f"{r['pnl_medio_com_stop_hipotetico']:+.1f} pts")
+    typer.echo(f"\nrelatorio: {r['relatorio']}")
+
+
+@app.command()
 def ea_contas(
     timeout: float = typer.Option(15.0, "--timeout"),
     log_level: str = typer.Option("INFO", "--log-level"),

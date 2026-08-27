@@ -1,0 +1,146 @@
+"""
+Testes de research/mae.py -- o calculo de MAE precisa ser exato, ele decide
+se o stop catastrofico e' seguro de cauda ou ja esta mordendo de verdade.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import pytest
+
+from profittape.research.mae import _sinal_de_entrada, analisar_mae
+
+
+def test_sinal_de_entrada_contrarian() -> None:
+    z = pd.Series([-2.0, -0.5, 0.0, 0.5, 2.0])
+    lado = _sinal_de_entrada(z, threshold=1.4, direcao="contrarian")
+    assert list(lado) == [1, 0, 0, 0, -1]   # extremo baixo compra, alto vende
+
+
+def test_sinal_de_entrada_momentum() -> None:
+    z = pd.Series([-2.0, 0.0, 2.0])
+    lado = _sinal_de_entrada(z, threshold=1.4, direcao="momentum")
+    assert list(lado) == [-1, 0, 1]   # invertido do contrarian
+
+
+def _df_basico() -> pd.DataFrame:
+    """Cenario calculado a mao: compra na barra 2 (close=100), h=3.
+    MAE_close esperado=5 (barra 3), MAE_intrabar esperado=10 (barra 3),
+    pnl_final_h esperado=+10 (barra 5, close=110)."""
+    return pd.DataFrame({
+        "dia": ["2026-01-01"] * 10,
+        "ts_close": np.arange(10) * 10**11,
+        "close":  [50, 60, 100, 95, 98, 110, 70, 71, 72, 73],
+        "high":   [51, 61, 101, 96, 99, 111, 71, 72, 73, 74],
+        "low":    [49, 59, 99,  90, 97, 105, 69, 70, 71, 72],
+        "z_agf_3": [0, 0, -1.5, 0, 0, 0, 0, 0, 0, 0],
+    })
+
+
+def test_mae_calculado_corretamente_compra(tmp_path: Path) -> None:
+    arq = tmp_path / "features.parquet"
+    _df_basico().to_parquet(arq, index=False)
+    r = analisar_mae(arq, "z_agf_3", horizonte=3, threshold_entrada=1.4,
+                     direcao="contrarian", stop_catastrofico_pontos=500,
+                     saida=tmp_path / "out")
+    tabela = r["tabela"]
+    assert len(tabela) == 1
+    assert tabela["lado"].iloc[0] == 1
+    assert tabela["mae_close"].iloc[0] == 5
+    assert tabela["mae_intrabar"].iloc[0] == 10
+    assert tabela["pnl_final_h"].iloc[0] == 10
+    assert not tabela["teria_batido_stop"].iloc[0]
+
+
+def test_mae_calculado_corretamente_venda(tmp_path: Path) -> None:
+    """Espelha o cenario de compra: venda na barra 2 (close=100), preco
+    SOBE (contra a posicao vendida) na barra 3 -> excursao positiva."""
+    df = pd.DataFrame({
+        "dia": ["2026-01-01"] * 10,
+        "ts_close": np.arange(10) * 10**11,
+        "close":  [50, 60, 100, 108, 102, 90, 70, 71, 72, 73],
+        "high":   [51, 61, 101, 112, 103, 91, 71, 72, 73, 74],
+        "low":    [49, 59, 99,  105, 101, 89, 69, 70, 71, 72],
+        "z_agf_3": [0, 0, 1.5, 0, 0, 0, 0, 0, 0, 0],   # extremo alto -> vende
+    })
+    arq = tmp_path / "features.parquet"
+    df.to_parquet(arq, index=False)
+    r = analisar_mae(arq, "z_agf_3", horizonte=3, threshold_entrada=1.4,
+                     direcao="contrarian", stop_catastrofico_pontos=500,
+                     saida=tmp_path / "out")
+    tabela = r["tabela"]
+    assert tabela["lado"].iloc[0] == -1
+    # excursao contra vendido = (entrada - preco) * -1 = preco - entrada
+    assert tabela["mae_close"].iloc[0] == 8     # barra3: 108-100
+    assert tabela["mae_intrabar"].iloc[0] == 12  # barra3 high=112: 112-100
+    assert tabela["pnl_final_h"].iloc[0] == 10   # (90-100)*-1 = 10
+
+
+def test_trigger_no_fim_do_dia_sem_janela_completa_e_descartado(tmp_path: Path) -> None:
+    """Trigger na PENULTIMA barra do dia (h=3) nao tem 3 barras de futuro
+    dentro do mesmo dia -- purge estrutural, mesma regra de retornos.py."""
+    df = pd.DataFrame({
+        "dia": ["2026-01-01"] * 5,
+        "ts_close": np.arange(5) * 10**11,
+        "close": [50, 60, 70, 80, 90],
+        "high": [51, 61, 71, 81, 91],
+        "low": [49, 59, 69, 79, 89],
+        "z_agf_3": [0, 0, 0, -1.5, 0],   # trigger na barra 3, so' 1 barra depois
+    })
+    arq = tmp_path / "features.parquet"
+    df.to_parquet(arq, index=False)
+    with pytest.raises(SystemExit, match="insuficiente"):
+        analisar_mae(arq, "z_agf_3", horizonte=3, threshold_entrada=1.4,
+                    direcao="contrarian", stop_catastrofico_pontos=500,
+                    saida=tmp_path / "out")
+
+
+def test_trigger_nao_atravessa_para_o_dia_seguinte(tmp_path: Path) -> None:
+    """Trigger no fim do dia 1 nao pode usar barras do dia 2 como futuro,
+    mesmo que existam logo em seguida no dataframe."""
+    df = pd.DataFrame({
+        "dia": ["2026-01-01"] * 4 + ["2026-01-02"] * 4,
+        "ts_close": np.arange(8) * 10**11,
+        "close": [50, 60, 70, 80,   200, 201, 202, 203],
+        "high":  [51, 61, 71, 81,   201, 202, 203, 204],
+        "low":   [49, 59, 69, 79,   199, 200, 201, 202],
+        "z_agf_3": [0, 0, 0, -1.5,   0, 0, 0, 0],   # trigger na ultima barra do dia 1
+    })
+    arq = tmp_path / "features.parquet"
+    df.to_parquet(arq, index=False)
+    with pytest.raises(SystemExit, match="insuficiente"):
+        analisar_mae(arq, "z_agf_3", horizonte=3, threshold_entrada=1.4,
+                    direcao="contrarian", stop_catastrofico_pontos=500,
+                    saida=tmp_path / "out")
+
+
+def test_nenhum_trigger_falha_com_mensagem_clara(tmp_path: Path) -> None:
+    df = pd.DataFrame({
+        "dia": ["2026-01-01"] * 5,
+        "ts_close": np.arange(5) * 10**11,
+        "close": [50, 60, 70, 80, 90],
+        "high": [51, 61, 71, 81, 91],
+        "low": [49, 59, 69, 79, 89],
+        "z_agf_3": [0.1, 0.2, -0.3, 0.1, 0.0],   # nunca cruza o threshold
+    })
+    arq = tmp_path / "features.parquet"
+    df.to_parquet(arq, index=False)
+    with pytest.raises(SystemExit, match="nenhum trigger"):
+        analisar_mae(arq, "z_agf_3", horizonte=3, threshold_entrada=1.4,
+                    direcao="contrarian", stop_catastrofico_pontos=500,
+                    saida=tmp_path / "out")
+
+
+def test_relatorio_markdown_e_gerado(tmp_path: Path) -> None:
+    arq = tmp_path / "features.parquet"
+    _df_basico().to_parquet(arq, index=False)
+    r = analisar_mae(arq, "z_agf_3", horizonte=3, threshold_entrada=1.4,
+                     direcao="contrarian", stop_catastrofico_pontos=500,
+                     saida=tmp_path / "out")
+    conteudo = Path(r["relatorio"]).read_text(encoding="utf-8")
+    assert "MAE_close" in conteudo
+    assert "MAE_intrabar" in conteudo
+    assert "stop catastrofico" in conteudo
