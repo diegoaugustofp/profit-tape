@@ -42,7 +42,49 @@ conexao da DLL. RoteamentoConfig.conta_para() e' o unico ponto de decisao
 entre as duas: default sempre demo, conta real exige
 EAConfig.usar_conta_real=True explicito.
 
-## Pergunta RESOLVIDA (2026-08-26) — teste de concorrencia real
+## CORRIGIDO (2026-08-27) — a conclusao anterior estava ERRADA por interpretacao
+
+**A secao abaixo ("Pergunta RESOLVIDA") concluiu errado.** Mantida
+riscada para nao apagar o historico do raciocinio, mas NAO USAR.
+
+O QUE MUDOU: teste de 2026-08-27 (00:10-00:11 local) rodou o MESMO
+experimento, mas com o `ea-contas` conectando de VERDADE (nao mais
+falhando de imediato como ontem) -- e revelou o padrao real:
+
+  00:10:53 -- record (Terminal 1) ATIVO e saudavel (heartbeat normal).
+             ea-contas (Terminal 2) tenta conectar -> FALHA imediata
+             (-2147483647), IDENTICO ao padrao de ontem.
+  00:11:04 -- operador da' Ctrl+C no record. Desconecta limpo.
+  00:11:09 -- ea-contas roda de novo, AGORA com o record ja' desconectado
+             -> CONECTA PERFEITAMENTE, lista a conta.
+
+CONCLUSAO CORRIGIDA: as duas conexoes NAO coexistem -- mas de um jeito
+especifico que a leitura de ontem confundiu. A conexao JA ESTABELECIDA
+(record) nao e' derrubada; e' a SEGUNDA tentativa de conexao que FALHA
+em se estabelecer enquanto a primeira estiver ativa. "O record nao foi
+afetado" (verdade, confirmada de novo) NAO significa "as duas coexistem"
+(falso) -- sao conclusoes diferentes, e o registro de ontem apresentou a
+primeira como se fosse a segunda. Erro de interpretacao da evidencia,
+nao de dado incorreto.
+
+IMPLICACAO CRITICA PARA O FORWARD-TEST: o teste de ontem/hoje foi
+MarketLogin (record) + LoginCompleto (ea-contas). O plano de amanha usa
+MarketLogin (record) + MarketLogin (ea em dry_run, mesma funcao dos
+dois lados, corrigido em service.py). NAO TESTADO ainda se duas conexoes
+MarketLogin tambem colidem do mesmo jeito -- se a trava for "uma sessao
+por chave de ativacao" (nao especifica de MarketLogin vs LoginCompleto),
+o forward-test de amanha tambem falharia ao tentar conectar enquanto o
+record (agendado via schtasks) ja estiver rodando.
+
+TESTE PENDENTE, urgente antes de confiar no plano de amanha: dois
+`record` simultaneos (MarketLogin + MarketLogin), mesma credencial,
+pastas de dado diferentes -- ver se o SEGUNDO consegue conectar com o
+PRIMEIRO ja ativo. Se falhar do mesmo jeito, o forward-test do EA
+precisa rodar DENTRO do mesmo processo/conexao do record (consumindo os
+trades que ele ja' esta capturando), nao como processo separado com
+conexao propria -- mudanca de arquitetura real, nao cosmetica.
+
+## Pergunta RESOLVIDA (2026-08-26) — teste de concorrencia real ~~[SUPERADO, ver acima]~~
 
 **Resultado: as duas conexoes COEXISTEM sem conflito.**
 
