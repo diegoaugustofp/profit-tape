@@ -40,6 +40,7 @@ class ProfitClient:
         bus: EventBus,
         tz_offset_horas: int = -3,
         on_state: Callable[[int, int], None] | None = None,
+        on_trade_extra: Callable[[Trade], None] | None = None,
         dll: Any | None = None,
     ) -> None:
         self.dll_path = dll_path
@@ -49,6 +50,17 @@ class ProfitClient:
         self.bus = bus
         self.tz = tz_offset_horas
         self._on_state = on_state
+        # Hook opcional, ADITIVO (2026-08-27, decisao de arquitetura: EA
+        # roda DENTRO do processo do record, mesma conexao -- licenciamento
+        # da Nelogica so' permite UMA chave de ativacao, validado com o
+        # time comercial deles). None por padrao -- callers existentes
+        # (record de producao ha' semanas) tem ZERO mudanca de
+        # comportamento. Chamado DEPOIS de publish() no hot path, nunca
+        # antes -- a captura (bus.publish) e' sempre a prioridade; se este
+        # hook falhar ou travar, NUNCA pode atrasar ou perder um evento de
+        # captura. Exception aqui e' sempre engolida e logada, nunca
+        # propaga de volta pra fronteira ctypes.
+        self._on_trade_extra = on_trade_extra
         self._dll = dll  # injetavel: permite FakeProfitDLL em teste
 
         self.conectado_market = False
@@ -212,25 +224,37 @@ class ProfitClient:
             if self._on_state is not None:
                 self._on_state(tipo, valor)
 
+        on_trade_extra = self._on_trade_extra
+
         @b.TNewTradeCallback
         def _trade(ativo, data, numero, preco, vol, qtd, comp, vend, tipo, edit) -> None:
-            publish(
-                Stream.TRADE,
-                Trade(
-                    ts_ns=parse_ts_ns(data, tz),
-                    ts_recv_ns=time.time_ns(),
-                    symbol=ativo.ticker or "",
-                    exchange=ativo.bolsa or "",
-                    trade_id=int(numero),
-                    price=float(preco),
-                    volume_financeiro=float(vol),
-                    quantidade=int(qtd),
-                    agente_comprador=int(comp),
-                    agente_vendedor=int(vend),
-                    trade_type=int(tipo),
-                    is_edit=edit != b"\x00",
-                ),
+            evento = Trade(
+                ts_ns=parse_ts_ns(data, tz),
+                ts_recv_ns=time.time_ns(),
+                symbol=ativo.ticker or "",
+                exchange=ativo.bolsa or "",
+                trade_id=int(numero),
+                price=float(preco),
+                volume_financeiro=float(vol),
+                quantidade=int(qtd),
+                agente_comprador=int(comp),
+                agente_vendedor=int(vend),
+                trade_type=int(tipo),
+                is_edit=edit != b"\x00",
             )
+            publish(Stream.TRADE, evento)
+            if on_trade_extra is not None:
+                # A CAPTURA (linha acima) sempre vem primeiro e nunca espera
+                # por isto. Qualquer excecao aqui e' silenciosamente
+                # engolida -- propagar atravessaria a fronteira ctypes
+                # (comportamento indefinido, tipicamente crash do processo
+                # inteiro) so' porque o EA (secundario) teve um bug. Perder
+                # o dado do EA para 1 trade e' aceitavel; perder a captura
+                # do dia inteiro por causa do EA nao e'.
+                try:
+                    on_trade_extra(evento)
+                except Exception:
+                    log.exception("profitdll.on_trade_extra_falhou")
 
         FULL_BOOK = 4   # BookAction.FULL_BOOK — ver domain/enums.py
 

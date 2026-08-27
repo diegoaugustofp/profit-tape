@@ -343,3 +343,69 @@ def test_contrato_exit_code_para_o_nssm(tmp_raiz: Path) -> None:
                            dll_injetada=_DLLQuebrada())
     codigo2 = svc2.run()
     assert codigo2 == 1, "excecao nao tratada deve devolver 1 (NSSM reinicia)"
+
+
+def test_on_trade_extra_falho_nao_derruba_a_captura(tmp_raiz: Path) -> None:
+    """
+    Garantia de seguranca do hook opcional (2026-08-27, decisao de
+    arquitetura: EA roda DENTRO do processo do record, mesma conexao --
+    licenciamento Nelogica so' permite UMA chave de ativacao, validado
+    com o time comercial). Uma excecao no hook secundario (EA) NUNCA pode
+    impedir a captura (prioridade absoluta) de publicar o evento na fila
+    principal -- e nunca pode propagar de volta pra fronteira ctypes
+    (comportamento indefinido, tipicamente derruba o processo inteiro).
+    """
+    from profittape.pipeline.bus import EventBus
+    from profittape.profitdll.client import ProfitClient
+    from profittape.profitdll.types import TAssetIDRec
+
+    bus = EventBus()
+    fake = FakeProfitDLL(eventos_por_ativo=1)
+    chamadas_do_hook = []
+
+    def _hook_que_quebra(evento) -> None:
+        chamadas_do_hook.append(evento)
+        raise RuntimeError("bug proposital no EA, simulando falha real")
+
+    c = ProfitClient(dll_path="x", activation_key="k", user="u", password="p",
+                     bus=bus, dll=fake, on_trade_extra=_hook_que_quebra)
+    c.connect(timeout_s=5)
+    try:
+        ativo = TAssetIDRec("WINFUT", "F", 0)
+        # Nao pode levantar aqui -- se levantar, o hook propagou, que e'
+        # exatamente o que a protecao deveria impedir.
+        c._cb["trade"](ativo, "27/08/2026 10:00:00.000", 1, 140000.0,
+                       0.0, 5, 3, 85, 2, b"\x00")
+        c._cb["trade"](ativo, "27/08/2026 10:00:01.000", 2, 140005.0,
+                       0.0, 3, 85, 3, 2, b"\x00")
+    finally:
+        c.disconnect()
+
+    # A CAPTURA continuou normal para os DOIS trades, apesar do hook
+    # quebrar nos dois -- prioridade absoluta preservada.
+    assert bus.stats().total_recebido == 2
+    assert bus.stats().total_descartado == 0
+    # O hook FOI chamado (nao foi silenciosamente pulado) -- so' a
+    # excecao dele que foi engolida, nao a chamada em si.
+    assert len(chamadas_do_hook) == 2
+
+
+def test_sem_on_trade_extra_comportamento_identico_a_sempre(tmp_raiz: Path) -> None:
+    """Retrocompatibilidade explicita: on_trade_extra=None (default,
+    todo caller de producao ate agora) nao muda NADA do comportamento."""
+    from profittape.pipeline.bus import EventBus
+    from profittape.profitdll.client import ProfitClient
+    from profittape.profitdll.types import TAssetIDRec
+
+    bus = EventBus()
+    fake = FakeProfitDLL(eventos_por_ativo=1)
+    c = ProfitClient(dll_path="x", activation_key="k", user="u", password="p",
+                     bus=bus, dll=fake)   # on_trade_extra omitido -- default None
+    c.connect(timeout_s=5)
+    try:
+        ativo = TAssetIDRec("WINFUT", "F", 0)
+        c._cb["trade"](ativo, "27/08/2026 10:00:00.000", 1, 140000.0,
+                       0.0, 5, 3, 85, 2, b"\x00")
+    finally:
+        c.disconnect()
+    assert bus.stats().total_recebido == 1

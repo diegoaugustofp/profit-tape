@@ -221,6 +221,66 @@ que o research mediu (sem posicoes sobrepostas).
 6. So' entao considerar mais sinais alem de z_agf_3/z_agf_4090 -- e so'
    apos passarem pelo MESMO funil (IC -> DSR -> quintis -> significancia).
 
+## DECISAO DE ARQUITETURA DE LONGO PRAZO: EA integrado ao processo do record (2026-08-27)
+
+Decisao **fechada**, nao mais "duas rotas em aberto": o EA vai rodar
+DENTRO do mesmo processo/conexao do `record`, nao como processo separado
+com conexao propria.
+
+### Por que — fato comercial, nao preferencia tecnica
+
+Validado com o time comercial da Nelogica hoje: **o contrato e' de UMA
+UNICA chave de ativacao**. Uma segunda chave para o EA exigiria pagar uma
+segunda licenca -- opcao descartada. Isso fecha definitivamente a
+pergunta que ficou em aberto em 2026-08-27 mais cedo ("segunda chave OU
+integrar no processo do record") a favor da segunda opcao, por motivo
+contratual, nao de engenharia.
+
+### Design da integracao (FUNDACAO implementada, integracao completa
+### ainda pendente)
+
+O `EventBus` (pipeline/bus.py) e' fila de UM consumidor -- dois
+consumidores nela competiriam pelos mesmos eventos, nao veriam cada um a
+copia inteira. Por isso a integracao NAO reusa a fila do writer: usa um
+**hook opcional e aditivo** no callback de trade do ProfitClient.
+
+**Implementado (2026-08-27)**:
+- `ProfitClient.__init__` ganhou `on_trade_extra: Callable[[Trade], None]
+  | None = None` -- mesmo padrao ja usado por `on_state`. `None` por
+  padrao: TODO caller de producao existente (o `record` rodando ha'
+  semanas) tem ZERO mudanca de comportamento.
+- O callback de trade chama `on_trade_extra(evento)` DEPOIS de
+  `publish()` (a captura sempre vem primeiro, nunca espera pelo hook) e
+  DENTRO de um try/except que **engole qualquer excecao** -- propagar
+  atravessaria a fronteira ctypes (comportamento indefinido, tipicamente
+  derruba o processo INTEIRO por causa de um bug no EA, secundario).
+  Testado explicitamente: `test_on_trade_extra_falho_nao_derruba_a_captura`
+  prova que 2 trades sao publicados normalmente mesmo com o hook
+  levantando excecao nos dois.
+- `test_sem_on_trade_extra_comportamento_identico_a_sempre` prova
+  retrocompatibilidade total.
+
+**AINDA NAO implementado** (proximos passos, nesta ordem):
+1. Um `EABridge` (fila PROPRIA, independente do EventBus do writer,
+   mesmo filosofia de "perda contabilizada > perda silenciosa" -- se
+   encher, descarta e conta, nunca bloqueia o hot path) + uma thread
+   consumidora que alimenta `EAService.processar_trade_bruto()` --
+   reusa sinal.py/decisao.py/risco.py sem modificacao nenhuma, ja'
+   testados hoje.
+2. Comando `record` ganha parametro opcional (ex.: `--ea-config`); se
+   fornecido, constroi o `EABridge`+`EAService` e passa
+   `on_trade_extra=bridge.publicar` para o `ProfitClient`. Sem o
+   parametro, comportamento identico a hoje (default None em toda a
+   cadeia).
+3. `dry_run=True` sempre nesta fase -- SendOrder real usando a MESMA
+   conexao do record (ao inves de MarketLogin) e' uma decisao futura
+   separada, que exige DLLInitializeLogin no lugar de
+   DLLInitializeMarketLogin -- reabre a pergunta de licenciamento para
+   roteamento de ordem de verdade (nao coberta por este registro, so'
+   pela construcao de sinal em dry_run).
+4. Encerramento: `record` chama `ea_service.encerrar_dia()` no shutdown,
+   mesma disciplina de sempre (nunca carregar posicao overnight).
+
 ## Zeragem automatica da XP — pesquisa e decisao de horario (2026-08-26)
 
 Pergunta do operador: quando a corretora zera automaticamente posicoes de
