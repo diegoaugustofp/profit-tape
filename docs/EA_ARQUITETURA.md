@@ -453,3 +453,41 @@ habilitada pela XP) antes disso de qualquer forma.
 
 209 testes (2 novos: rodar_replay com parquet real + erro de parquet
 ausente).
+
+## ea-replay-lote + modo diagnostico do circuit breaker (2026-08-27)
+
+Pedido do operador apos o primeiro replay real (2026-08-26: -578 pts,
+3 perdas seguidas, bloqueado): um dia isolado tem amostra pequena
+demais para julgar (o proprio quintil do research tinha ~43% de
+acerto -- 3 perdas seguidas no primeiro dia testado tem probabilidade
+nada desprezivel so' por variancia). Observacao pontual do operador
+sobre o dado daquele dia: uma perda de -336 contra ganhos bem menores
+e' o OPOSTO da expectativa matematica que a gestao de risco busca
+(ganhar significativamente mais do que se perde) -- precisa medir a
+DISTRIBUICAO por operacao, nao so' o total do dia, para saber se isso
+e' variancia normal ou desvio real.
+
+IMPLEMENTADO:
+- GestorDeRisco.historico_pnl: lista do P&L liquido de CADA operacao
+  fechada (nao so' o total acumulado do dia).
+- GestorDeRisco(ignorar_circuit_breaker=True): modo SO' DE ANALISE --
+  nao interrompe apos 3 perdas seguidas, para ver o dia inteiro.
+  `bloqueado` continua sendo CALCULADO normalmente (sabe quando teria
+  disparado em producao de verdade), so' nao impede pode_abrir().
+  NUNCA vem de config/ea.yaml -- so' flag explicita de ferramenta de
+  diagnostico, para nao vazar para producao por acidente.
+- Comando `profit-tape ea-replay-lote`: roda TODOS os dias ja
+  capturados (uma instancia NOVA de EAService por dia -- circuit
+  breaker/posicao reiniciam a cada dia, igual produção de verdade),
+  agrega taxa de acerto, ganho medio, perda media, maior ganho/perda,
+  e a RAZAO ganho/perda medio com rotulo FAVORAVEL/DESFAVORAVEL
+  explicito -- responde diretamente a pergunta do operador sobre
+  assimetria. Relatorio salvo em data/research/ea_replay_lote_*.md.
+
+USO:
+```
+profit-tape ea-replay-lote -c config/ea.yaml
+profit-tape ea-replay-lote -c config/ea.yaml --ignorar-circuit-breaker
+```
+
+3 testes novos (modo diagnostico, historico de pnl). 212 testes.

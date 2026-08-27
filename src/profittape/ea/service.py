@@ -72,7 +72,8 @@ class EAService:
     """
 
     def __init__(self, config: EAConfig, roteamento: RoteamentoConfig | None = None,
-                executor: ExecutorDeOrdens | None = None) -> None:
+                executor: ExecutorDeOrdens | None = None,
+                ignorar_circuit_breaker: bool = False) -> None:
         if not config.dry_run and executor is None:
             raise RuntimeError(
                 "dry_run=False exige um ExecutorDeOrdens construido "
@@ -84,7 +85,8 @@ class EAService:
         self.construtor = ConstrutorDeSinalAoVivo(
             config.volume_barra, config.janela_z, agentes)
         self.stats = EstatisticasEA()
-        self.gestor = GestorDeRisco(config.risco, config.custo_pontos_estimado)
+        self.gestor = GestorDeRisco(config.risco, config.custo_pontos_estimado,
+                                    ignorar_circuit_breaker=ignorar_circuit_breaker)
         self._ultimo_close: float | None = None
 
     # ------------------------------------------------------------ nucleo

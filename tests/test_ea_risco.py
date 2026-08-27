@@ -144,3 +144,30 @@ def test_service_bloqueia_entradas_apos_circuit_breaker() -> None:
         decisoes = svc.processar_trade_bruto(_trade(i, comp=3))
         assert all(d.acao.value not in ("comprar", "vender") for d in decisoes)
     assert svc.stats.posicao_simulada == 0
+
+
+def test_modo_diagnostico_ignora_circuit_breaker_mas_continua_calculando() -> None:
+    """
+    Pedido do operador (2026-08-27): entender o comportamento do dia
+    INTEIRO em analise, sem o circuit breaker cortar cedo. 'bloqueado'
+    continua sendo CALCULADO normalmente (para saber quando teria
+    disparado em producao de verdade) -- so' nao impede nova entrada.
+    """
+    g = GestorDeRisco(RiscoConfig(), custo_pontos=_CUSTO,
+                      ignorar_circuit_breaker=True)
+    for i in range(6):   # 6 perdas seguidas -- bem alem do limiar de 3
+        assert g.pode_abrir(), f"nao deveria bloquear em modo diagnostico ({i})"
+        g.registrar_abertura(+1, 140000.0, i * 10, 3)
+        g.registrar_fechamento(140000.0)   # perda (custo > 0, bruto = 0)
+    assert g.bloqueado   # calculado normalmente
+    assert g.perdas_consecutivas == 6   # nao trava em 3, continua contando
+    assert len(g.historico_pnl) == 6
+
+
+def test_historico_pnl_registra_cada_operacao() -> None:
+    g = _gestor()
+    valores_brutos = [10.0, -5.0, 20.0]
+    for i, bruto in enumerate(valores_brutos):
+        g.registrar_abertura(+1, 140000.0, i * 10, 3)
+        g.registrar_fechamento(140000.0 + bruto)
+    assert g.historico_pnl == pytest.approx([b - _CUSTO for b in valores_brutos])

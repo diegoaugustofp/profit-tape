@@ -643,6 +643,130 @@ def ea_replay(
 
 
 @app.command()
+def ea_replay_lote(
+    config: Path = typer.Option(Path("config/ea.yaml"), "-c", "--config"),
+    raiz_raw: Path = typer.Option(Path("data/raw"), "--raiz-raw"),
+    ignorar_circuit_breaker: bool = typer.Option(
+        False, "--ignorar-circuit-breaker",
+        help="SO' PARA ANALISE: nao interrompe apos 3 perdas seguidas, "
+             "para ver o comportamento do dia inteiro. NUNCA usar isso "
+             "como configuracao de producao -- e' flag explicita de "
+             "diagnostico, nao vem do ea.yaml."),
+    saida: Path = typer.Option(Path("data/research"), "--saida"),
+    log_level: str = typer.Option("WARNING", "--log-level",
+                                  help="WARNING p/ nao afogar o console "
+                                       "com o log de cada barra de cada dia."),
+) -> None:
+    """
+    Roda ea-replay em TODOS os dias ja' capturados (uma instancia NOVA de
+    EAService por dia -- circuit breaker e posicao reiniciam a cada dia,
+    igual rodaria em producao de verdade), agrega o resultado.
+
+    Existe para responder a pergunta certa: um dia isolado tem amostra
+    pequena demais para julgar (o proprio quintil do research tinha so'
+    ~43% de acerto -- 3 perdas seguidas logo no primeiro dia testado tem
+    probabilidade nada desprezivel so' por variancia). O lote da' a
+    distribuicao completa por OPERACAO (nao so' o total por dia) -- e'
+    isso que decide se a assimetria ganho/perda bate com a expectativa
+    matematica validada no research, ou se alguma coisa diverge.
+    """
+    import statistics as stats
+
+    from .ea.config import EAConfig
+    from .ea.service import EAService
+
+    configurar(log_level, None)
+    ea_cfg = EAConfig.from_yaml(config)
+    raiz_symbol = raiz_raw / "trade"
+    dias = sorted(p.name.removeprefix("dt=") for p in raiz_symbol.glob("dt=*")
+                 if (p / f"sym={ea_cfg.symbol}").exists())
+    if not dias:
+        raise SystemExit(f"nenhum dia encontrado em {raiz_symbol} para "
+                         f"symbol={ea_cfg.symbol}")
+
+    typer.echo(f"EA replay em lote: {ea_cfg.symbol}, {len(dias)} dia(s), "
+               f"ignorar_circuit_breaker={ignorar_circuit_breaker}")
+
+    por_dia = []
+    todas_operacoes: list[float] = []
+    for dia in dias:
+        caminho = raiz_symbol / f"dt={dia}" / f"sym={ea_cfg.symbol}"
+        svc = EAService(ea_cfg, ignorar_circuit_breaker=ignorar_circuit_breaker)
+        svc.rodar_replay(caminho)
+        por_dia.append({
+            "dia": dia, "trades": svc.stats.trades, "barras": svc.stats.barras,
+            "decisoes": dict(svc.stats.decisoes),
+            "pnl_dia": round(svc.gestor.pnl_dia_pontos, 1),
+            "n_operacoes": len(svc.gestor.historico_pnl),
+            "perdas_seguidas_final": svc.gestor.perdas_consecutivas,
+            "bloqueado": svc.gestor.bloqueado,
+        })
+        todas_operacoes.extend(svc.gestor.historico_pnl)
+        typer.echo(f"  {dia}: pnl={por_dia[-1]['pnl_dia']:+.1f} pts  "
+                   f"operacoes={por_dia[-1]['n_operacoes']}  "
+                   f"bloqueado={por_dia[-1]['bloqueado']}")
+
+    ganhos = [p for p in todas_operacoes if p > 0]
+    perdas = [p for p in todas_operacoes if p <= 0]
+    pnl_total = sum(todas_operacoes)
+    dias_bloqueados = sum(1 for d in por_dia if d["bloqueado"])
+
+    typer.echo("\n" + "=" * 62)
+    typer.echo("RESUMO DO LOTE")
+    typer.echo("=" * 62)
+    typer.echo(f"  dias                 : {len(dias)}")
+    typer.echo(f"  operacoes totais     : {len(todas_operacoes)}")
+    typer.echo(f"  pnl total (pts)      : {pnl_total:+.1f}")
+    typer.echo(f"  pnl medio/operacao   : {pnl_total / len(todas_operacoes):+.2f}"
+               if todas_operacoes else "  pnl medio/operacao   : n/a")
+    typer.echo(f"  taxa de acerto       : {len(ganhos) / len(todas_operacoes):.1%}"
+               if todas_operacoes else "  taxa de acerto       : n/a")
+    if ganhos:
+        typer.echo(f"  ganho medio          : {stats.mean(ganhos):+.1f}")
+    else:
+        typer.echo("  ganho medio          : n/a")
+    if perdas:
+        typer.echo(f"  perda media          : {stats.mean(perdas):+.1f}")
+    else:
+        typer.echo("  perda media          : n/a")
+    typer.echo(f"  MAIOR ganho          : {max(todas_operacoes):+.1f}" if todas_operacoes else "")
+    typer.echo(f"  MAIOR perda          : {min(todas_operacoes):+.1f}" if todas_operacoes else "")
+    if ganhos and perdas:
+        razao = abs(stats.mean(ganhos) / stats.mean(perdas))
+        rotulo = "FAVORAVEL" if razao > 1 else "DESFAVORAVEL — oposto da expectativa buscada"
+        typer.echo(f"  razao ganho/perda medio: {razao:.2f}  ({rotulo})")
+    typer.echo(f"  dias com circuit breaker disparado: {dias_bloqueados}/{len(dias)}")
+
+    saida.mkdir(parents=True, exist_ok=True)
+    from datetime import UTC, datetime
+    arq = saida / f"ea_replay_lote_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.md"
+    linhas = [
+        "# EA replay em lote\n",
+        f"- symbol: {ea_cfg.symbol}",
+        f"- dias: {len(dias)} ({dias[0]} a {dias[-1]})",
+        f"- ignorar_circuit_breaker: {ignorar_circuit_breaker}",
+        f"- operacoes totais: {len(todas_operacoes)}",
+        f"- pnl total: {pnl_total:+.1f} pts",
+        f"- taxa de acerto: {len(ganhos) / len(todas_operacoes):.1%}" if todas_operacoes else "",
+        f"- ganho medio: {stats.mean(ganhos):+.1f}" if ganhos else "",
+        f"- perda media: {stats.mean(perdas):+.1f}" if perdas else "",
+        f"- MAIOR ganho: {max(todas_operacoes):+.1f}" if todas_operacoes else "",
+        f"- MAIOR perda: {min(todas_operacoes):+.1f}" if todas_operacoes else "",
+        f"- dias com circuit breaker disparado: {dias_bloqueados}/{len(dias)}",
+        "\n## Por dia\n",
+        "| dia | pnl | operacoes | perdas seguidas (final) | bloqueado |",
+        "|---|---|---|---|---|",
+    ]
+    for d in por_dia:
+        linhas.append(f"| {d['dia']} | {d['pnl_dia']:+.1f} | {d['n_operacoes']} | "
+                      f"{d['perdas_seguidas_final']} | {d['bloqueado']} |")
+    linhas.append("\n## Todas as operacoes (pnl liquido, pontos)\n")
+    linhas.append(", ".join(f"{p:+.1f}" for p in todas_operacoes))
+    arq.write_text("\n".join(linhas), encoding="utf-8")
+    typer.echo(f"\nrelatorio: {arq}")
+
+
+@app.command()
 def ea_contas(
     timeout: float = typer.Option(15.0, "--timeout"),
     log_level: str = typer.Option("INFO", "--log-level"),

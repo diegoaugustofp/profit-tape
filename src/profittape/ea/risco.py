@@ -48,7 +48,8 @@ class GestorDeRisco:
     posicao (motivo_de_saida); registra abertura e fechamento aqui.
     """
 
-    def __init__(self, config: RiscoConfig, custo_pontos: float) -> None:
+    def __init__(self, config: RiscoConfig, custo_pontos: float,
+                ignorar_circuit_breaker: bool = False) -> None:
         if config.capital <= 0 or config.risco_max_pct <= 0:
             raise ValueError("capital e risco_max_pct precisam ser positivos")
         self.config = config
@@ -58,6 +59,19 @@ class GestorDeRisco:
         self.bloqueado = False
         self.pnl_dia_pontos = 0.0
         self.operacoes_fechadas = 0
+        # SO' PARA ANALISE (2026-08-27): permite ver o comportamento do dia
+        # INTEIRO sem o circuit breaker interromper cedo -- nunca deve vir
+        # de config/ea.yaml versionado, so' de ferramenta de diagnostico
+        # (ea-replay-lote --ignorar-circuit-breaker). bloqueado continua
+        # sendo CALCULADO normalmente (para saber quando teria disparado em
+        # producao), so' nao interrompe pode_abrir().
+        self.ignorar_circuit_breaker = ignorar_circuit_breaker
+        # Historico de P&L LIQUIDO por operacao fechada -- para analise de
+        # distribuicao (media, pior perda, melhor ganho), nao so' o total
+        # do dia. Pedido real do operador: "-336 contra outras bem menores
+        # e' o oposto do que a expectativa matematica busca" -- precisa da
+        # distribuicao, nao so' da soma, para avaliar isso direito.
+        self.historico_pnl: list[float] = []
 
     # ------------------------------------------------------------- estado
     def em_posicao(self) -> bool:
@@ -65,7 +79,12 @@ class GestorDeRisco:
 
     def pode_abrir(self) -> bool:
         """Circuit breaker: False depois de max_perdas_consecutivas perdas
-        liquidas seguidas. Nao ha' desbloqueio no mesmo dia, de proposito."""
+        liquidas seguidas. Nao ha' desbloqueio no mesmo dia, de proposito.
+        Em modo diagnostico (ignorar_circuit_breaker=True), 'bloqueado'
+        continua sendo calculado normalmente mas nao impede nova entrada --
+        so' para enxergar o comportamento do dia inteiro em analise."""
+        if self.ignorar_circuit_breaker:
+            return self.posicao is None
         return not self.bloqueado and self.posicao is None
 
     # ------------------------------------------------------------ eventos
@@ -74,7 +93,7 @@ class GestorDeRisco:
         if self.posicao is not None:
             raise RuntimeError("abertura com posicao ja aberta — o service "
                                "nunca deveria permitir isso (sem piramide)")
-        if self.bloqueado:
+        if self.bloqueado and not self.ignorar_circuit_breaker:
             raise RuntimeError("abertura com circuit breaker ativo — o "
                                "service deveria ter consultado pode_abrir()")
         if lado not in (+1, -1):
@@ -114,6 +133,7 @@ class GestorDeRisco:
         self.posicao = None
         self.operacoes_fechadas += 1
         self.pnl_dia_pontos += pnl_liquido
+        self.historico_pnl.append(pnl_liquido)
 
         if pnl_liquido < 0:
             self.perdas_consecutivas += 1
