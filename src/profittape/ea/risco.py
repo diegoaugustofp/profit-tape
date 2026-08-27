@@ -72,6 +72,12 @@ class GestorDeRisco:
         # e' o oposto do que a expectativa matematica busca" -- precisa da
         # distribuicao, nao so' da soma, para avaliar isso direito.
         self.historico_pnl: list[float] = []
+        # Aditivo (2026-08-27, pedido real: separar resultado do EA
+        # simulado por lado, mesma pergunta que o mae.py ja' respondia --
+        # perdas concentradas no lado de compra, que o MAE ja mostrou sem
+        # edge, ou distribuidas nos dois?). Nao muda historico_pnl (usado
+        # em teste ja existente) -- so' adiciona o lado ao lado do pnl.
+        self.historico_operacoes: list[tuple[int, float]] = []
 
     # ------------------------------------------------------------- estado
     def em_posicao(self) -> bool:
@@ -134,6 +140,7 @@ class GestorDeRisco:
         self.operacoes_fechadas += 1
         self.pnl_dia_pontos += pnl_liquido
         self.historico_pnl.append(pnl_liquido)
+        self.historico_operacoes.append((p.lado, pnl_liquido))
 
         if pnl_liquido < 0:
             self.perdas_consecutivas += 1

@@ -715,6 +715,7 @@ def ea_replay_lote(
 
     por_dia = []
     todas_operacoes: list[float] = []
+    todas_operacoes_com_lado: list[tuple[int, float]] = []
     t0_lote = time.monotonic()
     for i, dia in enumerate(dias, 1):
         # Visibilidade de progresso (2026-08-27, pedido real do operador):
@@ -741,6 +742,7 @@ def ea_replay_lote(
             "bloqueado": svc.gestor.bloqueado,
         })
         todas_operacoes.extend(svc.gestor.historico_pnl)
+        todas_operacoes_com_lado.extend(svc.gestor.historico_operacoes)
 
         decorrido_s = time.monotonic() - t0_lote
         media_por_dia_s = decorrido_s / i
@@ -787,6 +789,26 @@ def ea_replay_lote(
         typer.echo(f"  razao ganho/perda medio: {razao:.2f}  ({rotulo})")
     typer.echo(f"  dias com circuit breaker disparado: {dias_bloqueados}/{len(dias)}")
 
+    # Quebra por lado (2026-08-27, mesma pergunta que mae.py ja' respondia
+    # de forma independente: as perdas do EA simulado estao concentradas
+    # no lado de compra -- ja' sem edge segundo o MAE -- ou distribuidas
+    # nos dois? So' o dado REAL do proprio EA replay confirma ou nao.
+    op_compra = [pnl for lado, pnl in todas_operacoes_com_lado if lado == 1]
+    op_venda = [pnl for lado, pnl in todas_operacoes_com_lado if lado == -1]
+    typer.echo("\n  por lado (pnl LIQUIDO, ja' descontado o custo):")
+    if op_compra:
+        typer.echo(f"    compra: n={len(op_compra)}  "
+                   f"pnl_liquido_medio={stats.mean(op_compra):+.1f}  "
+                   f"pnl_liquido_total={sum(op_compra):+.1f}")
+    else:
+        typer.echo("    compra: n=0")
+    if op_venda:
+        typer.echo(f"    venda : n={len(op_venda)}  "
+                   f"pnl_liquido_medio={stats.mean(op_venda):+.1f}  "
+                   f"pnl_liquido_total={sum(op_venda):+.1f}")
+    else:
+        typer.echo("    venda : n=0")
+
     saida.mkdir(parents=True, exist_ok=True)
     from datetime import UTC, datetime
     arq = saida / f"ea_replay_lote_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.md"
@@ -810,6 +832,19 @@ def ea_replay_lote(
     for d in por_dia:
         linhas.append(f"| {d['dia']} | {d['pnl_dia']:+.1f} | {d['n_operacoes']} | "
                       f"{d['perdas_seguidas_final']} | {d['bloqueado']} |")
+    linhas.append("\n## Por lado (pnl LIQUIDO, ja' descontado o custo)\n")
+    linhas.append("Mesma pergunta que mae.py ja' respondia de forma independente: "
+                  "as perdas estao concentradas no lado de compra (sem edge segundo "
+                  "o MAE), ou distribuidas nos dois? Dado REAL do proprio EA "
+                  "replay, nao mais inferencia.\n")
+    linhas.append("| lado | n | pnl liquido medio | pnl liquido total |")
+    linhas.append("|---|---|---|---|")
+    linhas.append(f"| compra | {len(op_compra)} | "
+                  f"{stats.mean(op_compra):+.1f} | {sum(op_compra):+.1f} |"
+                  if op_compra else "| compra | 0 | - | - |")
+    linhas.append(f"| venda | {len(op_venda)} | "
+                  f"{stats.mean(op_venda):+.1f} | {sum(op_venda):+.1f} |"
+                  if op_venda else "| venda | 0 | - | - |")
     linhas.append("\n## Todas as operacoes (pnl liquido, pontos)\n")
     linhas.append(", ".join(f"{p:+.1f}" for p in todas_operacoes))
     arq.write_text("\n".join(linhas), encoding="utf-8")

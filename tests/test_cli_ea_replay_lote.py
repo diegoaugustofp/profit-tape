@@ -109,3 +109,30 @@ def test_progresso_tambem_vai_para_o_log_file(tmp_path: Path) -> None:
     assert "ea.replay_lote_dia_concluido" in conteudo
     for dia in dias:
         assert dia in conteudo
+
+
+def test_relatorio_lote_quebra_por_lado(tmp_path: Path) -> None:
+    """
+    Mesma pergunta que mae.py ja respondia de forma independente: as
+    perdas do EA simulado (dado REAL do proprio replay) estao
+    concentradas no lado de compra, ou distribuidas nos dois?
+    """
+    dias = ["2026-08-24", "2026-08-25", "2026-08-26"]
+    _preparar_dias(tmp_path / "raw", dias)
+    cfg = tmp_path / "ea.yaml"
+    _config(cfg)
+
+    resultado = runner.invoke(app, [
+        "ea-replay-lote", "-c", str(cfg),
+        "--raiz-raw", str(tmp_path / "raw"),
+        "--saida", str(tmp_path / "out"),
+    ])
+    assert resultado.exit_code == 0, resultado.output
+    assert "por lado (pnl" in resultado.output
+    assert "compra:" in resultado.output
+    assert "venda " in resultado.output
+
+    arquivos_md = list((tmp_path / "out").glob("*.md"))
+    assert len(arquivos_md) == 1
+    conteudo = arquivos_md[0].read_text(encoding="utf-8")
+    assert "Por lado (pnl LIQUIDO" in conteudo

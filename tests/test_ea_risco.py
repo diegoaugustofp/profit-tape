@@ -171,3 +171,20 @@ def test_historico_pnl_registra_cada_operacao() -> None:
         g.registrar_abertura(+1, 140000.0, i * 10, 3)
         g.registrar_fechamento(140000.0 + bruto)
     assert g.historico_pnl == pytest.approx([b - _CUSTO for b in valores_brutos])
+
+
+def test_historico_operacoes_registra_lado_junto_com_pnl() -> None:
+    """
+    Aditivo (2026-08-27): mesma pergunta que mae.py ja respondia por
+    lado -- perdas do EA simulado concentradas na compra (sem edge
+    segundo o MAE) ou distribuidas? historico_pnl continua so' floats
+    (nao quebra o teste existente); historico_operacoes soma o lado.
+    """
+    g = _gestor()
+    g.registrar_abertura(+1, 140000.0, 0, 3)     # compra
+    g.registrar_fechamento(140010.0)              # +10 bruto -11 = -1 liquido
+    g.registrar_abertura(-1, 140000.0, 1, 3)     # venda
+    g.registrar_fechamento(139950.0)              # +50 bruto -11 = +39 liquido
+
+    assert g.historico_operacoes == [(1, -1.0), (-1, 39.0)]
+    assert g.historico_pnl == [-1.0, 39.0]   # continua igual, nao quebrou
