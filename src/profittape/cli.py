@@ -835,6 +835,33 @@ def ea_replay_lote(
         typer.echo(f"  razao ganho/perda medio: {razao:.2f}  ({rotulo})")
     typer.echo(f"  dias com circuit breaker disparado: {dias_bloqueados}/{len(dias)}")
 
+    # Curva de patrimonio / drawdown (2026-08-27, pergunta real do
+    # operador: "qual o tamanho de conta necessario para essa
+    # estrategia?"). Reusa todas_operacoes na ordem CRONOLOGICA real (nao
+    # agrupada por lado) -- e' a experiencia de saldo de quem realmente
+    # operou dia apos dia. Fora de escopo aqui, registrado como pendencia
+    # separada: zeragem por consumo de GARANTIA (precisa da tabela de
+    # margem real da B3/XP) -- isto so' mede ruina por P&L.
+    curva = None
+    if todas_operacoes:
+        from .research.curva_patrimonio import calcular_curva_patrimonio
+        curva = calcular_curva_patrimonio(
+            todas_operacoes, capital_inicial=ea_cfg.risco.capital,
+            valor_ponto_reais=ea_cfg.risco.valor_ponto_reais)
+        typer.echo("\n  curva de patrimonio (capital inicial "
+                   f"R${ea_cfg.risco.capital:.2f}, so' ruina por P&L -- "
+                   "NAO cobre zeragem por garantia):")
+        typer.echo(f"    saldo final          : R${curva.saldo_final:,.2f}  "
+                   f"({curva.retorno_total_pct:+.1%})")
+        typer.echo(f"    drawdown maximo      : R${curva.drawdown_maximo_reais:,.2f}  "
+                   f"({curva.drawdown_maximo_pct:.1%} do pico de R${curva.saldo_no_pico:,.2f})")
+        typer.echo(f"    capital minimo sugerido (1.5x o dd): "
+                   f"R${curva.capital_minimo_sugerido:,.2f}")
+        typer.echo(f"    calmar ratio (retorno/dd): {curva.calmar_ratio:.2f}")
+        if curva.ficou_negativo_ou_zero:
+            typer.echo("    ATENCAO: com este capital inicial, o saldo "
+                      "chegou a zero ou negativo em algum ponto da amostra.")
+
     # Quebra por lado (2026-08-27, mesma pergunta que mae.py ja' respondia
     # de forma independente: as perdas do EA simulado estao concentradas
     # no lado de compra -- ja' sem edge segundo o MAE -- ou distribuidas
@@ -894,7 +921,30 @@ def ea_replay_lote(
         f"- MAIOR ganho: {max(todas_operacoes):+.1f}" if todas_operacoes else "",
         f"- MAIOR perda: {min(todas_operacoes):+.1f}" if todas_operacoes else "",
         f"- dias com circuit breaker disparado: {dias_bloqueados}/{len(dias)}",
-        "\n## Por dia\n",
+    ]
+    if curva is not None:
+        linhas.append("\n## Curva de patrimonio / drawdown\n")
+        linhas.append(
+            "So' ruina por P&L (saldo cair a zero ou perto) -- NAO cobre "
+            "zeragem por consumo de GARANTIA da B3/XP (exigiria a tabela "
+            "de margem real, fora de escopo aqui). Registrado como "
+            "pendencia separada em docs/EA_ARQUITETURA.md.\n"
+        )
+        linhas.append(f"- capital inicial: R${ea_cfg.risco.capital:,.2f}")
+        linhas.append(f"- saldo final: R${curva.saldo_final:,.2f} "
+                      f"({curva.retorno_total_pct:+.1%})")
+        linhas.append(f"- drawdown maximo: R${curva.drawdown_maximo_reais:,.2f} "
+                      f"({curva.drawdown_maximo_pct:.1%} do pico de "
+                      f"R${curva.saldo_no_pico:,.2f})")
+        linhas.append(f"- capital minimo sugerido (1.5x o drawdown maximo): "
+                      f"R${curva.capital_minimo_sugerido:,.2f}")
+        linhas.append(f"- calmar ratio (retorno total / drawdown maximo): "
+                      f"{curva.calmar_ratio:.2f}")
+        if curva.ficou_negativo_ou_zero:
+            linhas.append("- **ATENCAO**: com este capital inicial, o saldo "
+                          "chegou a zero ou negativo em algum ponto da amostra.")
+    linhas.append("\n## Por dia\n")
+    linhas.extend([
         (
             "| dia | pnl (com freio) | pnl (sem freio) | delta | operacoes | "
             "perdas seguidas (final) | bloqueado |"
@@ -902,7 +952,7 @@ def ea_replay_lote(
             "| dia | pnl | operacoes | perdas seguidas (final) | bloqueado |"
         ),
         ("|---|---|---|---|---|---|---|" if comparar_circuit_breaker else "|---|---|---|---|---|"),
-    ]
+    ])
     for d in por_dia:
         if comparar_circuit_breaker:
             if d["pnl_sem_freio"] is not None:

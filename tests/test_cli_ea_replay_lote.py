@@ -225,3 +225,31 @@ def test_por_lado_sem_comparar_nao_mostra_secao_extra(tmp_path: Path) -> None:
     ])
     assert resultado.exit_code == 0, resultado.output
     assert "SEM o circuit breaker" not in resultado.output
+
+
+def test_curva_de_patrimonio_aparece_no_relatorio(tmp_path: Path) -> None:
+    """
+    Pedido real do operador (2026-08-27): "qual o tamanho de conta
+    necessario para essa estrategia?" -- ea-replay-lote agora calcula a
+    curva de patrimonio/drawdown a partir do capital configurado em
+    ea.yaml, usando o historico cronologico real de operacoes.
+    """
+    dias = ["2026-08-24", "2026-08-25", "2026-08-26"]
+    _preparar_dias(tmp_path / "raw", dias)
+    cfg = tmp_path / "ea.yaml"
+    _config(cfg)
+
+    resultado = runner.invoke(app, [
+        "ea-replay-lote", "-c", str(cfg),
+        "--raiz-raw", str(tmp_path / "raw"),
+        "--saida", str(tmp_path / "out"),
+    ])
+    assert resultado.exit_code == 0, resultado.output
+    assert "curva de patrimonio" in resultado.output
+    assert "drawdown maximo" in resultado.output
+    assert "capital minimo sugerido" in resultado.output
+
+    arquivos_md = list((tmp_path / "out").glob("*.md"))
+    conteudo = arquivos_md[0].read_text(encoding="utf-8")
+    assert "Curva de patrimonio / drawdown" in conteudo
+    assert "capital inicial: R$5,000.00" in conteudo

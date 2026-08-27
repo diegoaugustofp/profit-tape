@@ -708,3 +708,32 @@ Acompanhar a MESMA comparacao (ea.yaml vs ea_venda_apenas.yaml)
 conforme dias novos se acumularem a partir de agora -- cada dia novo
 capturado dai em diante e' validacao prospectiva de verdade, nao mais
 releitura do periodo que gerou a hipotese.
+
+## Curva de patrimonio / drawdown maximo (2026-08-27)
+
+Pergunta real do operador: "qual o tamanho de conta (saldo) necessario
+para essa estrategia? Posso concluir que e' positiva, mas o saldo
+exigido ser alto demais pode nao valer a pena."
+
+IMPLEMENTADO: research/curva_patrimonio.py::calcular_curva_patrimonio()
+-- algoritmo padrao de drawdown maximo (peak-to-trough) sobre o
+historico cronologico real de operacoes ja simulado pelo EA. Devolve:
+saldo final, drawdown maximo (R$ e %), capital minimo sugerido
+(drawdown x 1.5 por padrao), calmar ratio (retorno/drawdown).
+
+IMPORTANTE, escopo deliberadamente limitado: isto mede so' RUINA POR
+P&L (saldo caindo a zero ou perto). NAO cobre zeragem por CONSUMO DE
+GARANTIA da B3/XP (a corretora pode exigir mais margem por contrato num
+dia de volatilidade alta, mesmo com saldo positivo e folgado) -- isso
+exigiria cruzar com a tabela de margem real, fora de escopo aqui e
+registrado como pendencia SEPARADA em EA_ARQUITETURA.md.
+
+Drawdown em R$ e' INDEPENDENTE do capital_inicial escolhido (tamanho de
+posicao e' fixo, 1 contrato) -- capital_inicial so' decide SE aquele
+drawdown, aplicado aquele capital, teria zerado a conta. Conectado ao
+`ea-replay-lote`: usa `todas_operacoes` (ordem cronologica real, nao
+agrupada por lado) + `ea_cfg.risco.capital`/`valor_ponto_reais`.
+
+7 testes no modulo de calculo (valores conferidos a mao, incluindo o
+caso de conta zerando e a independencia do capital_inicial sobre o
+drawdown em R$) + 1 teste de integracao no CLI. 276 testes.
