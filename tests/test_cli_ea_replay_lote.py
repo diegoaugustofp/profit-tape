@@ -182,3 +182,46 @@ def test_comparar_circuit_breaker_mostra_com_e_sem_freio(tmp_path: Path) -> None
     assert "pnl (com freio)" in conteudo
     assert "pnl (sem freio)" in conteudo
     assert "ATENCAO NA LEITURA" in conteudo
+
+
+def test_por_lado_com_comparar_mostra_tambem_sem_freio(tmp_path: Path) -> None:
+    """
+    Pergunta real do operador (2026-08-27): "por lado" tambem deveria
+    comparar com/sem freio, igual "por dia" ja faz? Sim -- senao a tabela
+    so' com freio pode subestimar o potencial de um lado que o freio
+    bloqueou desproporcionalmente.
+    """
+    dias = ["2026-08-24"]
+    _preparar_dias(tmp_path / "raw", dias)
+    cfg = tmp_path / "ea.yaml"
+    _config(cfg)
+
+    resultado = runner.invoke(app, [
+        "ea-replay-lote", "-c", str(cfg),
+        "--raiz-raw", str(tmp_path / "raw"),
+        "--saida", str(tmp_path / "out"),
+        "--comparar-circuit-breaker",
+    ])
+    assert resultado.exit_code == 0, resultado.output
+    assert "por lado SEM o circuit breaker" in resultado.output
+
+    arquivos_md = list((tmp_path / "out").glob("*.md"))
+    conteudo = arquivos_md[0].read_text(encoding="utf-8")
+    assert "Por lado SEM o circuit breaker" in conteudo
+
+
+def test_por_lado_sem_comparar_nao_mostra_secao_extra(tmp_path: Path) -> None:
+    """Retrocompatibilidade: sem --comparar-circuit-breaker, a secao
+    extra 'sem freio' nao deve aparecer."""
+    dias = ["2026-08-24"]
+    _preparar_dias(tmp_path / "raw", dias)
+    cfg = tmp_path / "ea.yaml"
+    _config(cfg)
+
+    resultado = runner.invoke(app, [
+        "ea-replay-lote", "-c", str(cfg),
+        "--raiz-raw", str(tmp_path / "raw"),
+        "--saida", str(tmp_path / "out"),
+    ])
+    assert resultado.exit_code == 0, resultado.output
+    assert "SEM o circuit breaker" not in resultado.output

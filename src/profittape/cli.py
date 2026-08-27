@@ -729,6 +729,15 @@ def ea_replay_lote(
     por_dia = []
     todas_operacoes: list[float] = []
     todas_operacoes_com_lado: list[tuple[int, float]] = []
+    # "sem freio" completo (2026-08-27, pergunta real do operador: "por
+    # lado" nao deveria ter com/sem freio tambem?). Para dias em que o
+    # freio NUNCA disparou, com/sem freio sao IDENTICOS por construcao
+    # (o freio so' age depois de bloqueado=True) -- reusa o mesmo dado do
+    # svc principal, sem rodar de novo. So' dias que dispararam o freio
+    # precisam do segundo passe (svc_sem_freio) para saber o que teria
+    # acontecido nas operacoes que o freio impediu.
+    todas_operacoes_sem_freio: list[float] = []
+    todas_operacoes_com_lado_sem_freio: list[tuple[int, float]] = []
     t0_lote = time.monotonic()
     for i, dia in enumerate(dias, 1):
         # Visibilidade de progresso (2026-08-27, pedido real do operador):
@@ -750,6 +759,7 @@ def ea_replay_lote(
         svc.processar_trades_carregados(trades)
 
         pnl_sem_freio = None
+        svc_sem_freio = None
         if comparar_circuit_breaker and svc.gestor.bloqueado:
             # Mesmo dado JA' CARREGADO, sem reler o parquet -- a leitura
             # e' a parte cara (~80s), este segundo passe e' barato (~10s).
@@ -773,6 +783,12 @@ def ea_replay_lote(
         })
         todas_operacoes.extend(svc.gestor.historico_pnl)
         todas_operacoes_com_lado.extend(svc.gestor.historico_operacoes)
+        if comparar_circuit_breaker:
+            # svc_sem_freio existe so' quando o freio disparou neste dia;
+            # senao, com/sem freio sao identicos -- reusa svc mesmo.
+            fonte = svc_sem_freio if svc_sem_freio is not None else svc
+            todas_operacoes_sem_freio.extend(fonte.gestor.historico_pnl)
+            todas_operacoes_com_lado_sem_freio.extend(fonte.gestor.historico_operacoes)
 
         decorrido_s = time.monotonic() - t0_lote
         media_por_dia_s = decorrido_s / i
@@ -839,6 +855,29 @@ def ea_replay_lote(
     else:
         typer.echo("    venda : n=0")
 
+    op_compra_sf = op_venda_sf = None
+    if comparar_circuit_breaker:
+        # Pergunta real do operador (2026-08-27): "por lado" tambem
+        # deveria comparar com/sem freio? Sim -- se o freio bloqueia
+        # desproporcionalmente um lado (ex.: apos uma sequencia de perdas
+        # de compra, o freio tambem impede vendas que teriam edge), a
+        # tabela SO' com freio subestima o potencial real daquele lado.
+        op_compra_sf = [pnl for lado, pnl in todas_operacoes_com_lado_sem_freio if lado == 1]
+        op_venda_sf = [pnl for lado, pnl in todas_operacoes_com_lado_sem_freio if lado == -1]
+        typer.echo("\n  por lado SEM o circuit breaker (para comparacao):")
+        if op_compra_sf:
+            typer.echo(f"    compra: n={len(op_compra_sf)}  "
+                       f"pnl_liquido_medio={stats.mean(op_compra_sf):+.1f}  "
+                       f"pnl_liquido_total={sum(op_compra_sf):+.1f}")
+        else:
+            typer.echo("    compra: n=0")
+        if op_venda_sf:
+            typer.echo(f"    venda : n={len(op_venda_sf)}  "
+                       f"pnl_liquido_medio={stats.mean(op_venda_sf):+.1f}  "
+                       f"pnl_liquido_total={sum(op_venda_sf):+.1f}")
+        else:
+            typer.echo("    venda : n=0")
+
     saida.mkdir(parents=True, exist_ok=True)
     from datetime import UTC, datetime
     arq = saida / f"ea_replay_lote_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.md"
@@ -902,6 +941,25 @@ def ea_replay_lote(
     linhas.append(f"| venda | {len(op_venda)} | "
                   f"{stats.mean(op_venda):+.1f} | {sum(op_venda):+.1f} |"
                   if op_venda else "| venda | 0 | - | - |")
+    if comparar_circuit_breaker:
+        linhas.append("\n## Por lado SEM o circuit breaker (para comparacao)\n")
+        linhas.append(
+            "Se o freio bloqueia desproporcionalmente um lado (ex.: apos "
+            "uma sequencia de perdas de compra, tambem impede vendas que "
+            "teriam edge), a tabela COM freio acima subestima o potencial "
+            "real daquele lado. Esta tabela usa, para os dias em que o "
+            "freio disparou, as operacoes que teriam acontecido sem ele; "
+            "nos demais dias e' identica a tabela acima (o freio nunca "
+            "chegou a agir).\n"
+        )
+        linhas.append("| lado | n | pnl liquido medio | pnl liquido total |")
+        linhas.append("|---|---|---|---|")
+        linhas.append(f"| compra | {len(op_compra_sf)} | "
+                      f"{stats.mean(op_compra_sf):+.1f} | {sum(op_compra_sf):+.1f} |"
+                      if op_compra_sf else "| compra | 0 | - | - |")
+        linhas.append(f"| venda | {len(op_venda_sf)} | "
+                      f"{stats.mean(op_venda_sf):+.1f} | {sum(op_venda_sf):+.1f} |"
+                      if op_venda_sf else "| venda | 0 | - | - |")
     linhas.append("\n## Todas as operacoes (pnl liquido, pontos)\n")
     linhas.append(", ".join(f"{p:+.1f}" for p in todas_operacoes))
     arq.write_text("\n".join(linhas), encoding="utf-8")
