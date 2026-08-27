@@ -860,6 +860,13 @@ def mae_analise(
     typer.echo(f"  pnl medio SEM stop : {r['pnl_medio_sem_stop']:+.1f} pts")
     typer.echo(f"  pnl medio COM stop hipotetico: "
                f"{r['pnl_medio_com_stop_hipotetico']:+.1f} pts")
+    typer.echo("\n  por lado:")
+    typer.echo(f"    compra: n={r['stats_compra']['n']}  "
+               f"pnl_bruto_medio={r['stats_compra']['pnl_bruto_medio']:+.1f}  "
+               f"mae_mediana={r['stats_compra']['mae_close_mediana']:.1f}")
+    typer.echo(f"    venda : n={r['stats_venda']['n']}  "
+               f"pnl_bruto_medio={r['stats_venda']['pnl_bruto_medio']:+.1f}  "
+               f"mae_mediana={r['stats_venda']['mae_close_mediana']:.1f}")
     typer.echo(f"\nrelatorio: {r['relatorio']}")
 
 

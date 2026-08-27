@@ -144,3 +144,31 @@ def test_relatorio_markdown_e_gerado(tmp_path: Path) -> None:
     assert "MAE_close" in conteudo
     assert "MAE_intrabar" in conteudo
     assert "stop catastrofico" in conteudo
+
+
+def test_quebra_por_lado_separa_compra_e_venda(tmp_path: Path) -> None:
+    """
+    Achado real (2026-08-27): threshold simetrico pode esconder assimetria
+    de edge entre compra e venda -- um lado carrega o sinal, o outro dilui.
+    A quebra por lado precisa separar corretamente os dois grupos.
+    """
+    df = pd.DataFrame({
+        "dia": ["2026-01-01"] * 10,
+        "ts_close": np.arange(10) * 10**11,
+        # Duas compras (lucrativas) e duas vendas (uma lucrativa, uma nao)
+        "close":  [100, 100, 110,  90, 100, 95, 105, 130, 131, 132],
+        "high":   [101, 101, 111,  91, 101, 96, 106, 131, 132, 133],
+        "low":    [99,  99,  109,  89, 99,  94, 104, 129, 130, 131],
+        "z_agf_3": [-1.5, 0, 0, 1.5, 0, 0, -1.5, 0, 0, 0],
+    })
+    arq = tmp_path / "features.parquet"
+    df.to_parquet(arq, index=False)
+    r = analisar_mae(arq, "z_agf_3", horizonte=3, threshold_entrada=1.4,
+                     direcao="contrarian", stop_catastrofico_pontos=500,
+                     saida=tmp_path / "out")
+
+    assert r["stats_compra"]["n"] == 2   # barras 0 e 6
+    assert r["stats_venda"]["n"] == 1    # barra 3
+    conteudo = Path(r["relatorio"]).read_text(encoding="utf-8")
+    assert "Quebra por lado" in conteudo
+    assert "compra" in conteudo and "venda" in conteudo

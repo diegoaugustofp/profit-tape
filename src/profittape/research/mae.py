@@ -103,6 +103,26 @@ def analisar_mae(arquivo_features: Path, feature: str, horizonte: int,
 
     n = len(r)
     n_batido = int(r["teria_batido_stop"].sum())
+
+    def _stats_lado(sub: pd.DataFrame) -> dict:
+        if sub.empty:
+            return {"n": 0, "pnl_bruto_medio": float("nan"),
+                   "mae_close_mediana": float("nan"), "pct_batido_stop": float("nan")}
+        return {
+            "n": len(sub),
+            "pnl_bruto_medio": sub["pnl_final_h"].mean(),
+            "mae_close_mediana": sub["mae_close"].median(),
+            "pct_batido_stop": sub["teria_batido_stop"].mean(),
+        }
+
+    # Quebra por lado (2026-08-27, achado real): threshold_entrada simetrico
+    # para compra e venda pode estar escondendo uma assimetria de edge --
+    # um lado pode carregar o sinal inteiro, o outro pode ser diluidor puro.
+    # Confirma (ou descarta) isso direto nos triggers REAIS, nao so' inferido
+    # da tabela de quintis (que usa quintil, nao o threshold exato do EA).
+    stats_compra = _stats_lado(r[r["lado"] == 1])
+    stats_venda = _stats_lado(r[r["lado"] == -1])
+
     resumo = {
         "feature": feature, "horizonte": horizonte,
         "threshold_entrada": threshold_entrada, "direcao": direcao,
@@ -122,6 +142,8 @@ def analisar_mae(arquivo_features: Path, feature: str, horizonte: int,
         "pnl_medio_com_stop_hipotetico": np.where(
             r["teria_batido_stop"], -stop_catastrofico_pontos, r["pnl_final_h"]
         ).mean(),
+        "stats_compra": stats_compra,
+        "stats_venda": stats_venda,
     }
 
     saida.mkdir(parents=True, exist_ok=True)
@@ -162,6 +184,27 @@ def analisar_mae(arquivo_features: Path, feature: str, horizonte: int,
         "recuperariam ate' o horizonte -- tensao real com a Rota A "
         "(saida por tempo). Se melhora ou nao muda muito, o stop e' "
         "seguro de cauda de verdade, coerente com o desenho original.",
+        "\n## Quebra por lado (compra vs venda)\n",
+        "threshold_entrada simetrico para compra e venda pode esconder "
+        "uma assimetria real de edge -- um lado pode carregar o sinal "
+        "inteiro, o outro pode ser diluidor puro do resultado combinado.\n",
+        "| lado | n | pnl bruto medio | MAE_close mediana | %% bateria o stop |",
+        "|---|---|---|---|---|",
+        f"| compra | {resumo['stats_compra']['n']} | "
+        f"{resumo['stats_compra']['pnl_bruto_medio']:+.1f} | "
+        f"{resumo['stats_compra']['mae_close_mediana']:.1f} | "
+        f"{resumo['stats_compra']['pct_batido_stop']:.1%} |",
+        f"| venda | {resumo['stats_venda']['n']} | "
+        f"{resumo['stats_venda']['pnl_bruto_medio']:+.1f} | "
+        f"{resumo['stats_venda']['mae_close_mediana']:.1f} | "
+        f"{resumo['stats_venda']['pct_batido_stop']:.1%} |",
+        "\nSe um lado tem pnl bruto medio abaixo do custo de transacao "
+        "(tipicamente ~11pts no WIN) e o outro bem acima, o threshold "
+        "simetrico esta operando um lado sem edge real ao lado de um "
+        "lado forte -- vale considerar threshold assimetrico ou desativar "
+        "o lado fraco, com o CUIDADO de isso ser uma decisao de design "
+        "nova (nao gratuita -- precisa de pre-registro proprio antes de "
+        "mudar o comportamento do EA, mesma disciplina de sempre).",
     ]
     arq.write_text("\n".join(linhas_md), encoding="utf-8")
     resumo["relatorio"] = str(arq)

@@ -494,3 +494,43 @@ economico, mesmo com custo real e baixo (RLP). z_agf_3/z_agf_4090 no
 WIN continuam os UNICOS sinais que passaram pelo funil completo (IC +
 quintis + significancia). Isso NAO invalida o metodo -- e' exatamente
 o resultado que o funil existe para produzir.
+
+## Resultado real do MAE + achado de assimetria compra/venda (2026-08-27)
+
+Rodado sobre 336 triggers reais de z_agf_3 h=3 (threshold=1.4):
+
+  MAE_close: media=114.9  mediana=105.0  p90=395  p99=742  max=815
+  15/336 (4.5%) teriam batido o stop de 500pts antes do horizonte natural
+  pnl medio SEM stop hipotetico: +4.3 pts (BRUTO)
+  pnl medio COM stop hipotetico: +7.1 pts
+
+CONCLUSAO 1 (stop catastrofico): o stop JA ESTA mordendo de verdade
+(4.5% nao e' desprezivel, MAE p99 supera o stop) -- mas o EFEITO no pnl
+medio e' POSITIVO (+7.1 > +4.3): os casos que bateriam o stop, se
+deixados correr, teriam terminado PIORES que -500 na media. O stop
+esta funcionando como seguro de verdade, nao cortando caudas
+ganhadoras -- SEM tensao com a Rota A nesta dimensao.
+
+CONCLUSAO 2 (mais importante, achado NOVO): +4.3 pts bruto combinado
+e' menor que o custo de transacao (~11pts) -- e revela uma ASSIMETRIA
+real entre compra e venda que o threshold simetrico do ea.yaml estava
+escondendo. Reconstruindo os quintis por lado (z_agf_3 h=3, 2026-08-25):
+  Q1 (compra, extremo baixo): bruto +6.41 -- fraco, LIQUIDO NEGATIVO (-4.59) sozinho
+  Q5 (venda, extremo alto):   bruto +33.73 -- forte, LIQUIDO POSITIVO (+22.73) sozinho
+
+O sinal funciona bem VENDENDO contra o XP comprando forte, mas NAO
+funciona comprando contra o XP vendendo forte -- ao tratar os dois
+lados com o mesmo threshold, o lado fraco (compra) dilui o lado forte
+(venda) no resultado combinado.
+
+FERRAMENTA: mae.py agora quebra estatisticas por lado
+(stats_compra/stats_venda: n, pnl_bruto_medio, mae_close_mediana,
+pct_batido_stop) -- confirma isso direto nos 336 triggers reais, nao
+so' inferido da tabela de quintis antiga.
+
+DECISAO PENDENTE (do operador, nao automatica): considerar threshold
+assimetrico, ou desativar o lado de compra, exigiria pre-registro
+proprio antes de mudar o comportamento do EA -- mesma disciplina de
+sempre, nao e' ajuste gratuito so' porque os numeros sugerem.
+
+9 testes novos em test_mae.py. 237 testes.
