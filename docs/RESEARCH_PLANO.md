@@ -650,3 +650,61 @@ EA_ARQUITETURA.md.
 
 3 testes novos de decisao.py (lado_permitido venda/compra/ambos,
 confirmando que ZERAR nunca e' suprimido). 257 testes.
+
+## RESULTADO do pre-registro "Restricao de direcao — venda apenas" (2026-08-27)
+
+Comparacao rodada no mesmo periodo (24 dias, 2026-07-24 a 2026-08-26),
+`--comparar-circuit-breaker` nos dois:
+
+|                          | baseline (ambos) | venda apenas |
+|---|---|---|
+| operacoes totais         | 163              | 142          |
+| pnl total                | -533.0 pts       | +3228.0 pts  |
+| taxa de acerto           | 47.2%            | 52.8%        |
+| ganho medio              | +204.1           | +206.9       |
+| perda media              | -189.0           | -183.4       |
+| razao ganho/perda medio  | 1.080            | 1.128        |
+| dias com freio disparado | 12/24            | 7/24         |
+| efeito liquido do freio  | +757 pts         | +79 pts      |
+
+Checagem de consistencia: soma das 142 operacoes individuais = +3228.0,
+bate exatamente com o total declarado. compra: n=0 nas duas tabelas por
+lado -- confirma que lado_permitido=venda suprimiu 100% das aberturas
+de compra, nenhuma escapou.
+
+### VEREDITO, pela regra CONGELADA antes de rodar
+
+**FAVORAVEL** -- os dois criterios pre-registrados se confirmam:
+  - pnl total venda-apenas (+3228) > baseline (-533): SIM
+  - razao ganho/perda venda-apenas (1.128) >= baseline (1.080): SIM
+
+### Leitura honesta (registrada ANTES do resultado, mantida)
+
+Isto NAO e' surpresa estatistica nova -- e' consequencia quase
+aritmetica do que ja se sabia: removendo um componente documentado
+como perdedor (compra, -2253 a -3677 pts total em varias amostras) de
+uma combinacao com um componente ganhador (venda, +1720 a +3228 pts
+total), o resultado combinado melhora NA MESMA AMOSTRA que revelou essa
+divisao. Confirmatorio de engenharia, nao prova estatistica
+independente. A validacao de verdade e' prospectiva: como isto se
+comporta em dias NOVOS, capturados a partir de 2026-08-27 em diante,
+que nunca influenciaram a decisao de restringir o lado.
+
+Achado adicional nao previsto no criterio formal, mas relevante: o
+efeito liquido do circuit breaker caiu de +757 para +79 pts na
+variante venda-apenas -- faz sentido, boa parte do que o freio
+protegia era justamente sequencias de perda do lado de compra, que
+agora nao existem mais.
+
+### O que ISTO NAO decide (mantido do pre-registro original)
+
+dry_run continua True. Nenhuma decisao sobre dry_run=False decorre
+deste resultado sozinho -- gestao de risco (ja desenhada) e
+forward-test em DEMO continuam pre-requisitos, EA_ARQUITETURA.md.
+
+### Proximo passo (nao automatico, decisao do operador quando fizer sentido)
+
+Acompanhar a MESMA comparacao (ea.yaml vs ea_venda_apenas.yaml)
+conforme dias novos se acumularem a partir de agora -- cada dia novo
+capturado dai em diante e' validacao prospectiva de verdade, nao mais
+releitura do periodo que gerou a hipotese.
