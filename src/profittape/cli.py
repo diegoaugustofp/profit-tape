@@ -221,6 +221,17 @@ def quarentena(
              "(ZSTD failed) que o footer intacto esconde. Mais lento, mas pega "
              "o que derruba o curate.",
     ),
+    desde: str | None = typer.Option(
+        None, "--desde", help="YYYY-MM-DD -- so' valida dt= a partir desta "
+        "data (inclusive). Sem isso, varre TODO o historico (comportamento "
+        "de sempre) -- pedido real: revarrer tudo a cada backup incremental "
+        "fica inviavel com semanas/meses acumulados."),
+    ate: str | None = typer.Option(
+        None, "--ate", help="YYYY-MM-DD -- so' valida dt= ate esta data "
+        "(inclusive). Combina com --desde para um intervalo."),
+    dia: str | None = typer.Option(
+        None, "--dia", help="YYYY-MM-DD -- atalho para --desde X --ate X "
+        "(valida so' um dia). Nao combina com --desde/--ate."),
     log_level: str = typer.Option("INFO", "--log-level"),
     log_file: Path | None = typer.Option(
         None, "--log-file",
@@ -239,10 +250,15 @@ def quarentena(
     --profundo em milhares de arquivos fica em silencio por horas,
     indistinguivel de travado.
     """
+    if dia and (desde or ate):
+        raise SystemExit("--dia nao combina com --desde/--ate -- use um ou outro.")
+    if dia:
+        desde = ate = dia
+
     configurar(log_level, log_file)
     from .tools.quarentena import varrer
 
-    varrer(raiz, remover, profundo)
+    varrer(raiz, remover, profundo, desde=desde, ate=ate)
 
 
 @app.command()

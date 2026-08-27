@@ -56,10 +56,28 @@ def _corrompido_profundo(arquivo: Path) -> bool:
         return True
 
 
-def varrer(raiz: Path, remover: bool = False, profundo: bool = False) -> None:
+def _dt_de(arquivo: Path) -> str | None:
+    """Extrai o valor de dt= do caminho (ex.: 'dt=2026-08-26' -> '2026-08-26').
+    None se o caminho nao tiver esse componente -- nao deveria acontecer na
+    convencao do projeto, mas tratado sem quebrar (ver varrer())."""
+    parte = next((p for p in arquivo.parts if p.startswith("dt=")), None)
+    return parte.removeprefix("dt=") if parte else None
+
+
+def varrer(raiz: Path, remover: bool = False, profundo: bool = False,
+          desde: str | None = None, ate: str | None = None) -> None:
     """
     Lista (e opcionalmente remove) todos os .parquet sem footer sob a raiz.
     Ignora .inprogress (sao escrita em andamento legitima, nao fossil).
+
+    desde/ate (YYYY-MM-DD, inclusive nos dois extremos): filtra por dt= no
+    caminho -- pedido real do operador (2026-08-27): sem isso, a varredura
+    cresce linearmente com o historico acumulado, e revalidar TUDO a cada
+    backup incremental fica inviavel com semanas/meses de dado. Comparacao
+    e' de STRING (YYYY-MM-DD ordena lexicograficamente igual a data real,
+    nao precisa parsear). Arquivos sem dt= reconhecivel no caminho SEMPRE
+    sao incluidos, filtro ou nao -- nao classificavel e' motivo para checar
+    com mais atencao, nao para pular silenciosamente.
 
     profundo=True tambem descomprime cada arquivo para pegar corrupcao INTERNA
     (ZSTD failed) que o footer intacto esconde — mais lento, mas e' o unico
@@ -68,15 +86,37 @@ def varrer(raiz: Path, remover: bool = False, profundo: bool = False) -> None:
     if not raiz.exists():
         raise SystemExit(f"caminho nao existe: {raiz.resolve()}")
 
-    candidatos = [
+    todos = [
         p for p in raiz.rglob("*.parquet")
         if not p.name.endswith(".inprogress")
     ]
+    if desde or ate:
+        candidatos = []
+        sem_data = 0
+        for p in todos:
+            dt = _dt_de(p)
+            if dt is None:
+                candidatos.append(p)   # nao classificavel -- inclui sempre
+                sem_data += 1
+                continue
+            if desde and dt < desde:
+                continue
+            if ate and dt > ate:
+                continue
+            candidatos.append(p)
+        if sem_data:
+            log.warning("quarentena.sem_data_reconhecida", quantidade=sem_data,
+                       msg="sem dt= no caminho -- incluidos mesmo assim, "
+                           "filtro de data nao se aplica a eles")
+    else:
+        candidatos = todos
+
     modo = "footer + descompressao (profundo)" if profundo else "footer"
     log.info("quarentena.plano", raiz=str(raiz.resolve()), arquivos=len(candidatos),
-             modo=modo)
-    print(f"Varrendo {len(candidatos)} arquivo(s) .parquet em {raiz.resolve()} "
-          f"[{modo}] ...")
+             de_total=len(todos), desde=desde, ate=ate, modo=modo)
+    filtro_txt = f" [dt {desde or '...'} a {ate or '...'}]" if (desde or ate) else ""
+    print(f"Varrendo {len(candidatos)} de {len(todos)} arquivo(s) .parquet em "
+          f"{raiz.resolve()}{filtro_txt} [{modo}] ...")
 
     def _suspeito(p: Path) -> bool:
         if _sem_footer(p):
