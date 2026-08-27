@@ -34,6 +34,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from .walkforward import gerar_folds
+
 
 def _sinal_de_entrada(z: pd.Series, threshold: float, direcao: str) -> pd.Series:
     """+1 = compra, -1 = venda, 0 = nao dispara. Mesma regra de
@@ -53,10 +55,28 @@ def _sinal_de_entrada(z: pd.Series, threshold: float, direcao: str) -> pd.Series
 
 def analisar_mae(arquivo_features: Path, feature: str, horizonte: int,
                  threshold_entrada: float, direcao: str,
-                 stop_catastrofico_pontos: float, saida: Path) -> dict:
+                 stop_catastrofico_pontos: float, saida: Path,
+                 treino_min: int = 3, teste_dias: int = 2) -> dict:
     df = pd.read_parquet(arquivo_features)
     if "dia" not in df.columns:
         df["dia"] = pd.to_datetime(df["ts_close"], unit="ns", utc=True).dt.date
+
+    # BUG REAL corrigido (2026-08-27, achado comparando com quintis.py): a
+    # primeira versao rodava sobre a amostra INTEIRA, misturando dias que o
+    # walk-forward do IC usou como TREINO com dias de TESTE -- diferente da
+    # disciplina que quintis.py ja seguia (restringir ao pool out-of-sample
+    # da uniao dos blocos de teste). Isso inflava artificialmente o numero
+    # de venda (+33.73 bruto inferido da tabela de quintis OOS vs +11.6
+    # bruto medido aqui sobre amostra cheia contaminada com in-sample) --
+    # a diferenca e' exatamente essa contaminacao, nao ruido. Corrigido:
+    # MESMOS dias de teste que quintis.py usaria com os mesmos treino_min/
+    # teste_dias, para os dois numeros serem genuinamente comparaveis.
+    dias = sorted(df["dia"].unique())
+    folds = gerar_folds(dias, treino_min=treino_min, teste_dias=teste_dias)
+    dias_teste = set()
+    for _treino, teste in folds:
+        dias_teste.update(teste)
+    df = df[df["dia"].isin(dias_teste)].reset_index(drop=True)
 
     lado = _sinal_de_entrada(df[feature], threshold_entrada, direcao)
     triggers = df.index[lado != 0]
@@ -153,6 +173,8 @@ def analisar_mae(arquivo_features: Path, feature: str, horizonte: int,
         f"- feature: {feature} @ h={horizonte}",
         f"- threshold_entrada: {threshold_entrada}  direcao: {direcao}",
         f"- stop catastrofico: {stop_catastrofico_pontos:.0f} pts",
+        f"- pool out-of-sample: treino_min={treino_min} teste_dias={teste_dias} "
+        f"(mesma disciplina de research/quintis.py — nunca a amostra inteira)",
         f"- triggers com janela completa: {n}\n",
         "Nao gasta trial: engenharia de risco sobre sinal JA' validado, "
         "nao hipotese estatistica nova.\n",

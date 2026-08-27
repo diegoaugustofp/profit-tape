@@ -45,7 +45,7 @@ def test_mae_calculado_corretamente_compra(tmp_path: Path) -> None:
     _df_basico().to_parquet(arq, index=False)
     r = analisar_mae(arq, "z_agf_3", horizonte=3, threshold_entrada=1.4,
                      direcao="contrarian", stop_catastrofico_pontos=500,
-                     saida=tmp_path / "out")
+                     saida=tmp_path / "out", treino_min=0)
     tabela = r["tabela"]
     assert len(tabela) == 1
     assert tabela["lado"].iloc[0] == 1
@@ -70,7 +70,7 @@ def test_mae_calculado_corretamente_venda(tmp_path: Path) -> None:
     df.to_parquet(arq, index=False)
     r = analisar_mae(arq, "z_agf_3", horizonte=3, threshold_entrada=1.4,
                      direcao="contrarian", stop_catastrofico_pontos=500,
-                     saida=tmp_path / "out")
+                     saida=tmp_path / "out", treino_min=0)
     tabela = r["tabela"]
     assert tabela["lado"].iloc[0] == -1
     # excursao contra vendido = (entrada - preco) * -1 = preco - entrada
@@ -95,7 +95,7 @@ def test_trigger_no_fim_do_dia_sem_janela_completa_e_descartado(tmp_path: Path) 
     with pytest.raises(SystemExit, match="insuficiente"):
         analisar_mae(arq, "z_agf_3", horizonte=3, threshold_entrada=1.4,
                     direcao="contrarian", stop_catastrofico_pontos=500,
-                    saida=tmp_path / "out")
+                    saida=tmp_path / "out", treino_min=0)
 
 
 def test_trigger_nao_atravessa_para_o_dia_seguinte(tmp_path: Path) -> None:
@@ -114,7 +114,7 @@ def test_trigger_nao_atravessa_para_o_dia_seguinte(tmp_path: Path) -> None:
     with pytest.raises(SystemExit, match="insuficiente"):
         analisar_mae(arq, "z_agf_3", horizonte=3, threshold_entrada=1.4,
                     direcao="contrarian", stop_catastrofico_pontos=500,
-                    saida=tmp_path / "out")
+                    saida=tmp_path / "out", treino_min=0)
 
 
 def test_nenhum_trigger_falha_com_mensagem_clara(tmp_path: Path) -> None:
@@ -131,7 +131,7 @@ def test_nenhum_trigger_falha_com_mensagem_clara(tmp_path: Path) -> None:
     with pytest.raises(SystemExit, match="nenhum trigger"):
         analisar_mae(arq, "z_agf_3", horizonte=3, threshold_entrada=1.4,
                     direcao="contrarian", stop_catastrofico_pontos=500,
-                    saida=tmp_path / "out")
+                    saida=tmp_path / "out", treino_min=0)
 
 
 def test_relatorio_markdown_e_gerado(tmp_path: Path) -> None:
@@ -139,7 +139,7 @@ def test_relatorio_markdown_e_gerado(tmp_path: Path) -> None:
     _df_basico().to_parquet(arq, index=False)
     r = analisar_mae(arq, "z_agf_3", horizonte=3, threshold_entrada=1.4,
                      direcao="contrarian", stop_catastrofico_pontos=500,
-                     saida=tmp_path / "out")
+                     saida=tmp_path / "out", treino_min=0)
     conteudo = Path(r["relatorio"]).read_text(encoding="utf-8")
     assert "MAE_close" in conteudo
     assert "MAE_intrabar" in conteudo
@@ -165,10 +165,74 @@ def test_quebra_por_lado_separa_compra_e_venda(tmp_path: Path) -> None:
     df.to_parquet(arq, index=False)
     r = analisar_mae(arq, "z_agf_3", horizonte=3, threshold_entrada=1.4,
                      direcao="contrarian", stop_catastrofico_pontos=500,
-                     saida=tmp_path / "out")
+                     saida=tmp_path / "out", treino_min=0)
 
     assert r["stats_compra"]["n"] == 2   # barras 0 e 6
     assert r["stats_venda"]["n"] == 1    # barra 3
     conteudo = Path(r["relatorio"]).read_text(encoding="utf-8")
     assert "Quebra por lado" in conteudo
     assert "compra" in conteudo and "venda" in conteudo
+
+
+def test_restringe_a_dias_out_of_sample_como_quintis(tmp_path: Path) -> None:
+    """
+    BUG REAL corrigido (2026-08-27, achado comparando com quintis.py): a
+    primeira versao rodava sobre a amostra INTEIRA, misturando dias de
+    TREINO do walk-forward com dias de TESTE -- diferente da disciplina
+    que quintis.py ja seguia. Aqui, com treino_min=3, teste_dias=1, os
+    primeiros 3 dias sao SEMPRE treino (nunca aparecem na analise) --
+    um trigger so' no dia 1 (treino) tem que ser IGNORADO.
+    """
+    dias_todos = [f"2026-01-0{i}" for i in range(1, 6)]   # 5 dias
+    linhas = []
+    for d_idx, dia in enumerate(dias_todos):
+        for b in range(5):
+            z = -1.5 if (d_idx == 0 and b == 2) else 0.0   # trigger SO no dia 1 (treino)
+            linhas.append({"dia": dia, "close": 100.0 + b, "high": 101.0 + b,
+                           "low": 99.0 + b, "z_agf_3": z})
+    df = pd.DataFrame(linhas)
+    df["ts_close"] = np.arange(len(df)) * 10**11
+    arq = tmp_path / "features.parquet"
+    df.to_parquet(arq, index=False)
+
+    with pytest.raises(SystemExit, match="nenhum trigger"):
+        # com treino_min=3, teste_dias=1: dias 1-3 sao treino (o unico
+        # trigger existente esta no dia 1) -- filtrado fora, sobra ZERO
+        # triggers no pool out-of-sample.
+        analisar_mae(arq, "z_agf_3", horizonte=1, threshold_entrada=1.4,
+                    direcao="contrarian", stop_catastrofico_pontos=500,
+                    saida=tmp_path / "out", treino_min=3, teste_dias=1)
+
+
+def test_purge_de_dia_sobrevive_a_reindexacao_apos_filtro_oos(tmp_path: Path) -> None:
+    """
+    Depois de filtrar para so' dias de teste e reindexar, linhas de dias de
+    teste NAO ADJACENTES no calendario (com um dia de treino saltado no
+    meio) ficam fisicamente vizinhas no dataframe filtrado. O purge (nunca
+    atravessar o dia) tem que continuar funcionando MESMO ASSIM -- ele
+    compara a coluna 'dia', nao a posicao fisica da linha.
+    """
+    # dias 1,2,3 = treino (teste_dias=1, treino_min=3); dia 4 e' teste;
+    # dia 2 (NO MEIO do treino) nao aparece na analise -- mas o ponto do
+    # teste e' o trigger no FIM do dia 4 nao vazar para o "dia 5" seguinte
+    # (que tambem seria teste) usando dado de um dia diferente.
+    linhas = []
+    for d_idx in range(1, 6):
+        dia = f"2026-01-0{d_idx}"
+        for b in range(3):
+            z = -1.5 if (d_idx == 4 and b == 2) else 0.0   # trigger na ULTIMA barra do dia 4
+            linhas.append({"dia": dia, "close": 100.0 + d_idx * 10 + b,
+                           "high": 101.0 + d_idx * 10 + b,
+                           "low": 99.0 + d_idx * 10 + b, "z_agf_3": z})
+    df = pd.DataFrame(linhas)
+    df["ts_close"] = np.arange(len(df)) * 10**11
+    arq = tmp_path / "features.parquet"
+    df.to_parquet(arq, index=False)
+
+    # dias de teste com treino_min=3, teste_dias=1: dia4, dia5 sao teste.
+    # O trigger esta na ULTIMA barra do dia4 -- sem barra seguinte NO
+    # MESMO dia, precisa ser descartado (nao pode usar barra do dia5).
+    with pytest.raises(SystemExit, match="insuficiente"):
+        analisar_mae(arq, "z_agf_3", horizonte=1, threshold_entrada=1.4,
+                    direcao="contrarian", stop_catastrofico_pontos=500,
+                    saida=tmp_path / "out", treino_min=3, teste_dias=1)

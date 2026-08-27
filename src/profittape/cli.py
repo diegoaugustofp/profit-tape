@@ -829,6 +829,14 @@ def mae_analise(
         help="Deve bater com RiscoConfig.stop_catastrofico_pontos do "
              "ea.yaml (derivado de capital x risco_max_pct / valor_ponto)."),
     saida: Path = typer.Option(Path("data/research"), "--saida"),
+    treino_min: int = typer.Option(
+        3, "--treino-min",
+        help="Mesma semantica de walk-forward do `research`/`quintis`: dias "
+             "minimos de treino antes do primeiro bloco de teste. A analise "
+             "roda SO' sobre o pool out-of-sample (uniao dos blocos de "
+             "teste) -- nunca sobre a amostra inteira, para nao misturar "
+             "dia que 'treinou' com dia de avaliacao real."),
+    teste_dias: int = typer.Option(2, "--teste-dias"),
 ) -> None:
     """
     MAE (Maximum Adverse Excursion) por operacao -- responde se o stop
@@ -845,7 +853,8 @@ def mae_analise(
         raise SystemExit(f"nao achei {arquivo} — rode `profit-tape features` antes")
 
     r = analisar_mae(arquivo, feature, horizonte, threshold_entrada, direcao,
-                     stop_catastrofico_pontos, saida)
+                     stop_catastrofico_pontos, saida,
+                     treino_min=treino_min, teste_dias=teste_dias)
     typer.echo("=" * 62)
     typer.echo(f"MAE — {feature}@h{horizonte}  stop={stop_catastrofico_pontos:.0f}pts  "
                f"n={r['n_triggers']}")

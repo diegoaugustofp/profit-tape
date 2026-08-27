@@ -534,3 +534,29 @@ proprio antes de mudar o comportamento do EA -- mesma disciplina de
 sempre, nao e' ajuste gratuito so' porque os numeros sugerem.
 
 9 testes novos em test_mae.py. 237 testes.
+
+## CORRECAO CRITICA: mae.py rodava sobre amostra inteira, nao out-of-sample (2026-08-27)
+
+O resultado real do MAE (336 triggers) mostrou venda bruto=+11.6 pts --
+bem menor que os +33.73 inferidos da tabela de quintis (que usa pool
+out-of-sample). Investigando a discrepancia: mae.py NUNCA restringia aos
+dias de teste do walk-forward -- rodava sobre TODA a amostra, misturando
+dias de TREINO (que o IC usou para o proprio processo de avaliacao) com
+dias de TESTE. quintis.py sempre seguiu essa disciplina (uniao dos
+blocos de teste via gerar_folds); mae.py nao replicou isso -- descuido
+meu, nao decisao deliberada.
+
+CORRIGIDO: mae.py agora restringe ao MESMO pool out-of-sample que
+quintis.py usaria, com os mesmos parametros treino_min/teste_dias
+(default 3/2, iguais aos do research/quintis). Os dois numeros passam a
+ser genuinamente comparaveis.
+
+PENDENTE: re-rodar mae-analise com a correcao aplicada e comparar o novo
+numero de venda (deve se aproximar mais de +33.73, ou revelar mais uma
+camada de nuance se ainda divergir -- amostras diferentes por construcao
+mesmo restrita: quintil Q5 e' os ~20% mais extremos, enquanto o threshold
+exato de 1.4 do ea.yaml captura TUDO acima disso, uma populacao um pouco
+mais ampla e portanto potencialmente mais fraca na margem).
+
+2 testes novos (vazamento in-sample detectado + purge de dia sobrevive a
+reindexacao apos filtro OOS). 240 testes.
