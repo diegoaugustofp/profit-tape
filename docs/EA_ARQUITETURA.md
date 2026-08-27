@@ -410,3 +410,46 @@ e' um campo configuravel no .env, nunca hardcoded em lugar nenhum do
 codigo (conferido). So' um lembrete operacional: quando a XP habilitar
 a conta real para esta chave, RODAR `ea-contas` DE NOVO -- nao assumir
 que o mesmo corretora_id=32006 vale para a conta real tambem.
+
+## CONFIRMADO (2026-08-27): MarketLogin+MarketLogin TAMBEM colide -- ea-replay criado
+
+Teste do operador: dois `record` simultaneos, mesma credencial, pastas
+diferentes. O SEGUNDO recebeu o MESMO erro exato
+(DLLInitializeMarketLogin devolveu -2147483647) do primeiro segundo em
+diante -- nao e' especifico de LoginCompleto vs MarketLogin, e' a chave
+de ativacao permitindo UMA sessao por vez, ponto.
+
+IMPLICACAO CONFIRMADA: `profit-tape ea` (dry_run, MarketLogin) NAO PODE
+rodar como processo separado com conexao propria enquanto o `record`
+(agendado, tambem MarketLogin, mesma credencial) estiver ativo. A
+arquitetura de "processo separado com conexao propria" para o EA,
+assumida desde o inicio, nao funciona com uma unica chave de ativacao.
+
+SOLUCAO IMPLEMENTADA para nao bloquear a validacao do EA: `rodar_replay()`
+em service.py + comando `profit-tape ea-replay`. Le os trades que o
+`record` JA' CAPTUROU (parquet), ordena por ts_ns, alimenta o MESMO
+nucleo (processar_trade_bruto -- sinal.py + decisao.py + risco.py,
+identico ao que rodaria ao vivo) sem NENHUMA conexao com a DLL --
+portanto sem conflito possivel com o record. Nao e' tempo real (roda
+DEPOIS que os arquivos foram escritos), mas valida a MESMA logica com
+dado real, sem risco de disputa de sessao.
+
+USO (depois do fechamento do pregao, com o dia ja capturado):
+```
+profit-tape ea-replay -c config/ea.yaml --dia 2026-08-27
+```
+
+PENDENTE (nao resolvido, nao urgente): a arquitetura de LONGO PRAZO,
+para quando dry_run=False for cogitado (que precisa SIM de reacao em
+tempo real, replay pos-hoc nao serve para executar ordem de verdade).
+Duas rotas possiveis, nenhuma implementada: (a) uma SEGUNDA chave de
+ativacao dedicada ao EA (se a XP/Nelogica permitir), eliminando a
+disputa por chave unica; (b) integrar a construcao de sinal do EA
+DENTRO do mesmo processo/conexao do record (consumindo o EventBus que
+ja existe, em vez de abrir conexao propria) -- mudanca real de
+arquitetura, nao cosmetica. Decisao adiada ate' dry_run=False ser
+considerado, que ja tem outros pre-requisitos (2a chave de conta real
+habilitada pela XP) antes disso de qualquer forma.
+
+209 testes (2 novos: rodar_replay com parquet real + erro de parquet
+ausente).

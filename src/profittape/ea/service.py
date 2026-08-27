@@ -32,6 +32,7 @@ import queue
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import structlog
 
@@ -300,6 +301,58 @@ class EAService:
             self.encerrar_dia()
             dll.DLLFinalize()
             log.info("ea.finalizado", **self._hb())
+
+    def rodar_replay(self, raiz_raw: Path) -> None:
+        """
+        FORWARD-TEST SEM CONEXAO PROPRIA (2026-08-27, resposta a um problema
+        real de licenciamento): a chave de ativacao so' permite UMA sessao
+        por vez -- duas conexoes MarketLogin simultaneas (record + ea)
+        colidem exatamente como MarketLogin+LoginCompleto ja colidia
+        (testado na pratica: a segunda tentativa recebe NL_INTERNAL_ERROR
+        de forma identica, nao importa qual funcao de login). Rodar o EA
+        como processo separado com conexao propria, ao mesmo tempo que o
+        record, NAO FUNCIONA com uma unica chave de ativacao.
+
+        Solucao para VALIDAR o EA sem esperar uma segunda chave ou
+        redesenhar a arquitetura sob pressao: reler os trades que o
+        record JA' CAPTUROU, direto do parquet, e alimentar o MESMO
+        nucleo (processar_trade_bruto) que rodaria ao vivo. Nao e' tempo
+        real -- roda DEPOIS que o record escreveu os arquivos -- mas usa
+        exatamente a mesma logica de sinal/decisao/risco, sem nenhuma
+        conexao com a DLL, portanto SEM CONFLITO possivel com o record.
+
+        raiz_raw: caminho do stream trade dentro de data/raw (ex.:
+        data/raw/trade/dt=2026-08-27/sym=WINFUT) -- le todos os
+        part-*.parquet dali, ordena por ts_ns, alimenta em ordem.
+        """
+        import pyarrow.dataset as ds
+
+        arquivos = sorted(raiz_raw.glob("*.parquet"))
+        if not arquivos:
+            raise SystemExit(f"nenhum parquet em {raiz_raw}")
+
+        tabela = ds.dataset(arquivos, format="parquet").to_table()
+        tabela = tabela.sort_by("ts_ns")
+        log.info("ea.replay_iniciado", arquivo=str(raiz_raw), linhas=tabela.num_rows,
+                 dry_run=self.config.dry_run,
+                 sinais=[s.feature for s in self.config.sinais])
+
+        cols = tabela.to_pydict()
+        n = tabela.num_rows
+        for i in range(n):
+            self.processar_trade_bruto(_TradeBruto(
+                ts_ns=cols["ts_ns"][i],
+                price=cols["price"][i],
+                quantidade=cols["quantidade"][i],
+                trade_type=cols["trade_type"][i],
+                agente_comprador=cols["agente_comprador"][i],
+                agente_vendedor=cols["agente_vendedor"][i],
+            ))
+            if (i + 1) % 200_000 == 0:
+                log.info("ea.replay_progresso", linha=i + 1, de=n, **self._hb())
+
+        self.encerrar_dia()
+        log.info("ea.replay_concluido", **self._hb())
 
     def _hb(self) -> dict:
         return {"trades": self.stats.trades, "barras": self.stats.barras,

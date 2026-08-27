@@ -601,6 +601,48 @@ def ea(
 
 
 @app.command()
+def ea_replay(
+    config: Path = typer.Option(Path("config/ea.yaml"), "-c", "--config"),
+    dia: str = typer.Option(..., "--dia", help="YYYY-MM-DD"),
+    raiz_raw: Path = typer.Option(Path("data/raw"), "--raiz-raw"),
+    log_file: Path | None = typer.Option(None, "--log-file"),
+    log_level: str = typer.Option("INFO", "--log-level"),
+) -> None:
+    """
+    Forward-test SEM conexao propria: reler os trades que o `record` JA'
+    CAPTUROU (parquet), alimentar o MESMO nucleo do EA (sinal, decisao,
+    risco), e reportar as decisoes que teriam sido tomadas.
+
+    Existe por um motivo real de licenciamento (2026-08-27): a chave de
+    ativacao so' permite UMA sessao por vez -- rodar `ea` como processo
+    separado com conexao propria, ao mesmo tempo que o `record`, nao
+    funciona (a segunda conexao recebe NL_INTERNAL_ERROR). O replay reusa
+    a mesma logica sem precisar de conexao nenhuma, portanto sem conflito.
+    """
+    configurar(log_level, log_file)
+    from .ea.config import EAConfig
+    from .ea.service import EAService
+
+    if not config.exists():
+        raise SystemExit(f"nao achei {config} -- crie a partir de "
+                         f"config/ea.exemplo.yaml")
+    ea_cfg = EAConfig.from_yaml(config)
+    caminho = raiz_raw / "trade" / f"dt={dia}" / f"sym={ea_cfg.symbol}"
+    if not caminho.exists():
+        raise SystemExit(f"nao achei {caminho} -- o record capturou esse dia?")
+
+    typer.echo(f"EA replay: {ea_cfg.symbol} dia={dia} dry_run={ea_cfg.dry_run} "
+               f"sinais={[s.feature for s in ea_cfg.sinais]}")
+    svc = EAService(ea_cfg)
+    svc.rodar_replay(caminho)
+    typer.echo(f"trades={svc.stats.trades} barras={svc.stats.barras} "
+               f"decisoes={svc.stats.decisoes} "
+               f"pnl_dia_pontos={round(svc.gestor.pnl_dia_pontos, 1)} "
+               f"perdas_seguidas={svc.gestor.perdas_consecutivas} "
+               f"bloqueado={svc.gestor.bloqueado}")
+
+
+@app.command()
 def ea_contas(
     timeout: float = typer.Option(15.0, "--timeout"),
     log_level: str = typer.Option("INFO", "--log-level"),

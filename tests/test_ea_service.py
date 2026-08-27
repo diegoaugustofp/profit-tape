@@ -125,3 +125,46 @@ def test_dry_run_false_com_executor_envia_de_verdade() -> None:
     n_ordens = sum(v for k, v in svc.stats.decisoes.items() if k != "nada")
     assert n_ordens > 0, "fluxo desequilibrado do XP deveria ter gerado ordem"
     assert len(dll.chamadas) == n_ordens   # cada decisao nao-NADA virou chamada real
+
+
+def test_rodar_replay_le_parquet_e_alimenta_o_mesmo_nucleo(tmp_path) -> None:
+    """
+    Resposta a um problema real de licenciamento (2026-08-27): duas
+    conexoes MarketLogin simultaneas (record + ea) colidem -- a chave de
+    ativacao so' permite uma sessao por vez (confirmado na pratica, erro
+    identico ao de MarketLogin+LoginCompleto). rodar_replay reusa o MESMO
+    nucleo (processar_trade_bruto) mas le trades JA' CAPTURADOS do
+    parquet, sem nenhuma conexao -- portanto sem conflito possivel.
+    """
+    import pandas as pd
+
+    rng = np.random.default_rng(11)
+    n = 5000
+    df = pd.DataFrame({
+        "ts_ns": np.arange(n, dtype=np.int64) * 10**8,
+        "ts_recv_ns": np.arange(n, dtype=np.int64) * 10**8,
+        "symbol": "WINFUT", "exchange": "F", "trade_id": np.arange(n),
+        "price": 140000.0 + np.cumsum(rng.choice([-5.0, 0.0, 5.0], n)),
+        "volume_financeiro": 0.0,
+        "quantidade": rng.integers(1, 8, n),
+        "agente_comprador": rng.choice([3, 85], n),
+        "agente_vendedor": rng.choice([3, 85], n),
+        "trade_type": rng.choice([2, 3], n),
+        "is_edit": False,
+    })
+    raiz = tmp_path / "trade" / "dt=2026-08-27" / "sym=WINFUT"
+    raiz.mkdir(parents=True)
+    df.to_parquet(raiz / "part-0000.parquet", index=False)
+
+    svc = _config_svc = EAService(_config())
+    svc.rodar_replay(raiz)
+
+    assert svc.stats.trades == n
+    assert svc.stats.barras > 10
+    assert svc.stats.posicao_simulada == 0   # encerrar_dia zerou no final
+
+
+def test_rodar_replay_sem_parquet_falha_com_mensagem_clara(tmp_path) -> None:
+    svc = EAService(_config())
+    with pytest.raises(SystemExit, match="nenhum parquet"):
+        svc.rodar_replay(tmp_path / "vazio")
