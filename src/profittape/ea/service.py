@@ -327,13 +327,21 @@ class EAService:
         data/raw/trade/dt=2026-08-27/sym=WINFUT) -- le todos os
         part-*.parquet dali, ordena por ts_ns, alimenta em ordem.
         """
+        import time as _time
+
         import pyarrow.dataset as ds
 
         arquivos = sorted(raiz_raw.glob("*.parquet"))
         if not arquivos:
             raise SystemExit(f"nenhum parquet em {raiz_raw}")
 
-        tabela = ds.dataset(arquivos, format="parquet").to_table()
+        # Projecao de colunas (2026-08-27): antes lia TODAS as colunas do
+        # parquet (symbol, exchange, trade_id, volume_financeiro, is_edit,
+        # ts_recv_ns...), desperdicando tempo/memoria com o que nunca e'
+        # usado -- so' as 6 abaixo entram em _TradeBruto.
+        colunas = ["ts_ns", "price", "quantidade", "trade_type",
+                  "agente_comprador", "agente_vendedor"]
+        tabela = ds.dataset(arquivos, format="parquet").to_table(columns=colunas)
         tabela = tabela.sort_by("ts_ns")
         log.info("ea.replay_iniciado", arquivo=str(raiz_raw), linhas=tabela.num_rows,
                  dry_run=self.config.dry_run,
@@ -341,6 +349,15 @@ class EAService:
 
         cols = tabela.to_pydict()
         n = tabela.num_rows
+        t0 = _time.monotonic()
+        # Instrumentacao fina (2026-08-27, pedido real: um replay de dia
+        # unico ficou rodando 3+ HORAS sem NENHUMA linha de progresso — o
+        # checkpoint antigo (a cada 200k trades) so' apareceria depois de
+        # boa parte do dia processado; se algo travar cedo, o operador fica
+        # as cegas por horas antes do primeiro sinal. Agora reporta a cada
+        # 10k trades, com THROUGHPUT real (trades/s) — um numero caindo
+        # para perto de zero e' o sinal inequivoco de travamento real,
+        # visivel em segundos, nao em horas.
         for i in range(n):
             self.processar_trade_bruto(_TradeBruto(
                 ts_ns=cols["ts_ns"][i],
@@ -350,8 +367,13 @@ class EAService:
                 agente_comprador=cols["agente_comprador"][i],
                 agente_vendedor=cols["agente_vendedor"][i],
             ))
-            if (i + 1) % 200_000 == 0:
-                log.info("ea.replay_progresso", linha=i + 1, de=n, **self._hb())
+            if (i + 1) % 10_000 == 0:
+                decorrido = _time.monotonic() - t0
+                throughput = (i + 1) / decorrido if decorrido > 0 else 0.0
+                log.info("ea.replay_progresso", linha=i + 1, de=n,
+                        pct=round(100 * (i + 1) / n, 1),
+                        trades_por_s=round(throughput, 0),
+                        decorrido_s=round(decorrido, 1), **self._hb())
 
         self.encerrar_dia()
         log.info("ea.replay_concluido", **self._hb())
