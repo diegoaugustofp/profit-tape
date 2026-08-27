@@ -101,6 +101,13 @@ def analisar_mae(arquivo_features: Path, feature: str, horizonte: int,
         excursao_close = (entrada - janela["close"]) * L
         mae_close = excursao_close.max()
 
+        # MFE_close (2026-08-27, preparacao para Rota B -- payoff fixo):
+        # complemento simetrico do MAE, excursao A FAVOR (nao contra) usando
+        # CLOSE de cada barra -- responde "quanto de lucro estava disponivel
+        # dentro da janela, se um alvo fixo tivesse sido usado em vez da
+        # saida por tempo". Mesma disciplina de janela/purge do MAE.
+        mfe_close = (-excursao_close).max()   # excursao_close negativo = a favor
+
         # MAE_intrabar: pior excursao usando LOW (comprado) / HIGH (vendido)
         # -- limite teorico mais severo, NAO monitorado pelo sistema hoje.
         pior_preco_intrabar = janela["low"] if L > 0 else janela["high"]
@@ -112,6 +119,7 @@ def analisar_mae(arquivo_features: Path, feature: str, horizonte: int,
         linhas.append({
             "dia": dia, "lado": L, "entrada": entrada,
             "mae_close": mae_close, "mae_intrabar": mae_intrabar,
+            "mfe_close": mfe_close,
             "pnl_final_h": pnl_final,
             "teria_batido_stop": mae_close >= stop_catastrofico_pontos,
         })
@@ -156,6 +164,10 @@ def analisar_mae(arquivo_features: Path, feature: str, horizonte: int,
         "mae_intrabar_p90": r["mae_intrabar"].quantile(0.9),
         "mae_intrabar_p99": r["mae_intrabar"].quantile(0.99),
         "mae_intrabar_max": r["mae_intrabar"].max(),
+        "mfe_close_media": r["mfe_close"].mean(),
+        "mfe_close_mediana": r["mfe_close"].median(),
+        "mfe_close_p10": r["mfe_close"].quantile(0.1),
+        "mfe_close_p90": r["mfe_close"].quantile(0.9),
         "n_teria_batido_stop": n_batido,
         "pct_teria_batido_stop": n_batido / n,
         "pnl_medio_sem_stop": r["pnl_final_h"].mean(),
@@ -190,6 +202,17 @@ def analisar_mae(arquivo_features: Path, feature: str, horizonte: int,
         f"- p90: {resumo['mae_intrabar_p90']:.1f} pts",
         f"- p99: {resumo['mae_intrabar_p99']:.1f} pts",
         f"- MAXIMO: {resumo['mae_intrabar_max']:.1f} pts\n",
+        "## MFE_close (Maximum Favorable Excursion — preparacao para "
+        "Rota B, payoff fixo)\n",
+        "Complemento simetrico do MAE: quanto de lucro estava disponivel "
+        "dentro da janela, se um alvo fixo tivesse sido usado em vez da "
+        "saida por tempo. NAO decide sozinho um alvo -- e' insumo para "
+        "um pre-registro proprio, nunca escolha de alvo por seleção apos "
+        "ver o resultado (mesma disciplina de sempre).\n",
+        f"- media: {resumo['mfe_close_media']:.1f} pts",
+        f"- mediana: {resumo['mfe_close_mediana']:.1f} pts",
+        f"- p10: {resumo['mfe_close_p10']:.1f} pts",
+        f"- p90: {resumo['mfe_close_p90']:.1f} pts\n",
         f"## Quantas operacoes teriam BATIDO o stop catastrofico "
         f"({stop_catastrofico_pontos:.0f} pts) antes do horizonte natural\n",
         f"- {n_batido} de {n} ({resumo['pct_teria_batido_stop']:.1%})\n",

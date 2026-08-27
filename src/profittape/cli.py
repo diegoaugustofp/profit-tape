@@ -1064,6 +1064,9 @@ def mae_analise(
                f"p99={r['mae_close_p99']:.1f}  max={r['mae_close_max']:.1f}")
     typer.echo(f"  MAE_intrabar (teorico) p90={r['mae_intrabar_p90']:.1f}  "
                f"p99={r['mae_intrabar_p99']:.1f}  max={r['mae_intrabar_max']:.1f}")
+    typer.echo(f"  MFE_close (p/ Rota B) media={r['mfe_close_media']:.1f}  "
+               f"mediana={r['mfe_close_mediana']:.1f}  p10={r['mfe_close_p10']:.1f}  "
+               f"p90={r['mfe_close_p90']:.1f}")
     typer.echo(f"  teria batido o stop: {r['n_teria_batido_stop']}/{r['n_triggers']} "
                f"({r['pct_teria_batido_stop']:.1%})")
     typer.echo(f"  pnl medio SEM stop : {r['pnl_medio_sem_stop']:+.1f} pts")

@@ -737,3 +737,59 @@ agrupada por lado) + `ea_cfg.risco.capital`/`valor_ponto_reais`.
 7 testes no modulo de calculo (valores conferidos a mao, incluindo o
 caso de conta zerando e a independencia do capital_inicial sobre o
 drawdown em R$) + 1 teste de integracao no CLI. 276 testes.
+
+## PRE-REGISTRO: Rota B (payoff fixo, alvo/stop) — preparacao (2026-08-27)
+
+Registrado ANTES de rodar qualquer teste economico com alvo/stop --
+mesma disciplina de sempre. Rota B ficou registrada em EA_ARQUITETURA.md
+desde ontem como "evolucao futura, exige research proprio (MAE/MFE)
+antes de substituir a saida por tempo". Hoje: MFE implementado
+(mae.py), a decisao metodologica de COMO escolher o par continua em
+aberto, registrada aqui com cuidado.
+
+### O risco metodologico real que este pre-registro existe para evitar
+
+Testar VARIOS pares de stop/alvo e escolher o que "deu melhor" e' a
+MESMA forma de overfitting que justifica DSR/trials/limiar deflacionado
+em todo o resto do projeto -- so' que aplicada ao lado economico em vez
+do IC. Se isto vira uma busca (grid search) sobre combinacoes, e'
+p-hacking disfarcado de engenharia, mesmo sem tocar no calculo do IC.
+
+### Regra decidida: UM par, nao um grid
+
+Rota B, quando for testada de verdade, testa **UM UNICO par** de
+stop/alvo por sinal -- escolhido por PRINCIPIO a partir das distribuicoes
+de MAE/MFE ja calculadas, nunca por selecao apos ver o resultado
+economico. Principio proposto (a confirmar quando o teste for de fato
+rodado): alvo = mediana do MFE_close do lado testado; stop = mediana do
+MAE_close do mesmo lado -- ambos arredondados para o multiplo de 5 ou 10
+mais proximo ANTES de rodar, nunca ajustados depois.
+
+### O que ainda falta (NAO implementado, proximo passo real)
+
+1. Rodar `mae-analise` com `--comparar-circuit-breaker`-like quebra por
+   lado (ja existe) para pegar MFE_close_mediana especificamente do lado
+   de venda (dado o resultado de hoje sobre a restricao de direcao) --
+   e' o candidato natural, ja que e' o lado com edge confirmado.
+2. Com os numeros de MAE/MFE do lado de venda em maos, congelar o par
+   stop/alvo exato (numero, nao formula) NESTA secao, antes de escrever
+   qualquer linha de codigo que implemente a saida por alvo/stop.
+3. So' entao: estender GestorDeRisco com uma saida por ALVO opcional
+   (paralela a saida por tempo, nao substituindo sem comparar as duas) --
+   mudanca de codigo real, deliberadamente adiada para uma sessao com
+   atencao plena (nao no fim de um dia longo), testada com o mesmo rigor
+   de tudo que foi construido hoje.
+4. Comparar (mesma disciplina de "Restricao de direcao"): saida por
+   ALVO/stop fixo vs saida por TEMPO (Rota A), no MESMO periodo,
+   criterio de favoravel/desfavoravel/inconclusivo definido ANTES de ver
+   o resultado.
+
+### O que JA esta pronto para o proximo passo
+
+- `mae.py` calcula MFE_close (media, mediana, p10, p90) -- complemento
+  simetrico do MAE, mesma disciplina de janela/purge/OOS.
+- Quebra por lado do MAE (ja existente desde a analise de assimetria)
+  aplica-se igual ao MFE -- so' falta rodar e ler o numero.
+
+3 testes novos de MFE (valores conferidos a mao, compra e venda,
+relatorio inclui a secao). 280 testes.

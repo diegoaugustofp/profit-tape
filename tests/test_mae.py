@@ -236,3 +236,50 @@ def test_purge_de_dia_sobrevive_a_reindexacao_apos_filtro_oos(tmp_path: Path) ->
         analisar_mae(arq, "z_agf_3", horizonte=1, threshold_entrada=1.4,
                     direcao="contrarian", stop_catastrofico_pontos=500,
                     saida=tmp_path / "out", treino_min=3, teste_dias=1)
+
+
+def test_mfe_e_complemento_simetrico_do_mae(tmp_path: Path) -> None:
+    """
+    Preparacao para Rota B (2026-08-27): MFE = complemento simetrico do
+    MAE, excursao A FAVOR em vez de contra. Mesmo cenario ja conferido a
+    mao do MAE (compra, entrada=100, janela close=[95,98,110]):
+    excursao_close=[5,2,-10] -> MAE=5 (ja testado), MFE=10 (o -10 vira
+    +10, a melhor excursao a favor).
+    """
+    arq = tmp_path / "features.parquet"
+    _df_basico().to_parquet(arq, index=False)
+    r = analisar_mae(arq, "z_agf_3", horizonte=3, threshold_entrada=1.4,
+                     direcao="contrarian", stop_catastrofico_pontos=500,
+                     saida=tmp_path / "out", treino_min=0)
+    assert r["tabela"]["mfe_close"].iloc[0] == 10
+
+
+def test_mfe_venda_espelha_o_sinal_corretamente(tmp_path: Path) -> None:
+    """Mesmo cenario ja conferido a mao da venda: entrada=100, janela
+    close=[108,102,90]. excursao_close (venda, L=-1) = [8,2,-10] ->
+    MAE=8 (ja testado), MFE=10 (o -10 vira +10)."""
+    df = pd.DataFrame({
+        "dia": ["2026-01-01"] * 10,
+        "ts_close": np.arange(10) * 10**11,
+        "close":  [50, 60, 100, 108, 102, 90, 70, 71, 72, 73],
+        "high":   [51, 61, 101, 112, 103, 91, 71, 72, 73, 74],
+        "low":    [49, 59, 99,  105, 101, 89, 69, 70, 71, 72],
+        "z_agf_3": [0, 0, 1.5, 0, 0, 0, 0, 0, 0, 0],
+    })
+    arq = tmp_path / "features.parquet"
+    df.to_parquet(arq, index=False)
+    r = analisar_mae(arq, "z_agf_3", horizonte=3, threshold_entrada=1.4,
+                     direcao="contrarian", stop_catastrofico_pontos=500,
+                     saida=tmp_path / "out", treino_min=0)
+    assert r["tabela"]["mfe_close"].iloc[0] == 10
+
+
+def test_relatorio_inclui_secao_mfe(tmp_path: Path) -> None:
+    arq = tmp_path / "features.parquet"
+    _df_basico().to_parquet(arq, index=False)
+    r = analisar_mae(arq, "z_agf_3", horizonte=3, threshold_entrada=1.4,
+                     direcao="contrarian", stop_catastrofico_pontos=500,
+                     saida=tmp_path / "out", treino_min=0)
+    conteudo = Path(r["relatorio"]).read_text(encoding="utf-8")
+    assert "MFE_close" in conteudo
+    assert "Rota B" in conteudo
