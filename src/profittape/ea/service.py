@@ -65,6 +65,79 @@ class EstatisticasEA:
     posicao_simulada: int = 0
 
 
+def carregar_trades_do_dia(raiz_raw: Path) -> list[_TradeBruto]:
+    """
+    Le+ordena o parquet de um dia, devolve a lista de _TradeBruto pronta
+    para processar_trade_bruto(). Separado de rodar_replay() (2026-08-27)
+    para permitir carregar UMA VEZ e processar MULTIPLAS VEZES (ex.:
+    comparar com/sem circuit breaker sem reler o parquet duas vezes — a
+    leitura e' a parte cara, ~80s num dia real; o loop de decisao e'
+    barato, ~10s para 5 milhoes de trades).
+    """
+    import time as _time
+
+    # Instrumentacao da fase de LEITURA (2026-08-27, achado real: um
+    # replay ficou 3+ horas com o log tendo SO' a primeira linha —
+    # ou seja, nem chegava a "ea.replay_iniciado", que so' aparece
+    # DEPOIS de ler+ordenar o parquet inteiro. O gargalo NAO estava no
+    # loop trade-a-trade (bancada: 5 milhoes de trades sinteticos
+    # processam em ~11s) -- estava ANTES dele, numa etapa sem
+    # visibilidade nenhuma. Cada passo agora e' cronometrado e logado
+    # separadamente, para a proxima tentativa apontar exatamente ONDE.
+    t_glob = _time.monotonic()
+    arquivos = sorted(raiz_raw.glob("*.parquet"))
+    if not arquivos:
+        raise SystemExit(f"nenhum parquet em {raiz_raw}")
+    tamanho_total_mb = sum(a.stat().st_size for a in arquivos) / 1e6
+    log.info("ea.replay_arquivos_encontrados", n_arquivos=len(arquivos),
+             tamanho_mb=round(tamanho_total_mb, 1),
+             decorrido_s=round(_time.monotonic() - t_glob, 2))
+
+    colunas = ["ts_ns", "price", "quantidade", "trade_type",
+              "agente_comprador", "agente_vendedor"]
+    t_leitura = _time.monotonic()
+    # BUG REAL achado (2026-08-27, diagnostico do operador): ds.dataset(
+    # arquivos).to_table() ficou 3+ HORAS travado combinando 37
+    # fragmentos -- enquanto ler cada arquivo INDIVIDUALMENTE (mesmo
+    # numero de arquivos, mesmo disco) somou menos de 2 MINUTOS no
+    # total. Confirmado nos DOIS discos (SSD externo e interno) com
+    # numeros praticamente identicos -- nao e' velocidade de disco, e'
+    # o pyarrow.dataset() sendo patologicamente lento ao combinar
+    # multiplos fragmentos NESTE ambiente especifico (causa exata no
+    # pyarrow desconhecida -- nao importa, o contorno empirico funciona
+    # e foi provado pelo proprio operador). Trocado para ler arquivo a
+    # arquivo (pq.ParquetFile.read(), sem a maquina de "dataset" com
+    # multiplos fragmentos) e concatenar no final.
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    tabelas = [pq.ParquetFile(a).read(columns=colunas) for a in arquivos]
+    tabela = pa.concat_tables(tabelas)
+    log.info("ea.replay_leitura_concluida", linhas=tabela.num_rows,
+             decorrido_s=round(_time.monotonic() - t_leitura, 2))
+
+    t_sort = _time.monotonic()
+    tabela = tabela.sort_by("ts_ns")
+    log.info("ea.replay_sort_concluido",
+             decorrido_s=round(_time.monotonic() - t_sort, 2))
+
+    t_pydict = _time.monotonic()
+    cols = tabela.to_pydict()
+    log.info("ea.replay_pydict_concluido",
+             decorrido_s=round(_time.monotonic() - t_pydict, 2))
+
+    n = tabela.num_rows
+    return [
+        _TradeBruto(
+            ts_ns=cols["ts_ns"][i], price=cols["price"][i],
+            quantidade=cols["quantidade"][i], trade_type=cols["trade_type"][i],
+            agente_comprador=cols["agente_comprador"][i],
+            agente_vendedor=cols["agente_vendedor"][i],
+        )
+        for i in range(n)
+    ]
+
+
 class EAService:
     """
     Uma instancia por simbolo (igual ConstrutorDeSinalAoVivo). Testavel sem
@@ -327,62 +400,24 @@ class EAService:
         data/raw/trade/dt=2026-08-27/sym=WINFUT) -- le todos os
         part-*.parquet dali, ordena por ts_ns, alimenta em ordem.
         """
-        import time as _time
-
-        # Instrumentacao da fase de LEITURA (2026-08-27, achado real: um
-        # replay ficou 3+ horas com o log tendo SO' a primeira linha --
-        # ou seja, nem chegava a "ea.replay_iniciado", que so' aparece
-        # DEPOIS de ler+ordenar o parquet inteiro. O gargalo NAO estava no
-        # loop trade-a-trade (bancada: 5 milhoes de trades sinteticos
-        # processam em ~11s) -- estava ANTES dele, numa etapa sem
-        # visibilidade nenhuma. Cada passo agora e' cronometrado e logado
-        # separadamente, para a proxima tentativa apontar exatamente ONDE.
-        t_glob = _time.monotonic()
-        arquivos = sorted(raiz_raw.glob("*.parquet"))
-        if not arquivos:
-            raise SystemExit(f"nenhum parquet em {raiz_raw}")
-        tamanho_total_mb = sum(a.stat().st_size for a in arquivos) / 1e6
-        log.info("ea.replay_arquivos_encontrados", n_arquivos=len(arquivos),
-                 tamanho_mb=round(tamanho_total_mb, 1),
-                 decorrido_s=round(_time.monotonic() - t_glob, 2))
-
-        colunas = ["ts_ns", "price", "quantidade", "trade_type",
-                  "agente_comprador", "agente_vendedor"]
-        t_leitura = _time.monotonic()
-        # BUG REAL achado (2026-08-27, diagnostico do operador): ds.dataset(
-        # arquivos).to_table() ficou 3+ HORAS travado combinando 37
-        # fragmentos -- enquanto ler cada arquivo INDIVIDUALMENTE (mesmo
-        # numero de arquivos, mesmo disco) somou menos de 2 MINUTOS no
-        # total. Confirmado nos DOIS discos (SSD externo e interno) com
-        # numeros praticamente identicos -- nao e' velocidade de disco, e'
-        # o pyarrow.dataset() sendo patologicamente lento ao combinar
-        # multiplos fragmentos NESTE ambiente especifico (causa exata no
-        # pyarrow desconhecida -- nao importa, o contorno empirico funciona
-        # e foi provado pelo proprio operador). Trocado para ler arquivo a
-        # arquivo (pq.ParquetFile.read(), sem a maquina de "dataset" com
-        # multiplos fragmentos) e concatenar no final.
-        import pyarrow as pa
-        import pyarrow.parquet as pq
-
-        tabelas = [pq.ParquetFile(a).read(columns=colunas) for a in arquivos]
-        tabela = pa.concat_tables(tabelas)
-        log.info("ea.replay_leitura_concluida", linhas=tabela.num_rows,
-                 decorrido_s=round(_time.monotonic() - t_leitura, 2))
-
-        t_sort = _time.monotonic()
-        tabela = tabela.sort_by("ts_ns")
-        log.info("ea.replay_sort_concluido",
-                 decorrido_s=round(_time.monotonic() - t_sort, 2))
-
-        log.info("ea.replay_iniciado", arquivo=str(raiz_raw), linhas=tabela.num_rows,
+        trades = carregar_trades_do_dia(raiz_raw)
+        log.info("ea.replay_iniciado", arquivo=str(raiz_raw), linhas=len(trades),
                  dry_run=self.config.dry_run,
                  sinais=[s.feature for s in self.config.sinais])
+        self.processar_trades_carregados(trades)
 
-        t_pydict = _time.monotonic()
-        cols = tabela.to_pydict()
-        log.info("ea.replay_pydict_concluido",
-                 decorrido_s=round(_time.monotonic() - t_pydict, 2))
-        n = tabela.num_rows
+    def processar_trades_carregados(self, trades: list[_TradeBruto]) -> None:
+        """
+        Processa uma lista de trades JA' CARREGADA (ver carregar_trades_do_dia)
+        -- separado de rodar_replay() para permitir carregar o parquet UMA
+        vez e processar MULTIPLAS vezes (ex.: comparar com/sem circuit
+        breaker no mesmo dia, sem reler o arquivo duas vezes -- a leitura
+        e' a parte cara, ~80s num dia real; este loop e' barato, ~10s
+        para 5 milhoes de trades).
+        """
+        import time as _time
+
+        n = len(trades)
         t0 = _time.monotonic()
         # Instrumentacao fina (2026-08-27, pedido real: um replay de dia
         # unico ficou rodando 3+ HORAS sem NENHUMA linha de progresso — o
@@ -392,15 +427,8 @@ class EAService:
         # 10k trades, com THROUGHPUT real (trades/s) — um numero caindo
         # para perto de zero e' o sinal inequivoco de travamento real,
         # visivel em segundos, nao em horas.
-        for i in range(n):
-            self.processar_trade_bruto(_TradeBruto(
-                ts_ns=cols["ts_ns"][i],
-                price=cols["price"][i],
-                quantidade=cols["quantidade"][i],
-                trade_type=cols["trade_type"][i],
-                agente_comprador=cols["agente_comprador"][i],
-                agente_vendedor=cols["agente_vendedor"][i],
-            ))
+        for i, t in enumerate(trades):
+            self.processar_trade_bruto(t)
             if (i + 1) % 10_000 == 0:
                 decorrido = _time.monotonic() - t0
                 throughput = (i + 1) / decorrido if decorrido > 0 else 0.0

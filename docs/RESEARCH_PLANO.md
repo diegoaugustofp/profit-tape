@@ -560,3 +560,39 @@ mais ampla e portanto potencialmente mais fraca na margem).
 
 2 testes novos (vazamento in-sample detectado + purge de dia sobrevive a
 reindexacao apos filtro OOS). 240 testes.
+
+## Circuit breaker: com freio vs sem freio, num dia real (2026-08-27)
+
+Resultado real do operador (3 dias, WINFUT): com o circuit breaker
+ligado, dia 26/08 parou em -578pts apos 3 perdas seguidas. Rodado de
+novo com --ignorar-circuit-breaker (so' para analise), o mesmo dia
+CONTINUOU e terminou em +187pts -- as 5 operacoes seguintes aquele dia
+recuperaram tudo e ainda deram lucro. Agregado dos 3 dias melhorou de
+-1402 (com freio) para -637 (sem freio); taxa de acerto subiu de 33.3%
+para 47.1% (mais perto do ~43% que o proprio quintil ja sugeria).
+
+LEITURA CORRETA, registrada para nao repetir o erro de decidir com
+amostra pequena: isto NAO decide se max_perdas_consecutivas=3 esta mal
+calibrado. So' 1 dos 3 dias disparou o freio -- n=1 evento nao decide
+nada sobre a distribuicao real de "o que acontece depois de 3 perdas"
+para este sinal. O freio protege contra o PIOR CASO, nao maximiza o
+resultado esperado de UM dia -- julgar a regra por um unico evento
+realizado e' o mesmo erro logico ja discutido para o sinal em si,
+aplicado a gestao de risco.
+
+FERRAMENTA: `ea-replay-lote --comparar-circuit-breaker` -- para todo
+dia em que o freio disparar de verdade, carrega o parquet UMA vez e
+roda DUAS simulacoes (com e sem freio) sobre o MESMO dado (sem reler o
+arquivo duas vezes -- a leitura e' a parte cara). Mostra os dois
+resultados lado a lado, com nota de cautela explicita no relatorio
+contra decisao prematura.
+
+PROXIMO PASSO: acumular MUITOS eventos de disparo do freio (semanas de
+captura) antes de considerar ajustar max_perdas_consecutivas -- so' a
+distribuicao de "com vs sem freio" atraves de dezenas de disparos
+decide se a regra de 3 perdas esta bem calibrada para este sinal
+especifico, ou se e' generica demais (herdada do framework de risco
+geral do operador, nao derivada da pesquisa de z_agf_3).
+
+5 testes novos (nova flag + validacao de combinacao invalida). 251
+testes.

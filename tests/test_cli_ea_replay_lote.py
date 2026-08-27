@@ -136,3 +136,49 @@ def test_relatorio_lote_quebra_por_lado(tmp_path: Path) -> None:
     assert len(arquivos_md) == 1
     conteudo = arquivos_md[0].read_text(encoding="utf-8")
     assert "Por lado (pnl LIQUIDO" in conteudo
+
+
+def test_comparar_circuit_breaker_nao_combina_com_ignorar(tmp_path: Path) -> None:
+    dias = ["2026-08-24"]
+    _preparar_dias(tmp_path / "raw", dias)
+    cfg = tmp_path / "ea.yaml"
+    _config(cfg)
+
+    resultado = runner.invoke(app, [
+        "ea-replay-lote", "-c", str(cfg),
+        "--raiz-raw", str(tmp_path / "raw"),
+        "--saida", str(tmp_path / "out"),
+        "--ignorar-circuit-breaker", "--comparar-circuit-breaker",
+    ])
+    assert resultado.exit_code != 0
+    assert "nao combina" in resultado.output or "nao combina" in str(resultado.exception)
+
+
+def test_comparar_circuit_breaker_mostra_com_e_sem_freio(tmp_path: Path) -> None:
+    """
+    Pedido real do operador (2026-08-27): apos ver que o circuit breaker
+    disparou num dia e o resto do dia teria recuperado (sem o freio),
+    a comparacao precisa ser automatica -- carrega o dia UMA vez, roda
+    DUAS simulacoes (com e sem freio) sobre o MESMO dado, sem reler o
+    parquet duas vezes.
+    """
+    dias = ["2026-08-24"]
+    # Volume alto o suficiente para provavelmente disparar o circuit
+    # breaker em pelo menos um cenario -- usa o mesmo gerador de sempre.
+    _preparar_dias(tmp_path / "raw", dias)
+    cfg = tmp_path / "ea.yaml"
+    _config(cfg)
+
+    resultado = runner.invoke(app, [
+        "ea-replay-lote", "-c", str(cfg),
+        "--raiz-raw", str(tmp_path / "raw"),
+        "--saida", str(tmp_path / "out"),
+        "--comparar-circuit-breaker",
+    ])
+    assert resultado.exit_code == 0, resultado.output
+
+    arquivos_md = list((tmp_path / "out").glob("*.md"))
+    conteudo = arquivos_md[0].read_text(encoding="utf-8")
+    assert "pnl (com freio)" in conteudo
+    assert "pnl (sem freio)" in conteudo
+    assert "ATENCAO NA LEITURA" in conteudo

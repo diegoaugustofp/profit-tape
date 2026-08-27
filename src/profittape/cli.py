@@ -671,6 +671,14 @@ def ea_replay_lote(
              "para ver o comportamento do dia inteiro. NUNCA usar isso "
              "como configuracao de producao -- e' flag explicita de "
              "diagnostico, nao vem do ea.yaml."),
+    comparar_circuit_breaker: bool = typer.Option(
+        False, "--comparar-circuit-breaker",
+        help="Para todo dia em que o circuit breaker disparar de "
+             "verdade, roda TAMBEM sem ele (mesmo dado ja' carregado, "
+             "SEM reler o parquet duas vezes) e mostra os dois "
+             "resultados lado a lado. Responde 'o freio ajudou ou "
+             "atrapalhou NESTE dia' sem precisar rodar o comando duas "
+             "vezes manualmente. Nao combina com --ignorar-circuit-breaker."),
     saida: Path = typer.Option(Path("data/research"), "--saida"),
     log_file: Path | None = typer.Option(
         None, "--log-file",
@@ -698,8 +706,13 @@ def ea_replay_lote(
     """
     import statistics as stats
 
+    if comparar_circuit_breaker and ignorar_circuit_breaker:
+        raise SystemExit("--comparar-circuit-breaker nao combina com "
+                         "--ignorar-circuit-breaker -- sao dois modos "
+                         "de diagnostico diferentes, use um ou outro.")
+
     from .ea.config import EAConfig
-    from .ea.service import EAService
+    from .ea.service import EAService, carregar_trades_do_dia
 
     configurar(log_level, log_file, nivel_arquivo="INFO")
     ea_cfg = EAConfig.from_yaml(config)
@@ -731,8 +744,24 @@ def ea_replay_lote(
         typer.echo(f"\n[{i}/{len(dias)}] {dia} — iniciando...")
 
         caminho = raiz_symbol / f"dt={dia}" / f"sym={ea_cfg.symbol}"
+        trades = carregar_trades_do_dia(caminho)
+
         svc = EAService(ea_cfg, ignorar_circuit_breaker=ignorar_circuit_breaker)
-        svc.rodar_replay(caminho)
+        svc.processar_trades_carregados(trades)
+
+        pnl_sem_freio = None
+        if comparar_circuit_breaker and svc.gestor.bloqueado:
+            # Mesmo dado JA' CARREGADO, sem reler o parquet -- a leitura
+            # e' a parte cara (~80s), este segundo passe e' barato (~10s).
+            svc_sem_freio = EAService(ea_cfg, ignorar_circuit_breaker=True)
+            svc_sem_freio.processar_trades_carregados(trades)
+            pnl_sem_freio = round(svc_sem_freio.gestor.pnl_dia_pontos, 1)
+            delta = round(pnl_sem_freio - svc.gestor.pnl_dia_pontos, 1)
+            typer.echo(f"    [circuit breaker disparou] com freio: "
+                      f"{svc.gestor.pnl_dia_pontos:+.1f} pts  |  "
+                      f"sem freio: {pnl_sem_freio:+.1f} pts  |  "
+                      f"delta: {delta:+.1f} pts")
+
         por_dia.append({
             "dia": dia, "trades": svc.stats.trades, "barras": svc.stats.barras,
             "decisoes": dict(svc.stats.decisoes),
@@ -740,6 +769,7 @@ def ea_replay_lote(
             "n_operacoes": len(svc.gestor.historico_pnl),
             "perdas_seguidas_final": svc.gestor.perdas_consecutivas,
             "bloqueado": svc.gestor.bloqueado,
+            "pnl_sem_freio": pnl_sem_freio,
         })
         todas_operacoes.extend(svc.gestor.historico_pnl)
         todas_operacoes_com_lado.extend(svc.gestor.historico_operacoes)
@@ -826,12 +856,39 @@ def ea_replay_lote(
         f"- MAIOR perda: {min(todas_operacoes):+.1f}" if todas_operacoes else "",
         f"- dias com circuit breaker disparado: {dias_bloqueados}/{len(dias)}",
         "\n## Por dia\n",
-        "| dia | pnl | operacoes | perdas seguidas (final) | bloqueado |",
-        "|---|---|---|---|---|",
+        (
+            "| dia | pnl (com freio) | pnl (sem freio) | delta | operacoes | "
+            "perdas seguidas (final) | bloqueado |"
+            if comparar_circuit_breaker else
+            "| dia | pnl | operacoes | perdas seguidas (final) | bloqueado |"
+        ),
+        ("|---|---|---|---|---|---|---|" if comparar_circuit_breaker else "|---|---|---|---|---|"),
     ]
     for d in por_dia:
-        linhas.append(f"| {d['dia']} | {d['pnl_dia']:+.1f} | {d['n_operacoes']} | "
-                      f"{d['perdas_seguidas_final']} | {d['bloqueado']} |")
+        if comparar_circuit_breaker:
+            if d["pnl_sem_freio"] is not None:
+                delta = d["pnl_sem_freio"] - d["pnl_dia"]
+                linhas.append(f"| {d['dia']} | {d['pnl_dia']:+.1f} | "
+                              f"{d['pnl_sem_freio']:+.1f} | {delta:+.1f} | "
+                              f"{d['n_operacoes']} | {d['perdas_seguidas_final']} | "
+                              f"{d['bloqueado']} |")
+            else:
+                linhas.append(f"| {d['dia']} | {d['pnl_dia']:+.1f} | - | - | "
+                              f"{d['n_operacoes']} | {d['perdas_seguidas_final']} | "
+                              f"{d['bloqueado']} |")
+        else:
+            linhas.append(f"| {d['dia']} | {d['pnl_dia']:+.1f} | {d['n_operacoes']} | "
+                          f"{d['perdas_seguidas_final']} | {d['bloqueado']} |")
+    if comparar_circuit_breaker:
+        linhas.append(
+            "\nATENCAO NA LEITURA: cada linha acima e' UM dia -- nao decida "
+            "sobre a calibracao do circuit breaker (max_perdas_consecutivas) "
+            "com poucos dias de amostra. O freio protege contra o PIOR "
+            "caso, nao maximiza o resultado esperado de um dia especifico; "
+            "'o freio atrapalhou este dia' nao significa que a regra esteja "
+            "mal calibrada -- so' rodadas futuras, com MUITOS dias em que o "
+            "freio disparou, respondem isso de verdade."
+        )
     linhas.append("\n## Por lado (pnl LIQUIDO, ja' descontado o custo)\n")
     linhas.append("Mesma pergunta que mae.py ja' respondia de forma independente: "
                   "as perdas estao concentradas no lado de compra (sem edge segundo "
