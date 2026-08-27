@@ -354,3 +354,17 @@ conta?"
 
 200 testes (6 novos/atualizados em test_ea_contas.py, incluindo replay
 exato desta sequencia real).
+
+## Nota do operador: corretora_id=32006 e' provavelmente codigo Nelogica do simulador, nao da XP (2026-08-26)
+
+Observacao importante para quando a conta real for habilitada: o
+corretora_id=32006 retornado por GetAccount() na conta demo/simulador
+provavelmente e' um codigo INTERNO da Nelogica para o ambiente de
+simulacao, nao o codigo real da XP como corretora. E' plausivel que a
+conta REAL, quando habilitada, venha com um corretora_id DIFERENTE.
+
+Nao exige mudanca de codigo agora -- RoteamentoConfig.id_corretora ja'
+e' um campo configuravel no .env, nunca hardcoded em lugar nenhum do
+codigo (conferido). So' um lembrete operacional: quando a XP habilitar
+a conta real para esta chave, RODAR `ea-contas` DE NOVO -- nao assumir
+que o mesmo corretora_id=32006 vale para a conta real tambem.
