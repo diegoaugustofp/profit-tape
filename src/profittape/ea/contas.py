@@ -209,4 +209,17 @@ def listar_contas(cred: Credenciais, timeout_s: float = 15.0,
         time.sleep(0.1)
 
     dll.DLLFinalize()
-    return coletor.contas
+
+    # Dedup por (corretora_id, account_id) -- observado na pratica
+    # (2026-08-26): o AccountCallback pode disparar mais de uma vez para a
+    # MESMA conta (nao e' erro nosso, e' como a DLL entrega); sem isso, o
+    # operador via a mesma conta duas vezes na lista, parecendo duas
+    # contas distintas quando era so' uma.
+    vistas: set[tuple[int, str]] = set()
+    unicas: list[ContaEncontrada] = []
+    for c in coletor.contas:
+        chave = (c.corretora_id, c.account_id)
+        if chave not in vistas:
+            vistas.add(chave)
+            unicas.append(c)
+    return unicas

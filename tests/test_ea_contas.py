@@ -178,3 +178,21 @@ def test_ativacao_invalidada_apos_conectar_da_mensagem_clara() -> None:
     with pytest.raises(SystemExit, match="ATIVACAO INVALIDADA"):
         listar_contas(_cred(), timeout_s=3.0,
                       dll_injetada=_FakeInvalidaDepoisDeConectar())
+
+
+def test_conta_duplicada_no_callback_vira_uma_so() -> None:
+    """
+    Observado na pratica (2026-08-26): AccountCallback disparou 2x para a
+    MESMA conta (mesma corretora_id + account_id) -- nao e' erro nosso,
+    e' como a DLL entrega. Sem dedup, o operador veria a mesma conta
+    duas vezes, parecendo duas contas distintas quando e' so' uma --
+    exatamente o que aconteceu (chave de ativacao so' habilitada para o
+    Simulador por enquanto, conta unica).
+    """
+    fake = _FakeLoginCompleto(contas=[
+        (32006, "Simulador", "1000357256", "DIEGO AUGUSTO FERNANDES DE PAULA"),
+        (32006, "Simulador", "1000357256", "DIEGO AUGUSTO FERNANDES DE PAULA"),
+    ])
+    contas = listar_contas(_cred(), timeout_s=5.0, dll_injetada=fake)
+    assert len(contas) == 1
+    assert contas[0].account_id == "1000357256"

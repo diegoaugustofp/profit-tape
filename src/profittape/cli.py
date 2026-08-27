@@ -634,10 +634,24 @@ def ea_contas(
         typer.echo(f"  corretora_id={c.corretora_id:<6} corretora={c.corretora_nome}")
         typer.echo(f"  account_id={c.account_id!r:<12} titular={c.titular}")
         typer.echo("-" * 70)
-    typer.echo("\nAnote qual account_id e' DEMO e qual e' REAL, e preencha:")
-    typer.echo("  ROTEAMENTO_ID_ACCOUNT_DEMO=<...>")
-    typer.echo("  ROTEAMENTO_ID_ACCOUNT_REAL=<...>")
-    typer.echo("  ROTEAMENTO_ID_CORRETORA=<corretora_id acima>")
+
+    if len(contas) == 1:
+        typer.echo(
+            "\nSo' uma conta -- normal se a chave de ativacao ainda so' "
+            "tem permissao para o SIMULADOR (nao para a conta real). "
+            "Preencha por enquanto so':"
+        )
+        typer.echo(f"  ROTEAMENTO_ID_ACCOUNT_DEMO={contas[0].account_id}")
+        typer.echo(f"  ROTEAMENTO_ID_CORRETORA={contas[0].corretora_id}")
+        typer.echo(
+            "ROTEAMENTO_ID_ACCOUNT_REAL fica VAZIO ate' a XP habilitar a "
+            "conta real para esta chave -- nunca invente um valor aqui."
+        )
+    else:
+        typer.echo("\nAnote qual account_id e' DEMO e qual e' REAL, e preencha:")
+        typer.echo("  ROTEAMENTO_ID_ACCOUNT_DEMO=<...>")
+        typer.echo("  ROTEAMENTO_ID_ACCOUNT_REAL=<...>")
+        typer.echo("  ROTEAMENTO_ID_CORRETORA=<corretora_id acima>")
     typer.echo("no seu .env (nunca no yaml versionado).")
 
 

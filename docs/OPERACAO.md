@@ -416,3 +416,16 @@ ACAO NECESSARIA NO DISCO DO OPERADOR:
    NOVAS a partir da v0.55 corrigida ficam corretas.
 3. Isso NAO afeta trade (sempre tem ts_ns real) nem price_book (usa
    time.time_ns() sempre) — so' offer_book era vulneravel.
+
+## Teste fragil conhecido: test_vigia_detecta_travado sensivel a virada de dia UTC
+
+Observado 2026-08-27 00:03 UTC: teste falhou isoladamente (esperava
+"travado", recebeu "ok"). Nao relacionado a nenhuma mudanca de codigo do
+dia -- git log confirma o arquivo intocado desde 2026-08-25. Hipotese:
+o teste monta um timestamp "hoje" (via datetime.now(UTC) + horario fixo
+09:00:00) e compara contra o que checar() calcula internamente no
+momento exato da chamada -- rodar bem perto da meia-noite UTC pode
+fazer os dois lados discordarem sobre qual e' "o dia de hoje". Nao
+corrigido ainda -- registrar para nao confundir com regressao real numa
+proxima falha. Se reaparecer LONGE da meia-noite UTC, aí sim e' bug de
+verdade, nao fuso.
