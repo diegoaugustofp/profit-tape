@@ -530,3 +530,42 @@ profit-tape mae-analise --feature z_agf_3 --horizonte 3 \
 
 8 testes (valores conferidos a mao: compra, venda, purge de fim-de-dia,
 purge de fronteira entre dias, sem trigger). 235 testes.
+
+## RESOLVIDO: causa raiz do travamento de 3+ horas no ea-replay (2026-08-27)
+
+Diagnostico decisivo do operador: script le cada um dos 37 arquivos
+INDIVIDUALMENTE (pq.ParquetFile().read()), cronometrado -- soma total de
+TODOS os arquivos ficou abaixo de 2 MINUTOS. Rodado nos DOIS discos (SSD
+externo D: e interno C:), com numeros PRATICAMENTE IDENTICOS entre os
+dois -- descarta de vez qualquer hipotese de velocidade de disco (nunca
+foi isso, nem externo nem interno).
+
+CAUSA RAIZ: `pyarrow.dataset(arquivos, format="parquet").to_table()` --
+a API que combina MULTIPLOS FRAGMENTOS num Table so' -- ficou
+patologicamente lenta (3+ horas, nunca terminou) neste ambiente
+especifico, para exatamente os mesmos 37 arquivos que leem rapido
+(<2min) quando abertos INDIVIDUALMENTE. Nenhum arquivo com schema
+diferente (verificado, todos identicos). A causa exata dentro do
+pyarrow/ambiente Windows nao foi identificada -- e nao precisou ser: o
+contorno empirico (ler arquivo a arquivo, sem passar pela maquina de
+"dataset" com multiplos fragmentos) resolve e foi provado pelo proprio
+diagnostico do operador antes mesmo de eu mudar o codigo.
+
+CORRIGIDO: rodar_replay() agora le cada parquet individualmente
+(pq.ParquetFile(a).read(columns=colunas)) e concatena com
+pa.concat_tables() -- import de pyarrow.dataset removido, nao e' mais
+usado. Testado com 5M trades sinteticos em 139 arquivos: continua
+rodando em ~16s (sem regressao no ambiente onde o bug nunca se
+manifestou).
+
+LICAO REGISTRADA: quando um sintoma nao reproduz em bancada mesmo
+replicando volume e estrutura de arquivo, ISOLAR POR ARQUIVO (nao so'
+por etapa agregada) foi o que revelou a causa -- log de checkpoint
+agregado (v0.80) ja tinha reduzido de "3 horas sem pista nenhuma" para
+"travado especificamente no to_table()", mas so' o teste arquivo-a-
+arquivo, sugerido e executado pelo proprio operador, isolou que o
+PROBLEMA ERA ESPECIFICO DA API DE MULTIPLOS FRAGMENTOS, nao do disco
+nem do volume de dado.
+
+241 testes (sem mudanca de logica de sinal/decisao/risco -- so' a fonte
+dos dados de entrada mudou de metodo de leitura).

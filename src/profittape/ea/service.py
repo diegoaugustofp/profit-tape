@@ -329,8 +329,6 @@ class EAService:
         """
         import time as _time
 
-        import pyarrow.dataset as ds
-
         # Instrumentacao da fase de LEITURA (2026-08-27, achado real: um
         # replay ficou 3+ horas com o log tendo SO' a primeira linha --
         # ou seja, nem chegava a "ea.replay_iniciado", que so' aparece
@@ -351,7 +349,23 @@ class EAService:
         colunas = ["ts_ns", "price", "quantidade", "trade_type",
                   "agente_comprador", "agente_vendedor"]
         t_leitura = _time.monotonic()
-        tabela = ds.dataset(arquivos, format="parquet").to_table(columns=colunas)
+        # BUG REAL achado (2026-08-27, diagnostico do operador): ds.dataset(
+        # arquivos).to_table() ficou 3+ HORAS travado combinando 37
+        # fragmentos -- enquanto ler cada arquivo INDIVIDUALMENTE (mesmo
+        # numero de arquivos, mesmo disco) somou menos de 2 MINUTOS no
+        # total. Confirmado nos DOIS discos (SSD externo e interno) com
+        # numeros praticamente identicos -- nao e' velocidade de disco, e'
+        # o pyarrow.dataset() sendo patologicamente lento ao combinar
+        # multiplos fragmentos NESTE ambiente especifico (causa exata no
+        # pyarrow desconhecida -- nao importa, o contorno empirico funciona
+        # e foi provado pelo proprio operador). Trocado para ler arquivo a
+        # arquivo (pq.ParquetFile.read(), sem a maquina de "dataset" com
+        # multiplos fragmentos) e concatenar no final.
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+
+        tabelas = [pq.ParquetFile(a).read(columns=colunas) for a in arquivos]
+        tabela = pa.concat_tables(tabelas)
         log.info("ea.replay_leitura_concluida", linhas=tabela.num_rows,
                  decorrido_s=round(_time.monotonic() - t_leitura, 2))
 
