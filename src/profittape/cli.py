@@ -1126,6 +1126,72 @@ def triagem_inprogress(
 
 
 @app.command()
+def risco_realizado(
+    symbol: str = typer.Option("WINFUT", "--symbol"),
+    features: Path = typer.Option(Path("data/features"), "--features"),
+    limiar_pontos: float = typer.Option(
+        ..., "--limiar-pontos",
+        help="O limiar JA' ESCOLHIDO a avaliar (ex.: 500, o stop "
+             "catastrofico do ea.yaml). Responde: que nivel de confianca "
+             "empirico este limiar representa?"),
+    niveis_confianca: str = typer.Option(
+        "0.90,0.95,0.99,0.995", "--niveis-confianca",
+        help="Lista separada por virgula, ex.: 0.90,0.95,0.99"),
+    por_horario: bool = typer.Option(
+        False, "--por-horario",
+        help="Tambem segmenta por faixa de horario (abertura/meio/"
+             "fechamento) -- sazonalidade intradiaria pode enviesar o "
+             "VaR agregado sem isso."),
+) -> None:
+    """
+    VaR e Expected Shortfall REALIZADOS sobre o retorno de barra do
+    instrumento -- aplica o insight central de "Realized Quantiles"
+    (2026-08-27, ver research/risco_realizado.py para a fundamentacao
+    completa) para calibrar um limiar de risco (ex.: o stop catastrofico)
+    contra o comportamento EMPIRICO de cauda do proprio instrumento, nao
+    so' contra uma regra de capital.
+
+    NAO consome trial: engenharia/descricao sobre o instrumento,
+    incondicional a qualquer sinal -- mesmo espirito de mae-analise.
+    """
+    from .research.risco_realizado import (
+        nivel_implicado_por_limiar,
+        var_es_por_faixa_horario,
+        var_es_realizado,
+    )
+
+    arquivo = features / f"sym={symbol.upper()}" / "features.parquet"
+    if not arquivo.exists():
+        raise SystemExit(f"nao achei {arquivo} — rode `profit-tape features` antes")
+
+    import pandas as pd
+    df = pd.read_parquet(arquivo)
+    retornos_abs = df["close"].diff().abs().dropna()
+    niveis = tuple(float(x) for x in niveis_confianca.split(","))
+
+    typer.echo("=" * 62)
+    typer.echo(f"RISCO REALIZADO — {symbol}  n_barras={len(retornos_abs)}")
+    typer.echo("=" * 62)
+
+    tabela = var_es_realizado(retornos_abs, niveis)
+    typer.echo("\nVaR/ES agregado (todas as barras, sem segmentar por horario):")
+    typer.echo(tabela.to_string(index=False, float_format=lambda v: f"{v:.2f}"))
+
+    inv = nivel_implicado_por_limiar(retornos_abs, limiar_pontos)
+    typer.echo(f"\nO limiar de {limiar_pontos:.0f} pts representa:")
+    typer.echo(f"  nivel de confianca implicado: {inv['nivel_confianca_implicado']:.2%}")
+    typer.echo(f"  fracao de barras que excedem : {inv['pct_barras_que_excedem']:.2%} "
+               f"({inv['n_barras_que_excedem']} barras)")
+    typer.echo(f"  ES no limiar (tamanho medio quando excede): "
+               f"{inv['es_no_limiar_pontos']:.1f} pts")
+
+    if por_horario:
+        typer.echo("\nPor faixa de horario:")
+        tabela_h = var_es_por_faixa_horario(df, "ts_close", "close", niveis_confianca=niveis)
+        typer.echo(tabela_h.to_string(index=False, float_format=lambda v: f"{v:.2f}"))
+
+
+@app.command()
 def ea_contas(
     timeout: float = typer.Option(15.0, "--timeout"),
     log_level: str = typer.Option("INFO", "--log-level"),

@@ -793,3 +793,50 @@ mais proximo ANTES de rodar, nunca ajustados depois.
 
 3 testes novos de MFE (valores conferidos a mao, compra e venda,
 relatorio inclui a secao). 280 testes.
+
+## Risco realizado (VaR/ES) — primeiro passo aplicado do RQ (2026-08-27)
+
+Discussao com o operador sobre a literatura de Realized Quantiles (RQ,
+Journal of Business & Economic Statistics 2021): estimar quantis de
+risco direto de retorno de alta frequencia, em "tempo intrinseco"
+(transformado pela atividade de negociacao, nao pelo relogio).
+
+CONEXAO DE DESIGN, nao coincidencia: "tempo intrinseco" e' exatamente o
+conceito de "volume clock" (Easley/Lopez de Prado/O'Hara) que ja
+motivou a escolha de barras por VOLUME neste projeto desde o inicio.
+Nossas barras JA SAO amostragem em tempo intrinseco -- a fundacao
+teorica do RQ ja esta embutida na arquitetura, sem esforco extra.
+
+IMPLEMENTADO (primeiro passo, escopo deliberadamente limitado -- NAO a
+maquinaria completa do paper, que projeta quantil intradiario para VaR
+DIARIO via relacao de escala de autossimilaridade, nao validada aqui):
+research/risco_realizado.py --
+  - var_es_realizado(): VaR (quantil empirico) + Expected Shortfall
+    (media da cauda que excede o VaR) de retorno de barra, por nivel de
+    confianca.
+  - nivel_implicado_por_limiar(): pergunta INVERSA -- dado um limiar ja'
+    escolhido (ex.: os 500pts do stop catastrofico), que nivel de
+    confianca empirico ele representa? Responde diretamente "o stop
+    esta bem calibrado contra o comportamento real do instrumento, ou
+    e' arbitrario"?
+  - var_es_por_faixa_horario(): a MESMA pergunta segmentada por faixa
+    de horario -- necessario porque o padrao em U de volume/
+    volatilidade intradiaria (ja documentado neste projeto) quebra a
+    suposicao de estacionariedade se agrupado sem segmentar. Conecta
+    diretamente ao item pendente "segmentacao de IC por horario" --
+    o mesmo trabalho de condicionamento serve aos dois.
+
+NAO consome trial: engenharia/descricao sobre o INSTRUMENTO
+(incondicional a qualquer sinal), mesmo espirito de mae.py/quintis.py.
+
+Comando `profit-tape risco-realizado --symbol WINFUT --limiar-pontos 500
+--por-horario`.
+
+8 testes (valores conferidos a mao, incluindo a segmentacao por horario
+com regimes de volatilidade propositalmente diferentes). 291 testes.
+
+PROXIMO PASSO (nao automatico): rodar sobre o dado real do WINFUT e
+comparar o nivel de confianca implicado pelos 500pts contra o esperado
+-- se vier muito baixo (ex.: so' 90% em vez de 99%+), e' evidencia
+concreta de que o stop catastrofico deveria ser recalibrado com base no
+comportamento empirico do instrumento, nao so' na regra de capital.
