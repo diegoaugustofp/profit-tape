@@ -1134,6 +1134,25 @@ def triagem_inprogress(
         typer.echo("\nCopie o bloco acima para docs/INTEGRIDADE_DOS_DADOS.md.")
 
 
+def _tabela_var_es_fmt(tabela) -> str:
+    """
+    Formatacao POR COLUNA (2026-08-27, bug real achado pelo operador): um
+    float_format UNICO (.2f) aplicado a todas as colunas fazia
+    nivel_confianca=0.995 arredondar para "0.99" -- colidindo visualmente
+    com o nivel 0.99 de verdade (0.995 em binario e' ligeiramente menor
+    que 0.995 exato, ".2f" arredonda pra baixo). Mesma familia de bug ja'
+    corrigida em quintis.py (v0.58) -- nao repetida aqui por descuido,
+    corrigida agora. nivel_confianca em PERCENTUAL (99.0% vs 99.5% —
+    inequivoco), pontos com 2 casas fixas (nunca colidem entre si nessa
+    faixa de magnitude).
+    """
+    formatadores = {"nivel_confianca": lambda v: f"{v:.1%}"}
+    for col in tabela.columns:
+        if col != "nivel_confianca" and tabela[col].dtype.kind == "f":
+            formatadores[col] = lambda v: f"{v:.2f}"
+    return tabela.to_string(index=False, formatters=formatadores)
+
+
 @app.command()
 def risco_realizado(
     symbol: str = typer.Option("WINFUT", "--symbol"),
@@ -1184,7 +1203,7 @@ def risco_realizado(
 
     tabela = var_es_realizado(retornos_abs, niveis)
     typer.echo("\nVaR/ES agregado (todas as barras, sem segmentar por horario):")
-    typer.echo(tabela.to_string(index=False, float_format=lambda v: f"{v:.2f}"))
+    typer.echo(_tabela_var_es_fmt(tabela))
 
     inv = nivel_implicado_por_limiar(retornos_abs, limiar_pontos)
     typer.echo(f"\nO limiar de {limiar_pontos:.0f} pts representa:")
@@ -1197,7 +1216,7 @@ def risco_realizado(
     if por_horario:
         typer.echo("\nPor faixa de horario:")
         tabela_h = var_es_por_faixa_horario(df, "ts_close", "close", niveis_confianca=niveis)
-        typer.echo(tabela_h.to_string(index=False, float_format=lambda v: f"{v:.2f}"))
+        typer.echo(_tabela_var_es_fmt(tabela_h))
 
 
 @app.command()

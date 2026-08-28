@@ -840,3 +840,39 @@ comparar o nivel de confianca implicado pelos 500pts contra o esperado
 -- se vier muito baixo (ex.: so' 90% em vez de 99%+), e' evidencia
 concreta de que o stop catastrofico deveria ser recalibrado com base no
 comportamento empirico do instrumento, nao so' na regra de capital.
+
+## Resultado real do risco-realizado + correcao de bug de exibicao (2026-08-27)
+
+Rodado sobre 2135 barras do WINFUT (23 dias):
+
+  Agregado: 500pts = 98.69% de confianca (1.31% das barras excedem)
+  Consistente na direcao com o MAE (4.5% de operacoes bateriam o stop
+  dentro da janela de 3 barras -- numero diferente pois mede janela
+  multi-barra, nao barra isolada, mas aponta a mesma direcao geral).
+
+  Por horario -- O ACHADO QUE IMPORTA: na ABERTURA, 500pts cai ENTRE o
+  VaR_90 (360) e o VaR_95 (564) -- ou seja, na abertura especificamente
+  o stop cobre so' ~90-95% de confianca, bem ABAIXO dos 98.69%
+  agregados. O meio do pregao (mais calmo, n=1696 de 2135 barras) dilui
+  o numero geral, escondendo que na abertura o stop protege bem menos.
+  Fechamento (n=89, so' 1 barra na cauda do nivel 99.5%) e' amostra
+  fragil demais para confiar com a mesma forca.
+
+IMPLICACAO: se as entradas do EA se concentrarem na abertura (fluxo
+mais intenso), o stop catastrofico esta, na pratica, mais perto de
+90-95% de confianca do que os 98.69% agregados sugerem. Nao decide
+sozinho mudar o stop -- registra a evidencia concreta de que a
+sazonalidade intradiaria (ja' documentada) afeta a calibracao de
+risco tanto quanto afeta o IC.
+
+BUG DE EXIBICAO corrigido: mesma familia do bug ja corrigido em
+quintis.py (v0.58) -- um float_format UNICO (.2f) aplicado a tabela
+inteira fazia nivel_confianca=0.995 arredondar para "0.99",
+colidindo visualmente com o nivel 0.99 de verdade (os VALORES de
+VaR/ES estavam sempre corretos, so' o ROTULO do nivel colidia). Nao
+detectado antes por descuido meu (o padrao de correcao ja existia,
+nao foi reaproveitado ao escrever risco_realizado hoje). Corrigido
+com formatters por coluna -- nivel_confianca em percentual (99.0%
+vs 99.5%, inequivoco).
+
+1 teste de regressao dedicado. 301 testes.
