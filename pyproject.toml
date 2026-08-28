@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "profit-tape"
 version = "0.1.0"
 description = "Gravador de tape e book da B3 via ProfitDLL, com sink Parquet particionado."
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
     "pyarrow>=15.0",
     "pandas>=2.2",
