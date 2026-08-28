@@ -943,3 +943,37 @@ CONCLUSAO: a hipotese do fluxo institucional do UBS, nesta formulacao
 especifica (z_agf_8), nao se sustentou em nenhum lugar testado.
 Fechado -- nao reabrir sem feature/hipotese NOVA (ex.: outra
 transformacao do mesmo fluxo, ou outro agente institucional).
+
+## Rota B: par CONGELADO, e uma tensao real revelada (2026-08-27)
+
+Seguindo o principio ja' pre-registrado (mediana do MAE/MFE do lado de
+venda, arredondado ANTES de ver o resultado economico), com n=336
+triggers (26 dias):
+
+  MAE_close mediana (venda) = 95.0  -> arredondado p/ 100
+  MFE_close mediana (venda) = 120.0 -> ja' redondo
+
+PAR CONGELADO: stop=100 pts, alvo=120 pts.
+
+TENSAO REAL: payoff implicito = 120/100 = 1.2:1 -- bem abaixo do 2:1
+que motivou a consideracao original da Rota B (alinhado ao framework
+geral de analise de preco do operador). Nao e' erro de calculo -- e' o
+que a mediana real do MFE mostra ser tipicamente alcancavel dentro da
+janela de holding deste sinal especifico.
+
+TRES CAMINHOS, nenhum decidido automaticamente:
+1. Aceitar o par empirico (1.2:1) -- coerente com o dado, nao com a
+   preferencia original de payoff.
+2. Usar quantil mais otimista para o alvo (ex.: p90 do MFE=412.5) --
+   precisaria ser uma escolha de PRINCIPIO decidida agora, nao
+   selecionada depois de ver o resultado; maioria das operacoes NAO
+   bateria esse alvo mais distante, saindo por tempo mesmo assim.
+3. Concluir que payoff 2:1 nao e' compativel com este sinal -- manter
+   Rota A (saida por tempo) como esta, arquivar Rota B para z_agf_3
+   especificamente (poderia ainda fazer sentido para outro sinal no
+   futuro).
+
+PENDENTE: decisao do operador entre os 3 caminhos ANTES de escrever
+qualquer codigo em risco.py. Implementacao do overlay continua
+deliberadamente adiada (mudanca real de comportamento de risco,
+merece sessao com atencao plena).
