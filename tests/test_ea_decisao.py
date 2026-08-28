@@ -207,7 +207,7 @@ def test_config_recusa_campo_desconhecido_em_vez_de_ignorar_silenciosamente() ->
     import pytest
     from pydantic import ValidationError
 
-    with pytest.raises(ValidationError, match="extra_forbidden|Extra inputs"):
+    with pytest.raises(ValidationError, match=r"extra_forbidden|Extra inputs"):
         SinalConfig(feature="z_agf_3", horizonte=3, agent_id=3,
                     threshold_entrada=1.4, direcao="contrarian",
                     campo_que_nao_existe=999)

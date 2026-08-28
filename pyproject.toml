@@ -47,7 +47,7 @@ select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 "src/profittape/cli.py" = ["B008"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.14"
 strict = true
 ignore_missing_imports = true
 # ctypes com DLL externa nao tem stub; o modulo de bindings e' inerentemente dinamico.
