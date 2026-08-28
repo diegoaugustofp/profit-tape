@@ -18,6 +18,25 @@ _SINAL = SinalConfig(feature="z_agf_3", horizonte=3, agent_id=3,
                      threshold_entrada=1.0, direcao="contrarian")
 
 
+def _esperar_ate(condicao, timeout_s: float = 5.0, intervalo_s: float = 0.02) -> bool:
+    """
+    Espera ATIVA com timeout generoso -- substitui time.sleep() fixo
+    (2026-08-28, achado real: CI do GitHub Actions e' mais lento/menos
+    previsivel que o ambiente local, um sleep fixo suficiente localmente
+    pode nao ser suficiente la', causando falha INTERMITENTE, nao
+    deterministica -- classico anti-padrao de teste com thread/fila).
+    Retorna assim que a condicao vira verdadeira, ou False se o timeout
+    esgotar -- sempre tao rapido quanto possivel, nunca mais lento que
+    o necessario, e tolerante a maquinas lentas ate' o teto do timeout.
+    """
+    prazo = time.monotonic() + timeout_s
+    while time.monotonic() < prazo:
+        if condicao():
+            return True
+        time.sleep(intervalo_s)
+    return condicao()
+
+
 def _svc(symbol: str = "WINFUT") -> EAService:
     cfg = EAConfig(symbol=symbol, volume_barra=50, janela_z=6,
                    sinais=[_SINAL], tamanho_posicao=1, dry_run=True,
@@ -61,8 +80,9 @@ def test_consumidor_processa_e_alimenta_o_ea_service() -> None:
     try:
         for i in range(3000):
             bridge.publicar(_trade("WINFUT", i))
-        time.sleep(1.0)   # da' tempo da thread consumidora processar
-        assert svc.stats.trades == 3000
+        assert _esperar_ate(lambda: svc.stats.trades == 3000, timeout_s=10.0), (
+            f"esperava 3000 trades processados, ficou em {svc.stats.trades}"
+        )
         assert svc.stats.barras > 0
     finally:
         bridge.parar()
@@ -88,8 +108,10 @@ def test_erro_no_processamento_nao_derruba_a_thread(monkeypatch) -> None:
     try:
         bridge.publicar(_trade("WINFUT", 1))   # este vai "quebrar"
         bridge.publicar(_trade("WINFUT", 2))   # este tem que continuar normal
-        time.sleep(0.5)
-        assert chamadas["n"] == 2   # os DOIS foram tentados, nao so' o 1o
+        assert _esperar_ate(lambda: chamadas["n"] == 2, timeout_s=5.0), (
+            f"esperava os 2 trades tentados (1 quebrando, 1 normal), "
+            f"ficou em {chamadas['n']}"
+        )
     finally:
         bridge.parar()
 
