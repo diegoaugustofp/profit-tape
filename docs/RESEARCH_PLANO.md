@@ -911,3 +911,35 @@ gasto.
 PRATICA: antes de rodar `research`, checar quantos dias novos existem
 desde o `- dias:` do ultimo relatorio gerado em data/research/. Se for
 menor que teste_dias, esperar mais.
+
+## FECHADO: z_agf_8 (fluxo UBS) descartado nos dois fronts (2026-08-27)
+
+Hipotese: momentum institucional (IC positivo, UBS, aparecendo em varios
+ativos). Testado em dois fronts, ambos negativos:
+
+**Acoes (VALE3, MGLU3)**: morto pelo custo nos dois horizontes (h=1,
+h=3), CONFIRMADO DUAS VEZES -- primeiro com custo generico (0.026
+pts/acao), depois com custo corrigido a partir da planilha real da XP
+(0.005 pts/acao para MGLU3, calculado com formula exata replicada e
+conferida). Com o custo correto (5x MENOR que o testado antes), o
+padrao "%>0 liquido" normalizou (deixou de ser uniformemente baixo em
+todos os quintis, evidencia de que o custo antigo estava mal
+calibrado) -- mas o Q5 continua liquido NEGATIVO nos dois horizontes
+(edge bruto ~0.002pts, menor que o proprio custo real de 0.005pts).
+Morte mais honesta que a primeira vez, nao mais dependente de custo
+duvidoso.
+
+**WINFUT**: ja' estava na lista de features testadas na rodada
+ORIGINAL de research (2026-08-23T11:21:32Z, 42 trials, 21 dias,
+arquivo=sym=WINFUT) -- NAO passou no filtro de IC/DSR em nenhum dos 3
+horizontes testados (1, 3, 10). So' z_agf_3 h=3 e z_agf_4090 h=1
+passaram naquela rodada. Confirmado via leitura direta de trials.json
+(match EXATO de string, nao substring -- z_agf_85/z_agf_88 sao
+strings DIFERENTES que colidem em buscas ingenuas tipo grep/
+Select-String) -- SEM gastar trial novo, so' lendo o que ja' estava
+registrado.
+
+CONCLUSAO: a hipotese do fluxo institucional do UBS, nesta formulacao
+especifica (z_agf_8), nao se sustentou em nenhum lugar testado.
+Fechado -- nao reabrir sem feature/hipotese NOVA (ex.: outra
+transformacao do mesmo fluxo, ou outro agente institucional).
