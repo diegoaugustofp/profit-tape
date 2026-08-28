@@ -135,11 +135,20 @@ def analisar_mae(arquivo_features: Path, feature: str, horizonte: int,
     def _stats_lado(sub: pd.DataFrame) -> dict:
         if sub.empty:
             return {"n": 0, "pnl_bruto_medio": float("nan"),
-                   "mae_close_mediana": float("nan"), "pct_batido_stop": float("nan")}
+                   "mae_close_mediana": float("nan"),
+                   "mfe_close_mediana": float("nan"),
+                   "pct_batido_stop": float("nan")}
         return {
             "n": len(sub),
             "pnl_bruto_medio": sub["pnl_final_h"].mean(),
             "mae_close_mediana": sub["mae_close"].median(),
+            # 2026-08-27, lacuna real achada rodando o MAE de novo com mais
+            # dado: o MFE agregado (compra+venda misturados) nao serve para
+            # congelar o par da Rota B, que precisa do MFE ESPECIFICO do
+            # lado com edge (venda) -- sem isso, o lado de compra (sem
+            # edge, MFE tipicamente menor) diluiria a mediana usada para
+            # escolher o alvo.
+            "mfe_close_mediana": sub["mfe_close"].median(),
             "pct_batido_stop": sub["teria_batido_stop"].mean(),
         }
 
@@ -233,15 +242,18 @@ def analisar_mae(arquivo_features: Path, feature: str, horizonte: int,
         "threshold_entrada simetrico para compra e venda pode esconder "
         "uma assimetria real de edge -- um lado pode carregar o sinal "
         "inteiro, o outro pode ser diluidor puro do resultado combinado.\n",
-        "| lado | n | pnl bruto medio | MAE_close mediana | %% bateria o stop |",
-        "|---|---|---|---|---|",
+        "| lado | n | pnl bruto medio | MAE_close mediana | "
+        "MFE_close mediana | %% bateria o stop |",
+        "|---|---|---|---|---|---|",
         f"| compra | {resumo['stats_compra']['n']} | "
         f"{resumo['stats_compra']['pnl_bruto_medio']:+.1f} | "
         f"{resumo['stats_compra']['mae_close_mediana']:.1f} | "
+        f"{resumo['stats_compra']['mfe_close_mediana']:.1f} | "
         f"{resumo['stats_compra']['pct_batido_stop']:.1%} |",
         f"| venda | {resumo['stats_venda']['n']} | "
         f"{resumo['stats_venda']['pnl_bruto_medio']:+.1f} | "
         f"{resumo['stats_venda']['mae_close_mediana']:.1f} | "
+        f"{resumo['stats_venda']['mfe_close_mediana']:.1f} | "
         f"{resumo['stats_venda']['pct_batido_stop']:.1%} |",
         "\nSe um lado tem pnl bruto medio abaixo do custo de transacao "
         "(tipicamente ~11pts no WIN) e o outro bem acima, o threshold "

@@ -1084,10 +1084,12 @@ def mae_analise(
     typer.echo("\n  por lado:")
     typer.echo(f"    compra: n={r['stats_compra']['n']}  "
                f"pnl_bruto_medio={r['stats_compra']['pnl_bruto_medio']:+.1f}  "
-               f"mae_mediana={r['stats_compra']['mae_close_mediana']:.1f}")
+               f"mae_mediana={r['stats_compra']['mae_close_mediana']:.1f}  "
+               f"mfe_mediana={r['stats_compra']['mfe_close_mediana']:.1f}")
     typer.echo(f"    venda : n={r['stats_venda']['n']}  "
                f"pnl_bruto_medio={r['stats_venda']['pnl_bruto_medio']:+.1f}  "
-               f"mae_mediana={r['stats_venda']['mae_close_mediana']:.1f}")
+               f"mae_mediana={r['stats_venda']['mae_close_mediana']:.1f}  "
+               f"mfe_mediana={r['stats_venda']['mfe_close_mediana']:.1f}")
     typer.echo(f"\nrelatorio: {r['relatorio']}")
 
 

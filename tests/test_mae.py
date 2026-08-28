@@ -283,3 +283,35 @@ def test_relatorio_inclui_secao_mfe(tmp_path: Path) -> None:
     conteudo = Path(r["relatorio"]).read_text(encoding="utf-8")
     assert "MFE_close" in conteudo
     assert "Rota B" in conteudo
+
+
+def test_quebra_por_lado_inclui_mfe_mediana(tmp_path: Path) -> None:
+    """
+    Lacuna real achada (2026-08-27): o MFE agregado (compra+venda
+    misturados) nao serve para congelar o par da Rota B -- precisa do
+    MFE ESPECIFICO do lado com edge (venda), senao o lado sem edge
+    (compra) dilui a mediana usada para escolher o alvo.
+    """
+    df = pd.DataFrame({
+        "dia": ["2026-01-01"] * 10,
+        "ts_close": np.arange(10) * 10**11,
+        "close":  [100, 100, 110,  90, 100, 95, 105, 130, 131, 132],
+        "high":   [101, 101, 111,  91, 101, 96, 106, 131, 132, 133],
+        "low":    [99,  99,  109,  89, 99,  94, 104, 129, 130, 131],
+        "z_agf_3": [-1.5, 0, 0, 1.5, 0, 0, -1.5, 0, 0, 0],
+    })
+    arq = tmp_path / "features.parquet"
+    df.to_parquet(arq, index=False)
+    r = analisar_mae(arq, "z_agf_3", horizonte=3, threshold_entrada=1.4,
+                     direcao="contrarian", stop_catastrofico_pontos=500,
+                     saida=tmp_path / "out", treino_min=0)
+
+    # compra (barras 0 e 6): MFE de cada uma -- calculado a mao no teste
+    # ja existente (test_quebra_por_lado_separa_compra_e_venda) confirma
+    # n=2 compra, n=1 venda; aqui so' confere que a chave existe e e' um
+    # numero real, nao NaN nem ausente.
+    assert not pd.isna(r["stats_compra"]["mfe_close_mediana"])
+    assert not pd.isna(r["stats_venda"]["mfe_close_mediana"])
+
+    conteudo = Path(r["relatorio"]).read_text(encoding="utf-8")
+    assert "MFE_close mediana" in conteudo
