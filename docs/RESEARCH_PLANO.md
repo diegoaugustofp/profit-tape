@@ -876,3 +876,38 @@ com formatters por coluna -- nivel_confianca em percentual (99.0%
 vs 99.5%, inequivoco).
 
 1 teste de regressao dedicado. 301 testes.
+
+## Disciplina: quando rodar features vs quando rodar research (2026-08-27)
+
+Pergunta real do operador: acumular dias antes de rodar, ou rodar
+sempre? Duas ferramentas, duas regras bem diferentes -- nunca
+formalizado por escrito ate agora.
+
+### features todos -- SEM custo, rodar sempre que convier
+
+Recalcula barras/z-scores sobre TODO o curated acumulado. Nao consome
+trial, nao tem orcamento -- so' custa tempo de maquina. Rodar toda vez
+que o curate terminar, sem pensar duas vezes.
+
+### research -- TEM custo real (trials.json, limiar deflacionado sobe
+### a CADA rodada, nao importa quantos dias novos foram adicionados)
+
+Rodar com poucos dias novos desde a ultima vez gasta orcamento
+estatistico por muito pouca evidencia genuinamente nova -- proximo do
+mesmo problema que o DSR existe para penalizar.
+
+REGRA (decorre diretamente da estrutura do walk-forward, nao e'
+arbitraria): so' rodar `research` de novo quando pelo menos
+`teste_dias` (default 2) dias NOVOS tiverem se acumulado desde a
+ultima rodada -- e' o minimo para formar um bloco de teste out-of-
+sample genuinamente novo. Menos que isso, o "novo" trial nao testa
+quase nada de fato novo.
+
+Mais conservador (recomendado quando nao ha pressa): esperar uma
+semana inteira de pregoes acumulados, nao so' o minimo de 2 dias --
+cada rodada de research vale mais a pena com mais dado novo por trial
+gasto.
+
+PRATICA: antes de rodar `research`, checar quantos dias novos existem
+desde o `- dias:` do ultimo relatorio gerado em data/research/. Se for
+menor que teste_dias, esperar mais.
