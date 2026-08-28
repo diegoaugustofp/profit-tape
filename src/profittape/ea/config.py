@@ -89,6 +89,15 @@ class SinalConfig(BaseModel):
     # "compra" restringe -- NUNCA mudar sem essa mesma disciplina de
     # pre-registro para outro sinal/decisao.
     lado_permitido: str = "ambos"   # "ambos" | "compra" | "venda"
+    # Rota B (2026-08-27, PRE-REGISTRADA -- ver docs/RESEARCH_PLANO.md
+    # "Rota B: par CONGELADO"). None (default) = Rota A pura, comportamento
+    # historico intacto. Se AMBOS setados, adiciona saida por alvo/stop
+    # mais apertado PARALELA a saida por tempo (nao substitui) -- qualquer
+    # um dos tres (stop_rota_b, alvo, tempo) que disparar primeiro fecha a
+    # posicao. Par especifico deste sinal (z_agf_3 h=3, venda) -- NUNCA
+    # generalizar para outro sinal sem medir o proprio MAE/MFE dele.
+    alvo_pontos: float | None = None
+    stop_rota_b_pontos: float | None = None
 
 
 class RiscoConfig(BaseModel):

@@ -209,7 +209,9 @@ class EAService:
             self._executar_e_simular(d)
             lado = +1 if d.acao == Acao.COMPRAR else -1
             self.gestor.registrar_abertura(lado, barra.close, barra.bar_id,
-                                           sinal_cfg.horizonte)
+                                           sinal_cfg.horizonte,
+                                           sinal_cfg.alvo_pontos,
+                                           sinal_cfg.stop_rota_b_pontos)
             break   # UMA posicao por vez — o primeiro sinal que disparar leva
         if decisoes:
             log.info("ea.barra_fechada", bar_id=barra.bar_id,

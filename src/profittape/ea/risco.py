@@ -39,6 +39,10 @@ class PosicaoAberta:
     preco_entrada: float
     bar_id_entrada: int
     horizonte: int         # do SinalConfig que abriu — governa a saida por tempo
+    # Rota B (2026-08-27, PRE-REGISTRADA) -- None = Rota A pura, sem
+    # mudanca de comportamento para quem nao configurar isso.
+    alvo_pontos: float | None = None
+    stop_rota_b_pontos: float | None = None
 
 
 class GestorDeRisco:
@@ -95,7 +99,8 @@ class GestorDeRisco:
 
     # ------------------------------------------------------------ eventos
     def registrar_abertura(self, lado: int, preco: float, bar_id: int,
-                           horizonte: int) -> None:
+                           horizonte: int, alvo_pontos: float | None = None,
+                           stop_rota_b_pontos: float | None = None) -> None:
         if self.posicao is not None:
             raise RuntimeError("abertura com posicao ja aberta — o service "
                                "nunca deveria permitir isso (sem piramide)")
@@ -104,16 +109,27 @@ class GestorDeRisco:
                                "service deveria ter consultado pode_abrir()")
         if lado not in (+1, -1):
             raise ValueError("lado precisa ser +1 (compra) ou -1 (venda)")
-        self.posicao = PosicaoAberta(lado, preco, bar_id, horizonte)
+        self.posicao = PosicaoAberta(lado, preco, bar_id, horizonte,
+                                     alvo_pontos, stop_rota_b_pontos)
         log.info("risco.abertura", lado=lado, preco=preco, bar_id=bar_id,
-                 horizonte=horizonte)
+                 horizonte=horizonte, alvo_pontos=alvo_pontos,
+                 stop_rota_b_pontos=stop_rota_b_pontos)
 
     def motivo_de_saida(self, bar_id_atual: int, preco_atual: float) -> str | None:
         """
         Consultado a cada barra fechada com posicao aberta. Devolve o motivo
         da saida FORCADA, ou None para manter. Ordem de prioridade: stop
         catastrofico primeiro (protecao de capital acima de fidelidade ao
-        procedimento), tempo depois.
+        procedimento), depois stop da Rota B (se configurado, mais
+        apertado), depois alvo da Rota B (se configurado), tempo por
+        ultimo (fallback sempre presente, Rota A).
+
+        Rota B (2026-08-27, PRE-REGISTRADA): usa CLOSE em ambas as pernas
+        (stop e alvo) -- mesma metodologia exata do MAE_close/MFE_close
+        que MEDIU os numeros 100/120 usados aqui. Usar intrabar (high/low)
+        aqui criaria descompasso entre o que foi MEDIDO e o que e'
+        ENFORCED -- o hit-rate real deixaria de bater com o que o MAE_close
+        previu.
         """
         p = self.posicao
         if p is None:
@@ -122,6 +138,14 @@ class GestorDeRisco:
         if excursao_contra >= self.config.stop_catastrofico_pontos:
             return (f"STOP CATASTROFICO: {excursao_contra:.0f} pts contra "
                     f"(limite {self.config.stop_catastrofico_pontos:.0f})")
+        if p.stop_rota_b_pontos is not None and excursao_contra >= p.stop_rota_b_pontos:
+            return (f"ROTA B — STOP: {excursao_contra:.0f} pts contra "
+                    f"(limite {p.stop_rota_b_pontos:.0f})")
+        if p.alvo_pontos is not None:
+            excursao_a_favor = (preco_atual - p.preco_entrada) * p.lado
+            if excursao_a_favor >= p.alvo_pontos:
+                return (f"ROTA B — ALVO: {excursao_a_favor:.0f} pts a favor "
+                        f"(alvo {p.alvo_pontos:.0f})")
         if bar_id_atual - p.bar_id_entrada >= p.horizonte:
             return f"saida por tempo: {p.horizonte} barra(s) desde a entrada"
         return None

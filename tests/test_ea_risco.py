@@ -188,3 +188,65 @@ def test_historico_operacoes_registra_lado_junto_com_pnl() -> None:
 
     assert g.historico_operacoes == [(1, -1.0), (-1, 39.0)]
     assert g.historico_pnl == [-1.0, 39.0]   # continua igual, nao quebrou
+
+
+def test_rota_b_alvo_atingido_fecha_a_favor_da_venda() -> None:
+    """
+    PRE-REGISTRADA (2026-08-27, RESEARCH_PLANO.md 'Rota B: par
+    CONGELADO'): stop=100, alvo=120, venda. Preco cai 130 pts a favor
+    da venda (>= alvo=120) -> fecha por ALVO, mesmo antes do horizonte.
+    """
+    g = _gestor()
+    g.registrar_abertura(lado=-1, preco=140000.0, bar_id=10, horizonte=3,
+                         alvo_pontos=120.0, stop_rota_b_pontos=100.0)
+    # 1 barra depois, preco caiu 130 (a favor da venda) -- alvo bate antes
+    # do horizonte de 3 barras
+    motivo = g.motivo_de_saida(bar_id_atual=11, preco_atual=139870.0)
+    assert motivo is not None
+    assert "ALVO" in motivo
+
+
+def test_rota_b_stop_mais_apertado_dispara_antes_do_catastrofico() -> None:
+    """Stop da Rota B (100) e' mais apertado que o catastrofico (500,
+    default) -- tem que disparar primeiro, com o motivo certo."""
+    g = _gestor()
+    g.registrar_abertura(lado=+1, preco=140000.0, bar_id=10, horizonte=3,
+                         alvo_pontos=120.0, stop_rota_b_pontos=100.0)
+    # preco caiu 110 CONTRA a compra -- bate o stop da Rota B (100),
+    # mas nao o catastrofico (500)
+    motivo = g.motivo_de_saida(bar_id_atual=11, preco_atual=139890.0)
+    assert motivo is not None
+    assert "ROTA B" in motivo and "STOP" in motivo
+
+
+def test_rota_b_ainda_respeita_o_stop_catastrofico_como_teto_absoluto() -> None:
+    """Mesmo com Rota B configurada, o stop catastrofico continua
+    verificado PRIMEIRO -- protecao de capital acima de tudo."""
+    g = _gestor()   # stop_catastrofico default (2% de 5000 a 0.20/pt = 500)
+    g.registrar_abertura(lado=+1, preco=140000.0, bar_id=10, horizonte=3,
+                         alvo_pontos=120.0, stop_rota_b_pontos=100.0)
+    motivo = g.motivo_de_saida(bar_id_atual=11, preco_atual=139400.0)  # -600
+    assert motivo is not None
+    assert "STOP CATASTROFICO" in motivo   # nao "ROTA B" -- o catastrofico venceu
+
+
+def test_rota_b_none_e_o_default_comportamento_identico_a_rota_a() -> None:
+    """Retrocompatibilidade explicita: sem alvo/stop_rota_b (None, o
+    default), o comportamento e' EXATAMENTE o de sempre -- so' tempo e
+    stop catastrofico, nada de alvo."""
+    g = _gestor()
+    g.registrar_abertura(lado=+1, preco=140000.0, bar_id=10, horizonte=3)
+    # preco subiu MUITO a favor (seria alvo em qualquer configuracao de
+    # Rota B) mas SEM alvo configurado, tem que continuar segurando
+    motivo = g.motivo_de_saida(bar_id_atual=11, preco_atual=140500.0)
+    assert motivo is None
+
+
+def test_rota_b_so_alvo_sem_stop_dedicado_funciona() -> None:
+    """alvo e stop_rota_b sao independentes -- pode configurar so' um."""
+    g = _gestor()
+    g.registrar_abertura(lado=-1, preco=140000.0, bar_id=10, horizonte=5,
+                         alvo_pontos=50.0)   # sem stop_rota_b_pontos
+    motivo = g.motivo_de_saida(bar_id_atual=11, preco_atual=139940.0)  # -60 a favor
+    assert motivo is not None
+    assert "ALVO" in motivo

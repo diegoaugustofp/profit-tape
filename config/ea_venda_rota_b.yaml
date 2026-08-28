@@ -1,0 +1,35 @@
+# Rota B PRE-REGISTRADA (2026-08-27) -- ver docs/RESEARCH_PLANO.md "Rota B:
+# par CONGELADO" para a justificativa completa e a tensao do payoff 1.2:1
+# (aceita conscientemente, nao forcada para 2:1).
+#
+# ACOPLADA a "Restricao de direcao: venda apenas" (mesma data, mesmo
+# documento) -- as duas decisoes de design sao avaliadas JUNTAS aqui, nao
+# isoladamente: so' o lado de venda tem edge confirmado, e o par
+# stop=100/alvo=120 foi medido especificamente nesse lado.
+#
+# NAO e' validacao out-of-sample nova -- roda sobre o MESMO periodo que
+# gerou a hipotese. Confirmacao de engenharia, nao prova independente.
+
+symbol: WINFUT
+volume_barra: 120000
+janela_z: 50
+tamanho_posicao: 1
+custo_pontos_estimado: 11.0
+dry_run: true
+usar_conta_real: false
+
+sinais:
+  - feature: z_agf_3
+    horizonte: 3
+    agent_id: 3
+    threshold_entrada: 1.4
+    direcao: contrarian
+    lado_permitido: venda      # so' o lado com edge confirmado
+    alvo_pontos: 120           # mediana do MFE_close (venda), ja redondo
+    stop_rota_b_pontos: 100    # mediana do MAE_close (venda) 95, arred. p/ 100
+
+risco:
+  capital: 5000.0
+  risco_max_pct: 0.02
+  valor_ponto_reais: 0.20
+  max_perdas_consecutivas: 3
