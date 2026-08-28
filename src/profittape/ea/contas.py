@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
+from typing import Any
 
 import structlog
 
@@ -75,7 +76,7 @@ class _Coletor:
 
 
 def listar_contas(cred: Credenciais, timeout_s: float = 15.0,
-                  dll_injetada: object | None = None) -> list[ContaEncontrada]:
+                  dll_injetada: Any | None = None) -> list[ContaEncontrada]:
     """
     Conecta, chama GetAccount(), espera ate' timeout_s por respostas do
     AccountCallback, desconecta, devolve o que achou.
@@ -94,7 +95,7 @@ def listar_contas(cred: Credenciais, timeout_s: float = 15.0,
 
         if tipo == ConnState.LOGIN:
             if valor in _LOGIN_ERROS:
-                coletor.erro_estado = f"login: {_LOGIN_ERROS[valor]} (codigo {valor})"
+                coletor.erro_estado = f"login: {_LOGIN_ERROS[LoginResult(valor)]} (codigo {valor})"
 
         elif tipo == ConnState.ROTEAMENTO:
             if valor == RoteamentoResult.BROKER_CONNECTED:

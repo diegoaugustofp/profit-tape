@@ -129,7 +129,7 @@ class ParquetSink:
 
         aberto.writer.write_batch(batch)
         aberto.rows += batch.num_rows
-        return batch.num_rows
+        return int(batch.num_rows)
 
     # ------------------------------------------------------------------
     def _open(self, key: PartitionKey, schema: pa.Schema) -> _OpenFile:

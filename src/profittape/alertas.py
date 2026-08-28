@@ -59,7 +59,7 @@ def enviar(mensagem: str, cfg: ConfigAlertas | None, timeout_s: float = 10.0) ->
     )
     try:
         with urllib.request.urlopen(req, timeout=timeout_s) as resp:
-            ok = resp.status == 200
+            ok = bool(resp.status == 200)
             if not ok:
                 log.warning("alertas.envio_falhou", status=resp.status)
             return ok

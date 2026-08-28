@@ -35,8 +35,8 @@ def triple_barrier(
     low = barras["low"].to_numpy(dtype=float)
 
     ret = pd.Series(np.log(close)).diff()
-    sigma = ret.rolling(janela_vol, min_periods=max(2, janela_vol // 2)).std().shift(1)
-    sigma = sigma.to_numpy()
+    sigma_serie = ret.rolling(janela_vol, min_periods=max(2, janela_vol // 2)).std().shift(1)
+    sigma = sigma_serie.to_numpy()
 
     n = len(barras)
     label = np.zeros(n, dtype=np.int8)

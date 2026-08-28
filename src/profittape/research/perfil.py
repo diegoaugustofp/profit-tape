@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import csv
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -69,7 +70,7 @@ def fluxo_diario_por_perfil(curated: Path, symbol: str,
     return pd.DataFrame(linhas).fillna(0.0)
 
 
-def validar(fluxo: pd.DataFrame, referencia_csv: Path) -> dict:
+def validar(fluxo: pd.DataFrame, referencia_csv: Path) -> dict[str, Any]:
     """
     Correlaciona (Pearson + concordancia de sinal) o fluxo por perfil com a
     serie oficial, nos dias em comum. Teste central pre-registrado:
@@ -81,13 +82,14 @@ def validar(fluxo: pd.DataFrame, referencia_csv: Path) -> dict:
         raise SystemExit(f"so' {len(juntos)} dias em comum com a referencia — "
                          f"insuficiente para correlacao honesta")
 
+    zero = pd.Series(0.0, index=juntos.index)
     oficial_nacional = (
-        juntos.get("institucional_rs_mil", 0)
-        + juntos.get("pessoa_fisica_rs_mil", 0)
-        + juntos.get("inst_financeiras_rs_mil", 0)
-        + juntos.get("outros_rs_mil", 0)
+        juntos.get("institucional_rs_mil", zero)
+        + juntos.get("pessoa_fisica_rs_mil", zero)
+        + juntos.get("inst_financeiras_rs_mil", zero)
+        + juntos.get("outros_rs_mil", zero)
     )
-    pares = []
+    pares: list[tuple[str, pd.Series, pd.Series, bool]] = []
     if "ESTRANGEIRO" in juntos.columns:
         pares.append(("ESTRANGEIRO", juntos["ESTRANGEIRO"],
                       juntos["estrangeiro_rs_mil"], True))

@@ -38,7 +38,7 @@ from pathlib import Path
 
 import structlog
 
-from ..config import Credenciais, RecorderConfig
+from ..config import AtivoConfig, Credenciais, RecorderConfig
 from ..health.metrics import Metrics
 from ..pipeline.bus import EventBus, nivel_ocupacao
 from ..pipeline.writer import WriterThread
@@ -89,7 +89,8 @@ def _dia_ja_capturado(raiz: Path, dia: str, tickers: list[str]) -> bool:
     )
 
 
-def _aguardar_quiesce(bus, base: int, quiesce_s: float, timeout_s: float) -> tuple[int, bool]:
+def _aguardar_quiesce(bus: EventBus, base: int, quiesce_s: float,
+                      timeout_s: float) -> tuple[int, bool]:
     """Espera o total (relativo a `base`) estabilizar. Devolve (eventos, completou)."""
     t0 = time.monotonic()
     anterior = -1
@@ -405,7 +406,7 @@ def executar(
                     while time.monotonic() < limite and not client.conectado_market:
                         time.sleep(0.5)
 
-            falharam: list = []
+            falharam: list[AtivoConfig] = []
             for a in pendentes:
                 # Log ANTES da chamada: se a DLL bloquear (observado: 21 min
                 # apos queda de conexao), esta e' a linha que diz ONDE.

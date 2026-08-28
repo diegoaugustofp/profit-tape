@@ -9,6 +9,7 @@ ANTES de qualquer feature ser calculada em cima.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
@@ -21,7 +22,7 @@ from ..profitdll.timeparse import formatar
 from ..storage.validacao import relatorio
 
 
-def _agrupar_contando(tabela: pa.Table, coluna: str) -> list[dict]:
+def _agrupar_contando(tabela: pa.Table, coluna: str) -> list[dict[str, Any]]:
     """
     Contagem por coluna, robusta a dicionarios divergentes.
 
@@ -35,7 +36,8 @@ def _agrupar_contando(tabela: pa.Table, coluna: str) -> list[dict]:
         tabela = tabela.set_column(
             tabela.column_names.index(coluna), coluna, col.cast(pa.string())
         )
-    return tabela.group_by(coluna).aggregate([([], "count_all")]).to_pylist()
+    return cast(list[dict[str, Any]],
+               tabela.group_by(coluna).aggregate([([], "count_all")]).to_pylist())
 
 
 def _msg(texto: str) -> None:
@@ -141,8 +143,8 @@ def resumir(caminho: Path, stream: str = "trade") -> None:
             problemas.append((frag.path, type(exc).__name__ + ": " + str(exc)[:120]))
     if problemas:
         print(f"\n  ATENCAO: {len(problemas)} arquivo(s) ilegiveis, PULADOS:")
-        for caminho, erro in problemas[:10]:
-            print(f"    {caminho}\n      -> {erro}")
+        for caminho_arquivo, erro in problemas[:10]:
+            print(f"    {caminho_arquivo}\n      -> {erro}")
         if len(problemas) > 10:
             print(f"    ... e mais {len(problemas) - 10}.")
         print("  (arquivo corrompido na interrupcao. Mova para quarentena ou "

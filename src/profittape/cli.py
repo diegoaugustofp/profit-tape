@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 import structlog
 import typer
@@ -735,7 +739,7 @@ def ea_replay_lote(
     typer.echo(f"EA replay em lote: {ea_cfg.symbol}, {len(dias)} dia(s), "
                f"ignorar_circuit_breaker={ignorar_circuit_breaker}")
 
-    por_dia = []
+    por_dia: list[dict[str, Any]] = []
     todas_operacoes: list[float] = []
     todas_operacoes_com_lado: list[tuple[int, float]] = []
     # "sem freio" completo (2026-08-27, pergunta real do operador: "por
@@ -1136,7 +1140,7 @@ def triagem_inprogress(
         typer.echo("\nCopie o bloco acima para docs/INTEGRIDADE_DOS_DADOS.md.")
 
 
-def _tabela_var_es_fmt(tabela) -> str:
+def _tabela_var_es_fmt(tabela: pd.DataFrame) -> str:
     """
     Formatacao POR COLUNA (2026-08-27, bug real achado pelo operador): um
     float_format UNICO (.2f) aplicado a todas as colunas fazia

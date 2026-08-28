@@ -23,6 +23,7 @@ import json
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import Any, cast
 
 import structlog
 
@@ -38,25 +39,25 @@ _COOLDOWN_S = {
 }
 
 
-def _carregar_estado(caminho: Path) -> dict:
+def _carregar_estado(caminho: Path) -> dict[str, Any]:
     if caminho.exists():
-        return json.loads(caminho.read_text(encoding="utf-8"))
+        return cast(dict[str, Any], json.loads(caminho.read_text(encoding="utf-8")))
     return {}
 
 
-def _salvar_estado(caminho: Path, estado: dict) -> None:
+def _salvar_estado(caminho: Path, estado: dict[str, Any]) -> None:
     caminho.parent.mkdir(parents=True, exist_ok=True)
     caminho.write_text(json.dumps(estado, indent=2), encoding="utf-8")
 
 
-def _pode_alertar(estado: dict, chave: str) -> bool:
+def _pode_alertar(estado: dict[str, Any], chave: str) -> bool:
     ultimo = estado.get(chave)
     if ultimo is None:
         return True
-    return (time.time() - ultimo) >= _COOLDOWN_S.get(chave, 900)
+    return bool((time.time() - ultimo) >= _COOLDOWN_S.get(chave, 900))
 
 
-def _ler_linhas_de_hoje(log_file: Path) -> list[dict]:
+def _ler_linhas_de_hoje(log_file: Path) -> list[dict[str, Any]]:
     """Linhas JSON do dia corrente. Arquivo ausente/vazio = lista vazia
     (nao e' erro — pode ser antes do primeiro heartbeat de hoje)."""
     if not log_file.exists():

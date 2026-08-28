@@ -2,8 +2,16 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, TypeVar
 
-def gerar_folds(dias: list, treino_min: int = 3, teste_dias: int = 2) -> list[tuple[list, list]]:
+if TYPE_CHECKING:
+    from _typeshed import SupportsRichComparison
+
+T = TypeVar("T", bound="SupportsRichComparison")
+
+
+def gerar_folds(dias: list[T], treino_min: int = 3,
+                teste_dias: int = 2) -> list[tuple[list[T], list[T]]]:
     """
     Janela EXPANSIVA: treino comeca com treino_min dias e cresce; teste anda
     em blocos de teste_dias. Ex.: 10 dias, treino_min=3, teste=2 ->

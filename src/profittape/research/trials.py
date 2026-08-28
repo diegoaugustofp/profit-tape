@@ -19,6 +19,7 @@ import json
 import math
 import time
 from pathlib import Path
+from typing import Any
 
 _GAMMA = 0.5772156649
 
@@ -93,7 +94,7 @@ class RegistroTrials:
     def total(self) -> int:
         return int(self._dados["total_trials"])
 
-    def registrar_rodada(self, n_trials: int, detalhe: dict) -> int:
+    def registrar_rodada(self, n_trials: int, detalhe: dict[str, Any]) -> int:
         """Soma os trials desta rodada e persiste. Devolve o total acumulado."""
         self._dados["total_trials"] += n_trials
         self._dados["rodadas"].append(

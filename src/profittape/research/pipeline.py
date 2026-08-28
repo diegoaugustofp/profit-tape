@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import time
+from datetime import date
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
@@ -45,7 +47,7 @@ def _veredito(linha: pd.Series, limiar_z: float) -> str:
 
 def rodar(features_parquet: Path, saida_dir: Path,
           horizontes: list[int] | None = None,
-          treino_min: int = 3, teste_dias: int = 2) -> dict:
+          treino_min: int = 3, teste_dias: int = 2) -> dict[str, Any]:
     horizontes = horizontes or HORIZONTES_PADRAO
     df = pd.read_parquet(features_parquet)
     df = adicionar_ret_futuro(df, horizontes)
@@ -90,9 +92,9 @@ def rodar(features_parquet: Path, saida_dir: Path,
     }
 
 
-def _escrever_relatorio(caminho: Path, resultado: pd.DataFrame, dias: list,
-                        folds: list, total_trials: int, limiar: float,
-                        origem: str) -> None:
+def _escrever_relatorio(caminho: Path, resultado: pd.DataFrame, dias: list[date],
+                        folds: list[tuple[list[date], list[date]]], total_trials: int,
+                        limiar: float, origem: str) -> None:
     caminho.parent.mkdir(parents=True, exist_ok=True)
     linhas = [
         "# Relatorio de research — IC walk-forward\n",
@@ -109,7 +111,7 @@ def _escrever_relatorio(caminho: Path, resultado: pd.DataFrame, dias: list,
     ]
     for _, r in resultado.sort_values(["veredito", "t_stat"],
                                       ascending=[True, False]).iterrows():
-        def _f(v, nd=4):
+        def _f(v: float, nd: int = 4) -> str:
             return "-" if pd.isna(v) else f"{v:.{nd}f}"
         linhas.append(
             f"| {r['feature']} | {r['horizonte']} | {r['folds_validos']} "

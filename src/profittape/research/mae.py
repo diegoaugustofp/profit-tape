@@ -29,7 +29,9 @@ Metodologia:
 
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
@@ -56,7 +58,7 @@ def _sinal_de_entrada(z: pd.Series, threshold: float, direcao: str) -> pd.Series
 def analisar_mae(arquivo_features: Path, feature: str, horizonte: int,
                  threshold_entrada: float, direcao: str,
                  stop_catastrofico_pontos: float, saida: Path,
-                 treino_min: int = 3, teste_dias: int = 2) -> dict:
+                 treino_min: int = 3, teste_dias: int = 2) -> dict[str, Any]:
     df = pd.read_parquet(arquivo_features)
     if "dia" not in df.columns:
         df["dia"] = pd.to_datetime(df["ts_close"], unit="ns", utc=True).dt.date
@@ -86,9 +88,17 @@ def analisar_mae(arquivo_features: Path, feature: str, horizonte: int,
 
     linhas = []
     for i in triggers:
-        dia = df.at[i, "dia"]
-        L = lado.at[i]
-        entrada = df.at[i, "close"]
+        dia = cast(date, df.at[i, "dia"])
+        L = int(cast(Any, lado.at[i]))
+        # cast explicito (2026-08-28, causa raiz de 57 erros em cascata do
+        # mypy strict): df.at[] com pandas-stubs devolve um Union amplo
+        # demais (qualquer tipo escalar que uma celula PODERIA conter --
+        # str, date, complex, etc.), ja' que o pandas nao expressa
+        # estaticamente "esta coluna e' sempre float64". Toda operacao
+        # subsequente usando 'entrada' sem essa narrowing herda o mesmo
+        # Union amplo e gera erro de overload. Um cast aqui resolve a
+        # cascata inteira de uma vez.
+        entrada = float(cast(Any, df.at[i, "close"]))
         # janela [i+1, i+horizonte] -- nunca atravessa o dia (mesmo purge
         # estrutural de retornos.py). Se a janela sair do dia, descarta.
         janela = df.loc[i + 1:i + horizonte]
@@ -132,7 +142,7 @@ def analisar_mae(arquivo_features: Path, feature: str, horizonte: int,
     n = len(r)
     n_batido = int(r["teria_batido_stop"].sum())
 
-    def _stats_lado(sub: pd.DataFrame) -> dict:
+    def _stats_lado(sub: pd.DataFrame) -> dict[str, Any]:
         if sub.empty:
             return {"n": 0, "pnl_bruto_medio": float("nan"),
                    "mae_close_mediana": float("nan"),

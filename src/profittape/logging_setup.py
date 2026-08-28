@@ -23,8 +23,9 @@ import sys
 from pathlib import Path
 
 import structlog
+from structlog.types import Processor
 
-_PROCESSORS_COMUNS = [
+_PROCESSORS_COMUNS: list[Processor] = [
     structlog.contextvars.merge_contextvars,
     structlog.processors.add_log_level,
     structlog.processors.TimeStamper(fmt="iso", utc=True),

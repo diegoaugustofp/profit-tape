@@ -25,6 +25,7 @@ dev = [
     "pytest-cov>=5.0",
     "ruff>=0.4",
     "mypy>=1.10",
+    "pandas-stubs>=2.0",
 ]
 
 [project.scripts]
@@ -51,8 +52,25 @@ strict = true
 ignore_missing_imports = true
 # ctypes com DLL externa nao tem stub; o modulo de bindings e' inerentemente dinamico.
 [[tool.mypy.overrides]]
-module = "profittape.profitdll.bindings"
+# ctypes com DLL externa nao tem stub; estes modulos sao inerentemente
+# dinamicos por natureza -- callbacks cuja assinatura e' ditada pelo
+# prototipo C da DLL (TNewTradeCallback etc.), nao pelo Python, e a
+# interface de DLL injetavel (FakeProfitDLL em teste) e' estruturalmente
+# tipada como Any de proposito. So' disallow_untyped_defs/calls sao
+# relaxados aqui -- outras checagens estritas (ex.: union-attr, os
+# generics de dict/list corrigidos em 2026-08-28) continuam ativas e ja
+# pegaram bugs reais nestes mesmos modulos antes desta excecao.
+module = [
+    "profittape.profitdll.bindings",
+    "profittape.profitdll.client",
+    "profittape.ea.contas",
+    "profittape.ea.service",
+    "profittape.testing.fake_dll",
+]
 disallow_untyped_calls = false
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+disallow_untyped_decorators = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

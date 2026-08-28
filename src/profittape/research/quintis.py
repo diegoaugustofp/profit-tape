@@ -21,7 +21,9 @@ Metodologia:
 
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
@@ -30,16 +32,16 @@ from .retornos import adicionar_ret_futuro_pontos
 from .walkforward import gerar_folds
 
 
-def _dias_de_teste(dias: list, folds: list[tuple[list, list]]) -> set:
+def _dias_de_teste(dias: list[date], folds: list[tuple[list[date], list[date]]]) -> set[date]:
     """Uniao dos blocos de teste de todos os folds — o out-of-sample pool."""
-    fora = set()
+    fora: set[date] = set()
     for _treino, teste in folds:
         fora.update(teste)
     return fora
 
 
 def _atribuir_quintis(df: pd.DataFrame, feature: str, horizonte: int,
-                      dias_teste: set, n_quintis: int) -> pd.DataFrame:
+                      dias_teste: set[date], n_quintis: int) -> pd.DataFrame:
     """Sub-dataframe out-of-sample com a coluna 'quintil' atribuida."""
     col_ret = f"ret_pts_{horizonte}"
     sub = df[df["dia"].isin(dias_teste)][[feature, col_ret]].dropna()
@@ -62,8 +64,8 @@ def _p_valor_bicaudal(t: float) -> float:
 
 
 def testar_diferenca_quintis(df: pd.DataFrame, feature: str, horizonte: int,
-                             dias_teste: set, custo_pontos: float,
-                             q_a: int, q_b: int, n_quintis: int = 5) -> dict:
+                             dias_teste: set[date], custo_pontos: float,
+                             q_a: int, q_b: int, n_quintis: int = 5) -> dict[str, Any]:
     """
     Welch's t-test (variancias desiguais, apropriado — quintis do meio tendem
     a ter variancia diferente dos extremos) entre o retorno LIQUIDO (1x custo,
@@ -106,7 +108,7 @@ def testar_diferenca_quintis(df: pd.DataFrame, feature: str, horizonte: int,
 
 
 def tabela_quintis(df: pd.DataFrame, feature: str, horizonte: int,
-                   dias_teste: set, custo_pontos: float,
+                   dias_teste: set[date], custo_pontos: float,
                    n_quintis: int = 5) -> pd.DataFrame:
     """
     Uma linha por quintil: n, sinal_medio, ret_medio_pontos, ret_liquido,
@@ -132,7 +134,7 @@ def tabela_quintis(df: pd.DataFrame, feature: str, horizonte: int,
         desvio = float(liquido.std(ddof=1)) if n > 1 else float("nan")
         t = float(liquido.mean() / (desvio / np.sqrt(n))) if n > 1 and desvio > 0 else float("nan")
         linhas.append({
-            "quintil": int(q), "n": n,
+            "quintil": int(cast(Any, q)), "n": n,
             "sinal_medio": float(grupo[feature].mean()),
             "ret_medio_pontos": float(ret.mean()),
             "ret_liquido_pontos": float(liquido.mean()),
@@ -146,7 +148,7 @@ def tabela_quintis(df: pd.DataFrame, feature: str, horizonte: int,
 def avaliar_pares(features_parquet: Path, pares: list[tuple[str, int]],
                   saida_dir: Path, custo_pontos: float,
                   treino_min: int = 3, teste_dias: int = 2,
-                  n_quintis: int = 5, testar_adjacentes: bool = True) -> dict:
+                  n_quintis: int = 5, testar_adjacentes: bool = True) -> dict[str, Any]:
     df = pd.read_parquet(features_parquet)
     if "dia" not in df.columns:
         df["dia"] = pd.to_datetime(df["ts_close"], unit="ns", utc=True).dt.date
@@ -204,8 +206,10 @@ def _fmt(v: float, casas_min: int = 2) -> str:
     return f"{v:.{casas + 1}f}"
 
 
-def _escrever_relatorio(caminho: Path, resultados: dict, custo_pontos: float,
-                        n_dias: int, diferencas: dict | None = None) -> None:
+def _escrever_relatorio(caminho: Path, resultados: dict[tuple[str, int], pd.DataFrame],
+                        custo_pontos: float, n_dias: int,
+                        diferencas: dict[tuple[str, int], list[dict[str, Any]]] | None = None,
+                        ) -> None:
     linhas = [
         "# Tabela de quintis — traducao economica dos vereditos 'segue'\n",
         f"- custo de ida-e-volta assumido: {_fmt(custo_pontos)} pontos "

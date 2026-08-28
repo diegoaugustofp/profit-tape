@@ -20,6 +20,7 @@ import sys
 import threading
 import time
 import traceback
+from collections.abc import Callable
 from datetime import datetime, timedelta
 
 from profittape.profitdll.types import TAssetIDRec
@@ -51,7 +52,7 @@ class FakeProfitDLL:
         self.intervalo_s = intervalo_s
         self.atraso_login_s = atraso_login_s
         self.rng = random.Random(seed)
-        self._cb: dict[str, object] = {}
+        self._cb: dict[str, Callable[..., object]] = {}
         self._subscritos: list[tuple[str, str, str]] = []
         self._threads: list[threading.Thread] = []
         self.erros: list[BaseException] = []

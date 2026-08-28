@@ -19,6 +19,7 @@ minusculo), depois do concat — identico a versao original.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
@@ -48,9 +49,9 @@ def _dias_do_symbol(origem: Path, symbol: str) -> list[Path]:
 def _carregar_dia(pasta_dia: Path, symbol: str) -> pd.DataFrame:
     dataset = ds.dataset(pasta_dia, format="parquet", partitioning="hive",
                          exclude_invalid_files=True)
-    df = dataset.to_table(
+    df = cast(pd.DataFrame, dataset.to_table(
         filter=ds.field("sym") == symbol, columns=_COLS
-    ).to_pandas()
+    ).to_pandas())
     df = df.sort_values("ts_ns", kind="stable").reset_index(drop=True)
     dia = pasta_dia.name.split("=", 1)[1]
     df["dt"] = pd.Categorical([dia] * len(df))
@@ -68,7 +69,7 @@ def gerar(
     label_k: float = 2.0,
     label_h: int = 10,
     perfis_csv: Path | None = None,
-) -> dict:
+) -> dict[str, Any]:
     origem = curated / "trade"
     dias = _dias_do_symbol(origem, symbol)
     if not dias:
@@ -87,7 +88,8 @@ def gerar(
             vol_agr_por_dia.append(float(agr["quantidade"].sum()))
             for lado in ("agente_comprador", "agente_vendedor"):
                 for ag, q in agr.groupby(lado)["quantidade"].sum().items():
-                    soma_agente[int(ag)] = soma_agente.get(int(ag), 0.0) + float(q)
+                    id_agente = int(cast(Any, ag))
+                    soma_agente[id_agente] = soma_agente.get(id_agente, 0.0) + float(q)
             difs = agr["price"].diff().abs()
             positivos = difs[difs > 0]
             if len(positivos):

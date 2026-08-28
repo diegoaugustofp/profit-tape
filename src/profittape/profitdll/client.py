@@ -160,12 +160,15 @@ class ProfitClient:
     # Subscricoes
     # ------------------------------------------------------------------
     def subscribe_trades(self, ticker: str, bolsa: str = "B") -> None:
+        assert self._dll is not None, "connect() precisa ser chamado antes"
         check(self._dll.SubscribeTicker(ticker, bolsa), f"SubscribeTicker {ticker}")
 
     def subscribe_offer_book(self, ticker: str, bolsa: str = "B") -> None:
+        assert self._dll is not None, "connect() precisa ser chamado antes"
         check(self._dll.SubscribeOfferBook(ticker, bolsa), f"SubscribeOfferBook {ticker}")
 
     def subscribe_price_book(self, ticker: str, bolsa: str = "B") -> None:
+        assert self._dll is not None, "connect() precisa ser chamado antes"
         check(self._dll.SubscribePriceBook(ticker, bolsa), f"SubscribePriceBook {ticker}")
 
     def request_history(self, ticker: str, inicio: str, fim: str, bolsa: str = "B") -> None:
@@ -176,6 +179,7 @@ class ProfitClient:
         como pedir livro de ontem. Toda feature de fila depende de gravacao
         propria, e por isso o recorder precisa comecar a rodar cedo.
         """
+        assert self._dll is not None, "connect() precisa ser chamado antes"
         check(
             self._dll.GetHistoryTrades(ticker, bolsa, inicio, fim),
             f"GetHistoryTrades {ticker}",
@@ -198,13 +202,13 @@ class ProfitClient:
                 if fn is not None:
                     resultado = fn(int(agent_id))
                     if resultado:
-                        return resultado
+                        return str(resultado)
             # sem short name: cai no longo abaixo
         for nome in ("GetAgentNameByID", "GetAgentNameById"):
             fn = getattr(self._dll, nome, None)
             if fn is not None:
                 resultado = fn(int(agent_id))
-                return resultado or None
+                return str(resultado) if resultado else None
         return None
 
     # ------------------------------------------------------------------

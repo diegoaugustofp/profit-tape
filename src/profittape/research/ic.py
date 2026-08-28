@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 import numpy as np
 import pandas as pd
 
@@ -15,7 +17,7 @@ def ic_spearman(x: pd.Series, y: pd.Series) -> float:
 
 
 def avaliar(df: pd.DataFrame, features: list[str], horizontes: list[int],
-            folds: list[tuple[list, list]]) -> pd.DataFrame:
+            folds: list[tuple[list[date], list[date]]]) -> pd.DataFrame:
     """
     Para cada (feature, horizonte): IC de Spearman em cada fold de teste.
     Agrega media, desvio ENTRE folds, t-stat (media/erro-padrao) e

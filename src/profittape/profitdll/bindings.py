@@ -46,7 +46,7 @@ else:
     # mantem o modulo IMPORTAVEL, o que permite rodar a suite inteira em CI
     # Linux com a DLL falsa. Nenhuma DLL real e' carregada nesse caminho —
     # `load_dll` recusa plataforma nao-Windows explicitamente.
-    WINFUNCTYPE = CFUNCTYPE  # type: ignore[assignment,misc]
+    WINFUNCTYPE = CFUNCTYPE
 
 from .errors import DLLNotFound
 from .types import TAssetIDRec
@@ -248,7 +248,13 @@ def load_dll(path: str | Path) -> Any:
             "FakeProfitDLL (tests/fakes) para exercitar o pipeline."
         )
 
-    from ctypes import WinDLL  # import tardio: nao existe fora do Windows
+    # Ignorar tipo aqui, justificado: WinDLL so existe no ctypes real do
+    # Windows -- inexistente no stub usado ao rodar mypy fora do Windows
+    # (CI Linux). A guarda `sys.platform != "win32": raise` acima ja
+    # impede este import de rodar de verdade fora do Windows -- o mypy
+    # nao entende esse padrao de exclusao de plataforma aqui, so' o
+    # runtime. Import tardio: nao existe fora do Windows.
+    from ctypes import WinDLL  # type: ignore[attr-defined]
 
     p = Path(path)
     if not p.exists():

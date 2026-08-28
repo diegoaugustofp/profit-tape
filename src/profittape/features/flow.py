@@ -70,10 +70,16 @@ def calcular(df: pd.DataFrame, agentes: list[int], tick: float,
         "n_trades": g.size(),
     })
     barras["duracao_s"] = (barras["ts_close"] - barras["ts_open"]) / 1e9
-    barras["vwap"] = g.apply(
-        lambda x: np.average(x["price"], weights=x["quantidade"]),
-        include_groups=False,
-    )
+    def _vwap(x: pd.DataFrame) -> float:
+        return float(np.average(x["price"], weights=x["quantidade"]))
+
+    # Ignorar tipo, justificado (2026-08-28): limitacao conhecida do
+    # pandas-stubs -- os overloads de DataFrameGroupBy.apply() nao casam
+    # bem com include_groups=False + uma callable com assinatura concreta
+    # (Callable[[DataFrame], float]), mesmo sendo exatamente o uso correto
+    # e documentado da API do pandas. Nao e' um erro de tipo real no
+    # nosso codigo.
+    barras["vwap"] = g.apply(_vwap, include_groups=False)  # type: ignore[call-overload]
 
     compras = agr[agr["trade_type"] == _BUY].groupby("bar_id", observed=True)
     vendas = agr[agr["trade_type"] == _SELL].groupby("bar_id", observed=True)

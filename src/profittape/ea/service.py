@@ -33,6 +33,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any
 
 import structlog
 
@@ -248,7 +249,7 @@ class EAService:
     # ------------------------------------------------- conexao e loop real
     def rodar(self, cred: Credenciais, bolsa: str = "F",
               encerrar_em: str | None = None, tz_offset_horas: int = -3,
-              heartbeat_s: int = 30, dll_injetada: object | None = None) -> None:
+              heartbeat_s: int = 30, dll_injetada: Any | None = None) -> None:
         """
         Loop real contra a DLL. Consome trades ate' encerrar_em (ou
         Ctrl+C). Espelha o padrao do contas.py (callbacks todos
@@ -274,7 +275,7 @@ class EAService:
         from ..profitdll.timeparse import parse_ts_ns
 
         fila: queue.Queue[_TradeBruto] = queue.Queue(maxsize=100_000)
-        estado = {"conectado": False, "erro": None}
+        estado: dict[str, bool | str | None] = {"conectado": False, "erro": None}
 
         dll = dll_injetada if dll_injetada is not None else b.load_dll(cred.dll_path)
 
@@ -442,7 +443,7 @@ class EAService:
         self.encerrar_dia()
         log.info("ea.replay_concluido", **self._hb())
 
-    def _hb(self) -> dict:
+    def _hb(self) -> dict[str, Any]:
         return {"trades": self.stats.trades, "barras": self.stats.barras,
                 "decisoes": dict(self.stats.decisoes),
                 "posicao": self.stats.posicao_simulada,

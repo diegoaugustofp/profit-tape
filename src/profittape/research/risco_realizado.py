@@ -32,6 +32,8 @@ estacionariedade se tudo for agrupado sem essa segmentacao.
 
 from __future__ import annotations
 
+from typing import Any
+
 import pandas as pd
 
 
@@ -58,7 +60,7 @@ def var_es_realizado(
     return pd.DataFrame(linhas)
 
 
-def nivel_implicado_por_limiar(retornos_abs: pd.Series, limiar: float) -> dict:
+def nivel_implicado_por_limiar(retornos_abs: pd.Series, limiar: float) -> dict[str, Any]:
     """
     Pergunta inversa: dado um limiar JA' ESCOLHIDO (ex.: os 500 pts do
     stop catastrofico), que nivel de confianca empirico ele representa?

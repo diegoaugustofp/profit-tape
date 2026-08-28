@@ -23,6 +23,7 @@ retorno <= 0 e' erro.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import structlog
 
@@ -48,7 +49,7 @@ class ExecutorDeOrdens:
     conexao e' responsabilidade do service, nao daqui).
     """
 
-    def __init__(self, dll: object, roteamento: RoteamentoConfig,
+    def __init__(self, dll: Any, roteamento: RoteamentoConfig,
                 ticker: str, bolsa: str, quantidade: int,
                 usar_conta_real: bool = False) -> None:
         if quantidade <= 0:
