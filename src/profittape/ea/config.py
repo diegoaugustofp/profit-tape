@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -74,6 +74,15 @@ class SinalConfig(BaseModel):
     adicione um sinal aqui so' porque o IC deu 'segue' -- precisa ter
     passado pela tabela de quintis com o custo REAL da conta.
     """
+    # extra="forbid" (2026-08-28, incidente real): sem isto, um ea.yaml
+    # com campo desconhecido (ex.: alvo_pontos/stop_rota_b_pontos numa
+    # config rodada com codigo ANTIGO, sem esses campos ainda) e' ignorado
+    # SILENCIOSAMENTE pelo pydantic (default) -- o operador rodou a Rota B
+    # "sem erro nenhum" mas sem o alvo/stop terem efeito algum, so' porque
+    # o repositorio nao estava na versao que ele acreditava. Agora falha
+    # ALTO na hora de carregar, nao silenciosamente 3 rodadas depois.
+    model_config = ConfigDict(extra="forbid")
+
     feature: str                    # ex.: "z_agf_3"
     horizonte: int                  # barras (ex.: 3)
     agent_id: int                   # ex.: 3 (XP) -- o agente cujo fluxo gera o sinal
@@ -107,6 +116,8 @@ class RiscoConfig(BaseModel):
     matematica sobre taxa de acerto. Defaults = day trade de futuros
     (capital minimo R$5.000, risco max 2%, WIN a R$0,20/ponto).
     """
+    model_config = ConfigDict(extra="forbid")
+
     capital: float = 5000.0
     risco_max_pct: float = 0.02
     valor_ponto_reais: float = 0.20      # WIN; acoes seria 1.0 (R$/ponto=R$)
@@ -123,6 +134,8 @@ class RiscoConfig(BaseModel):
 
 
 class EAConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     symbol: str
     volume_barra: int               # CONGELADO do features.parquet que validou
                                     # o sinal -- nunca recalculado ao vivo

@@ -192,3 +192,22 @@ def test_lado_permitido_ambos_e_o_default_e_nao_muda_nada() -> None:
     assert sinal.lado_permitido == "ambos"
     assert decidir(sinal, valor_atual=-1.5, posicao_atual=0).acao == Acao.COMPRAR
     assert decidir(sinal, valor_atual=1.5, posicao_atual=0).acao == Acao.VENDER
+
+
+def test_config_recusa_campo_desconhecido_em_vez_de_ignorar_silenciosamente() -> None:
+    """
+    Incidente real (2026-08-28): operador rodou uma config com
+    alvo_pontos/stop_rota_b_pontos contra um codigo ANTIGO (sem esses
+    campos ainda) -- pydantic por padrao IGNORA campo desconhecido, entao
+    rodou "sem erro" mas sem a Rota B ter efeito nenhum, so' porque o
+    repositorio nao estava na versao que ele acreditava. extra="forbid"
+    fecha essa classe de falha silenciosa de vez -- agora falha ALTO na
+    hora de carregar a config, nao silenciosamente rodadas depois.
+    """
+    import pytest
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match="extra_forbidden|Extra inputs"):
+        SinalConfig(feature="z_agf_3", horizonte=3, agent_id=3,
+                    threshold_entrada=1.4, direcao="contrarian",
+                    campo_que_nao_existe=999)
