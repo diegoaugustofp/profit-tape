@@ -150,11 +150,18 @@ class GestorDeRisco:
             return f"saida por tempo: {p.horizonte} barra(s) desde a entrada"
         return None
 
-    def registrar_fechamento(self, preco: float) -> float:
+    def registrar_fechamento(self, preco: float, bar_id_saida: int | None = None) -> float:
         """
         Fecha a posicao, devolve o P&L LIQUIDO em pontos (bruto - custo).
         Atualiza o circuit breaker: perda liquida incrementa a sequencia,
         ganho liquido ZERA a sequencia (a regra e' consecutivas).
+
+        bar_id_saida OPCIONAL (2026-08-28, diagnostico real: precisava
+        calcular quantas barras uma posicao durou de verdade -- so' tinha
+        bar_id na ABERTURA, nao no fechamento -- para confirmar se a Rota B
+        as vezes sai exatamente na MESMA barra que a saida por tempo
+        sairia, ou se sai sempre antes de verdade). None = comportamento
+        de sempre (retrocompativel, nao quebra callers existentes).
         """
         p = self.posicao
         if p is None:
@@ -180,5 +187,8 @@ class GestorDeRisco:
         log.info("risco.fechamento", pnl_liquido=round(pnl_liquido, 1),
                  pnl_dia=round(self.pnl_dia_pontos, 1),
                  perdas_consecutivas=self.perdas_consecutivas,
-                 bloqueado=self.bloqueado)
+                 bloqueado=self.bloqueado,
+                 bar_id_entrada=p.bar_id_entrada, bar_id_saida=bar_id_saida,
+                 barras_duracao=(bar_id_saida - p.bar_id_entrada
+                                if bar_id_saida is not None else None))
         return pnl_liquido

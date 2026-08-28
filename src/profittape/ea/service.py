@@ -192,7 +192,7 @@ class EAService:
                 d = Decisao(Acao.ZERAR, motivo, 0.0, "_risco")
                 decisoes.append(d)
                 self._executar_e_simular(d)
-                self.gestor.registrar_fechamento(barra.close)
+                self.gestor.registrar_fechamento(barra.close, barra.bar_id)
             return decisoes
 
         # 2. Zerado: circuit breaker primeiro, sinal depois.
