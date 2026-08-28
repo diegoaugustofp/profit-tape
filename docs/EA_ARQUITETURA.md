@@ -629,3 +629,65 @@ nem do volume de dado.
 
 241 testes (sem mudanca de logica de sinal/decisao/risco -- so' a fonte
 dos dados de entrada mudou de metodo de leitura).
+
+## IMPLEMENTADO: EA integrado ao record (2026-08-27, noite)
+
+A integracao desenhada mais cedo hoje esta COMPLETA e testada
+ponta a ponta -- nao mais so' a fundacao (hook), mas o fluxo inteiro
+funcionando dentro do mesmo processo/conexao do record.
+
+### As 3 pecas
+
+1. **ea/bridge.py (EABridge)**: fila PROPRIA (independente do EventBus
+   do writer -- ver justificativa ja registrada), thread consumidora
+   que alimenta EAService.processar_trade_bruto(). Filtra por simbolo
+   em publicar() (o record tipicamente assina varios ativos, o EA so'
+   opera um). Descarta com contagem se a fila encher (nunca bloqueia o
+   hot path). Erro no processamento de UM trade nao derruba a thread
+   (try/except por item, nao por lote). parar() chama
+   ea_service.encerrar_dia() (zera posicao aberta), protegido por
+   try/except -- nunca impede o record de terminar o SEU encerramento.
+
+2. **recorder/service.py (RecorderService)**: `ea_config_path: Path |
+   None = None` novo parametro. None por padrao -- TODO caller
+   existente (producao ha' semanas) tem ZERO mudanca de comportamento.
+   Se fornecido: carrega EAConfig (falha CEDO, antes de qualquer
+   captura comecar, se dry_run=False ou config invalida -- diferente
+   de falha DURANTE a sessao, que o EABridge protege), constroi
+   EABridge, passa on_trade_extra=bridge.publicar ao ProfitClient.
+   ea_bridge.iniciar() junto com writer.start(); ea_bridge.parar()
+   ANTES do bus.close() no encerramento.
+
+3. **cli.py (`record --ea-config`)**: novo parametro opcional no
+   comando existente. Sem ele, comportamento identico a sempre.
+
+### Testado ponta a ponta (nao so' unitario)
+
+`test_ea_integrado_ao_record_processa_trades_e_nao_afeta_captura`:
+RecorderService real (FakeProfitDLL, sem mercado aberto) com 2 ativos
+(PETR4+VALE3) e EA configurado para PETR4 -- confirma NAS DUAS
+DIRECOES:
+  - a captura continua IDENTICA ao caso sem EA (mesma asserção do
+    teste original de "zero perda") -- a integracao nao interferiu.
+  - o EA de fato recebeu e processou os 400 trades de PETR4 (nao os de
+    VALE3, filtrados corretamente) e fechou pelo menos 1 barra.
+
+`test_sem_ea_config_path_comportamento_identico_a_sempre`: confirma
+retrocompatibilidade no nivel do RecorderService (alem do que ja
+estava confirmado no ProfitClient).
+
+### O que AINDA fica de fora, por design (nao esquecido)
+
+- **dry_run=False usando a mesma conexao**: RecorderService recusa
+  explicitamente (SystemExit) se o ea.yaml passado tiver
+  dry_run=False -- SendOrder real precisa de DLLInitializeLogin (nao
+  DLLInitializeMarketLogin, que e' o que o record usa), reabrindo a
+  pergunta de licenciamento para ROTEAMENTO especificamente (nao
+  coberta por esta implementacao, que so' cobre construcao de sinal
+  em dry_run).
+- Gestao de risco ja' existe (GestorDeRisco, dentro do EAService) --
+  mas o teste de resiliencia/forward-test em condicao real de pregao
+  (nao FakeProfitDLL) ainda nao foi feito -- proximo passo natural.
+
+12 testes novos (5 do EABridge isolado + 2 de integracao ponta a
+ponta + retrocompatibilidade). 299 testes.

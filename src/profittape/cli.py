@@ -22,6 +22,13 @@ def record(
     log_level: str = typer.Option("INFO", "--log-level"),
     log_file: Path | None = typer.Option(None, "--log-file"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Valida config e sai."),
+    ea_config: Path | None = typer.Option(
+        None, "--ea-config",
+        help="OPCIONAL (2026-08-27, decisao de arquitetura de longo "
+             "prazo): roda o EA DENTRO deste processo, mesma conexao -- "
+             "licenca Nelogica so' permite UMA chave de ativacao. Sempre "
+             "dry_run=True nesta fase -- so' loga decisoes, nunca envia "
+             "ordem. Sem este parametro, comportamento identico a sempre."),
 ) -> None:
     """Grava tape e book ate o horario configurado ou ate Ctrl+C."""
     configurar(log_level, log_file)
@@ -34,12 +41,14 @@ def record(
             flags = [n for n, v in
                      (("trades", a.trades), ("offer", a.offer_book), ("price", a.price_book)) if v]
             typer.echo(f"  {a.ticker:<10} {a.bolsa}  {'+'.join(flags)}")
+        if ea_config:
+            typer.echo(f"  EA integrado: --ea-config {ea_config}")
         raise typer.Exit(0)
 
     cred.validar()
     from .recorder.service import RecorderService
 
-    raise typer.Exit(RecorderService(cfg, cred).run())
+    raise typer.Exit(RecorderService(cfg, cred, ea_config_path=ea_config).run())
 
 
 @app.command()

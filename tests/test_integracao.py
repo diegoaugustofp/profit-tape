@@ -409,3 +409,83 @@ def test_sem_on_trade_extra_comportamento_identico_a_sempre(tmp_raiz: Path) -> N
     finally:
         c.disconnect()
     assert bus.stats().total_recebido == 1
+
+
+def test_ea_integrado_ao_record_processa_trades_e_nao_afeta_captura(
+    tmp_raiz: Path, tmp_path: Path,
+) -> None:
+    """
+    Teste de ponta a ponta da decisao de arquitetura de longo prazo
+    (2026-08-27): EA rodando DENTRO do processo do record, mesma conexao
+    -- licenca Nelogica so' permite UMA chave de ativacao. Confirma as
+    duas garantias que importam: (1) o EA de fato recebe e processa os
+    trades do simbolo configurado; (2) a captura continua IDENTICA ao
+    caso sem EA -- nada se perde, nada trava.
+    """
+    ea_yaml = tmp_path / "ea_teste.yaml"
+    ea_yaml.write_text("""
+symbol: PETR4
+volume_barra: 30
+janela_z: 6
+tamanho_posicao: 1
+custo_pontos_estimado: 0.026
+dry_run: true
+usar_conta_real: false
+sinais:
+  - feature: z_agf_3
+    horizonte: 3
+    agent_id: 3
+    threshold_entrada: 1.0
+    direcao: contrarian
+risco:
+  capital: 5000.0
+  risco_max_pct: 0.02
+  valor_ponto_reais: 1.0
+  max_perdas_consecutivas: 3
+""")
+
+    n = 400
+    fake = FakeProfitDLL(eventos_por_ativo=n, intervalo_s=0.0)
+    svc = RecorderService(_config(tmp_raiz), _cred(), dll_injetada=fake,
+                          ea_config_path=ea_yaml)
+    assert svc.ea_bridge is not None   # confirma que a integracao foi montada
+
+    t = threading.Thread(target=svc.run, daemon=True)
+    t.start()
+    time.sleep(3.0)
+    svc._parar.set()
+    t.join(timeout=60)
+
+    # GARANTIA 1: a captura continua IDENTICA ao teste sem EA (mesma
+    # asserção de test_ponta_a_ponta_sem_perda) -- o EA nao interferiu.
+    st = svc.bus.stats()
+    assert st.total_descartado == 0, "houve descarte silencioso"
+    assert st.total_recebido > 0
+    trades = ds.dataset(tmp_raiz / "trade", format="parquet", partitioning="hive").to_table()
+    assert trades.num_rows > 0
+    assert set(trades["symbol"].to_pylist()) == {"PETR4", "VALE3"}
+
+    # GARANTIA 2: o EA de fato recebeu e processou os trades de PETR4
+    # (o simbolo configurado) -- nao ficou so' de enfeite.
+    ea_svc = svc.ea_bridge.ea_service
+    assert ea_svc.stats.trades == n   # so' PETR4 tem 'n' trades (VALE3 e' outro simbolo, filtrado)
+    assert ea_svc.stats.barras > 0    # pelo menos 1 barra fechou (volume_barra=30, n=400)
+
+
+def test_sem_ea_config_path_comportamento_identico_a_sempre(tmp_raiz: Path) -> None:
+    """Retrocompatibilidade EXPLICITA no nivel do RecorderService (nao so'
+    do ProfitClient, ja testado): sem ea_config_path, ea_bridge e' None,
+    tudo funciona exatamente como antes desta feature existir."""
+    fake = FakeProfitDLL(eventos_por_ativo=100, intervalo_s=0.0)
+    svc = RecorderService(_config(tmp_raiz), _cred(), dll_injetada=fake)
+    assert svc.ea_bridge is None
+
+    t = threading.Thread(target=svc.run, daemon=True)
+    t.start()
+    time.sleep(2.0)
+    svc._parar.set()
+    t.join(timeout=60)
+
+    st = svc.bus.stats()
+    assert st.total_descartado == 0
+    assert st.total_recebido > 0

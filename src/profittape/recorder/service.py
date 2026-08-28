@@ -40,6 +40,7 @@ class RecorderService:
         cfg: RecorderConfig,
         cred: Credenciais,
         dll_injetada: object | None = None,
+        ea_config_path: Path | None = None,
     ) -> None:
         self.cfg = cfg
         self.cred = cred
@@ -64,6 +65,32 @@ class RecorderService:
             idle_close_s=cfg.storage.idle_close_s,
             limiar_lote_lento_s=cfg.pipeline.limiar_lote_lento_s,
         )
+        # EA integrado (2026-08-27, decisao de arquitetura de longo prazo):
+        # OPCIONAL, None por padrao -- todo caller existente (producao ha'
+        # semanas) tem ZERO mudanca de comportamento sem passar
+        # ea_config_path explicitamente. Falha CEDO (config invalida) e'
+        # aceitavel aqui, ANTES de qualquer captura comecar -- diferente de
+        # uma falha DURANTE a sessao, que a EABridge protege via try/except
+        # (ver bridge.py). Sempre dry_run=True nesta fase -- SendOrder real
+        # usando a MESMA conexao do record e' decisao futura separada.
+        self.ea_bridge: EABridge | None = None
+        if ea_config_path is not None:
+            from ..ea.bridge import EABridge
+            from ..ea.config import EAConfig
+            from ..ea.service import EAService
+
+            ea_cfg = EAConfig.from_yaml(ea_config_path)
+            if not ea_cfg.dry_run:
+                raise SystemExit(
+                    "ea_config_path com dry_run=False -- o record so' "
+                    "suporta o EA em dry_run nesta fase (SendOrder real "
+                    "usando a mesma conexao e' decisao futura separada, "
+                    "ver EA_ARQUITETURA.md)."
+                )
+            self.ea_bridge = EABridge(EAService(ea_cfg))
+            log.info("recorder.ea_integrado", symbol=ea_cfg.symbol,
+                     sinais=[s.feature for s in ea_cfg.sinais])
+
         self.client = ProfitClient(
             dll_path=cred.dll_path,
             activation_key=cred.activation_key,
@@ -72,6 +99,7 @@ class RecorderService:
             bus=self.bus,
             tz_offset_horas=cfg.runtime.tz_offset_horas,
             on_state=self._on_state,
+            on_trade_extra=self.ea_bridge.publicar if self.ea_bridge else None,
             dll=dll_injetada,
         )
         self._parar = threading.Event()
@@ -105,6 +133,8 @@ class RecorderService:
     def run(self) -> int:
         self._instalar_sinais()
         self.writer.start()
+        if self.ea_bridge is not None:
+            self.ea_bridge.iniciar()
         try:
             self.client.connect()
             self._subscrever()
@@ -212,6 +242,12 @@ class RecorderService:
     def _encerrar(self) -> None:
         log.info("recorder.encerrando")
         self.client.disconnect()      # 1: para de entrar evento novo
+        if self.ea_bridge is not None:
+            # ANTES do bus.close() -- protegido internamente (try/except em
+            # torno de encerrar_dia(), ver bridge.py); um erro aqui nunca
+            # pode impedir o restante do encerramento do record (footer,
+            # verificacao, alerta), que e' sempre prioridade.
+            self.ea_bridge.parar()
         self.bus.close()              # 2: sentinela
         self.writer.join(timeout=120) # 3: drena o que sobrou
         if self.writer.is_alive():
