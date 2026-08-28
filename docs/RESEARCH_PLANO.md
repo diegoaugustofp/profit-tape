@@ -977,3 +977,24 @@ PENDENTE: decisao do operador entre os 3 caminhos ANTES de escrever
 qualquer codigo em risco.py. Implementacao do overlay continua
 deliberadamente adiada (mudanca real de comportamento de risco,
 merece sessao com atencao plena).
+
+## DECISAO: par empirico aceito (2026-08-27)
+
+Operador optou pelo caminho 1: aceitar o par empirico como esta,
+sem forcar o payoff 2:1 original.
+
+**Rota B, especificacao final para implementacao futura:**
+- stop = 100 pts
+- alvo = 120 pts
+- payoff implicito = 1.2:1
+- lado: venda (o unico com edge confirmado) -- ou ambos os lados, a
+  decidir junto com a decisao ja pendente de "Restricao de direcao
+  venda apenas" (as duas mudancas de design deveriam ser avaliadas
+  coerentemente, nao independentes uma da outra)
+- feature/horizonte: z_agf_3 h=3 (o sinal onde este MAE/MFE foi
+  medido -- nao generalizar para outro sinal sem medir o proprio
+  MAE/MFE dele)
+
+Implementacao (extensao de risco.py com saida por alvo/stop fixo,
+paralela a saida por tempo) continua PENDENTE -- proxima sessao,
+codigo real de mudanca de comportamento de risco.
