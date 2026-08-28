@@ -998,3 +998,31 @@ sem forcar o payoff 2:1 original.
 Implementacao (extensao de risco.py com saida por alvo/stop fixo,
 paralela a saida por tempo) continua PENDENTE -- proxima sessao,
 codigo real de mudanca de comportamento de risco.
+
+## Acompanhamento continuo: efeito do circuit breaker com 25 dias (2026-08-28)
+
+Rodada com ea_venda_apenas.yaml (25 dias, 2026-07-24 a 2026-08-27, 157
+operacoes): taxa de acerto 51,0% (primeira vez cruzando 50%), razao
+ganho/perda 1,00 exato (neutro, nao claramente favoravel nem
+desfavoravel), pnl total +418 -- mas 08/27 sozinho rendeu +629 (sem
+esse dia, os outros 24 somariam -211). Amostra ainda sensivel a poucos
+dias fortes.
+
+Circuit breaker (7 disparos, 25 dias): efeito liquido REVERTEU para
+NEGATIVO (-328 pts -- salvou 1014, custou 1342) -- diferente das
+rodadas anteriores (24 dias, venda-apenas) onde o efeito era proximo
+de neutro/levemente positivo (+79pts). n=7 ainda nao e' "muitos
+eventos" o suficiente para recalibrar max_perdas_consecutivas, mas a
+tendencia de piorar conforme mais dias entram merece continuar sendo
+acompanhada -- NAO decidir nada ainda.
+
+Calmar ratio desta rodada: 0,23 (fraco) -- drawdown grande relativo ao
+retorno liquido, mesmo com edge medio positivo confirmado. Sinal de
+eficiencia de capital ainda baixa, complementar (nao contraditorio) ao
+resultado agregado positivo.
+
+Observacao tecnica: valores extremos nas operacoes individuais desta
+rodada (+524, -386, +409...) excedem os limiares 100/120 da Rota B --
+confirma que esta rodada usou ea_venda_apenas.yaml (Rota A, saida por
+tempo), NAO ea_venda_rota_b.yaml. Comparacao direta com Rota B sobre
+este mesmo periodo de 25 dias ainda nao foi feita.
