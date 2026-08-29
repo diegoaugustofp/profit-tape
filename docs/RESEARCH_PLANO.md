@@ -1,5 +1,65 @@
 # Plano do modulo research/ (decidido 2026-08-22, pre-implementacao)
 
+Regras de desenho, decisoes de sinal/estrategia, e resultados -- em ordem
+cronologica abaixo. Para navegar rapido por ASSUNTO em vez de ler tudo em
+ordem, use o indice agrupado abaixo (2026-08-28, adicionado porque o
+arquivo cresceu demais para navegar so' por titulo cronologico).
+
+## Indice por assunto
+
+**Perfil de agente / classificacao**
+- [REVISAO DA HIPOTESE DE PERFIL (2026-08-22, operador)](#revisao-da-hipotese-de-perfil-2026-08-22-operador)
+- [Revisao critica da taxonomia de 6 niveis (2026-08-22, operador pesquisou)](#revisao-critica-da-taxonomia-de-6-niveis-2026-08-22-operador-pesquisou)
+- [Classificacao final de 2 camadas (2026-08-22, operador)](#classificacao-final-de-2-camadas-2026-08-22-operador)
+- [CONCLUSAO DA VALIDACAO DE PERFIL (2026-08-23, aceita pelo operador)](#conclusao-da-validacao-de-perfil-2026-08-23-aceita-pelo-operador)
+- [fluxo_nacional implementado (2026-08-23)](#fluxo_nacional-implementado-2026-08-23)
+
+**z_agf_3 / z_agf_4090 (os sinais validados do WINFUT)**
+- [Teste de diferenca entre quintis adjacentes (2026-08-23)](#teste-de-diferenca-entre-quintis-adjacentes-2026-08-23)
+- [Segunda rodada de quintis — z_agf_3 h=1 passa no IC mas morre pelo custo (2026-08-26)](#segunda-rodada-de-quintis-z_agf_3-h1-passa-no-ic-mas-morre-pelo-custo-2026-08-26)
+- [Resultado real do MAE + achado de assimetria compra/venda (2026-08-27)](#resultado-real-do-mae-achado-de-assimetria-compravenda-2026-08-27)
+- [CORRECAO CRITICA: mae.py rodava sobre amostra inteira, nao out-of-sample (2026-08-27)](#correcao-critica-maepy-rodava-sobre-amostra-inteira-nao-out-of-sample-2026-08-27)
+
+**z_agf_8 (fluxo UBS) — fechado**
+- [FECHADO: z_agf_8 (fluxo UBS) descartado nos dois fronts (2026-08-27)](#fechado-z_agf_8-fluxo-ubs-descartado-nos-dois-fronts-2026-08-27)
+
+**Acoes (VALE3/MGLU3/etc.) — mortas pelo custo**
+- [Custo de transacao em ACOES na XP — ponderacao do operador (2026-08-26)](#custo-de-transacao-em-acoes-na-xp-ponderacao-do-operador-2026-08-26)
+- [Conclusao final: sinais de acao morrem no teste economico (2026-08-26)](#conclusao-final-sinais-de-acao-morrem-no-teste-economico-2026-08-26)
+
+**Restricao de direcao (venda apenas) — decisao aceita**
+- [PRE-REGISTRO: Restricao de direcao — venda apenas (2026-08-27)](#pre-registro-restricao-de-direcao-venda-apenas-2026-08-27)
+- [RESULTADO do pre-registro "Restricao de direcao — venda apenas" (2026-08-27)](#resultado-do-pre-registro-restricao-de-direcao-venda-apenas-2026-08-27)
+
+**Rota B — implementada, depois questionada (PENDENTE redesenho)**
+- [PRE-REGISTRO: Rota B (payoff fixo, alvo/stop) — preparacao (2026-08-27)](#pre-registro-rota-b-payoff-fixo-alvostop-preparacao-2026-08-27)
+- [Rota B: par CONGELADO, e uma tensao real revelada (2026-08-27)](#rota-b-par-congelado-e-uma-tensao-real-revelada-2026-08-27)
+- [DECISAO: par empirico aceito (2026-08-27)](#decisao-par-empirico-aceito-2026-08-27)
+- ⚠ ver `docs/HISTORICO_DE_SESSOES.md`, sessao 2026-08-27/28: mecanismo
+  questionado com razao pelo operador DEPOIS da implementacao -- checagem
+  so' no fechamento de barra nao e' stop/alvo continuo de verdade.
+  Redesenho pendente antes de tentar de novo.
+
+**Risco (drawdown, VaR/ES, circuit breaker)**
+- [Curva de patrimonio / drawdown maximo (2026-08-27)](#curva-de-patrimonio-drawdown-maximo-2026-08-27)
+- [Risco realizado (VaR/ES) — primeiro passo aplicado do RQ (2026-08-27)](#risco-realizado-vares-primeiro-passo-aplicado-do-rq-2026-08-27)
+- [Resultado real do risco-realizado + correcao de bug de exibicao (2026-08-27)](#resultado-real-do-risco-realizado-correcao-de-bug-de-exibicao-2026-08-27)
+- [Circuit breaker: com freio vs sem freio, num dia real (2026-08-27)](#circuit-breaker-com-freio-vs-sem-freio-num-dia-real-2026-08-27)
+- [Acompanhamento continuo: efeito do circuit breaker com 25 dias (2026-08-28)](#acompanhamento-continuo-efeito-do-circuit-breaker-com-25-dias-2026-08-28)
+
+**Disciplina/processo do proprio research**
+- [Decisoes aprovadas](#decisoes-aprovadas)
+- [Pre-requisitos antes de escrever research/](#pre-requisitos-antes-de-escrever-research)
+- [Disciplina: quando rodar features vs quando rodar research (2026-08-27)](#disciplina-quando-rodar-features-vs-quando-rodar-research-2026-08-27)
+
+**Outras decisoes (2026-08-22/23, nao encaixam nas categorias acima)**
+- [Persistencia de corretora — desenho refinado (ideia do operador, 2026-08-22)](#persistencia-de-corretora-desenho-refinado-ideia-do-operador-2026-08-22)
+- [IMPLEMENTADO (2026-08-22) — regras finais do veredito, pos teste de honestidade](#implementado-2026-08-22-regras-finais-do-veredito-pos-teste-de-honestidade)
+- [PRIMEIRA RODADA REAL + IDENTIFICACAO DO CLUSTER (2026-08-23)](#primeira-rodada-real-identificacao-do-cluster-2026-08-23)
+- [Resultado do teste de diferenca entre quintis (2026-08-23)](#resultado-do-teste-de-diferenca-entre-quintis-2026-08-23)
+
+---
+
 Registro das decisoes de desenho ANTES de escrever codigo, para o research
 nascer com metodo travado e nao com parametros escolhidos depois de ver
 resultado (isso seria p-hacking — o proprio projeto ja rejeitou esse padrao).

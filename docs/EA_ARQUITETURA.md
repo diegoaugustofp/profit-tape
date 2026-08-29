@@ -1,5 +1,43 @@
 # EA de fluxo por corretora — arquitetura (esboco, 2026-08-24)
 
+## Indice por assunto
+
+(2026-08-28, adicionado -- o arquivo cresceu demais para navegar so' por
+titulo cronologico. Ver tambem `docs/HISTORICO_DE_SESSOES.md` para o
+eixo "o que aconteceu em qual sessao".)
+
+**Por que ProfitDLL/Python (nao NTSL) — decisao de fundacao**
+- [Decisao: ProfitDLL/Python, nao NTSL — e por que](#decisao-profitdllpython-nao-ntsl-e-por-que)
+- [Correcao de desenho (2026-08-24, o operador identificou o erro)](#correcao-de-desenho-2026-08-24-o-operador-identificou-o-erro)
+
+**Concorrencia de sessao DLL (record + EA, uma so' chave de ativacao)**
+- [CORRIGIDO (2026-08-27) — a conclusao anterior estava ERRADA por interpretacao](#corrigido-2026-08-27-a-conclusao-anterior-estava-errada-por-interpretacao)
+- [Pergunta RESOLVIDA (2026-08-26) — teste de concorrencia real](#pergunta-resolvida-2026-08-26-teste-de-concorrencia-real-superado-ver-acima)
+- [CONFIRMADO (2026-08-27): MarketLogin+MarketLogin TAMBEM colide](#confirmado-2026-08-27-marketloginmarketlogin-tambem-colide----ea-replay-criado)
+- [DECISAO DE ARQUITETURA DE LONGO PRAZO: EA integrado ao processo do record (2026-08-27)](#decisao-de-arquitetura-de-longo-prazo-ea-integrado-ao-processo-do-record-2026-08-27)
+- [IMPLEMENTADO: EA integrado ao record (2026-08-27, noite)](#implementado-ea-integrado-ao-record-2026-08-27-noite)
+
+**Estrutura e gestao de risco do modulo EA**
+- [Estrutura do modulo (src/profittape/ea/)](#estrutura-do-modulo-srcprofittapeea)
+- [Gestao de risco — DESENHADA E IMPLEMENTADA (2026-08-26, ea/risco.py)](#gestao-de-risco-desenhada-e-implementada-2026-08-26-eariscopy)
+- [Pre-requisitos antes de qualquer ordem real (dry_run=False)](#pre-requisitos-antes-de-qualquer-ordem-real-dry_runfalse)
+
+**Login/conexao DLL — bugs reais de estado**
+- [DLLInitializeLogin: NL_INTERNAL_ERROR persistente + correcao de design (2026-08-26)](#dllinitializelogin-nl_internal_error-persistente-correcao-de-design-2026-08-26)
+- [Investigacao adicional: por que o client.py (record) nao teve este problema? (2026-08-26)](#investigacao-adicional-por-que-o-clientpy-record-nao-teve-este-problema-2026-08-26)
+- [ACHADO CRITICO: dois bugs reais na deteccao de estado (2026-08-26, 23:46)](#achado-critico-dois-bugs-reais-na-deteccao-de-estado-2026-08-26-2346)
+- [Nota do operador: corretora_id=32006](#nota-do-operador-corretora_id32006-e-provavelmente-codigo-nelogica-do-simulador-nao-da-xp-2026-08-26)
+
+**Replay/backtest do EA e achados de risco**
+- [ea-replay-lote + modo diagnostico do circuit breaker (2026-08-27)](#ea-replay-lote-modo-diagnostico-do-circuit-breaker-2026-08-27)
+- [Analise de MAE — stop catastrofico e' seguro de cauda ou ja morde? (2026-08-27)](#analise-de-mae-stop-catastrofico-e-seguro-de-cauda-ou-ja-morde-2026-08-27)
+- [RESOLVIDO: causa raiz do travamento de 3+ horas no ea-replay (2026-08-27)](#resolvido-causa-raiz-do-travamento-de-3-horas-no-ea-replay-2026-08-27)
+
+**Zeragem automatica**
+- [Zeragem automatica da XP — pesquisa e decisao de horario (2026-08-26)](#zeragem-automatica-da-xp-pesquisa-e-decisao-de-horario-2026-08-26)
+
+---
+
 ## Decisao: ProfitDLL/Python, nao NTSL — e por que
 
 Verificado nos manuais (nao suposto):
