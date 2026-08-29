@@ -501,3 +501,48 @@ RECOMENDACAO (nao implementada ainda, registrar como decisao futura):
   o historico completo a cada validacao incremental.
 - Path do backup sempre passado explicitamente via `--raiz-raw` nas
   ferramentas de replay -- nunca assumido implicitamente.
+
+## INCIDENTE: agendamento disparou, processo crashou, causa exata nunca encontrada (2026-08-25, entre a v0.51)
+
+SINTOMA: o `record` estava agendado via `schtasks` para as 08:50. Numa
+manhã, não capturou nada — parecia, à primeira vista, que a tarefa
+simplesmente não tinha disparado (suspeita inicial: problema de
+agendamento/Modo de Logon, por analogia a outros problemas de
+`schtasks` já vistos na mesma época).
+
+INVESTIGAÇÃO: usando o contrato de exit code desenhado no dia anterior
+para o NSSM (`run()` devolve `0` em qualquer parada LIMPA — horário
+agendado ou sinal externo — e `1` só em exceção não tratada,
+implementado em `1d382bd`, 2026-08-24), foi possível diferenciar as
+duas hipóteses. Resultado: **a tarefa disparou no horário certo**
+(08:50, não ficou parada nem foi pulada por hibernação) — não era
+problema de agendamento. **O processo rodou e falhou**, devolvendo
+exit code `1` — uma exceção não tratada de verdade, não um sintoma de
+scheduling.
+
+CAUSA RAIZ: **nunca confirmada**. A investigação identificou COMO
+falhou (crash real, não silêncio nem scheduling), mas não chegou à
+exceção específica por trás do crash daquela manhã.
+
+DECISÃO: não seguir investigando essa instância específica. Em vez de
+caçar uma causa possivelmente pontual/transitória, o caminho escolhido
+foi tornar o **impacto de qualquer crash futuro** irrelevante — via
+NSSM (serviço supervisionado, reinicia sozinho em segundos após
+qualquer exit code `1`), implementado e validado em produção em
+2026-08-27 (ver `docs/NSSM_SERVICO.md`). Até a implantação do NSSM, o
+`record` foi operado manualmente nas manhãs seguintes, como mitigação
+temporária.
+
+LIÇÃO: nem todo incidente precisa (ou compensa) ter a causa raiz
+exata encontrada — às vezes a resposta certa é tornar o SISTEMA
+resiliente ao tipo de falha, não caçar a instância específica dela.
+Isso é diferente do incidente do travamento de máquina durante o
+pregão (`docs/OPERACAO.md`, seção "Triagem automatizada de
+.inprogress órfãos") — naquele, a causa raiz (máquina travou de
+verdade) era óbvia; aqui, o crash em si ficou sem explicação, e essa
+lacuna é registrada de propósito, não escondida.
+
+(Nota de reconstrução: este registro foi escrito retroativamente em
+2026-08-29, a partir de um fragmento do diagnóstico original fornecido
+pelo operador — a sessão original não foi localizada nas conversas
+pesquisadas.)

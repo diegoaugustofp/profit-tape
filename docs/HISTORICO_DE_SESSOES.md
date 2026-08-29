@@ -230,3 +230,14 @@ em `journal.txt`, junto aos transcripts brutos, fora deste
 repositório). Se precisar de detalhe de uma sessão anterior a
 2026-08-27, comece pelos documentos de assunto (`RESEARCH_PLANO.md`,
 `EA_ARQUITETURA.md`) — eles têm entradas datadas desde 2026-08-23.
+
+**Exceção reconstruída (2026-08-29, a pedido do operador)**: o incidente
+de agendamento/crash do `record` em **2026-08-25** (próximo da tag
+`entregue-v0.51`) foi documentado retroativamente em
+`docs/OPERACAO.md` — a busca em conversas anteriores não localizou a
+sessão original, mas o operador forneceu um fragmento do diagnóstico
+da época que permitiu reconstruir o registro com precisão (tarefa
+disparou no horário certo, processo crashou com exit code `1`, causa
+exata nunca confirmada, decisão de não perseguir mais fundo e resolver
+via NSSM). Ver a seção "INCIDENTE: agendamento disparou, processo
+crashou, causa exata nunca encontrada" em `OPERACAO.md`.
