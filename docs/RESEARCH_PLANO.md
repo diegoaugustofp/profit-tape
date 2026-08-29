@@ -2133,10 +2133,14 @@ baixa a barra).
 
 ## PRE-REGISTRO 3 (RASCUNHO, NAO CONGELADO): separar falta de poder de ausencia de efeito (2026-08-29i)
 
-> **NAO CONGELADO.** Escrito ANTES de qualquer rodada de `research` sobre
-> barra de tempo — zero trial gasto ate aqui, nenhum IC calculado. O
-> momento e' este: notar depois de ver um `CONTRA` que "na verdade era
-> falta de poder" seria mover a trave.
+> **CONGELADO em 2026-08-29 pelo operador**, ANTES de qualquer rodada de
+> `research` sobre barra de tempo — zero trial gasto ate aqui, nenhum IC
+> calculado. O limiar de 0,85, a exigencia de opt-in e o criterio
+> revisado estao fixados a partir daqui; alteracao exige pre-registro
+> novo, com secao e data proprias.
+>
+> O momento de escrever isto era este: notar depois de ver um `CONTRA`
+> que "na verdade era falta de poder" seria mover a trave.
 
 ### O problema que este pre-registro resolve
 
