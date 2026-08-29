@@ -8,6 +8,8 @@ conferencia manual da sessao.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -205,3 +207,110 @@ def test_trials_previstos_so_endurece(tmp_path) -> None:  # type: ignore[no-unty
     assert ignorado["limiar_deflacionado"] == baixo["limiar_deflacionado"]
     # E a cobranca em disco e' identica nos tres casos.
     assert baixo["trials_rodada"] == alto["trials_rodada"] == 1
+
+
+# --- PRE-REGISTRO 3: promocao por falta de poder (congelado 2026-08-29i) ---
+
+def _celula(ic: float, t: float, consist: float,
+            n_obs: int = 2000, folds: int = 11) -> pd.Series:
+    return pd.Series({"folds_validos": folds, "t_stat": t, "n_obs_teste": n_obs,
+                      "ic_medio": ic, "consistencia_sinal": consist})
+
+
+# 11 folds e limiar 3,055 dao t_critico 4,03; piso de magnitude com
+# n_obs=2000 e' 2/sqrt(2000) = 0,0447. Conferido a mao antes destes testes.
+_LIM = 3.055
+
+
+def test_promove_quando_falha_so_estabilidade() -> None:
+    from profittape.research.pipeline import _veredito
+
+    celula = _celula(ic=-0.08, t=-3.0, consist=0.91)
+    assert _veredito(celula, _LIM) == "descarta"
+    assert _veredito(celula, _LIM, promover_por_poder=True) == "inconclusivo"
+
+
+def test_nao_promove_com_consistencia_abaixo_de_085() -> None:
+    """
+    A porta dos fundos que o limiar de 0,85 existe para fechar: |t| baixo
+    tambem vem de desvio ALTO entre folds, que e' instabilidade real. A
+    barra de 0,70 de `segue` nao separa os dois casos.
+    """
+    from profittape.research.pipeline import _veredito
+
+    celula = _celula(ic=-0.08, t=-3.0, consist=0.82)
+    assert _veredito(celula, _LIM, promover_por_poder=True) == "descarta"
+
+
+def test_nao_promove_se_magnitude_tambem_falha() -> None:
+    from profittape.research.pipeline import _veredito
+
+    celula = _celula(ic=-0.02, t=-3.0, consist=0.95)   # 0,02 < piso 0,0447
+    assert _veredito(celula, _LIM, promover_por_poder=True) == "descarta"
+
+
+def test_promocao_nunca_cria_um_segue() -> None:
+    """A regra so' move `descarta` -> `inconclusivo`. `segue` e' identico."""
+    from profittape.research.pipeline import _veredito
+
+    rng = np.random.default_rng(11)
+    for _ in range(500):
+        celula = _celula(ic=float(rng.normal(0, 0.06)),
+                         t=float(rng.normal(0, 4)),
+                         consist=float(rng.uniform(0.3, 1.0)),
+                         n_obs=int(rng.integers(500, 5000)),
+                         folds=int(rng.integers(4, 24)))
+        classico = _veredito(celula, _LIM)
+        com_poder = _veredito(celula, _LIM, promover_por_poder=True)
+        if classico == "segue":
+            assert com_poder == "segue"
+        assert com_poder in {classico, "inconclusivo"}
+        if com_poder != classico:
+            assert classico == "descarta"
+
+
+def test_retrocompatibilidade_veredito_sem_a_flag(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """
+    Sem a flag, o veredito e' IDENTICO ao classico celula a celula.
+
+    Nao basta "o default e' False": mudar `_veredito` para todos
+    reclassificaria retroativamente o historico de barra de volume (492
+    trials, incluindo os dois `segue` de 2026-08-23) sem ninguem ter
+    rerodado nada.
+    """
+    from profittape.research.pipeline import _veredito, rodar
+
+    rng = np.random.default_rng(5)
+    for _ in range(500):
+        celula = _celula(ic=float(rng.normal(0, 0.06)),
+                         t=float(rng.normal(0, 4)),
+                         consist=float(rng.uniform(0.3, 1.0)),
+                         n_obs=int(rng.integers(500, 5000)),
+                         folds=int(rng.integers(4, 24)))
+        assert _veredito(celula, _LIM) == _veredito(
+            celula, _LIM, promover_por_poder=False)
+
+    arq = tmp_path / "features.parquet"
+    _features_sinteticas().to_parquet(arq, index=False)
+    antigo = rodar(arq, tmp_path / "x", horizontes=[1])
+    novo = rodar(arq, tmp_path / "y", horizontes=[1], promover_por_poder=False)
+    pd.testing.assert_frame_equal(antigo["tabela"], novo["tabela"])
+
+
+def test_relatorio_registra_qual_regra_foi_usada(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """
+    Um `inconclusivo` de origem "faltou fold" e um de origem "promovido por
+    poder" significam coisas diferentes; um relatorio antigo tem que dizer
+    qual regra o produziu.
+    """
+    from profittape.research.pipeline import rodar
+
+    arq = tmp_path / "features.parquet"
+    _features_sinteticas().to_parquet(arq, index=False)
+
+    classico = rodar(arq, tmp_path / "c", horizontes=[1])
+    com_poder = rodar(arq, tmp_path / "p", horizontes=[1],
+                      promover_por_poder=True)
+    assert "sem promocao" in Path(classico["relatorio"]).read_text(encoding="utf-8")
+    assert "promocao por poder ATIVA" in Path(
+        com_poder["relatorio"]).read_text(encoding="utf-8")

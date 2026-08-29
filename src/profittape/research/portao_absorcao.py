@@ -150,6 +150,14 @@ def _avaliar_periodo(tape: pd.DataFrame, segundos: int, tick: float,
     features = [f"z_{c}" for c in COLUNAS_Z_TEMPO]
     res = avaliar(barras_df, features, horizontes, folds)
     res["veredito"] = res.apply(lambda linha: _veredito(linha, limiar_z), axis=1)
+    # O criterio do portao esta CONGELADO desde 2026-08-29e como "descarta
+    # nas 12 celulas", julgado pela regra CLASSICA — e continua sendo. A
+    # coluna abaixo nao muda criterio nenhum: mede, como DIAGNOSTICO, com
+    # que frequencia o ruido puro abriria a porta de "falta de poder" do
+    # PRE-REGISTRO 3. E' a taxa de continuacao falsa da cadencia
+    # incremental, e ela precisa ser conhecida antes de a cadencia comecar.
+    res["veredito_com_poder"] = res.apply(
+        lambda linha: _veredito(linha, limiar_z, promover_por_poder=True), axis=1)
     res["tf"] = PERIODOS[segundos]
     amplitude = (barras_df["high"] - barras_df["low"]) / tick
     res["range_ticks_mediano"] = float(amplitude.median())
@@ -225,7 +233,9 @@ def rodar_portao(
              ic_ruido_desvio=("ic_medio", "std"),
              ic_ruido_p05=("ic_medio", lambda s: float(np.quantile(s, 0.05))),
              ic_ruido_p95=("ic_medio", lambda s: float(np.quantile(s, 0.95))),
-             segue_sob_ruido=("veredito", lambda s: int((s == "segue").sum())))
+             segue_sob_ruido=("veredito", lambda s: int((s == "segue").sum())),
+             porta_poder_sob_ruido=("veredito_com_poder",
+                                    lambda s: int((s == "inconclusivo").sum())))
         .reset_index()
     )
     log.info("portao_absorcao.veredito", passou=passou,
@@ -239,6 +249,8 @@ def rodar_portao(
         "trials_extra": trials_extra,
         "celulas": len(tabela),
         "vereditos": tabela["veredito"].value_counts().to_dict(),
+        "porta_poder_sob_ruido": int(nulo["porta_poder_sob_ruido"].sum()),
+        "celulas_de_ruido": int(n_semeaduras * len(tabela)),
         "n_semeaduras": n_semeaduras,
         "tabela": tabela,
         "nulo_empirico": nulo,

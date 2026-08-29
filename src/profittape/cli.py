@@ -536,6 +536,14 @@ def research(
              "separados). Sem isto a rodada que correr primeiro e julgada "
              "contra um total menor. So' endurece: se for menor que o "
              "total real, o real prevalece."),
+    promover_por_poder: bool = typer.Option(
+        False, "--promover-por-poder",
+        help="PRE-REGISTRO 3 (2026-08-29i): celula que passa em MAGNITUDE e "
+             "falha SO em ESTABILIDADE, com consistencia de sinal >= 0.85, "
+             "sai `inconclusivo` em vez de `descarta` — falhar so na unica "
+             "barra que depende do numero de folds e afirmacao sobre PODER, "
+             "nao sobre ausencia de efeito. OPT-IN: sem a flag, o veredito e "
+             "o classico, identico a todo o historico ja registrado."),
 ) -> None:
     """
     IC walk-forward das features com veredito deflacionado por trials
@@ -549,12 +557,14 @@ def research(
         raise SystemExit(f"nao achei {arquivo} — rode `profit-tape features` antes")
     hs = [int(x) for x in horizontes.split(",")] if horizontes else None
     r = rodar(arquivo, saida, horizontes=hs, treino_min=treino_min,
-              teste_dias=teste_dias, trials_previstos=trials_previstos)
+              teste_dias=teste_dias, trials_previstos=trials_previstos,
+              promover_por_poder=promover_por_poder)
     typer.echo("=" * 62)
     typer.echo("RESEARCH — IC walk-forward")
     typer.echo("=" * 62)
     for k in ("dias", "folds", "features", "trials_rodada", "trials_acumulados",
-              "limiar_deflacionado", "segue", "descarta", "inconclusivo"):
+              "limiar_deflacionado", "promover_por_poder",
+              "segue", "descarta", "inconclusivo"):
         typer.echo(f"  {k:20}: {r[k]}")
     typer.echo(f"  relatorio           : {r['relatorio']}")
 
