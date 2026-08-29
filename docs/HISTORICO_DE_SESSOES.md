@@ -27,7 +27,8 @@ Sessão de DESENHO, não de implementação — nenhuma linha de código de
 comportamento foi escrita, deliberadamente (regra 7 da skill
 `profit-tape-disciplina`). Versões entregues: `entregue-v1.06` (pré-registro),
 `entregue-v1.07` (congelamento), `entregue-v1.08` (implementação),
-`entregue-v1.09` (anulação + pré-registro 2).
+`entregue-v1.09` (anulação + pré-registro 2),
+`entregue-v1.10` (congelamento do pré-registro 2).
 
 ### Rota B — revisão desde o início
 Revisada a cadeia inteira de decisões (26/08 tensão original → 27/08
@@ -101,7 +102,8 @@ dado — alteração de critério exige pré-registro novo.
   impossível separar os dois efeitos.
 
 ### Pendências que ficaram em aberto
-- Congelar o pré-registro 2 e implementar o estimador corrigido.
+- Implementar o estimador corrigido (pré-registro 2 **congelado** em
+  2026-08-29, antes de qualquer código).
 - Checagem de pré-voo: reconciliar 162 ops/22 pregões contra os 336
   gatilhos/26 dias da análise de MAE de 27/08.
 - Medição do custo em expectativa do stop-como-(a) — pré-registro

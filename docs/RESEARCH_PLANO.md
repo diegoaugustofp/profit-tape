@@ -1401,6 +1401,21 @@ conclusão.
 
 ## PRE-REGISTRO 2: expectativa remanescente a partir do toque (2026-08-29b)
 
+> **CONGELADO em 2026-08-29 pelo operador**, antes de qualquer linha de
+> código do estimador novo e antes de qualquer contato com o dado.
+> Ficam fixados: o estimador (remanescente a partir de τ), a medição
+> BRUTA, os dois limites de `F` com a leitura e o escalonamento, a
+> grade, o portão de honestidade, a checagem de pré-voo, o critério de
+> decisão e a regra de parada. Alteração de qualquer um exige
+> pré-registro NOVO, com seção e data próprias — não editar esta seção.
+>
+> Precedente registrado junto: o pré-registro anterior também estava
+> congelado e ainda assim teve o RESULTADO anulado, porque o defeito
+> era do estimador e o argumento da anulação era *a priori*. Congelar
+> protege contra ajuste oportunista de critério; **não** é certificado
+> de que o método é válido. O portão de honestidade existe para cobrir
+> exatamente essa lacuna.
+
 Registrado ANTES de qualquer código. Substitui o estimador anulado
 acima; a pergunta de fundo (hipótese (b)) permanece a mesma e continua
 sem resposta.
