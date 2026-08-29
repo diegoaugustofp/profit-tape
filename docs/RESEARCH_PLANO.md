@@ -26,7 +26,7 @@ arquivo cresceu demais para navegar so' por titulo cronologico).
 **Acoes (VALE3/MGLU3/etc.) — mortas pelo custo**
 - [Custo de transacao em ACOES na XP — ponderacao do operador (2026-08-26)](#custo-de-transacao-em-acoes-na-xp-ponderacao-do-operador-2026-08-26)
 - [Conclusao final: sinais de acao morrem no teste economico (2026-08-26)](#conclusao-final-sinais-de-acao-morrem-no-teste-economico-2026-08-26)
-- [Como calcular o custo real de acoes — planilha da XP + modulo dedicado (2026-08-28)](#como-calcular-o-custo-real-de-acoes-planilha-da-xp-modulo-dedicado-2026-08-28)
+- [Como calcular o custo real de acoes — planilha da XP + modulo dedicado (2026-08-28)](#como-calcular-o-custo-real-de-ações-planilha-da-xp-módulo-dedicado-2026-08-28)
 
 **Restricao de direcao (venda apenas) — decisao aceita**
 - [PRE-REGISTRO: Restricao de direcao — venda apenas (2026-08-27)](#pre-registro-restricao-de-direcao-venda-apenas-2026-08-27)
@@ -40,6 +40,10 @@ arquivo cresceu demais para navegar so' por titulo cronologico).
   questionado com razao pelo operador DEPOIS da implementacao -- checagem
   so' no fechamento de barra nao e' stop/alvo continuo de verdade.
   Redesenho pendente antes de tentar de novo.
+- [PRE-REGISTRO: existe reversao condicional em z_agf_3? (2026-08-29)](#pre-registro-existe-reversao-condicional-em-z_agf_3-2026-08-29)
+  — revisao do desenho desde o inicio: ALVO descartado como conceito
+  para este sinal (incompativel com edge de cauda); stop separado em
+  duas hipoteses distintas (limite de perda vs detector de reversao).
 
 **Risco (drawdown, VaR/ES, circuit breaker)**
 - [Curva de patrimonio / drawdown maximo (2026-08-27)](#curva-de-patrimonio-drawdown-maximo-2026-08-27)
@@ -1126,3 +1130,151 @@ própria planilha (`preço=37,52`, `qtd=300` → `custo_giro=12,18514784`,
 conferido à mão antes de confiar no código — 4 testes automatizados em
 `tests/test_custo_acoes.py`, incluindo o achado de assimetria entre
 VALE3/MGLU3 como caso de regressão).
+
+## PRE-REGISTRO: existe reversao condicional em z_agf_3? (2026-08-29)
+
+Registrado ANTES de rodar qualquer coisa. Nenhum código foi escrito
+para responder esta pergunta até este documento ser congelado.
+
+### Por que este pré-registro existe
+
+Rota B (alvo/stop fixo, par 100/120) foi implementada em 2026-08-27 e
+questionada com razão pelo operador logo depois: checagem só no
+fechamento de barra não é stop/alvo contínuo de verdade. Ao revisar o
+desenho **desde o início** (2026-08-29), apareceu um segundo defeito
+que tinha sobrevivido ao primeiro, e uma ambiguidade que precisa ser
+resolvida antes de qualquer redesenho.
+
+**O segundo defeito** (não corrigido, registrado aqui): a decisão de
+Rota A (2026-08-26) rejeitou alvo fixo com o argumento de que "alvo
+fixo 2:1 cortaria exatamente as caudas ganhadoras que pagam a conta".
+O congelamento do par (2026-08-27) instalou um alvo em 120 quando o p90
+do MFE é 412,5 — sobre um sinal cujo edge vem de magnitude, não de
+frequência (Q5 com ~43% de acerto). O elo 4 não refutou o elo 2; passou
+por cima dele, porque a discussão naquele momento era sobre payoff
+(1,2:1 vs 2:1), não sobre compatibilidade entre alvo fixo e edge de
+cauda. **Alvo, como conceito, está fora deste pré-registro e fora do
+redesenho de Rota B para z_agf_3.**
+
+**A ambiguidade** que este documento existe para resolver: "usar stop"
+significa duas coisas diferentes, que foram se misturando na conversa.
+
+  (a) STOP COMO LIMITE DE PERDA. Sai quando a perda atinge X. Não
+      afirma nada sobre o sinal. Custa expectativa e compra redução de
+      drawdown — trade-off mensurável, não hipótese sobre o mercado.
+      Motivação viva e legítima: Calmar 0,23 na rodada de 25 dias.
+
+  (b) STOP COMO DETECTOR DE REVERSAO. Sai porque o movimento contra é
+      EVIDENCIA de que o edge expirou. Isto é uma afirmação
+      inferencial, testável, e ainda não testada.
+
+(a) e (b) exigem mecanismos e justificativas diferentes. Este
+pré-registro testa **apenas (b)**.
+
+### Hipótese testada (H_b)
+
+Existe uma magnitude de excursão adversa X tal que, condicionado a a
+posição ter atingido -X pontos em algum momento da janela de holding, a
+expectativa líquida remanescente até o fim da janela é pior que a
+expectativa incondicional — e pior de forma sistemática, não pontual.
+
+### Contra-hipótese, registrada ANTES
+
+`z_agf_3` é contrarian: entra fazendo fade de um extremo de fluxo. Se o
+preço anda contra depois da entrada, o extremo ficou MAIS extremo — em
+reversão à média, movimento adverso pode ser melhora da entrada, não
+refutação da tese. A intuição de "sinal reverteu, sai" é intuição de
+seguidor de tendência e se inverte aqui.
+
+Logo, um resultado na direção OPOSTA (expectativa condicional MAIOR que
+a incondicional) é um achado genuíno e deve ser registrado como tal,
+não descartado como anomalia. Mas NÃO autoriza automaticamente
+"aumentar posição no adverso" — isso é pirâmide, proibida por design em
+`ea/decisao.py`. Seria um pré-registro novo, separado.
+
+### Categoria: NAO consome trial
+
+Tradução econômica condicional sobre um sinal JA validado pelo IC —
+mesma família de `mae.py`, `quintis.py`, `risco_realizado.py`,
+`curva_patrimonio.py` (ver regra 2 da skill `profit-tape-disciplina`).
+Não é hipótese de sinal nova, não sobe o limiar deflacionado.
+
+### Metodologia, fixada ANTES de rodar
+
+- **População**: gatilhos de `z_agf_3`, h=3, `threshold_entrada` 1.4,
+  `direcao: contrarian`, `agent_id: 3`, `volume_barra` 120000,
+  `janela_z` 50 — MESMA regra de entrada de `ea/decisao.py`. Lado
+  **venda apenas** (o único com edge confirmado).
+- **Pool out-of-sample**, nunca a amostra inteira (o bug real já
+  corrigido em `mae.py` em 2026-08-27 — não repetir).
+- **Purga estrutural de dia inteiro**: as últimas h barras de cada
+  pregão ficam de fora, retorno nunca cruza fronteira de pregão (mesma
+  regra de `retornos.py`).
+- **Como medir "atingiu -X"**: excursão adversa **intrabar**
+  (`MAE_intrabar`, já existente em `mae.py`, usando o HIGH da barra no
+  lado vendido) — NAO por close. Este ponto é deliberado e é a correção
+  direta do erro de Rota B: mede-se do jeito que se pretende EXECUTAR
+  (um stop real é contínuo), não se executa do jeito que por acaso se
+  mediu. O tape é trade a trade (`atribuir_barras` opera sobre negócio
+  individual), então a ordenação intrabar é integralmente resolvível se
+  o high/low de barra se mostrar grosseiro demais.
+- **Resultado medido**: P&L LIQUIDO (bruto − `custo_pontos_estimado`
+  11,0) no fechamento de t+3 — ou seja, o que a Rota A de fato entrega.
+  A pergunta é "dado que tocou -X, o que a Rota A realiza no fim da
+  janela?", não "quanto o stop teria salvado".
+- **Grade de X, fixada agora**: {40, 60, 80, 100, 120, 150, 200} pts.
+  Sete pontos, múltiplos redondos, escolhidos por cobertura da faixa
+  onde o MAE observado vive (mediana 95), NAO por inspeção de
+  resultado.
+- **Estatística**: Welch t-test do subgrupo condicionado contra o
+  incondicional (variâncias desiguais, tamanhos diferentes), com
+  bootstrap por bloco de pregão inteiro para a dependência
+  intradiária — padrão já usado no projeto.
+- **Correção para múltiplas comparações**: 7 pontos de grade, mesma
+  lógica do limiar deflacionado usada no IC. Um ponto isolado
+  "significativo" numa grade de 7 não decide nada sozinho.
+- **n mínimo por ponto**: subgrupo com n < 30 é REPORTADO mas marcado
+  INCONCLUSIVO por construção, nunca interpretado.
+- **Reportar SEMPRE todos os 7 pontos**, inclusive os que não deram
+  nada. Reportar só o melhor ponto seria a mesma p-hacking que o
+  pré-registro original de Rota B existia para evitar.
+
+### Critério de decisão, definido ANTES de ver qualquer número
+
+**FAVORAVEL a (b)** — as três condições, juntas:
+  1. Existe X* na grade com expectativa condicional negativa e
+     significativamente abaixo da incondicional (após a correção para
+     as 7 comparações);
+  2. MONOTONICIDADE: todos os X > X* da grade também negativos. A
+     hipótese (b) prevê deterioração progressiva, não um buraco
+     isolado. Mesmo raciocínio que já concluiu que a não-monotonicidade
+     Q4→Q5 era ruído e o degrau Q3→Q4 era estrutura;
+  3. n ≥ 30 no ponto X* e nos pontos acima dele.
+  → (b) existe. X* vira o candidato a stop, DERIVADO da estrutura
+  condicional, não da mediana de uma distribuição descritiva.
+
+**CONTRA (b)**: nenhum X da grade produz expectativa condicional
+distinguível da incondicional.
+  → (b) é falso para este sinal. Stop só se justifica como (a), e aí o
+  custo em expectativa precisa ser medido explicitamente — pré-registro
+  separado, decisão consciente de trocar expectativa por drawdown.
+
+**INCONCLUSIVO**: efeito presente mas não monótono, ou n insuficiente
+nos pontos relevantes.
+  → registrar, não decidir, aguardar mais pregões.
+
+### Regra de parada
+
+Proibido re-rodar com grade ajustada, threshold diferente, outro
+horizonte ou outro lado depois de ver o resultado. Se der
+INCONCLUSIVO, a única continuação legítima é acumular mais pregões e
+rodar de novo com a MESMA grade. Qualquer grade nova exige
+pré-registro novo, do zero.
+
+### Explicitamente FORA deste pré-registro
+
+- Escolha do número final do stop (mesmo se (b) der favorável — X* é
+  candidato, não decisão).
+- Qualquer implementação em `ea/risco.py`.
+- Alvo, em qualquer forma (ver "segundo defeito" acima).
+- Medição do custo em expectativa do stop-como-(a).

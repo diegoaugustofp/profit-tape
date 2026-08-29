@@ -21,6 +21,45 @@ documentos de assunto — só resuma e aponte.
 
 ---
 
+## Sessão 2026-08-29 (revisão de desenho da Rota B)
+
+Sessão de DESENHO, não de implementação — nenhuma linha de código de
+comportamento foi escrita, deliberadamente (regra 7 da skill
+`profit-tape-disciplina`). Versão entregue: `entregue-v1.06` (docs).
+
+### Rota B — revisão desde o início
+Revisada a cadeia inteira de decisões (26/08 tensão original → 27/08
+pré-registro → congelamento do par → implementação → colapso). Dois
+achados:
+
+- **O argumento de consistência estava invertido.** A checagem por
+  close foi justificada como "medir e executar do mesmo jeito". A
+  conclusão correta é a inversa: medir do jeito que se pretende
+  EXECUTAR. `mae.py` não consome trial, remedir era barato. Como
+  bônus: com h=3, Rota B só podia divergir de Rota A em t+1 e t+2 —
+  dois pontos de decisão em troca de toda a complexidade.
+- **Segundo defeito, que sobreviveu ao primeiro e nunca foi
+  resolvido**: a decisão de Rota A rejeitou alvo fixo porque "cortaria
+  as caudas que pagam a conta", e o congelamento instalou alvo em 120
+  com p90 do MFE em 412,5. O elo 4 não refutou o elo 2 — passou por
+  cima dele. **ALVO descartado como conceito para `z_agf_3`.**
+
+### Pré-registro novo
+"Existe reversão condicional em z_agf_3?" — separa duas hipóteses que
+estavam misturadas: stop como LIMITE DE PERDA (a, motivado por Calmar
+0,23) vs stop como DETECTOR DE REVERSÃO (b, afirmação inferencial
+ainda não testada). Testa só (b), com grade de X fixada antes,
+exigência de monotonicidade, contra-hipótese contrarian registrada, e
+regra de parada. Não consome trial.
+
+### Pendências que ficaram em aberto
+- Rodar o teste condicional pré-registrado (código ainda não escrito).
+- Medição do custo em expectativa do stop-como-(a) — pré-registro
+  separado, depois que (b) resolver.
+- Todas as pendências da sessão anterior seguem abertas.
+
+---
+
 ## Sessão 2026-08-27 a 2026-08-28 (sessão longa, ~um dia inteiro)
 
 Sessão excepcionalmente longa e densa — do planejamento matinal até
