@@ -60,6 +60,10 @@ arquivo cresceu demais para navegar so' por titulo cronologico).
 - [Circuit breaker: com freio vs sem freio, num dia real (2026-08-27)](#circuit-breaker-com-freio-vs-sem-freio-num-dia-real-2026-08-27)
 - [Acompanhamento continuo: efeito do circuit breaker com 25 dias (2026-08-28)](#acompanhamento-continuo-efeito-do-circuit-breaker-com-25-dias-2026-08-28)
 
+**Absorcao direcional / barra de tempo (indicador NTSL) — EM ABERTO**
+- [ORCAMENTO DE TRIALS: o total real e 492, nao 42 (2026-08-29d)](#orcamento-de-trials-o-total-real-e-492-nao-42-2026-08-29d)
+- [PRE-REGISTRO (RASCUNHO, NAO CONGELADO): absorcao direcional em barra de tempo (2026-08-29e)](#pre-registro-rascunho-nao-congelado-absorcao-direcional-em-barra-de-tempo-winfut-1m5m-2026-08-29e)
+
 **Disciplina/processo do proprio research**
 - [Decisoes aprovadas](#decisoes-aprovadas)
 - [Pre-requisitos antes de escrever research/](#pre-requisitos-antes-de-escrever-research)
@@ -1628,3 +1632,226 @@ Duas correções apontam para o mesmo lugar:
 
 Isto muda estimador e critério, então exige pré-registro novo — não se
 edita o congelado.
+
+## ORCAMENTO DE TRIALS: o total real e 492, nao 42 (2026-08-29d)
+
+Este documento registrava "42 trials, limiar 2.209" desde 2026-08-23 e
+nunca foi atualizado depois disso. O `data/research/trials.json` real
+(lido do arquivo do operador em 2026-08-29) fecha em **492**, e
+reconcilia exatamente:
+
+    WINFUT 2026-08-23 (14 features x 3 horizontes)          42
+    WINFUT 2026-08-23 (+ z_fluxo_nacional)                  45
+    WINFUT 2026-08-26                                       45
+    Varredura de 8 simbolos 2026-08-26 (WDOFUT, PETR4,
+      VALE3, ITUB4, BOVA11, BBAS3, MGLU3, WEGE3)           360
+                                                          ----
+                                                           492
+
+**73% do orcamento estatistico do projeto foi gasto numa varredura de
+oito simbolos que rodou em ~1 minuto** (timestamps 02:04:35 a 02:05:54).
+O contador esta CERTO em cobrar por ela: os oito foram olhados
+procurando algum passar, entao o maximo foi selecionado entre todos —
+e' exatamente a situacao que o teorema da estrategia falsa descreve.
+
+### Consequencia sobre a barra
+
+    limiar_z(492) = 3,048        limiar_z(504) = 3,055
+
+Mas o limiar em Z nao e' a barra que uma feature enfrenta: a barra e'
+`t_critico(limiar_z, folds-1)`, e a correcao de Student domina quando ha
+poucos folds.
+
+    folds     t_critico a 504 trials
+      5              6,20
+      8              4,56
+     10              4,16
+     12              3,93
+
+Na rodada de 42 trials a barra era 3,31 com 5 folds. Hoje, com 5 folds,
+seria 6,20 — inatingivel para qualquer feature de microestrutura.
+
+Como `gerar_folds` produz `(n_dias - 3) / 2` folds (treino_min=3,
+teste_dias=2), isso vira uma condicao sobre DADO, nao sobre criterio:
+abaixo de ~23 pregoes no arquivo de features, gastar trial em qualquer
+hipotese nova compra um `descarta` quase garantido.
+
+### O que NAO se conclui daqui
+
+Nao se zera, nao se particiona por simbolo, nao se afrouxa a regra. O
+contador existe para nunca esquecer (`trials.py`: "sem persistencia, o
+contador zeraria a cada rodada e o pesquisador se enganaria
+honestamente"). O registro aqui e' de LICAO: uma varredura ampla e'
+barata em tempo de maquina e cara em orcamento estatistico, e o preco
+dela e' pago por todas as perguntas futuras. Varredura ampla, daqui em
+diante, e' decisao consciente — nao "so' rodar em todos os simbolos para
+ver".
+
+## PRE-REGISTRO (RASCUNHO, NAO CONGELADO): absorcao direcional em barra de tempo — WINFUT 1m/5m (2026-08-29e)
+
+> **NAO CONGELADO.** Definicoes e controles aprovados pelo operador em
+> 2026-08-29. Falta o congelamento formal e falta o PORTAO DE
+> HONESTIDADE passar. Nenhum trial pode ser gasto antes dos dois.
+
+### Motivacao
+
+Leitura visual do operador sobre grafico intradiario: existe uma barra
+em que a agressao vai fortemente para um lado e o preco NAO acompanha —
+a ponta passiva absorve. O objetivo final e' um indicador NTSL plotado
+ao vivo no Profit Chart e, depois, um robo que entra no fechamento da
+barra com stop no extremo dela. A pesquisa acontece AQUI (tape completo,
+IC, trials contados); o NTSL e' camada de visualizacao e execucao, nao
+de calibracao.
+
+### O que ja foi refutado, e por que isto nao e' repeticao
+
+`z_absorcao` e `z_imbalance` ja foram avaliados em h {1,3,10} nas
+rodadas de 2026-08-23 e 2026-08-26 (constam de `trials.json`) e sairam
+`descarta`. Este pre-registro difere em tres pontos, declarados ANTES:
+
+1. **Barra de TEMPO**, nao barra de volume. Toda avaliacao anterior
+   rodou sobre volume bars com relogio de agressao — que e' justamente
+   o que apaga a estrutura de 1m/5m que a hipotese descreve.
+2. **Direcional, nao crua.** `absorcao = vol_agr / range_ticks` nao tem
+   lado; o mecanismo hipotetizado exige o lado.
+3. A leitura visual e' sobre barras extremas, nao sobre associacao
+   monotona em todas as barras.
+
+Sobre o ponto 3, explicitamente: o IC e' um teste FRACO para efeito
+concentrado em cauda, e mesmo assim ele fica sendo o portao. Resgatar
+por quintil um sinal que o IC reprovou seria mover a trave depois do
+resultado. Se o IC reprovar, a hipotese morre nesta forma.
+
+### Features avaliadas (aprovadas pelo operador, 2026-08-29)
+
+Em barra de tempo, todas ja na escala [-1, 1], sem parametro livre:
+
+    imbalance    = (vol_buy - vol_sell) / vol_agr      [ja existe]
+    desloc_norm  = (close - open) / (high - low)       [novo]
+    absorcao_dir = imbalance - desloc_norm             [PRIMARIA]
+
+A frase inteira do mecanismo: *o esforco foi para um lado e o preco
+fechou para o outro*. Positivo = compradores agrediram e nao levaram,
+logo previsao de QUEDA (IC esperado NEGATIVO).
+
+    1. z_absorcao_dir    PRIMARIA
+    2. z_desloc_norm     CONTROLE — reversao pura
+    3. z_imbalance       CONTROLE — fluxo puro
+
+Os controles existem porque `desloc_norm` isolado e' um proxy conhecido
+de reversao de curtissimo prazo: sem eles, um `segue` da primaria nao
+distinguiria absorcao de reversao simples com um passo a mais.
+
+Timeframes: 1m e 5m. Horizontes CASADOS EM TEMPO DE RELOGIO, para que a
+comparacao entre timeframes seja limpa:
+
+    5m -> h {1, 3}      1m -> h {5, 15}      (ambos = 5 e 15 minutos)
+
+### Custo: CONSOME trial — 12
+
+3 features x 2 timeframes x 2 horizontes. Total passaria de 492 para
+504 (`limiar_z` 3,048 -> 3,055).
+
+### PORTAO DE HONESTIDADE (bloqueante, antes de qualquer dado real)
+
+Exigido pela licao de 2026-08-29c: dois estimadores morreram seguidos
+por SELECAO NUM EXTREMO. `desloc_norm` seleciona pela posicao do
+fechamento dentro dos proprios extremos da barra — mesma familia.
+
+O vies concreto tem nome e direcao previsivel: ruido de microestrutura
+no fechamento. Barra que fecha na minima tem probabilidade elevada de
+ter o ultimo negocio agredido na venda; o fechamento seguinte tende a
+voltar do bid. Isso gera autocorrelacao negativa MECANICA entre
+`desloc_norm` e `ret_fut_h` — IC negativo, sem edge nenhum, na direcao
+exata que a hipotese preve. Em 1m o efeito e' proporcionalmente maior
+que em 5m (tick de 5 pontos no WIN), o que contaminaria TAMBEM a
+comparacao entre timeframes.
+
+Procedimento do portao:
+
+- Gerar random walk com drift zero, caminho continuo, GRANULARIDADE DE
+  TICK real (5 pts no WIN) e bounce bid-ask explicito. Sem o bounce o
+  portao nao testa o vies que importa.
+- Montar barras de tempo 1m e 5m sobre esse caminho, calcular as tres
+  features, rodar o pipeline de IC COMPLETO.
+- **Exigencia**: veredito `descarta` nas 12 celulas. Qualquer `segue`
+  sobre ruido puro REPROVA o desenho, antes de gastar trial.
+- Reportar tambem o IC medio de cada controle sobre ruido: se
+  `z_desloc_norm` sair com IC sistematicamente negativo mesmo saindo
+  `descarta`, o vies existe e precisa entrar como NULO EMPIRICO (mesma
+  correcao apontada em 2026-08-29c), nao como zero.
+
+Reprovacao no portao exige pre-registro NOVO. Nao se edita este.
+
+### Condicao de dado, fixada agora
+
+Rodar apenas com **folds >= 10** no arquivo de features (equivale a
+>= 23 pregoes). Nao e' baixar a barra: e' exigir dado suficiente para
+que a correcao de Student nao seja dominada por 4 graus de liberdade.
+Com 5 folds a barra e' 6,20 e o resultado seria `descarta` por falta de
+poder, gastando 12 trials para nao aprender nada.
+
+### Metodologia, fixada ANTES
+
+- Maquinario padrao: `retornos.py` (purga estrutural de dia inteiro),
+  `walkforward.gerar_folds`, `ic.avaliar`, veredito de tres barras
+  (magnitude / estabilidade / direcao), `inconclusivo` se folds < 4.
+- **Janela de z-score casada em tempo de relogio, nao em barras**: se 5m
+  usa 50 barras (250 min), 1m usa 250 barras. Fixar `n` igual nos dois
+  tornaria a comparacao entre timeframes sem sentido — a normalizacao
+  estaria medindo passados de duracao diferente.
+- Barra sem agressao nenhuma no periodo e' DESCARTADA, nao preenchida:
+  barra preenchida tem `range = 0` e `vol_agr = 0`, e produziria
+  `desloc_norm` degenerado.
+- `open/high/low/close` SO de agressao (leilao e RLP fora), igual a
+  convencao ja travada em `FEATURES.md`. Guarda: `high == low` =>
+  `desloc_norm := 0`.
+- Reportar as 12 celulas, inclusive as que nao derem nada.
+
+### Criterio de decisao, definido ANTES de ver qualquer numero
+
+**FAVORAVEL** — as quatro condicoes JUNTAS:
+  1. `z_absorcao_dir` sai `segue` em pelo menos um par (timeframe, h);
+  2. o sinal do IC e' NEGATIVO (direcao prevista pela convencao);
+  3. `|IC|` da primaria > `|IC|` de AMBOS os controles no mesmo par;
+  4. mesmo sinal nos DOIS horizontes daquele timeframe.
+
+**CONTRA**: nenhuma celula sai `segue`, ou sai `segue` com sinal
+POSITIVO. Sinal positivo seria continuacao (momentum de
+microestrutura) — achado legitimo, registrado, mas NAO autoriza
+inverter o lado da operacao sem pre-registro novo.
+
+**INCONCLUSIVO**: sai `segue` sem superar os controles (o efeito e'
+reversao ou fluxo, nao absorcao), ou folds < 4.
+
+### Regra de parada
+
+Proibido re-rodar com outra definicao de `absorcao_dir`, outro
+timeframe, outro horizonte ou outra janela de z depois de ver o
+resultado. `INCONCLUSIVO` so' permite acumular mais pregoes e rodar de
+novo com a MESMA grade.
+
+### Sobre 1m vs 5m
+
+Com uma rodada so', a comparacao e' DESCRITIVA. Se um timeframe passar e
+o outro falhar nos dois horizontes, isso e' observacao registrada, nao
+conclusao de que um e' melhor. A leitura visual do operador continua
+sendo a hipotese, nao o resultado.
+
+### Pre-requisito de engenharia (nao faz parte da hipotese)
+
+Construtor de barra de TEMPO em `features/bars.py` — hoje so' existe
+volume bar. Herda as regras ja travadas: nao atravessa dia, parcial do
+fim de pregao descartada, RLP/leilao atribuidos a barra mas fora de
+`vol_agr`. Categoria `features`: NAO consome trial. Conferencia a mao de
+um exemplo minimo antes dos testes automatizados (regra 4 da skill
+`profit-tape-disciplina`).
+
+### Explicitamente FORA deste pre-registro
+
+- Stop na maxima/minima da barra, R:R, e qualquer regra de saida.
+- Custo de transacao e viabilidade economica.
+- Qualquer linha de NTSL.
+- Qualquer coisa em `ea/`.
+
+Tudo isso so' existe se H sobreviver ao portao E ao IC.
