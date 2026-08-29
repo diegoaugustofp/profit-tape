@@ -28,7 +28,8 @@ comportamento foi escrita, deliberadamente (regra 7 da skill
 `profit-tape-disciplina`). Versões entregues: `entregue-v1.06` (pré-registro),
 `entregue-v1.07` (congelamento), `entregue-v1.08` (implementação),
 `entregue-v1.09` (anulação + pré-registro 2),
-`entregue-v1.10` (congelamento do pré-registro 2).
+`entregue-v1.10` (congelamento do pré-registro 2),
+`entregue-v1.11` (estimador + portão, que reprovou o desenho).
 
 ### Rota B — revisão desde o início
 Revisada a cadeia inteira de decisões (26/08 tensão original → 27/08
@@ -102,8 +103,28 @@ dado — alteração de critério exige pré-registro novo.
   impossível separar os dois efeitos.
 
 ### Pendências que ficaram em aberto
-- Implementar o estimador corrigido (pré-registro 2 **congelado** em
-  2026-08-29, antes de qualquer código).
+### Portão reprovou o pré-registro 2 — antes de tocar o dado real
+- `research/remanescente.py` implementado, e o portão de honestidade
+  rodou primeiro. Sobre ruído puro o limite **pessimista** devolve
+  +28 a +33 pts com t entre 8 e 13: viés estrutural, não ruído.
+- Causa: `F_pessimista` é o **extremo** da barra de cruzamento.
+  Selecionar num extremo garante que o resto do caminho pareça
+  favorável. É a mesma família do erro anterior, espelhada — um
+  condicionava no extremo e media até o fim, este mede a partir dele.
+- O veredito sobre ruído foi INCONCLUSIVO POR PREENCHIMENTO, que no
+  critério congelado **manda construir o tape**. O ruído sozinho
+  dispararia uma escalada de infraestrutura.
+- Portão endurecido: ruído puro tem de devolver CONTRA (b). Qualquer
+  outro veredito é reprovação.
+- Dois defeitos meus corrigidos: gerador de ruído incoerente (amplitude
+  sorteada por fora do passeio) e razão amplitude/desvio medida através
+  da virada de pregão.
+- **Segundo estimador inválido em dois — mas este morreu antes de tocar
+  o dado.** É exatamente para isso que o portão existe.
+
+### Pendências que ficaram em aberto
+- Pré-registro 3: descartar o limite pessimista e usar o ruído como
+  NULO EMPÍRICO em vez de zero.
 - Checagem de pré-voo: reconciliar 162 ops/22 pregões contra os 336
   gatilhos/26 dias da análise de MAE de 27/08.
 - Medição do custo em expectativa do stop-como-(a) — pré-registro

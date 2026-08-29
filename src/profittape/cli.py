@@ -1167,6 +1167,74 @@ def reversao_condicional(
 
 
 @app.command()
+def remanescente_apos_toque(
+    symbol: str = typer.Option("WINFUT", "--symbol"),
+    features: Path = typer.Option(Path("data/features"), "--features"),
+    feature: str = typer.Option(..., "--feature", help="ex.: z_agf_3"),
+    horizonte: int = typer.Option(..., "--horizonte"),
+    threshold_entrada: float = typer.Option(..., "--threshold-entrada"),
+    direcao: str = typer.Option("contrarian", "--direcao"),
+    lado: str = typer.Option("venda", "--lado"),
+    saida: Path = typer.Option(Path("data/research"), "--saida"),
+    treino_min: int = typer.Option(3, "--treino-min"),
+    teste_dias: int = typer.Option(2, "--teste-dias"),
+    n_bootstrap: int = typer.Option(2000, "--n-bootstrap"),
+) -> None:
+    """
+    PRE-REGISTRO 2 (2026-08-29b): no instante em que eu sairia a -X, qual
+    a expectativa de CONTINUAR ate' o fim da janela?
+
+    Substitui o estimador ANULADO de `reversao-condicional`. Nao ha'
+    custo na conta (bruto de proposito: o giro cancela entre sair e
+    segurar) e nao ha' grupo de comparacao (uma amostra contra zero).
+
+    O PORTAO DE HONESTIDADE roda sempre, antes, sobre ruido puro, e sai
+    no mesmo relatorio. Se o ruido nao devolver CONTRA (b), o resultado
+    real NAO se interpreta.
+
+    NAO consome trial.
+    """
+    from .research.remanescente import analisar_remanescente
+
+    if lado not in ("venda", "compra", "ambos"):
+        raise SystemExit(f"--lado invalido: {lado!r}")
+    arquivo = features / f"sym={symbol.upper()}" / "features.parquet"
+    if not arquivo.exists():
+        raise SystemExit(f"nao achei {arquivo} — rode `profit-tape features` antes")
+
+    r = analisar_remanescente(
+        arquivo, feature, horizonte, threshold_entrada, direcao, saida,
+        lado_permitido=lado, treino_min=treino_min, teste_dias=teste_dias,
+        n_bootstrap=n_bootstrap)
+
+    portao = r["portao"]
+    typer.echo("=" * 78)
+    typer.echo(f"PORTAO DE HONESTIDADE (ruido puro): "
+               f"{'PASSOU' if portao['passou'] else 'REPROVOU'} — "
+               f"veredito sobre ruido: {portao['veredito']}")
+    typer.echo(f"  amplitude/sd por barra — ruido "
+               f"{portao['razao_amplitude_ruido']:.2f} vs real "
+               f"{portao['razao_amplitude_real']:.2f}")
+    typer.echo("=" * 78)
+    if not portao["passou"]:
+        typer.echo("  Resultado real abaixo NAO se interpreta.\n")
+    typer.echo(f"REMANESCENTE — {feature}@h{horizonte} lado={lado}  "
+               f"{r['n_dias']} pregoes")
+    typer.echo(f"  {'X':>5} {'n':>6} {'rem PESS':>10} {'t':>7} "
+               f"{'rem OTIM':>10} {'t':>7}")
+    for p in r["pontos"]:
+        if not p["n"]:
+            typer.echo(f"  {p['x']:5.0f} {0:6d}   (sem operacao)")
+            continue
+        typer.echo(f"  {p['x']:5.0f} {p['n']:6d} {p['media_pess']:+10.2f} "
+                   f"{p['t_pess']:7.2f} {p['media_otim']:+10.2f} "
+                   f"{p['t_otim']:7.2f}")
+    typer.echo(f"\n  VEREDITO: {r['veredito']}")
+    typer.echo(f"  {r['justificativa']}")
+    typer.echo(f"\nrelatorio: {r['relatorio']}")
+
+
+@app.command()
 def triagem_inprogress(
     raiz_raw: Path = typer.Argument(..., help="Raiz do dado (ex.: data/raw)."),
     destino_quarentena: Path = typer.Option(

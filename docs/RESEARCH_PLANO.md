@@ -47,6 +47,7 @@ arquivo cresceu demais para navegar so' por titulo cronologico).
 - [IMPLEMENTADO: `reversao-condicional` — executa o pré-registro (2026-08-29)](#implementado-reversao-condicional-executa-o-pré-registro-2026-08-29)
 - [RESULTADO ANULADO: o pré-registro de 2026-08-29 tinha estimador inválido](#resultado-anulado-o-pré-registro-de-2026-08-29-tinha-estimador-inválido)
 - [PRE-REGISTRO 2: expectativa remanescente a partir do toque (2026-08-29b)](#pre-registro-2-expectativa-remanescente-a-partir-do-toque-2026-08-29b)
+- [PORTAO REPROVOU o desenho do pré-registro 2 (2026-08-29c)](#portao-reprovou-o-desenho-do-pré-registro-2-2026-08-29c)
 - ⚠ o pre-registro de 2026-08-29 rodou e o veredito foi ANULADO: o
   estimador tinha tautologia embutida (MAE_intrabar >= perda final,
   por construcao) e devolvia FAVORAVEL sobre ruido puro. Hipotese (b)
@@ -1542,3 +1543,88 @@ estimador. Estimador novo exige pré-registro novo — como este.
 - Qualquer implementação em `ea/risco.py`.
 - Alvo, em qualquer forma.
 - Custo em expectativa do stop-como-(a) — pré-registro separado.
+
+## PORTAO REPROVOU o desenho do pré-registro 2 (2026-08-29c)
+
+O portão de honestidade rodou **antes de qualquer contato com o dado
+real** — e reprovou o próprio estimador que o pré-registro 2 congelou.
+Nenhum número real foi olhado. Desta vez o defeito foi pego na hora
+certa.
+
+### O que o ruído puro devolveu
+
+Random walk puro, drift zero, caminho contínuo, escala calibrada,
+n≈1.400 por ponto:
+
+    X     n     rem PESSIMISTA   t      rem OTIMISTA   t
+    40   1362      +32,98      13,04       -7,21     -2,64
+    100   734      +30,43      10,99       -5,51     -1,78
+    200   162      +30,43       8,30       -1,83     -0,43
+
+    VEREDITO SOBRE RUIDO: INCONCLUSIVO POR PREENCHIMENTO
+
+### O achado: o limite "pessimista" não é um limite
+
+Sobre dado sem edge nenhum, o limite pessimista devolve **+28 a +33
+pontos, com t entre 8 e 13**. Não é ruído em torno de zero: é viés
+estrutural, de magnitude comparável a um terço da amplitude média da
+barra.
+
+A causa é a mesma família do erro anterior, espelhada: `F_pessimista` é
+o **extremo** da barra de cruzamento. Selecionar num extremo garante
+que o resto do caminho pareça favorável — o preço esteve no pior ponto
+da barra e o fechamento quase sempre volta dali. O estimador anterior
+condicionava no extremo e media até o fim; este mede A PARTIR do
+extremo. Os dois selecionam no mesmo lugar.
+
+O limite otimista sai em -2 a -7 pts, viés pequeno e na direção
+prevista (overshoot do cruzamento). É o único dos dois que chega perto
+de calibrado.
+
+### Consequência sobre o critério congelado
+
+O veredito sobre ruído foi INCONCLUSIVO POR PREENCHIMENTO — que, no
+critério congelado, **manda construir a leitura do tape trade a trade**.
+Ou seja: o ruído sozinho dispara uma escalada de infraestrutura. O
+gatilho de escalonamento do pré-registro 2 é inválido.
+
+### O portão foi endurecido (e por quê)
+
+O pré-registro 2 escreveu o portão como "reprova se der FAVORAVEL".
+Estreito demais, como este resultado mostrou. Um estimador calibrado
+tem que devolver **CONTRA (b)** — "não há nada aqui" — quando de fato
+não há nada. Qualquer outro veredito sobre ruído puro é reprovação.
+`portao_de_honestidade()` implementa esse critério mais duro.
+
+### Dois defeitos meus, corrigidos no caminho
+
+1. **Gerador de ruído incoerente**: a primeira versão sorteava a
+   amplitude da barra por fora do passeio, produzindo barras cujo high
+   jamais foi visitado por caminho nenhum. Um portão só vale se o ruído
+   for um caminho de preço de verdade. Corrigido com sub-passos dentro
+   da barra e extremos reais.
+2. **Razão amplitude/desvio medida através da virada de pregão**, o que
+   inflava o denominador e fazia a razão parecer menor. Corrigido para
+   medir dentro do dia.
+
+### Estado da hipótese (b)
+
+**Segue sem resposta.** Não foi refutada nem confirmada. O que existe é
+o segundo estimador inválido em dois — mas este morreu antes de tocar
+o dado, que é exatamente o que o portão existe para fazer.
+
+### Direção para o pré-registro 3 (ainda NAO pré-registrado)
+
+Duas correções apontam para o mesmo lugar:
+
+- **Descartar o limite pessimista.** Não é conservador, é enviesado.
+  `F` = nível do stop é o único dos dois quase calibrado, e é também o
+  que um stop de mercado de fato consegue em instrumento líquido.
+- **Usar o ruído como NULO EMPIRICO, não zero.** O viés residual do
+  limite otimista (-2 a -7 pts) é conhecido e mensurável. Em vez de
+  supor que o estimador é não-enviesado, testar o real CONTRA a
+  distribuição gerada por ruído com a mesma geometria de barra. Isso
+  neutraliza qualquer viés estrutural remanescente, seja ele qual for.
+
+Isto muda estimador e critério, então exige pré-registro novo — não se
+edita o congelado.
