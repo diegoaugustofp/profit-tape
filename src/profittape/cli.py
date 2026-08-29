@@ -528,6 +528,14 @@ def research(
         help="Lista separada por virgula (ex.: 1,3 para 5m; 5,15 para 1m). "
              "Omitido usa o padrao 1,3,10. ATENCAO: cada feature x horizonte "
              "e um TRIAL — mudar isto muda o custo estatistico da rodada."),
+    trials_previstos: int | None = typer.Option(
+        None, "--trials-previstos",
+        help="Total contra o qual DEFLACIONAR, para uma hipotese que se "
+             "resolve em mais de uma invocacao (ex.: o pre-registro de "
+             "2026-08-29e gasta 6 trials no 5m e 6 no 1m, arquivos "
+             "separados). Sem isto a rodada que correr primeiro e julgada "
+             "contra um total menor. So' endurece: se for menor que o "
+             "total real, o real prevalece."),
 ) -> None:
     """
     IC walk-forward das features com veredito deflacionado por trials
@@ -541,7 +549,7 @@ def research(
         raise SystemExit(f"nao achei {arquivo} — rode `profit-tape features` antes")
     hs = [int(x) for x in horizontes.split(",")] if horizontes else None
     r = rodar(arquivo, saida, horizontes=hs, treino_min=treino_min,
-              teste_dias=teste_dias)
+              teste_dias=teste_dias, trials_previstos=trials_previstos)
     typer.echo("=" * 62)
     typer.echo("RESEARCH — IC walk-forward")
     typer.echo("=" * 62)

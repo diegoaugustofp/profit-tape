@@ -68,6 +68,8 @@ arquivo cresceu demais para navegar so' por titulo cronologico).
 
 - [PORTAO RECALIBRADO: o bloqueio do 1m era artefato meu; e o contador de buracos era falso (2026-08-29g)](#portao-recalibrado-o-bloqueio-do-1m-era-artefato-meu-e-o-contador-de-buracos-era-falso-2026-08-29g)
 
+- [DECISAO DE AMOSTRA: os 25 pregoes ficam, com a truncagem registrada (2026-08-29h)](#decisao-de-amostra-os-25-pregoes-ficam-com-a-truncagem-registrada-2026-08-29h)
+
 **Disciplina/processo do proprio research**
 - [Decisoes aprovadas](#decisoes-aprovadas)
 - [Pre-requisitos antes de escrever research/](#pre-requisitos-antes-de-escrever-research)
@@ -2049,3 +2051,80 @@ por resultado. Excluir dia depois de ver o IC seria escolha de amostra
 pelo resultado, exatamente o que o resto do metodo existe para impedir.
 Rerodar `features-tempo` com o contador corrigido diz quantos buracos
 existem de fato em cada um.
+
+## DECISAO DE AMOSTRA: os 25 pregoes ficam, com a truncagem registrada (2026-08-29h)
+
+Tomada pelo operador ANTES de qualquer rodada de `research` — nenhum IC
+foi calculado ate aqui. Registrar antes e' o ponto: excluir pregao depois
+de ver o resultado seria escolher amostra pelo resultado.
+
+### O que a geometria mostrou
+
+    dia          barras 5m   x5    barras 1m
+    2026-07-31       71     355       351
+    2026-08-25       54     270       267
+    (normal)        113     565       ~562-565
+
+Os numeros batem, e o contador de buracos corrigido (2026-08-29g) fecha a
+questao: `buracos = 0` no 5m e 6 em 13.568 barras no 1m. Os dois pregoes
+curtos sao **TRUNCADOS, nao esburacados** — a captura pegou um bloco
+CONTIGUO e parou.
+
+Isso e' o cenario benigno: nenhum `ret_fut_h` do 5m atravessa lacuna de
+captura, e no 1m sao 6 minutos ausentes (0,04%). A premissa de tempo de
+RELOGIO do horizonte se sustenta.
+
+### Incidentes correlatos (documentados pelo operador em v1.16)
+
+`docs/OPERACAO.md` registra o incidente de 2026-08-25: a tarefa agendada
+disparou as 08:50 e o processo CRASHOU (exit code 1, causa raiz nunca
+confirmada). Isso torna 25/08 um PREFIXO — capturou da abertura ate o
+crash. O operador lembra de um segundo incidente, de tipo oposto (record
+que nao iniciou e perdeu a manha inteira), que seria um SUFIXO, mas sem
+certeza de que corresponde a 31/07.
+
+Se o par for esse, a amostra tem um pregao so'-manha e um so'-tarde, e o
+desvio de composicao intradiaria se compensa em parte no agregado. Isso
+e' INFERENCIA a partir dos incidentes, nao medicao — resolvida com um
+`groupby` de primeiro/ultimo `ts_close` por dia, se valer a pena depois.
+
+### Decisao
+
+**Manter os 25 pregoes.** Justificativas, todas registradas antes:
+
+1. As barras que existem sao integras — o truncamento nao corrompe barra
+   nenhuma, so' reduz a contagem do dia.
+2. A sequencia e' contigua, entao nenhum retorno atravessa lacuna.
+3. Sao 2 pregoes em 25.
+4. Excluir mudaria os folds de 11 para 10 (`t_critico` de 4,03 para
+   4,16). Nao e' esse o motivo da decisao, mas fica registrado que o
+   efeito foi conhecido ANTES e nao decidiu nada.
+
+RESSALVA que acompanha a decisao: dois dos folds tem composicao
+intradiaria diferente dos demais. Se o resultado final vier
+INCONCLUSIVO, isto e' uma das explicacoes candidatas — registrada agora,
+para nao ser inventada depois.
+
+### Nota estrutural do operador
+
+"Da forma como montamos a captura de dados pode haver perda de dados."
+Isso vale para toda amostra futura, nao so' para estes dois dias: a
+captura nao tem garantia de completude, e o pipeline precisa CONTINUAR
+reportando cobertura por pregao em vez de assumi-la. O contador de
+buracos e a contagem de barras por dia no log existem exatamente para
+isso — e so' passaram a valer alguma coisa depois do bug de 2026-08-29g.
+
+## Deflacao consistente quando a hipotese roda em duas invocacoes (2026-08-29h)
+
+O pre-registro de 2026-08-29e gasta 12 trials: 6 no arquivo de 5m e 6 no
+de 1m. Sao dois arquivos, logo duas chamadas de `research`. Sem cuidado,
+a rodada que corresse PRIMEIRO seria julgada contra 498 trials e a
+segunda contra 504 — o mesmo pre-registro com duas barras diferentes, e
+um desconto para quem correu na frente.
+
+`research --trials-previstos 504` deflaciona contra o total
+PRE-REGISTRADO nas duas chamadas. O contador em disco continua somando
+normalmente; muda so' contra que numero se deflaciona, nunca quanto se
+cobra. E so' pode ENDURECER: valor menor que o total real e' ignorado
+(mesma logica do piso de 1,96 em `limiar_deflacionado` — deflacao nunca
+baixa a barra).

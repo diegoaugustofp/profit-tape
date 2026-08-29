@@ -47,7 +47,22 @@ def _veredito(linha: pd.Series, limiar_z: float) -> str:
 
 def rodar(features_parquet: Path, saida_dir: Path,
           horizontes: list[int] | None = None,
-          treino_min: int = 3, teste_dias: int = 2) -> dict[str, Any]:
+          treino_min: int = 3, teste_dias: int = 2,
+          trials_previstos: int | None = None) -> dict[str, Any]:
+    """
+    `trials_previstos`: total de trials contra o qual DEFLACIONAR, em vez do
+    total apos esta rodada. Existe para uma hipotese que se resolve em MAIS
+    DE UMA invocacao — caso real: o pre-registro de 2026-08-29e gasta 12
+    trials, 6 no arquivo de 5m e 6 no de 1m, dois arquivos separados e
+    portanto duas chamadas. Sem isto, a rodada que acontecesse PRIMEIRO
+    seria julgada contra 498 trials e a segunda contra 504: o mesmo
+    pre-registro com duas barras diferentes, e um desconto para quem correu
+    na frente.
+
+    O contador em disco continua somando normalmente — isto muda so' contra
+    QUE numero se deflaciona, nunca quanto se cobra. E so' pode ENDURECER a
+    barra: se o valor informado for menor que o total real, o real prevalece.
+    """
     horizontes = horizontes or HORIZONTES_PADRAO
     df = pd.read_parquet(features_parquet)
     df = adicionar_ret_futuro(df, horizontes)
@@ -72,7 +87,10 @@ def rodar(features_parquet: Path, saida_dir: Path,
         {"features": features, "horizontes": horizontes,
          "dias": [str(d) for d in dias], "arquivo": str(features_parquet)},
     )
-    limiar = limiar_deflacionado(total)
+    # max(): o valor informado so' pode ENDURECER. Se alguem passar um
+    # numero menor que o total real, o real vale — deflacao nunca baixa a
+    # barra (mesma regra do piso de 1.96 em limiar_deflacionado).
+    limiar = limiar_deflacionado(max(total, trials_previstos or 0))
     resultado["veredito"] = resultado.apply(_veredito, axis=1, limiar_z=limiar)
 
     ts = time.strftime("%Y%m%d_%H%M%S", time.gmtime())

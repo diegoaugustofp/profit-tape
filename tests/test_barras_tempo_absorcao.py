@@ -166,3 +166,42 @@ def test_sem_buraco_continua_dando_zero() -> None:
     barrado, _ = bars.atribuir_barras_tempo(_cenario(), 60)
     b = flow.calcular(barrado, agentes=[], tick=5.0, incluir_absorcao_dir=True)
     assert _contar_buracos(b) == 0
+
+
+def _features_sinteticas(n_dias: int = 12, por_dia: int = 40) -> pd.DataFrame:
+    """Arquivo de features minimo para exercitar `rodar` sem tocar em tape."""
+    rng = np.random.default_rng(3)
+    linhas = []
+    bar = 0
+    for d in range(n_dias):
+        t0 = pd.Timestamp("2026-03-02", tz="UTC").value + d * 86_400 * S
+        for j in range(por_dia):
+            linhas.append({
+                "bar_id": bar, "ts_close": t0 + j * 300 * S,
+                "close": 100.0 + rng.normal(),
+                "z_absorcao_dir": rng.normal(),
+            })
+            bar += 1
+    return pd.DataFrame(linhas)
+
+
+def test_trials_previstos_so_endurece(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """
+    Deflacionar contra um total MAIOR (hipotese resolvida em duas
+    invocacoes) sobe a barra; um total menor que o real e ignorado. A
+    contabilidade em disco nao muda nos dois casos.
+    """
+    from profittape.research.pipeline import rodar
+
+    arq = tmp_path / "features.parquet"
+    _features_sinteticas().to_parquet(arq, index=False)
+
+    baixo = rodar(arq, tmp_path / "a", horizontes=[1], trials_previstos=None)
+    alto = rodar(arq, tmp_path / "b", horizontes=[1], trials_previstos=5000)
+    ignorado = rodar(arq, tmp_path / "c", horizontes=[1], trials_previstos=1)
+
+    assert alto["limiar_deflacionado"] > baixo["limiar_deflacionado"]
+    # Total menor que o real nao afrouxa nada.
+    assert ignorado["limiar_deflacionado"] == baixo["limiar_deflacionado"]
+    # E a cobranca em disco e' identica nos tres casos.
+    assert baixo["trials_rodada"] == alto["trials_rodada"] == 1
