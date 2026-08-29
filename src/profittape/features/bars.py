@@ -149,12 +149,15 @@ def atribuir_barras_tempo(df: pd.DataFrame, segundos: int) -> tuple[pd.DataFrame
         if g.empty:
             continue
         b = balde[mask]
-        # Renumera de forma DENSA dentro do dia (o balde absoluto vem do
-        # epoch e teria saltos enormes entre dias), depois desloca pelo
-        # offset acumulado para o bar_id ser crescente atraves dos dias.
-        _, indices = np.unique(b, return_inverse=True)
-        g["bar_id"] = indices.astype(np.int64) + offset
-        offset += int(indices.max()) + 1
+        # Indice RELATIVO ao primeiro balde do dia — nao denso. A versao
+        # original usava np.unique(return_inverse=True), que renumera
+        # densamente e portanto APAGA os baldes vazios; o contador de
+        # buracos do pipeline media o resultado ja achatado e devolvia
+        # zero por construcao, sempre (bug real, 2026-08-29, pego ao
+        # investigar dois pregoes curtos no log do operador). Preservar o
+        # indice relativo e' o que torna o buraco visivel e contavel.
+        g["bar_id"] = (b - b.min()).astype(np.int64) + offset
+        offset += int(b.max() - b.min()) + 1
         partes.append(g)
 
     if not partes:

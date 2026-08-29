@@ -66,6 +66,8 @@ arquivo cresceu demais para navegar so' por titulo cronologico).
 
 - [RESULTADO DO PORTAO: passou no criterio congelado, mas o nulo empirico condena o braco de 1m (2026-08-29f)](#resultado-do-portao-passou-no-criterio-congelado-mas-o-nulo-empirico-condena-o-braco-de-1m-2026-08-29f)
 
+- [PORTAO RECALIBRADO: o bloqueio do 1m era artefato meu; e o contador de buracos era falso (2026-08-29g)](#portao-recalibrado-o-bloqueio-do-1m-era-artefato-meu-e-o-contador-de-buracos-era-falso-2026-08-29g)
+
 **Disciplina/processo do proprio research**
 - [Decisoes aprovadas](#decisoes-aprovadas)
 - [Pre-requisitos antes de escrever research/](#pre-requisitos-antes-de-escrever-research)
@@ -1964,3 +1966,86 @@ interessante, nao como validacao da intuicao.
   sao 11 folds, `t_critico` ~4,03).
 - Braco 1m: BLOQUEADO ate pre-registro novo.
 - Trials gastos ate aqui nesta hipotese: ZERO.
+
+## PORTAO RECALIBRADO: o bloqueio do 1m era artefato meu; e o contador de buracos era falso (2026-08-29g)
+
+`features-tempo WINFUT --segundos 300` rodou sobre os 25 pregoes reais
+(24/07 a 27/08). Cinco dos seis checks de pre-voo bateram. O sexto
+derrubou a calibracao do portao, e a investigacao dos dois pregoes
+curtos derrubou um contador.
+
+### Geometria real vs geometria simulada
+
+    real (5m)     : range mediano 35 ticks, 113 barras/dia,
+                    ~42.000 negocios por barra
+    simulado (5m) : range mediano  7 ticks,  96 barras/dia,
+                    ~100 negocios por barra
+
+O gerador de ruido de 2026-08-29f errou a escala de negocios por barra
+em mais de duas ordens de grandeza, e por consequencia a amplitude da
+barra por um fator de 5. Como o bounce bid/ask e' de 1 tick FIXO, o vies
+que ele injeta escala com `1 / amplitude` — numa barra de 7 ticks ele
+pesa cinco vezes mais que numa de 35.
+
+Isto foi previsto por escrito ANTES de rodar (docstring de
+`gerar_tape_ruido`: "a amplitude efetivamente obtida e' reportada pelo
+portao, para conferencia — nao se confia no default"). O que nao estava
+previsto era o tamanho do erro.
+
+### Portao rerodado com a geometria real (tpm=600, prob_passo=0,08)
+
+Calibracao escolhida por reproduzir a geometria OBSERVADA (5m: 33 ticks
+contra 35 reais; 1m: 15 ticks, coerente com os 35 do 5m divididos por
+raiz de 5), nao por produzir algum resultado.
+
+    zero `segue` em 156 celulas (12 congeladas + 144 de nulo empirico)
+    todos os nulos empiricos em torno de zero, bandas p05-p95 contendo
+    zero em TODAS as 12 celulas
+
+O maior |ic_ruido_medio| caiu de 0,0257 para 0,0063.
+
+### Consequencia: o bloqueio do braco de 1m e' REVOGADO
+
+O bloqueio de 2026-08-29f dizia: nulo de `absorcao_dir` em 1m positivo
+(+0,018) quebrando a condicao 2, e controles com |IC| ~0,025 de artefato
+quebrando a condicao 3. Com geometria realista, nada disso sobrevive —
+os nulos de 1m ficam em 0,002 a 0,003, com bandas contendo zero.
+
+O bloqueio era artefato de calibracao, nao propriedade do desenho. Nao
+foi o pre-registro que mudou; foi o instrumento que estava errado e foi
+consertado. Registrado assim, e nao apagado, porque um portao que so'
+aparece no historico quando confirma o que se queria nao e' portao.
+
+CONDICAO para o 1m rodar: confirmar a geometria real de 1m com
+`features-tempo WINFUT --segundos 60`. Os 15 ticks sao PREVISAO do
+simulador, nao medicao. Se o 1m real vier bem abaixo (ex.: 6-8 ticks), a
+contaminacao volta e o bloqueio volta com ela.
+
+### BUG: `_contar_buracos` era falso por construcao
+
+`buracos: 0` na saida real nao significava nada. `atribuir_barras_tempo`
+renumerava os baldes densamente com `np.unique(return_inverse=True)`, o
+que APAGA os baldes vazios; `_contar_buracos` media `diff(bar_id)` sobre
+o resultado ja achatado e devolvia zero SEMPRE, para qualquer entrada.
+
+Achado ao investigar dois pregoes curtos no log:
+
+    2026-07-31 : 2.492.067 negocios, 71 barras (contra 113)
+    2026-08-25 : 1.474.049 negocios, 54 barras (contra 113)
+
+Corrigido: `bar_id` passa a ser o indice do balde RELATIVO ao primeiro
+balde do dia, preservando os vazios. Conferido a mao (baldes 0, 1 e 12
+=> 10 buracos) antes do teste automatizado.
+
+Isso importa para o pre-registro porque o horizonte e' definido em tempo
+de RELOGIO: com buraco no meio do pregao, "3 barras a frente" deixa de
+ser "15 minutos a frente".
+
+### DECISAO PENDENTE, a tomar ANTES do research (nao depois)
+
+Os dois pregoes curtos precisam ser classificados por INTEGRIDADE DE
+CAPTURA — recorder fora do ar, quarentena, incidente registrado — e nao
+por resultado. Excluir dia depois de ver o IC seria escolha de amostra
+pelo resultado, exatamente o que o resto do metodo existe para impedir.
+Rerodar `features-tempo` com o contador corrigido diz quantos buracos
+existem de fato em cada um.

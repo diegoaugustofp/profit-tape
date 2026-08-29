@@ -126,3 +126,43 @@ def test_tape_de_ruido_nao_tem_informacao_no_lado_agressor() -> None:
     # ao bid); o que nao pode existir e' correlacao POSITIVA, que seria o
     # lado agressor prevendo o proprio movimento.
     assert corr < 0.05
+
+
+def test_buracos_sao_preservados_no_bar_id() -> None:
+    """
+    Balde vazio tem que ficar VISIVEL no bar_id.
+
+    Bug real (2026-08-29): a primeira versao renumerava densamente com
+    np.unique(return_inverse=True), o que apagava os baldes vazios; o
+    contador de buracos media o resultado ja achatado e devolvia zero por
+    construcao, sempre. Isso importa porque com buraco no meio do pregao
+    "h barras a frente" deixa de ser "h periodos a frente" — e o horizonte
+    do pre-registro e' definido em tempo de relogio.
+    """
+    from profittape.features.pipeline_tempo import _contar_buracos
+
+    linhas = [
+        (BASE + 0, 100.0, 10, 2), (BASE + 30 * S, 101.0, 10, 3),
+        (BASE + 300 * S, 102.0, 10, 2), (BASE + 330 * S, 103.0, 10, 3),
+        (BASE + 3600 * S, 104.0, 10, 2), (BASE + 3630 * S, 105.0, 10, 3),
+        (BASE + 3900 * S, 106.0, 10, 2),          # ultimo balde -> descartado
+    ]
+    df = pd.DataFrame(linhas, columns=["ts_ns", "price", "quantidade", "trade_type"])
+    df["agente_comprador"] = 1
+    df["agente_vendedor"] = 2
+    df["dt"] = pd.Categorical(["2026-08-24"] * len(df))
+
+    barrado, _ = bars.atribuir_barras_tempo(df, 300)
+    b = flow.calcular(barrado, agentes=[], tick=5.0, incluir_absorcao_dir=True)
+    # Baldes 0, 1 e 12 (3600s / 300s): dez baldes vazios entre o 1 e o 12.
+    assert list(b["bar_id"]) == [0, 1, 12]
+    assert _contar_buracos(b) == 10
+
+
+def test_sem_buraco_continua_dando_zero() -> None:
+    """O contador so' vale se nao acusar buraco onde nao ha."""
+    from profittape.features.pipeline_tempo import _contar_buracos
+
+    barrado, _ = bars.atribuir_barras_tempo(_cenario(), 60)
+    b = flow.calcular(barrado, agentes=[], tick=5.0, incluir_absorcao_dir=True)
+    assert _contar_buracos(b) == 0
