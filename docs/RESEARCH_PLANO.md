@@ -1133,6 +1133,13 @@ VALE3/MGLU3 como caso de regressão).
 
 ## PRE-REGISTRO: existe reversao condicional em z_agf_3? (2026-08-29)
 
+> **CONGELADO em 2026-08-29 pelo operador**, antes de qualquer linha de
+> código do teste e antes de qualquer contato com o dado. Hipótese,
+> metodologia, grade de X, critério de decisão e regra de parada estão
+> fixados a partir daqui. Alteração de qualquer um desses itens exige
+> um pré-registro NOVO, com seção própria e data própria — não editar
+> esta seção.
+
 Registrado ANTES de rodar qualquer coisa. Nenhum código foi escrito
 para responder esta pergunta até este documento ser congelado.
 

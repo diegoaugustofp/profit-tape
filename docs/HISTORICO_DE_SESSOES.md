@@ -25,7 +25,8 @@ documentos de assunto — só resuma e aponte.
 
 Sessão de DESENHO, não de implementação — nenhuma linha de código de
 comportamento foi escrita, deliberadamente (regra 7 da skill
-`profit-tape-disciplina`). Versão entregue: `entregue-v1.06` (docs).
+`profit-tape-disciplina`). Versões entregues: `entregue-v1.06` (pré-registro),
+`entregue-v1.07` (congelamento).
 
 ### Rota B — revisão desde o início
 Revisada a cadeia inteira de decisões (26/08 tensão original → 27/08
@@ -50,7 +51,9 @@ estavam misturadas: stop como LIMITE DE PERDA (a, motivado por Calmar
 0,23) vs stop como DETECTOR DE REVERSÃO (b, afirmação inferencial
 ainda não testada). Testa só (b), com grade de X fixada antes,
 exigência de monotonicidade, contra-hipótese contrarian registrada, e
-regra de parada. Não consome trial.
+regra de parada. Não consome trial. **Congelado pelo operador em
+2026-08-29**, antes de qualquer código e de qualquer contato com o
+dado — alteração de critério exige pré-registro novo.
 
 ### Pendências que ficaram em aberto
 - Rodar o teste condicional pré-registrado (código ainda não escrito).
