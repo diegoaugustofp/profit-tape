@@ -1160,6 +1160,39 @@ def _tabela_var_es_fmt(tabela: pd.DataFrame) -> str:
 
 
 @app.command()
+def custo_acoes(
+    preco: float = typer.Option(..., "--preco", help="Preco atual da acao (R$)."),
+    financeiro: float = typer.Option(
+        ..., "--financeiro",
+        help="Financeiro que voce pretende expor (mesmo criterio de "
+             "risco entre ativos diferentes, ex.: R$10000)."),
+    xlsx: Path = typer.Option(
+        Path("docs/referencias/custos_acoes_xp.xlsx"), "--xlsx",
+        help="Planilha real de custos da XP."),
+) -> None:
+    """
+    Custo de day trade de UMA acao, calculado a partir da planilha real
+    da XP -- devolve o numero pronto para `--custo-pontos` do comando
+    `quintis`. NUNCA reuse o custo calculado para um ativo em outro
+    ativo de preco muito diferente (achado real: custo por acao nao e'
+    constante entre ativos, mesmo com o mesmo financeiro exposto).
+    """
+    from .research.custo_acoes import carregar_parametros_xp, custo_giro_dia_trade
+
+    if not xlsx.exists():
+        raise SystemExit(f"planilha nao encontrada em {xlsx}")
+    parametros = carregar_parametros_xp(xlsx)
+    quantidade = financeiro / preco
+    r = custo_giro_dia_trade(preco, quantidade, parametros)
+
+    typer.echo(f"preco={preco:.2f}  financeiro={financeiro:,.2f}  "
+               f"quantidade implicita={quantidade:,.0f} acoes")
+    typer.echo(f"custo do giro (abre+fecha): R${r['custo_giro_total_reais']:.2f}")
+    typer.echo(f"custo por acao (--custo-pontos): {r['custo_por_acao_reais']:.5f}")
+    typer.echo(f"custo como % do financeiro: {r['custo_pct_financeiro']:.4%}")
+
+
+@app.command()
 def risco_realizado(
     symbol: str = typer.Option("WINFUT", "--symbol"),
     features: Path = typer.Option(Path("data/features"), "--features"),

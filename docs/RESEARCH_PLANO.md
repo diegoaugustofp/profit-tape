@@ -26,6 +26,7 @@ arquivo cresceu demais para navegar so' por titulo cronologico).
 **Acoes (VALE3/MGLU3/etc.) — mortas pelo custo**
 - [Custo de transacao em ACOES na XP — ponderacao do operador (2026-08-26)](#custo-de-transacao-em-acoes-na-xp-ponderacao-do-operador-2026-08-26)
 - [Conclusao final: sinais de acao morrem no teste economico (2026-08-26)](#conclusao-final-sinais-de-acao-morrem-no-teste-economico-2026-08-26)
+- [Como calcular o custo real de acoes — planilha da XP + modulo dedicado (2026-08-28)](#como-calcular-o-custo-real-de-acoes-planilha-da-xp-modulo-dedicado-2026-08-28)
 
 **Restricao de direcao (venda apenas) — decisao aceita**
 - [PRE-REGISTRO: Restricao de direcao — venda apenas (2026-08-27)](#pre-registro-restricao-de-direcao-venda-apenas-2026-08-27)
@@ -1086,3 +1087,42 @@ rodada (+524, -386, +409...) excedem os limiares 100/120 da Rota B --
 confirma que esta rodada usou ea_venda_apenas.yaml (Rota A, saida por
 tempo), NAO ea_venda_rota_b.yaml. Comparacao direta com Rota B sobre
 este mesmo periodo de 25 dias ainda nao foi feita.
+
+## Como calcular o custo real de ações — planilha da XP + módulo dedicado (2026-08-28)
+
+A planilha real de custos da XP está versionada em
+`docs/referencias/custos_acoes_xp.xlsx`. Não recalcule à mão nem reuse
+um número fixo entre ativos — o custo tem componente FIXO (corretagem,
+por ordem) e componente PROPORCIONAL (taxas B3, sobre o financeiro),
+então **não é constante por ação entre ativos de preços diferentes**,
+mesmo mantendo o mesmo risco exposto (achado real que motivou este
+módulo: `0,026 pts/ação` genérico distorceu o teste de `z_agf_8` em
+MGLU3 — corrigido depois, ver seção "Custo de transação em ACOES").
+
+**Uso direto pelo terminal** (o jeito mais rápido, para pegar o número
+antes de rodar `quintis`):
+```powershell
+profit-tape custo-acoes --preco 4.59 --financeiro 10000
+```
+Devolve o `custo_por_acao_reais` pronto para colar em
+`--custo-pontos` do comando `quintis` — **específico do ativo e do
+financeiro escolhido**, nunca reaproveitar entre ativos diferentes.
+
+**Uso programático** (`src/profittape/research/custo_acoes.py`):
+- `carregar_parametros_xp(caminho_xlsx)` — lê os parâmetros da aba
+  "Parametros" da planilha (corretagem fixa, taxas B3, taxa
+  operacional XP). Se a XP mudar taxas no futuro, atualize a planilha
+  e rode de novo — não há número fixo no código.
+- `custo_giro_dia_trade(preco, quantidade, parametros)` — replica
+  exatamente a fórmula da aba "Calculadora" (Day Trade, nunca aluguel
+  BTC — o EA nunca carrega posição overnight). Devolve financeiro,
+  custo total do giro em R$, custo por ação, e custo como % do
+  financeiro.
+- `custo_pontos_para_quintis(preco, financeiro_alvo, caminho_xlsx)` —
+  atalho de conveniência, mesmo resultado do comando CLI.
+
+Fórmula validada linha por linha contra o exemplo já preenchido na
+própria planilha (`preço=37,52`, `qtd=300` → `custo_giro=12,18514784`,
+conferido à mão antes de confiar no código — 4 testes automatizados em
+`tests/test_custo_acoes.py`, incluindo o achado de assimetria entre
+VALE3/MGLU3 como caso de regressão).
