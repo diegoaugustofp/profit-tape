@@ -382,7 +382,10 @@ def features_tempo(
     timeframe em vez dos 6 pre-registrados. Saida separada de
     data/features/, que continua sendo barra de volume.
     """
-    configurar(log_level, arquivo=log_file)
+    # nivel_arquivo="INFO": convencao do projeto -- console pode ficar
+    # quieto, mas o arquivo grava INFO completo sempre. Sem isso o
+    # --log-file herdaria o WARNING do console e sairia vazio.
+    configurar(log_level, arquivo=log_file, nivel_arquivo="INFO")
     from .features.pipeline_tempo import gerar_tempo
 
     r = gerar_tempo(curated, saida, symbol.strip().upper(), segundos,
@@ -417,7 +420,7 @@ def portao_absorcao(
     preco). Reprova o desenho se qualquer celula sair `segue` sobre ruido
     puro. Nao toca trials.json.
     """
-    configurar(log_level, arquivo=log_file)
+    configurar(log_level, arquivo=log_file, nivel_arquivo="INFO")
     from .research.portao_absorcao import rodar_portao
 
     r = rodar_portao(trials_json=str(trials), n_semeaduras=semeaduras,
