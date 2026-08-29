@@ -31,7 +31,8 @@ def top_agentes(df: pd.DataFrame, n: int = 10) -> list[int]:
 
 
 def calcular(df: pd.DataFrame, agentes: list[int], tick: float,
-            agentes_nacionais: set[int] | None = None) -> pd.DataFrame:
+            agentes_nacionais: set[int] | None = None,
+            incluir_absorcao_dir: bool = False) -> pd.DataFrame:
     """
     Uma linha por bar_id. Colunas:
 
@@ -54,6 +55,20 @@ def calcular(df: pd.DataFrame, agentes: list[int], tick: float,
 
     Fluxo por agente usa APENAS negocios de agressao: em RLP o "agente" da
     ponta provedora e' o internalizador e misturaria dois fenomenos distintos.
+
+    Com `incluir_absorcao_dir=True` (default False, para nao alterar nenhuma
+    saida existente), acrescenta as duas colunas do pre-registro de
+    2026-08-29e:
+
+      desloc_norm  = (close - open) / (high - low)     em [-1, 1]
+      absorcao_dir = imbalance - desloc_norm
+
+    A frase inteira do mecanismo: o esforco foi para um lado e o preco fechou
+    para o outro. Positivo = compradores agrediram e nao levaram.
+
+    Guarda `high == low`: `desloc_norm := 0`. Uma barra que nao andou nao
+    tem "para onde o preco fechou"; 0 e' o unico valor que nao inventa
+    direcao. Sem a guarda seria 0/0 = NaN, que o z-score propagaria.
     """
     agr = df[df["trade_type"].isin((_BUY, _SELL))]
     rlp = df[df["trade_type"] == _RLP]
@@ -92,8 +107,14 @@ def calcular(df: pd.DataFrame, agentes: list[int], tick: float,
     barras["tick_imbalance"] = (barras["n_buy"] - barras["n_sell"]) / (
         barras["n_buy"] + barras["n_sell"]
     )
-    range_ticks = (barras["high"] - barras["low"]) / tick
+    amplitude = barras["high"] - barras["low"]
+    range_ticks = amplitude / tick
     barras["absorcao"] = barras["vol_agr"] / np.maximum(range_ticks, 1.0)
+
+    if incluir_absorcao_dir:
+        desloc = (barras["close"] - barras["open"]) / amplitude
+        barras["desloc_norm"] = desloc.where(amplitude > 0, 0.0)
+        barras["absorcao_dir"] = barras["imbalance"] - barras["desloc_norm"]
 
     vol_rlp = rlp.groupby("bar_id", observed=True)["quantidade"].sum()
     barras["vol_rlp"] = vol_rlp.reindex(barras.index, fill_value=0)

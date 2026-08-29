@@ -360,6 +360,89 @@ def features(
 
 
 @app.command()
+def features_tempo(
+    symbol: str = typer.Argument("WINFUT", help="Ex.: WINFUT"),
+    segundos: int = typer.Option(300, "--segundos",
+                                 help="60 (1m) ou 300 (5m) — so' esses dois "
+                                      "estao no pre-registro de 2026-08-29e."),
+    curated: Path = typer.Option(Path("data/curated"), "--curated"),
+    saida: Path = typer.Option(Path("data/features_tempo"), "--saida"),
+    janela_minutos: int = typer.Option(
+        250, "--janela-minutos",
+        help="Janela do z-score em MINUTOS (nao em barras): casa a "
+             "normalizacao entre 1m e 5m."),
+    log_file: Path | None = typer.Option(None, "--log-file"),
+    log_level: str = typer.Option("WARNING", "--log-level"),
+) -> None:
+    """
+    Features em BARRA DE TEMPO para o pre-registro da absorcao direcional.
+
+    Gera SO as tres colunas pre-registradas (absorcao_dir, desloc_norm,
+    imbalance) — o conjunto completo faria o `research` cobrar 28 trials por
+    timeframe em vez dos 6 pre-registrados. Saida separada de
+    data/features/, que continua sendo barra de volume.
+    """
+    configurar(log_level, arquivo=log_file)
+    from .features.pipeline_tempo import gerar_tempo
+
+    r = gerar_tempo(curated, saida, symbol.strip().upper(), segundos,
+                    janela_minutos)
+    typer.echo("=" * 62)
+    typer.echo(f"FEATURES EM BARRA DE TEMPO — {r['symbol']} {r['tf']}")
+    typer.echo("=" * 62)
+    for k in ("dias", "trades", "barras", "barras_finais_descartadas",
+              "buracos", "range_ticks_mediano", "tick_inferido",
+              "janela_z_barras", "janela_z_minutos", "colunas_z", "arquivo"):
+        typer.echo(f"  {k:26}: {r[k]}")
+
+
+@app.command()
+def portao_absorcao(
+    trials: Path = typer.Option(Path("data/research/trials.json"), "--trials",
+                                help="Para usar o MESMO limiar que o teste "
+                                     "real vai enfrentar."),
+    semeaduras: int = typer.Option(20, "--semeaduras",
+                                   help="Tapes de ruido para o nulo empirico."),
+    dias: int = typer.Option(25, "--dias"),
+    saida: Path | None = typer.Option(None, "--saida",
+                                      help="CSV opcional com as duas tabelas."),
+    log_file: Path | None = typer.Option(None, "--log-file"),
+    log_level: str = typer.Option("INFO", "--log-level"),
+) -> None:
+    """
+    PORTAO DE HONESTIDADE do pre-registro de 2026-08-29e — bloqueante.
+
+    Roda o mesmo caminho de medicao sobre TAPE SINTETICO sem edge nenhum
+    (grade de tick + bounce bid/ask, lado agressor independente do passo do
+    preco). Reprova o desenho se qualquer celula sair `segue` sobre ruido
+    puro. Nao toca trials.json.
+    """
+    configurar(log_level, arquivo=log_file)
+    from .research.portao_absorcao import rodar_portao
+
+    r = rodar_portao(trials_json=str(trials), n_semeaduras=semeaduras,
+                     n_dias=dias)
+    typer.echo("=" * 62)
+    typer.echo("PORTAO DE HONESTIDADE — absorcao direcional (2026-08-29e)")
+    typer.echo("=" * 62)
+    typer.echo(f"  limiar_z usado      : {r['limiar_z']:.3f} "
+               f"(trials {r['trials_base']} + {r['trials_extra']})")
+    typer.echo(f"  vereditos           : {r['vereditos']}")
+    typer.echo(f"  PASSOU              : {r['passou']}")
+    typer.echo("\n--- rodada congelada ---")
+    typer.echo(r["tabela"][["tf", "feature", "horizonte", "ic_medio", "t_stat",
+                            "consistencia_sinal", "veredito"]].to_string(index=False))
+    typer.echo(f"\n--- nulo empirico ({r['n_semeaduras']} tapes) ---")
+    typer.echo(r["nulo_empirico"].round(5).to_string(index=False))
+    if saida:
+        saida.parent.mkdir(parents=True, exist_ok=True)
+        r["nulo_empirico"].to_csv(saida, index=False)
+        typer.echo(f"\n  nulo empirico gravado em {saida.resolve()}")
+    if not r["passou"]:
+        raise SystemExit("PORTAO REPROVOU — nao gaste trial (ver pre-registro)")
+
+
+@app.command()
 def agents(
     dados: Path = typer.Option(
         Path("data/curated"), "--dados",
@@ -431,6 +514,17 @@ def research(
     saida: Path = typer.Option(Path("data/research"), "--saida"),
     treino_min: int = typer.Option(3, "--treino-min", help="Dias minimos de treino."),
     teste_dias: int = typer.Option(2, "--teste-dias", help="Dias por bloco de teste."),
+    arquivo: Path | None = typer.Option(
+        None, "--arquivo",
+        help="Parquet de features direto, no lugar do caminho derivado de "
+             "--features/--symbol. Existe para a barra de TEMPO, que vive em "
+             "data/features_tempo/sym=X/tf=Nm/ e nao pode ser alcancada pelo "
+             "caminho de barra de volume."),
+    horizontes: str | None = typer.Option(
+        None, "--horizontes",
+        help="Lista separada por virgula (ex.: 1,3 para 5m; 5,15 para 1m). "
+             "Omitido usa o padrao 1,3,10. ATENCAO: cada feature x horizonte "
+             "e um TRIAL — mudar isto muda o custo estatistico da rodada."),
 ) -> None:
     """
     IC walk-forward das features com veredito deflacionado por trials
@@ -438,10 +532,13 @@ def research(
     """
     from .research.pipeline import rodar
 
-    arquivo = features / f"sym={symbol.upper()}" / "features.parquet"
+    if arquivo is None:
+        arquivo = features / f"sym={symbol.upper()}" / "features.parquet"
     if not arquivo.exists():
         raise SystemExit(f"nao achei {arquivo} — rode `profit-tape features` antes")
-    r = rodar(arquivo, saida, treino_min=treino_min, teste_dias=teste_dias)
+    hs = [int(x) for x in horizontes.split(",")] if horizontes else None
+    r = rodar(arquivo, saida, horizontes=hs, treino_min=treino_min,
+              teste_dias=teste_dias)
     typer.echo("=" * 62)
     typer.echo("RESEARCH — IC walk-forward")
     typer.echo("=" * 62)

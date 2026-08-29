@@ -89,6 +89,79 @@ def atribuir_barras(df: pd.DataFrame, volume_barra: int) -> tuple[pd.DataFrame, 
     return pd.concat(partes, ignore_index=True), descartadas
 
 
+def atribuir_barras_tempo(df: pd.DataFrame, segundos: int) -> tuple[pd.DataFrame, int]:
+    """
+    Barra de TEMPO fixo. Adiciona `bar_id` (global, crescente atraves dos
+    dias) e devolve (df_sem_a_ultima_barra_do_dia, n_barras_descartadas).
+
+    POR QUE ELA EXISTE, JA QUE O PROJETO USA VOLUME BAR
+    ---------------------------------------------------
+    O argumento a favor de volume bar (relogio de informacao, nao de parede)
+    continua valendo e nao esta sendo revogado. Esta funcao existe para o
+    pre-registro de 2026-08-29e, cuja HIPOTESE e' explicitamente sobre a
+    barra de 1m/5m que o operador le no grafico — a barra de volume apaga
+    exatamente a estrutura que a hipotese descreve. Sao dois regimes de
+    amostragem diferentes, com resultados que NAO se misturam.
+
+    O QUE SE MANTEM DA CONVENCAO JA TRAVADA
+    ---------------------------------------
+    - Barra nunca atravessa o dia (bucket calculado dentro de cada `dt`).
+    - A ULTIMA barra de cada pregao e' descartada: ela e' parcial por
+      construcao (o pregao acaba no meio do balde) e tem variancia de outro
+      regime, igual a parcial da volume bar.
+    - RLP e leilao sao ATRIBUIDOS a barra, mas nao entram em `vol_agr` nem
+      no OHLC — isso e' resolvido em flow.calcular, nao aqui.
+
+    O QUE MUDA, E E' DIFERENCA REAL
+    -------------------------------
+    O relogio e' de parede, entao um balde SEM negocio nenhum simplesmente
+    nao existe na saida (nao ha linha para agrupar). Como flow.calcular
+    monta a barra a partir dos negocios de AGRESSAO, um balde que so' teve
+    RLP tambem desaparece. Isso e' deliberado: barra preenchida artificial
+    teria `range = 0` e `vol_agr = 0`, e produziria `desloc_norm`
+    degenerado. O custo e' que `bar_id` pode ter buracos, e portanto
+    "h barras a frente" nem sempre e' "h*segundos a frente" — o numero de
+    buracos e' reportado pelo pipeline para que isso seja auditavel em vez
+    de silencioso.
+    """
+    if segundos <= 0:
+        raise ValueError("segundos deve ser positivo")
+    if not df["ts_ns"].is_monotonic_increasing:
+        df = df.sort_values("ts_ns", kind="stable").reset_index(drop=True)
+
+    # O balde vem do EPOCH (ts_ns // periodo). Para 60s e 300s isso coincide
+    # com a fronteira de minuto/5-minutos de relogio em UTC, e como o fuso da
+    # B3 e' deslocado em horas inteiras, coincide tambem com a fronteira
+    # local — a barra de 5m comeca em :00, :05, :10, como no grafico. Vale
+    # para qualquer periodo que divida 3600; para um periodo esquisito
+    # (ex.: 7s) o alinhamento seria arbitrario, e por isso o pipeline so'
+    # expoe 60 e 300.
+    periodo_ns = int(segundos) * 1_000_000_000
+    partes: list[pd.DataFrame] = []
+    descartadas = 0
+    offset = 0
+    for _, grupo in df.groupby("dt", observed=True, sort=True):
+        balde = (grupo["ts_ns"].to_numpy() // periodo_ns).astype(np.int64)
+        ultimo = balde[-1]
+        mask = balde < ultimo          # descarta o balde final do pregao
+        descartadas += 1
+        g = grupo.loc[mask].copy()
+        if g.empty:
+            continue
+        b = balde[mask]
+        # Renumera de forma DENSA dentro do dia (o balde absoluto vem do
+        # epoch e teria saltos enormes entre dias), depois desloca pelo
+        # offset acumulado para o bar_id ser crescente atraves dos dias.
+        _, indices = np.unique(b, return_inverse=True)
+        g["bar_id"] = indices.astype(np.int64) + offset
+        offset += int(indices.max()) + 1
+        partes.append(g)
+
+    if not partes:
+        raise ValueError("nenhuma barra de tempo completa — periodo grande demais?")
+    return pd.concat(partes, ignore_index=True), descartadas
+
+
 def inferir_tick(df: pd.DataFrame) -> float:
     """
     Tick = menor variacao de preco positiva observada na agressao.

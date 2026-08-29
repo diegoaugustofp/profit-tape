@@ -64,6 +64,8 @@ arquivo cresceu demais para navegar so' por titulo cronologico).
 - [ORCAMENTO DE TRIALS: o total real e 492, nao 42 (2026-08-29d)](#orcamento-de-trials-o-total-real-e-492-nao-42-2026-08-29d)
 - [PRE-REGISTRO (RASCUNHO, NAO CONGELADO): absorcao direcional em barra de tempo (2026-08-29e)](#pre-registro-rascunho-nao-congelado-absorcao-direcional-em-barra-de-tempo-winfut-1m5m-2026-08-29e)
 
+- [RESULTADO DO PORTAO: passou no criterio congelado, mas o nulo empirico condena o braco de 1m (2026-08-29f)](#resultado-do-portao-passou-no-criterio-congelado-mas-o-nulo-empirico-condena-o-braco-de-1m-2026-08-29f)
+
 **Disciplina/processo do proprio research**
 - [Decisoes aprovadas](#decisoes-aprovadas)
 - [Pre-requisitos antes de escrever research/](#pre-requisitos-antes-de-escrever-research)
@@ -1689,9 +1691,17 @@ ver".
 
 ## PRE-REGISTRO (RASCUNHO, NAO CONGELADO): absorcao direcional em barra de tempo — WINFUT 1m/5m (2026-08-29e)
 
-> **NAO CONGELADO.** Definicoes e controles aprovados pelo operador em
-> 2026-08-29. Falta o congelamento formal e falta o PORTAO DE
-> HONESTIDADE passar. Nenhum trial pode ser gasto antes dos dois.
+> **CONGELADO em 2026-08-29 pelo operador**, antes de qualquer linha de
+> codigo do teste e antes de qualquer contato com o dado. Hipotese,
+> features, controles, timeframes, horizontes, janela de z, criterio de
+> decisao e regra de parada estao fixados a partir daqui. Alteracao de
+> qualquer um desses itens exige pre-registro NOVO, com secao propria e
+> data propria — nao editar esta secao.
+>
+> O PORTAO DE HONESTIDADE continua bloqueante: congelar protege contra
+> ajuste de criterio, nao certifica que o metodo e' valido (licao de
+> 2026-08-29c, onde um pre-registro congelado e aparentemente rigoroso
+> foi reprovado pelo proprio portao).
 
 ### Motivacao
 
@@ -1746,6 +1756,28 @@ Timeframes: 1m e 5m. Horizontes CASADOS EM TEMPO DE RELOGIO, para que a
 comparacao entre timeframes seja limpa:
 
     5m -> h {1, 3}      1m -> h {5, 15}      (ambos = 5 e 15 minutos)
+
+### Isolamento em relacao a barra de volume (operador, 2026-08-29)
+
+Instrucao explicita: a estrategia e' validada EM BARRA DE TEMPO, sem
+misturar com o que foi medido em barra de volume. Consequencias
+operacionais, nao apenas retoricas:
+
+- O pipeline de features de tempo gera SOMENTE as tres colunas
+  pre-registradas (`absorcao_dir`, `desloc_norm`, `imbalance`). Se
+  gerasse o conjunto completo, o `research` — que avalia TODA coluna
+  `z_` presente — cobraria 14 features x 2 horizontes = 28 trials por
+  timeframe em vez de 6, estourando este pre-registro e reintroduzindo
+  justamente as features de barra de volume que se quer manter fora.
+- Arquivo de saida separado (`data/features_tempo/sym=X/tf=Nm/`), nunca
+  sobrescrevendo `data/features/`.
+- Os resultados de barra de volume NAO entram como evidencia a favor ou
+  contra esta hipotese; entram so' como o registro de que a versao
+  crua de `absorcao` ja foi tentada em outro regime de amostragem.
+
+O que NAO muda: o contador de trials e' UM so'. Ele mede quantas vezes
+se olhou, nao em qual tipo de barra. Barra de tempo nao abre orcamento
+novo.
 
 ### Custo: CONSOME trial — 12
 
@@ -1855,3 +1887,80 @@ um exemplo minimo antes dos testes automatizados (regra 4 da skill
 - Qualquer coisa em `ea/`.
 
 Tudo isso so' existe se H sobreviver ao portao E ao IC.
+
+## RESULTADO DO PORTAO: passou no criterio congelado, mas o nulo empirico condena o braco de 1m (2026-08-29f)
+
+Rodado ANTES de qualquer contato com dado real, com o limiar que o teste
+real vai enfrentar (`trials.json` = 492, + 12 desta hipotese => limiar_z
+3,055). Nenhum trial gasto. Comando: `profit-tape portao-absorcao`.
+
+### O binario: PASSOU
+
+As 12 celulas da semente congelada sairam `descarta`. Pelo criterio
+congelado, o desenho esta liberado.
+
+### O nulo empirico: o binario passou por sorte da semente
+
+Vinte tapes independentes, mesmo gerador. IC medio sob RUIDO PURO:
+
+    tf  feature          h    ic_ruido   p05       p95      segue/20
+    1m  z_absorcao_dir   5    +0,01793  +0,00586  +0,03188     0
+    1m  z_absorcao_dir  15    +0,01376  -0,00418  +0,02702     0
+    1m  z_desloc_norm    5    -0,02565  -0,03667  -0,01266     2
+    1m  z_desloc_norm   15    -0,01587  -0,02954  -0,00035     0
+    1m  z_imbalance      5    -0,02300  -0,03960  -0,00758     4
+    1m  z_imbalance     15    -0,01361  -0,03156  +0,00698     2
+    5m  z_absorcao_dir   1    +0,01486  -0,02105  +0,03597     0
+    5m  z_absorcao_dir   3    +0,01316  -0,02130  +0,03526     0
+    5m  z_desloc_norm    1    -0,01776  -0,03995  +0,01150     0
+    5m  z_desloc_norm    3    -0,01438  -0,03372  +0,01660     0
+    5m  z_imbalance      1    -0,01503  -0,05445  +0,03736     0
+    5m  z_imbalance      3    -0,00480  -0,04277  +0,03434     0
+
+Tres leituras, todas previstas por escrito antes de rodar:
+
+1. **O vies existe e tem a direcao prevista.** `desloc_norm` e
+   `imbalance` tem IC NEGATIVO sistematico sob ruido — bounce bid/ask no
+   fechamento, exatamente o mecanismo antecipado no pre-registro.
+2. **O vies e' maior em 1m que em 5m.** Em 1m as bandas p05-p95 de
+   `z_desloc_norm` h=5 e `z_imbalance` h=5 NAO contem zero. Em 5m todas
+   contem. O tick e' o mesmo nos dois; a amplitude da barra e' menor em
+   1m (mediana 3 ticks contra 7), entao o bounce pesa proporcionalmente
+   mais.
+3. **Sob ruido puro, o criterio devolve `segue`**: 8 celulas em 240 (20
+   tapes x 12), TODAS em 1m e TODAS nos dois controles. `z_imbalance`
+   h=5 sozinho deu `segue` em 4 de 20 tapes — 20% de falso positivo onde
+   o criterio deveria dar quase nada. A semente congelada calhou de ser
+   uma das limpas.
+
+### Consequencia sobre o criterio congelado
+
+O braco de **5m esta limpo**: zero `segue` em 120 celulas de ruido, todas
+as bandas contendo zero. Roda como congelado.
+
+O braco de **1m esta contaminado**, e de um jeito que quebra duas partes
+do criterio congelado, nao uma:
+
+- A condicao 2 (IC negativo) confunde sinal com bounce: o nulo de
+  `absorcao_dir` em 1m e' POSITIVO (+0,018), nao zero.
+- A condicao 3 (primaria supera ambos os controles em |IC|) compara
+  contra controles que ja carregam |IC| ~0,023-0,026 so' de artefato.
+
+Nao se conserta isso editando o congelado. O 1m exige pre-registro NOVO,
+com o nulo empirico como base de comparacao no lugar de zero — que e'
+literalmente a correcao que 2026-08-29c ja tinha apontado.
+
+### Observacao a NAO transformar em conclusao
+
+A intuicao visual do operador era que sinais de 1m sao "menos confiaveis"
+que os de 5m. O portao mostra que em 1m a MEDICAO e' enviesada. Sao duas
+afirmacoes diferentes e uma nao prova a outra — o vies de medicao nao diz
+nada sobre existir ou nao sinal em 1m. Registrado como coincidencia
+interessante, nao como validacao da intuicao.
+
+### Estado
+
+- Braco 5m: liberado para gastar 6 trials (limiar 3,055; com 25 pregoes
+  sao 11 folds, `t_critico` ~4,03).
+- Braco 1m: BLOQUEADO ate pre-registro novo.
+- Trials gastos ate aqui nesta hipotese: ZERO.
