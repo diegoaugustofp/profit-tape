@@ -44,6 +44,13 @@ arquivo cresceu demais para navegar so' por titulo cronologico).
   — revisao do desenho desde o inicio: ALVO descartado como conceito
   para este sinal (incompativel com edge de cauda); stop separado em
   duas hipoteses distintas (limite de perda vs detector de reversao).
+- [IMPLEMENTADO: `reversao-condicional` — executa o pré-registro (2026-08-29)](#implementado-reversao-condicional-executa-o-pré-registro-2026-08-29)
+- [RESULTADO ANULADO: o pré-registro de 2026-08-29 tinha estimador inválido](#resultado-anulado-o-pré-registro-de-2026-08-29-tinha-estimador-inválido)
+- [PRE-REGISTRO 2: expectativa remanescente a partir do toque (2026-08-29b)](#pre-registro-2-expectativa-remanescente-a-partir-do-toque-2026-08-29b)
+- ⚠ o pre-registro de 2026-08-29 rodou e o veredito foi ANULADO: o
+  estimador tinha tautologia embutida (MAE_intrabar >= perda final,
+  por construcao) e devolvia FAVORAVEL sobre ruido puro. Hipotese (b)
+  segue SEM RESPOSTA; ver o pre-registro 2.
 
 **Risco (drawdown, VaR/ES, circuit breaker)**
 - [Curva de patrimonio / drawdown maximo (2026-08-27)](#curva-de-patrimonio-drawdown-maximo-2026-08-27)
@@ -1321,3 +1328,202 @@ pré-registro novo?", não "como faço o teste passar?". 279 testes.
 
 NÃO consome trial. `trials.json` não é tocado — o limiar deflacionado é
 usado apenas para corrigir as 7 comparações desta grade.
+
+## RESULTADO ANULADO: o pré-registro de 2026-08-29 tinha estimador inválido
+
+O teste rodou (162 operações, 22 pregões, lado venda) e devolveu
+**FAVORAVEL a (b), X\* = 60 pts**, com t entre −7,5 e −13,2 em toda a
+grade. **Esse veredito está ANULADO.** Não é achado, é artefato.
+
+### A identidade que quebra o estimador
+
+Numa venda, `MAE_intrabar = max(high_i − entrada)` sobre a janela, e o
+resultado é `entrada − close_final`. Como o `high` da última barra é
+sempre ≥ o `close` dela:
+
+    MAE_intrabar >= perda bruta final, SEMPRE, por construção.
+
+Consequência direta: o grupo "não tocou −X" **não pode conter nenhuma
+operação que perdeu mais de X** — o teto de perda dele é X, por
+definição. E o grupo "tocou −X" recebe automaticamente todos os
+perdedores grandes. A variável de condicionamento e o desfecho são
+funções do MESMO caminho de preço, mecanicamente anticorrelacionadas.
+O teste não media reversão; media a própria identidade.
+
+### A impressão digital estava na tabela
+
+A coluna `dif` ficou praticamente CONSTANTE na grade inteira (−404,
+−360, −404, −392, −401, −428, −446). Um efeito estrutural real ficaria
+mais forte conforme X sobe. Constância assim é assinatura de
+tautologia, não de estrutura. E `media nao tocou` entre +219 e +382
+pts líquidos por operação, com média incondicional de +14,96, não é
+edge: é o subconjunto das operações que foram direto a favor,
+selecionado depois do fato.
+
+### Teste de honestidade (a prova)
+
+O mesmo módulo, sobre RANDOM WALK PURO (drift zero, feature de ruído
+independente do preço, zero edge por construção), n=841:
+
+    X=40   media toc −48,42   media nao +110,55   dif −158,97   t −22,52  SIM
+    X=100  media toc −93,64   media nao  +71,96   dif −165,60   t −27,26  SIM
+    X=200  media toc −168,80  media nao  +21,85   dif −190,65   t −25,16  SIM
+    VEREDITO SOBRE RUIDO PURO: FAVORAVEL a (b)
+
+Mesma forma, mesma monotonicidade, t ≈ −25. **O estimador dá favorável
+para nada.**
+
+### A lição, e por que anular não é p-hacking ao contrário
+
+A regra 0 (valide o MECANISMO antes de calibrar NÚMEROS) foi aplicada
+corretamente ao mecanismo — stop contínuo faz sentido, e continua
+fazendo. O que não foi validado foi o **ESTIMADOR**: a forma de medir.
+É a mesma falha um nível abaixo de onde ela pegou a Rota B, e o
+pré-registro congelou o estimador viciado. Congelar não torna válido.
+
+A anulação é legítima porque o argumento é **a priori**: a álgebra
+acima é provável sem olhar o dado, e o defeito se reproduz em ruído
+puro. Não é "não gostei do número" — dava para provar isto ANTES de
+rodar. Se a justificativa dependesse do resultado ter desagradado,
+seria p-hacking ao contrário e a anulação não valeria.
+
+**Regra nova, incorporada ao pré-registro seguinte**: nenhum estimador
+novo é interpretado antes de passar por um teste de honestidade sobre
+ruído puro. Deixa de ser boa prática opcional e vira PORTÃO obrigatório.
+
+### O que o dado insinua, de raspão (pista, não achado)
+
+Quem tocou −100 terminou em −92,5 bruto; quem tocou −200 terminou em
+−216,5. A expectativa A PARTIR DO TOQUE parece rondar zero. É
+enviesado (condicionar em MAE ≥ X significa que o pior real foi mais
+fundo que X), então é pista para desenhar o teste certo, nunca
+conclusão.
+
+## PRE-REGISTRO 2: expectativa remanescente a partir do toque (2026-08-29b)
+
+Registrado ANTES de qualquer código. Substitui o estimador anulado
+acima; a pergunta de fundo (hipótese (b)) permanece a mesma e continua
+sem resposta.
+
+### A correção central
+
+O condicionamento e o desfecho precisam viver em segmentos **disjuntos**
+do caminho de preço. A pergunta passa a ser exatamente a decisão que um
+stop toma:
+
+> No instante τ em que eu sairia a −X, qual a expectativa de CONTINUAR
+> até o fim da janela?
+
+A perda que já aconteceu ANTES de τ é irrelevante para essa decisão — e
+era justamente ela que o estimador anulado contava.
+
+Estimador: para cada operação que toca −X dentro da janela,
+
+    remanescente = (close_{t+h} − F) * lado
+
+onde `F` é o preço de preenchimento do stop em τ. Operações que nunca
+tocam −X são simplesmente EXCLUÍDAS. **Não há grupo de comparação** — é
+uma pergunta de UMA amostra contra zero, o que elimina de raiz o
+problema de subconjunto vs superconjunto do pré-registro anterior.
+
+### Custo: medido BRUTO, de propósito
+
+A comparação em τ é entre sair agora e segurar. Nos dois ramos paga-se
+exatamente um giro (uma entrada, uma saída). O custo **cancela**. Medir
+líquido aqui seria contá-lo duas vezes.
+
+### O preenchimento F — dois limites, com escalonamento definido
+
+Sem o tape trade a trade, `F` não é observável exatamente. Ficam dois
+limites, ambos calculáveis a partir das barras:
+
+- **PRIMÁRIO — pessimista**: `F` = extremo da barra de cruzamento (HIGH
+  no vendido / LOW no comprado). Assume o pior preenchimento possível
+  dentro da barra.
+- **SENSIBILIDADE — otimista**: `F` = o próprio nível do stop
+  (`entrada − X·lado`), preenchimento perfeito.
+
+A assimetria é conhecida e registrada ANTES: o limite pessimista mede a
+partir de um preço pior, o que faz o remanescente parecer MAIS POSITIVO
+— ou seja, é conservador CONTRA (b). O limite otimista mede a partir do
+nível, ignorando o overshoot real do cruzamento, o que faz o
+remanescente parecer MAIS NEGATIVO — anti-conservador, tende A FAVOR de
+(b). A verdade fica entre os dois.
+
+Isso define a leitura, fixada agora:
+
+- Os DOIS limites negativos e significativos → suporta (b) de forma
+  robusta (o pessimista, que trabalha contra (b), não conseguiu matá-lo).
+- Os DOIS positivos e significativos → direção INVERTIDA de forma
+  robusta (o otimista, que trabalha a favor de (b), não conseguiu
+  produzi-lo). É a contra-hipótese contrarian.
+- Limites com SINAIS DIFERENTES → INCONCLUSIVO POR PREENCHIMENTO.
+  Escalonamento definido, não julgamento: só então vale construir a
+  leitura de `F` exato a partir do tape trade a trade (que existe —
+  `atribuir_barras` opera sobre negócio individual). Não construir essa
+  infraestrutura antes de ela ser necessária.
+- Nenhum significativo → CONTRA (b): o stop é neutro em expectativa, e
+  a discussão volta a ser (a), drawdown puro.
+
+### PORTÃO DE HONESTIDADE (obrigatório, antes de interpretar qualquer coisa)
+
+O mesmo estimador roda sobre RANDOM WALK PURO (drift zero, sem edge)
+com amostra grande o bastante para o `n` não mascarar nada. Se o ruído
+puro produzir veredito FAVORAVEL, **a rodada sobre dado real é NULA e
+não se interpreta** — o estimador está viciado, exatamente como o
+anterior. Este portão roda e é reportado JUNTO com o resultado real, no
+mesmo relatório, sempre.
+
+Expectativa teórica: sob martingal, pela parada opcional,
+E[S_fim − S_τ] = 0. Um estimador correto deve devolver ≈ 0 no ruído.
+
+### Metodologia, fixada ANTES
+
+- População, purga de dia inteiro, pool out-of-sample, regra de entrada:
+  IDÊNTICAS ao pré-registro anulado (essa parte não estava errada).
+- Lado venda. Feature `z_agf_3`, h=3, threshold 1.4, contrarian.
+- Grade X: **a mesma** {40, 60, 80, 100, 120, 150, 200}. Mantida de
+  propósito — trocar a grade junto com o estimador tornaria impossível
+  distinguir efeito de mudança de grade de efeito de mudança de método.
+- n < 30 no ponto → reportado, NÃO interpretado.
+- Todos os 7 pontos sempre reportados, nos dois limites de `F`.
+- Estatística de UMA amostra contra zero, com bootstrap de bloco por
+  pregão inteiro. Significância exige as duas evidências: |t| ≥ limiar
+  deflacionado de 7 comparações E IC95 de bloco excluindo zero.
+- Reportar também a distribuição de τ (em qual barra da janela o
+  cruzamento ocorre) — diagnóstico, não critério.
+
+### CHECAGEM DE PRÉ-VOO (antes de interpretar)
+
+Reconciliar a contagem: a rodada anulada deu 162 operações em 22
+pregões, enquanto a análise de MAE de 2026-08-27 falava em 336 gatilhos
+em 26 dias. Pode ser só compra+venda somados lá, mas **confirmar, não
+assumir** — se a população mudou por outro motivo, nada mais neste
+teste é interpretável.
+
+### Critério de decisão (mesma estrutura de sempre)
+
+- **FAVORAVEL a (b)**: existe X\* com remanescente médio negativo e
+  significativo nos DOIS limites de `F`, monotonicidade (todos os X > X\*
+  também negativos) e n ≥ 30 em X\* e acima.
+- **CONTRA (b)**: nenhum X produz remanescente distinguível de zero. O
+  stop não detecta nada; só se justifica como (a).
+- **INVERTIDO**: remanescente significativamente POSITIVO nos dois
+  limites — sair a −X destrói valor. Achado genuíno, registrar; NÃO
+  autoriza aumentar posição no adverso (pirâmide, proibida por design).
+- **INCONCLUSIVO**: não monotônico, n insuficiente, ou limites de `F`
+  com sinais diferentes (aí com escalonamento definido acima).
+
+### Regra de parada
+
+Proibido re-rodar com grade ajustada, threshold, horizonte ou lado
+diferentes depois de ver o resultado. INCONCLUSIVO só se continua
+acumulando pregões e rodando de novo com a MESMA grade e o MESMO
+estimador. Estimador novo exige pré-registro novo — como este.
+
+### Fora deste pré-registro
+
+- Escolha do número final do stop (X\* é candidato, nunca decisão).
+- Qualquer implementação em `ea/risco.py`.
+- Alvo, em qualquer forma.
+- Custo em expectativa do stop-como-(a) — pré-registro separado.

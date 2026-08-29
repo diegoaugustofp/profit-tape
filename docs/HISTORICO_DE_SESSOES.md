@@ -26,7 +26,8 @@ documentos de assunto — só resuma e aponte.
 Sessão de DESENHO, não de implementação — nenhuma linha de código de
 comportamento foi escrita, deliberadamente (regra 7 da skill
 `profit-tape-disciplina`). Versões entregues: `entregue-v1.06` (pré-registro),
-`entregue-v1.07` (congelamento), `entregue-v1.08` (implementação).
+`entregue-v1.07` (congelamento), `entregue-v1.08` (implementação),
+`entregue-v1.09` (anulação + pré-registro 2).
 
 ### Rota B — revisão desde o início
 Revisada a cadeia inteira de decisões (26/08 tensão original → 27/08
@@ -66,8 +67,43 @@ dado — alteração de critério exige pré-registro novo.
   provável (ponto significativo sem n acima dele) não nomeava quais X
   ficaram curtos — corrigido o relato, não o teste.
 
+### Resultado ANULADO, e a lição
+- A rodada real (162 ops, 22 pregões) devolveu FAVORAVEL a (b), X*=60,
+  com t entre −7,5 e −13,2. **Anulado**: o estimador tinha tautologia
+  embutida — `MAE_intrabar >= perda bruta final` por construção, então
+  o grupo "não tocou −X" não pode conter nenhum perdedor maior que X.
+  A comparação era aritmeticamente forçada.
+- Duas impressões digitais que confirmam: `dif` praticamente constante
+  na grade inteira (efeito real ficaria mais forte com X), e o teste de
+  honestidade sobre random walk puro devolvendo o MESMO FAVORAVEL com
+  t ≈ −25.
+- A regra 0 foi aplicada ao MECANISMO (stop contínuo faz sentido — e
+  continua fazendo) mas não ao ESTIMADOR. Congelar um pré-registro não
+  torna válido um estimador viciado.
+- Anulação legítima porque o argumento é **a priori**: a álgebra é
+  provável sem olhar o dado e o defeito se reproduz em ruído puro. Não
+  é "não gostei do número" — dava para provar antes de rodar.
+- **Regra nova**: teste de honestidade sobre ruído puro vira PORTÃO
+  obrigatório antes de interpretar qualquer estimador novo, reportado
+  no mesmo relatório do resultado real.
+
+### Pré-registro 2 (2026-08-29b)
+- Estimador corrigido: condicionamento e desfecho em segmentos
+  **disjuntos** do caminho. Pergunta = "no instante τ em que eu sairia
+  a −X, qual a expectativa de CONTINUAR?". Uma amostra contra zero, sem
+  grupo de comparação — elimina de raiz o problema de subconjunto vs
+  superconjunto.
+- Custo medido BRUTO de propósito (cancela entre sair e segurar).
+- Preenchimento `F` em dois limites (pessimista = extremo da barra de
+  cruzamento, otimista = nível do stop), com leitura e escalonamento
+  para o tape trade a trade definidos ANTES.
+- Mesma grade de propósito — trocar grade junto com estimador tornaria
+  impossível separar os dois efeitos.
+
 ### Pendências que ficaram em aberto
-- Rodar `reversao-condicional` sobre o dado real do WINFUT.
+- Congelar o pré-registro 2 e implementar o estimador corrigido.
+- Checagem de pré-voo: reconciliar 162 ops/22 pregões contra os 336
+  gatilhos/26 dias da análise de MAE de 27/08.
 - Medição do custo em expectativa do stop-como-(a) — pré-registro
   separado, depois que (b) resolver.
 - Todas as pendências da sessão anterior seguem abertas.
