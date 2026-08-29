@@ -70,6 +70,8 @@ arquivo cresceu demais para navegar so' por titulo cronologico).
 
 - [DECISAO DE AMOSTRA: os 25 pregoes ficam, com a truncagem registrada (2026-08-29h)](#decisao-de-amostra-os-25-pregoes-ficam-com-a-truncagem-registrada-2026-08-29h)
 
+- [PRE-REGISTRO 3 (RASCUNHO, NAO CONGELADO): separar falta de poder de ausencia de efeito (2026-08-29i)](#pre-registro-3-rascunho-nao-congelado-separar-falta-de-poder-de-ausencia-de-efeito-2026-08-29i)
+
 **Disciplina/processo do proprio research**
 - [Decisoes aprovadas](#decisoes-aprovadas)
 - [Pre-requisitos antes de escrever research/](#pre-requisitos-antes-de-escrever-research)
@@ -2128,3 +2130,106 @@ normalmente; muda so' contra que numero se deflaciona, nunca quanto se
 cobra. E so' pode ENDURECER: valor menor que o total real e' ignorado
 (mesma logica do piso de 1,96 em `limiar_deflacionado` — deflacao nunca
 baixa a barra).
+
+## PRE-REGISTRO 3 (RASCUNHO, NAO CONGELADO): separar falta de poder de ausencia de efeito (2026-08-29i)
+
+> **NAO CONGELADO.** Escrito ANTES de qualquer rodada de `research` sobre
+> barra de tempo — zero trial gasto ate aqui, nenhum IC calculado. O
+> momento e' este: notar depois de ver um `CONTRA` que "na verdade era
+> falta de poder" seria mover a trave.
+
+### O problema que este pre-registro resolve
+
+O operador decidiu (2026-08-29) rodar agora e ir acumulando pregoes.
+Isso colide com a regra de parada congelada em 2026-08-29e, que autoriza
+continuar apenas se o veredito for `INCONCLUSIVO` — nao apos um
+`CONTRA`.
+
+E `CONTRA` e' o desfecho mais PROVAVEL da rodada 1, mesmo se o sinal
+existir: com 25 pregoes sao 11 folds e `t_critico` 4,03. Ou seja, o
+cenario mais provavel e' exatamente o que a regra congelada trata como
+fim de linha.
+
+Isso nao e' defeito do pre-registro anterior; e' o preco de congelar. A
+correcao legitima e' um pre-registro NOVO, escrito antes do dado.
+
+### A distincao, e por que ela e' aritmetica
+
+O veredito tem tres barras cumulativas:
+
+    1. MAGNITUDE    |IC| >= 2/sqrt(n_obs)
+    2. ESTABILIDADE |t entre folds| >= t_critico(limiar, k-1)
+    3. DIRECAO      mesmo sinal em >= 70% dos folds
+
+Das tres, ESTABILIDADE e' a UNICA cujo limiar depende do numero de
+folds: `t_critico` cai de 4,03 (11 folds) para 3,50 (23 folds) sem que
+nada no dado mude. Uma celula que passa em 1 e 3 e falha SO em 2 esta
+falhando na unica barra sensivel ao tamanho da amostra.
+
+### A porta dos fundos que isso abriria, e como ela e' fechada
+
+`t = IC_medio / (desvio_entre_folds / sqrt(k))`. Um |t| baixo vem de
+poucos folds OU de desvio alto entre folds — e desvio alto e'
+instabilidade REAL, nao falta de poder. A barra de direcao a 70% nao
+separa os dois: com 11 folds, 8 sinais iguais passa, e 8-de-11 e'
+compativel com moeda honesta (p = 0,11).
+
+**Regra escolhida (opcao (a), operador, 2026-08-29)**: promover
+`descarta` a `inconclusivo` exige consistencia de sinal >= **0,85**,
+nao os 0,70 de `segue`. Quem tem sinal real e so' falta amostra tende a
+ter direcao muito consistente; quem tem desvio alto entre folds, nao.
+
+Implicacao sob ruido puro (moeda honesta), calculada ANTES:
+
+    folds   minimo a 85%   p 1-lado
+      11        10/11       0,00586
+      13        12/13       0,00171
+      16        14/16       0,00209
+      18        16/18       0,00066
+      23        20/23       0,00024
+
+### Duas propriedades registradas antes, uma boa e uma ruim
+
+BOA: o criterio APERTA conforme os folds crescem (de p=0,006 para
+p=0,0002). Isso e' conservador na direcao certa — a porta existe para
+falta de amostra, e estreita a medida que a amostra deixa de faltar.
+
+RUIM: a porta pode fechar sobre um sinal real, fraco e persistente, cuja
+consistencia de sinal nao sobe com o tamanho da amostra. Este e' um
+custo aceito conscientemente, nao um efeito colateral descoberto depois.
+
+### Criterio revisado, na integra
+
+    segue        : as tres barras (inalterado)
+    inconclusivo : folds < 4 ou t incalculavel (inalterado)
+                   OU passa MAGNITUDE, falha ESTABILIDADE, e
+                      consistencia_sinal >= 0.85          [NOVO]
+    descarta     : qualquer outro caso
+
+`segue` nao muda em nada. A regra nova so' pode mover celulas de
+`descarta` para `inconclusivo` — nunca para `segue`, nunca o contrario.
+
+### Retrocompatibilidade: OPT-IN obrigatorio
+
+A regra NAO pode alterar `_veredito` para todo mundo. O historico de
+barra de volume (492 trials, incluindo os dois `segue` de 2026-08-23)
+foi julgado pela regra antiga; mudar a funcao reclassificaria
+retroativamente celulas que ninguem rerodou. Entra como parametro
+`promover_por_poder`, default `False`, com teste explicito provando que
+sem ele o comportamento antigo fica IDENTICO (regra 5 da disciplina — e
+a mesma classe de falha silenciosa que o `extra="forbid"` das configs do
+EA fechou).
+
+O relatorio precisa registrar QUAL regra foi usada, para que uma leitura
+futura nao confunda `inconclusivo` das duas origens.
+
+### O que este pre-registro NAO autoriza
+
+- Nao afrouxa `segue`. Nenhuma celula passa a "valer" por causa disto.
+- Nao autoriza rodar mais vezes que a cadencia acordada: rodada nova so'
+  com pregoes novos suficientes (regra 2 da disciplina — semanal, nao
+  diaria; com 2 pregoes novos paga-se 12 trials por ~8% de amostra).
+- Nao muda a grade, os horizontes, a janela de z, nem as tres features
+  do pre-registro de 2026-08-29e.
+- `INCONCLUSIVO` continua significando "nao decide nada". Nao e'
+  resultado parcial a favor.
