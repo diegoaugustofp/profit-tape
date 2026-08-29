@@ -1285,3 +1285,39 @@ pré-registro novo, do zero.
 - Qualquer implementação em `ea/risco.py`.
 - Alvo, em qualquer forma (ver "segundo defeito" acima).
 - Medição do custo em expectativa do stop-como-(a).
+
+## IMPLEMENTADO: `reversao-condicional` — executa o pré-registro (2026-08-29)
+
+`research/reversao.py` + comando `profit-tape reversao-condicional`.
+Implementa **literalmente** o critério congelado — grade, n mínimo e
+veredito estão no código, não como opção de linha de comando.
+
+**Ponto estatístico registrado ao implementar** (correção de
+implementação da mesma intenção, NÃO mudança de critério — registrado
+explicitamente para não virar ajuste silencioso): o pré-registro
+descreve a comparação como "condicional vs INCONDICIONAL". Está
+implementado como "tocou -X" vs "NÃO tocou -X", grupos **disjuntos**,
+porque o grupo incondicional CONTÉM o condicional — Welch entre
+subconjunto e superconjunto tem amostras dependentes, subestima o erro
+padrão da diferença e infla o t (anti-conservador). A média
+incondicional continua reportada como referência descritiva; o TESTE
+roda entre disjuntos.
+
+**Significância exige as duas evidências**: |t| ≥ limiar deflacionado
+de 7 comparações E intervalo de bootstrap por bloco que exclui zero. A
+interseção é conservadora de propósito — o bootstrap por pregão é quem
+trata a dependência intradiária, o Welch sozinho a ignora.
+
+Conferido à mão antes dos testes automatizados (regra 4): Welch
+(t=−5,656854, gl=3,8571 num cenário de 3 vs 4 observações), excursão
+intrabar nos dois lados (HIGH no vendido = 30 pts, LOW no comprado =
+22 pts no mesmo cenário — a assimetria é a classe de bug de sinal
+invertido que já apareceu em fórmula de MFE neste projeto), e o purge
+estrutural descartando janela que cruzaria o pregão.
+
+14 testes novos, incluindo guarda de regressão sobre a grade congelada:
+se `test_grade_esta_congelada` falhar, a pergunta certa é "onde está o
+pré-registro novo?", não "como faço o teste passar?". 279 testes.
+
+NÃO consome trial. `trials.json` não é tocado — o limiar deflacionado é
+usado apenas para corrigir as 7 comparações desta grade.

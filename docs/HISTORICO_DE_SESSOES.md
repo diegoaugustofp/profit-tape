@@ -26,7 +26,7 @@ documentos de assunto — só resuma e aponte.
 Sessão de DESENHO, não de implementação — nenhuma linha de código de
 comportamento foi escrita, deliberadamente (regra 7 da skill
 `profit-tape-disciplina`). Versões entregues: `entregue-v1.06` (pré-registro),
-`entregue-v1.07` (congelamento).
+`entregue-v1.07` (congelamento), `entregue-v1.08` (implementação).
 
 ### Rota B — revisão desde o início
 Revisada a cadeia inteira de decisões (26/08 tensão original → 27/08
@@ -55,8 +55,19 @@ regra de parada. Não consome trial. **Congelado pelo operador em
 2026-08-29**, antes de qualquer código e de qualquer contato com o
 dado — alteração de critério exige pré-registro novo.
 
+### Implementação
+- `research/reversao.py` + comando `reversao-condicional`: executa o
+  critério congelado literalmente (grade e n mínimo no código, não como
+  opção de CLI). Comparação implementada entre grupos DISJUNTOS, não
+  contra o incondicional que os contém — correção estatística
+  registrada no `RESEARCH_PLANO.md`, não ajuste silencioso.
+- 14 testes novos (279 no total), conferidos à mão antes dos
+  automatizados. Bug real pego pelo próprio teste: o desfecho mais
+  provável (ponto significativo sem n acima dele) não nomeava quais X
+  ficaram curtos — corrigido o relato, não o teste.
+
 ### Pendências que ficaram em aberto
-- Rodar o teste condicional pré-registrado (código ainda não escrito).
+- Rodar `reversao-condicional` sobre o dado real do WINFUT.
 - Medição do custo em expectativa do stop-como-(a) — pré-registro
   separado, depois que (b) resolver.
 - Todas as pendências da sessão anterior seguem abertas.

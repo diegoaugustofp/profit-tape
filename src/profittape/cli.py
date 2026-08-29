@@ -1098,6 +1098,75 @@ def mae_analise(
 
 
 @app.command()
+def reversao_condicional(
+    symbol: str = typer.Option("WINFUT", "--symbol"),
+    features: Path = typer.Option(Path("data/features"), "--features"),
+    feature: str = typer.Option(..., "--feature", help="ex.: z_agf_3"),
+    horizonte: int = typer.Option(..., "--horizonte", help="mesmo h do sinal, ex.: 3"),
+    threshold_entrada: float = typer.Option(..., "--threshold-entrada"),
+    direcao: str = typer.Option("contrarian", "--direcao"),
+    lado: str = typer.Option(
+        "venda", "--lado",
+        help="venda (o unico com edge confirmado), compra ou ambos."),
+    custo_pontos: float = typer.Option(
+        11.0, "--custo-pontos",
+        help="Deve bater com custo_pontos_estimado do ea.yaml."),
+    saida: Path = typer.Option(Path("data/research"), "--saida"),
+    treino_min: int = typer.Option(3, "--treino-min"),
+    teste_dias: int = typer.Option(2, "--teste-dias"),
+    n_bootstrap: int = typer.Option(2000, "--n-bootstrap"),
+) -> None:
+    """
+    Testa a hipotese (b) do PRE-REGISTRO congelado em 2026-08-29: o
+    movimento contra a posicao é EVIDENCIA de que o edge expirou, ou so'
+    ruido normal que metade das operacoes atravessa antes de pagar?
+
+    Separa duas coisas que a frase "usar stop" mistura: (a) stop como
+    LIMITE DE PERDA (nao afirma nada sobre o sinal) vs (b) stop como
+    DETECTOR DE REVERSAO. Testa SO' (b).
+
+    NAO consome trial: traducao economica condicional sobre sinal JA'
+    validado pelo IC, mesma familia de `mae-analise` e `quintis`.
+
+    A grade de X e o criterio de decisao estao CONGELADOS no pre-registro
+    — este comando nao os expoe como opcao de propósito.
+    """
+    from .research.reversao import analisar_reversao_condicional
+
+    if lado not in ("venda", "compra", "ambos"):
+        raise SystemExit(f"--lado invalido: {lado!r} (use venda, compra ou ambos)")
+    arquivo = features / f"sym={symbol.upper()}" / "features.parquet"
+    if not arquivo.exists():
+        raise SystemExit(f"nao achei {arquivo} — rode `profit-tape features` antes")
+
+    r = analisar_reversao_condicional(
+        arquivo, feature, horizonte, threshold_entrada, direcao, custo_pontos,
+        saida, lado_permitido=lado, treino_min=treino_min,
+        teste_dias=teste_dias, n_bootstrap=n_bootstrap)
+
+    typer.echo("=" * 78)
+    typer.echo(f"REVERSAO CONDICIONAL — {feature}@h{horizonte} lado={lado}  "
+               f"n={r['n_operacoes']} em {r['n_dias']} pregoes")
+    typer.echo("=" * 78)
+    typer.echo(f"  media INCONDICIONAL (referencia): "
+               f"{r['media_incondicional']:+.2f} pts liquidos")
+    typer.echo(f"  limiar deflacionado ({len(r['grade_x'])} comparacoes): "
+               f"|t| >= {r['limiar_deflacionado']:.3f}\n")
+    typer.echo(f"  {'X':>5} {'n toc':>6} {'media toc':>10} {'media nao':>10} "
+               f"{'dif':>8} {'t':>7}  situacao")
+    for p in r["pontos"]:
+        marca = ("SIGNIFICATIVO" if p["significativo"]
+                 else (f"n<{r['n_minimo_por_ponto']} (nao interpretado)"
+                       if not p["n_suficiente"] else "-"))
+        typer.echo(f"  {p['x']:5.0f} {p['n_tocou']:6d} {p['media_tocou']:+10.2f} "
+                   f"{p['media_nao_tocou']:+10.2f} {p['diferenca']:+8.2f} "
+                   f"{p['t_welch']:7.2f}  {marca}")
+    typer.echo(f"\n  VEREDITO: {r['veredito']}")
+    typer.echo(f"  {r['justificativa']}")
+    typer.echo(f"\nrelatorio: {r['relatorio']}")
+
+
+@app.command()
 def triagem_inprogress(
     raiz_raw: Path = typer.Argument(..., help="Raiz do dado (ex.: data/raw)."),
     destino_quarentena: Path = typer.Option(
