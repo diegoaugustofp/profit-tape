@@ -80,6 +80,8 @@ arquivo cresceu demais para navegar so' por titulo cronologico).
 
 - [ROTA B: leitura de F pelo tape — a infraestrutura que destrava (2026-08-30c)](#rota-b-leitura-de-f-pelo-tape--a-infraestrutura-que-destrava-2026-08-30c)
 
+- [PRE-REGISTRO 3 DA ROTA B (RASCUNHO, NAO CONGELADO): expectativa remanescente com F exato (2026-08-30d)](#pre-registro-3-da-rota-b-rascunho-nao-congelado-expectativa-remanescente-com-f-exato-2026-08-30d)
+
 **Disciplina/processo do proprio research**
 - [Decisoes aprovadas](#decisoes-aprovadas)
 - [Pre-requisitos antes de escrever research/](#pre-requisitos-antes-de-escrever-research)
@@ -2532,3 +2534,153 @@ E o stop de corretora do Profit resolve a EXECUCAO (como manter um stop
 continuo em producao); o tape resolve a MEDICAO (saber se o stop ajuda).
 Sao problemas diferentes, e mistura-los seria repetir o erro original da
 Rota B, que foi executar de um jeito e medir de outro.
+
+## PRE-REGISTRO 3 DA ROTA B (RASCUNHO, NAO CONGELADO): expectativa remanescente com F exato (2026-08-30d)
+
+> **NAO CONGELADO.** Escrito depois da infraestrutura de `F`
+> (2026-08-30c) e ANTES de qualquer contato com dado real para esta
+> pergunta. Precisa do congelamento do operador.
+>
+> Precedente que acompanha: os dois pre-registros anteriores desta mesma
+> pergunta tambem estavam congelados. O primeiro teve o RESULTADO
+> anulado; o segundo foi reprovado pelo portao antes de tocar o dado.
+> **Congelar protege contra ajuste oportunista de criterio; nao
+> certifica que o metodo e' valido.**
+
+### A pergunta, inalterada desde 2026-08-29
+
+Hipotese (b): o stop e' um DETECTOR DE REVERSAO?
+
+> No instante τ em que eu sairia a −X, qual a expectativa de CONTINUAR
+> ate o fim da janela?
+
+Segue sem resposta. Nao foi refutada nem confirmada — o que existe sao
+dois estimadores invalidos.
+
+### O que muda: `F` exato
+
+`preenchimento.localizar_toque` devolve o preco do PRIMEIRO NEGOCIO que
+atinge o nivel. Isso e' um tempo de parada legitimo na filtracao dos
+negocios, e pelo teorema da parada opcional, sob martingal,
+`E[preco_final − F] = 0`.
+
+**Duas consequencias que simplificam o desenho:**
+
+1. **Os dois limites de `F` desaparecem.** Nao ha mais "pessimista" e
+   "otimista", logo nao ha o ramo INCONCLUSIVO POR PREENCHIMENTO — que
+   era justamente o gatilho invalido que o portao de 29c expos (o ruido
+   sozinho disparava escalada de infraestrutura).
+2. **A recomendacao de 29c fica SUPERADA, nao ignorada.** Ela mandava
+   usar o nivel do stop e calibrar contra nulo empirico. Fazia sentido
+   quando so' havia barras. Com `F` exato nao e' preciso escolher entre
+   limites enviesados nem estimar um nulo: o estimador e' nao-enviesado
+   por teorema, e o nulo e' zero.
+
+Medido sobre passeio aleatorio (2026-08-30c): |t| <= 0,51 em tres
+niveis, contra t ~ -25 e t ~ +13 dos anulados.
+
+### Estimador
+
+Para cada operacao que toca −X dentro da janela:
+
+    remanescente = (close_{t+h} − F) * lado
+
+Operacoes que nunca tocam sao EXCLUIDAS. **Nao ha grupo de comparacao** —
+e' uma pergunta de UMA amostra contra zero, o que elimina de raiz o
+problema de subconjunto vs superconjunto do primeiro estimador anulado.
+
+### Custo: medido BRUTO, de proposito
+
+Em τ a escolha e' entre sair agora e segurar. Nos dois ramos paga-se
+exatamente um giro. O custo CANCELA; medir liquido seria conta-lo duas
+vezes.
+
+### Metodologia, fixada ANTES
+
+- Populacao, purga estrutural de dia inteiro, pool out-of-sample e regra
+  de entrada IDENTICAS aos pre-registros anteriores (essa parte nunca
+  esteve errada).
+- Lado **venda apenas** — o unico com edge confirmado. Feature
+  `z_agf_3`, h=3, threshold 1,4, contrarian.
+- **Grade X mantida**: {40, 60, 80, 100, 120, 150, 200}. Trocar a grade
+  junto com o estimador tornaria impossivel separar efeito de metodo de
+  efeito de grade.
+- `so_agressao=True` no disparo do stop (decisao registrada em
+  2026-08-30c). Reportar em SENSIBILIDADE o resultado com
+  `so_agressao=False`: se a escolha mudar a conclusao, isso e' achado de
+  microestrutura e tem que aparecer.
+- n < 30 no ponto: REPORTADO, nunca interpretado.
+- **Todos os 7 pontos sempre reportados**, inclusive os que nao derem
+  nada. Reportar so' o melhor seria a p-hacking que o pre-registro
+  original existia para evitar.
+- Estatistica de UMA amostra contra zero, com bootstrap de bloco por
+  pregao inteiro. Significancia exige as DUAS evidencias: |t| >= limiar
+  deflacionado de 7 comparacoes E IC95 de bloco excluindo zero.
+- Reportar a distribuicao de τ (em qual barra da janela ocorre o
+  cruzamento) — diagnostico, nao criterio.
+
+### PORTAO DE HONESTIDADE (bloqueante, antes de interpretar)
+
+O mesmo estimador sobre passeio aleatorio puro, com a mesma geometria.
+Exigencia: veredito **CONTRA (b)** — "nao ha nada aqui". Qualquer outro
+veredito sobre ruido reprova.
+
+Diferenca em relacao aos anteriores: aqui o portao e' CONFIRMACAO DE
+IMPLEMENTACAO, nao descoberta de vies. A validade vem do teorema; o
+portao verifica se o codigo corresponde a ele. Se reprovar, o bug esta
+no codigo, nao no desenho.
+
+### CHECAGEM DE PRE-VOO (carregada de 29b, ainda pendente)
+
+Reconciliar a contagem: a rodada anulada deu **162 operacoes em 22
+pregoes**, enquanto a analise de MAE de 2026-08-27 falava em **336
+gatilhos em 26 dias**. Pode ser compra+venda somados la', mas
+**confirmar, nao assumir** — se a populacao mudou por outro motivo, nada
+mais neste teste e' interpretavel.
+
+### Criterio de decisao, definido ANTES
+
+- **FAVORAVEL a (b)**: existe X* com remanescente medio NEGATIVO e
+  significativo, MONOTONICIDADE (todos os X > X* tambem negativos) e
+  n >= 30 em X* e acima.
+  → X* vira candidato a stop, DERIVADO da estrutura condicional.
+- **CONTRA (b)**: nenhum X produz remanescente distinguivel de zero.
+  → o stop nao detecta nada; so' se justifica como (a), controle de
+  drawdown, com custo em expectativa medido em pre-registro separado.
+- **INVERTIDO**: remanescente significativamente POSITIVO — sair a −X
+  destroi valor. Achado genuino, registrar; NAO autoriza aumentar
+  posicao no adverso (piramide, proibida por design).
+- **INCONCLUSIVO**: nao monotonico ou n insuficiente.
+
+### Regra de parada
+
+Proibido re-rodar com grade, threshold, horizonte ou lado diferentes
+depois de ver o resultado. INCONCLUSIVO so' permite acumular pregoes e
+rodar de novo com a MESMA grade e o MESMO estimador. Estimador novo
+exige pre-registro novo.
+
+### Contabilidade de multiplicidade — decisao do operador necessaria
+
+A correcao por 7 comparacoes cobre a grade. **Nao cobre** o fato de esta
+ser a terceira tentativa de estimador para a MESMA pergunta.
+
+Historico honesto de contatos com dado real para a hipotese (b):
+  - 29a: olhou o dado real, resultado anulado a priori.
+  - 29c: NUNCA tocou o dado real (o portao pegou antes).
+  - este: seria o **segundo** contato real.
+
+Os pre-registros anteriores aplicaram a deflacao localmente sobre os 7
+pontos, sem somar ao `trials.json`. Manter essa convencao e' defensavel
+(o contador global e' do IC, feature x horizonte), mas a multiplicidade
+de estimadores fica sem correcao nenhuma. **Decisao do operador**: somar
+7 ao contador global, manter local, ou registrar a multiplicidade sem
+corrigir. Qualquer das tres serve desde que fique escrita ANTES.
+
+### Fora deste pre-registro
+
+- Escolha do numero final do stop (X* e' candidato, nunca decisao).
+- Qualquer implementacao em `ea/risco.py`.
+- Alvo, em qualquer forma (fora desde 2026-08-26: alvo fixo cortaria as
+  caudas ganhadoras de um sinal cujo edge vem de magnitude).
+- Custo em expectativa do stop-como-(a) — pre-registro separado.
+- Stop de corretora do Profit: e' EXECUCAO, nao medicao.
