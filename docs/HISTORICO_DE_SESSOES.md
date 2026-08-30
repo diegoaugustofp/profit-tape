@@ -222,6 +222,49 @@ correção de CI de madrugada do dia seguinte. Versões entregues:
 
 ---
 
+## 2026-08-29/30 — indicador de absorção para NTSL: do plano ao CONTRA
+
+Sessão que começou com o pedido de planejar um indicador NTSL de barra
+de absorção para o Profit Chart, e terminou com a hipótese encerrada
+pelo próprio método, sem nenhuma linha de NTSL escrita.
+
+**Inversão de arquitetura.** O roadmap inicial era indicador → sinal →
+robô. O manual do NTSL mostrou que as funções de agressão são
+licenciadas (Pro/Ultra/Scalper), que `VolumeAtPrice` tem histórico
+documentadamente curto, que o livro não tem histórico nenhum na
+automação, e que `SoAgressores` é **silenciosamente ignorado** sem o
+opcional Plugin Tape Reading. Conclusão: pesquisa no profit-tape, NTSL
+como camada de visualização e execução.
+
+**Descoberta de orçamento.** O `RESEARCH_PLANO.md` registrava 42 trials
+desde 2026-08-23; o `trials.json` real fechava em **492**, dos quais 360
+(73%) vieram de uma varredura de 8 símbolos que rodou em ~1 minuto. O
+`t_critico` efetivo saltou de 3,31 para 4,03. Registrado como lição:
+varredura ampla é barata em máquina e cara em orçamento estatístico.
+
+**Três erros meus, achados antes de custar trial.** (1) O gerador de
+ruído do portão errou a escala em duas ordens de grandeza — barra de 7
+ticks contra os 35 reais — o que inflou o viés de bounce e me levou a
+bloquear o braço de 1m por engano; revogado após recalibração.
+(2) `_contar_buracos` era falso por construção: a renumeração densa dos
+baldes apagava os vazios e o contador devolvia zero para qualquer
+entrada. (3) O `--log-file` dos comandos novos herdava o nível do
+console e sairia vazio.
+
+**Resultado.** CONTRA nas 12 células. Melhor célula: `z_absorcao_dir`
+h=1 no 5m, IC −0,0342 no sinal previsto, superando ambos os controles,
+mas com |t| 3,06 contra os 4,03 exigidos. A porta de "falta de poder" do
+pré-registro 3 não abriu — maior consistência 0,82, contra os 0,85
+exigidos. Detalhe em `RESEARCH_PLANO.md`.
+
+**O que a sessão preservou.** Nada foi resgatado por reanálise. O
+pré-registro de 2026-08-29e antecipou por escrito que o IC é fraco para
+efeito de cauda e que mesmo assim seria o portão — e essa frase foi o
+que impediu, no fim, transformar um negativo em "o teste era
+inadequado".
+
+Tags `entregue-v1.12` a `entregue-v1.20`.
+
 ## Sessões anteriores (antes de 2026-08-27)
 
 Não recompiladas em detalhe aqui — o contexto desta sessão longa

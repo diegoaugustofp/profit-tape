@@ -72,6 +72,8 @@ arquivo cresceu demais para navegar so' por titulo cronologico).
 
 - [PRE-REGISTRO 3 (RASCUNHO, NAO CONGELADO): separar falta de poder de ausencia de efeito (2026-08-29i)](#pre-registro-3-rascunho-nao-congelado-separar-falta-de-poder-de-ausencia-de-efeito-2026-08-29i)
 
+- [RESULTADO: CONTRA nas 12 celulas — a absorcao direcional morre nesta forma (2026-08-30)](#resultado-contra-nas-12-celulas--a-absorcao-direcional-morre-nesta-forma-2026-08-30)
+
 **Disciplina/processo do proprio research**
 - [Decisoes aprovadas](#decisoes-aprovadas)
 - [Pre-requisitos antes de escrever research/](#pre-requisitos-antes-de-escrever-research)
@@ -2237,3 +2239,87 @@ futura nao confunda `inconclusivo` das duas origens.
   do pre-registro de 2026-08-29e.
 - `INCONCLUSIVO` continua significando "nao decide nada". Nao e'
   resultado parcial a favor.
+
+## RESULTADO: CONTRA nas 12 celulas — a absorcao direcional morre nesta forma (2026-08-30)
+
+Executado o pre-registro de 2026-08-29e com o criterio revisado de
+2026-08-29i. Duas invocacoes, `--trials-previstos 504` nas duas,
+`--promover-por-poder` nas duas. Trials: 492 -> 498 -> 504.
+
+### 5m (h 1,3) — relatorio 20260830_123543
+
+    feature          h   IC medio   desvio     t    consist.  veredito
+    z_desloc_norm    1    0.0246    0.0372   2.19     0.64    descarta
+    z_desloc_norm    3    0.0325    0.0790   1.36     0.73    descarta
+    z_imbalance      3    0.0024    0.0787   0.10     0.45    descarta
+    z_imbalance      1   -0.0069    0.0516  -0.44     0.55    descarta
+    z_absorcao_dir   3   -0.0417    0.0791  -1.75     0.64    descarta
+    z_absorcao_dir   1   -0.0342    0.0371  -3.06     0.73    descarta
+
+### 1m (h 5,15) — relatorio 20260830_123558
+
+    z_desloc_norm   15    0.0039    0.0302   0.43     0.64    descarta
+    z_desloc_norm    5    0.0030    0.0244   0.41     0.73    descarta
+    z_absorcao_dir  15   -0.0097    0.0316  -1.01     0.73    descarta
+    z_imbalance      5   -0.0076    0.0245  -1.03     0.82    descarta
+    z_imbalance     15   -0.0087    0.0237  -1.21     0.64    descarta
+    z_absorcao_dir   5   -0.0097    0.0247  -1.31     0.82    descarta
+
+### Veredito pelo criterio congelado: CONTRA
+
+Nenhuma celula saiu `segue`. A porta do PRE-REGISTRO 3 nao abriu: a
+maior consistencia foi 0,82, abaixo dos 0,85 exigidos. Pelo criterio de
+2026-08-29e, `CONTRA` significa que **a hipotese encerra NESTA FORMA**.
+
+A regra de parada autoriza acumular pregoes e rerodar apenas apos
+`INCONCLUSIVO`. Nao foi o caso. Rerodar o mesmo comando produziria
+numeros IDENTICOS (nao ha aleatoriedade no caminho) e custaria mais 6
+trials.
+
+### O que os numeros mostram, sem virar consolo
+
+A melhor celula das doze foi `z_absorcao_dir` h=1 no 5m: IC -0,0342,
+sinal NEGATIVO como a hipotese previa, superando ambos os controles em
+magnitude (0,0342 contra 0,0246 e 0,0069). Precisava de |t| >= 4,03 e
+entregou 3,06. Nem no mundo de 42 trials, onde a barra era 3,31, teria
+passado.
+
+Tres celulas de `z_absorcao_dir` das quatro tem o sinal previsto. Isso
+NAO e' evidencia parcial a favor — com quatro celulas e sinal binario,
+tres iguais e' o que uma moeda honesta entrega com frequencia alta.
+Registrado para nao ser reinterpretado depois.
+
+### Observacao descritiva, explicitamente NAO um resultado
+
+O 5m tem magnitudes maiores que o 1m em toda a linha: |t| maximo 3,06
+contra 1,31; |IC| medio 0,024 contra 0,007. A leitura visual do operador
+de que o 5m carrega mais sinal que o 1m e' COMPATIVEL com isso.
+
+Mas nao esta testado, e ha explicacao mecanica concorrente: o retorno de
+uma barra de 1m tem razao sinal/ruido menor por barra, o que encolhe o
+IC sem que a informacao total mude. Fica como material para gerar
+hipotese futura, nunca como validacao da intuicao.
+
+### O que este resultado NAO autoriza
+
+- **Nao** autoriza resgatar por quintil, por corte de cauda, ou por
+  qualquer analise condicional NESTES dados. Isso foi antecipado por
+  escrito em 2026-08-29e ("o IC e' um teste FRACO para efeito
+  concentrado em cauda, e mesmo assim ele fica sendo o portao").
+  Dizer agora que o teste era inadequado seria mover a trave.
+- **Nao** autoriza reajustar o limiar de 0,85 para que 0,82 passe.
+- **Nao** autoriza implementar o indicador NTSL como SINAL. O roadmap
+  era validar em Python e so' entao implementar; a validacao falhou.
+
+### O que continua legitimo
+
+- Pre-registro NOVO, com formalizacao diferente do mesmo fenomeno,
+  escrito antes do dado e testado em amostra NOVA — com a ressalva
+  honesta de que ele nasce depois de ter visto este CONTRA, e que seus
+  trials somam no mesmo contador.
+- Indicador NTSL como VISUALIZACAO exploratoria, rotulado como tal, para
+  gerar hipotese a partir do grafico. O que `imbalance - desloc_norm`
+  mediu pode simplesmente nao ser o que o operador ve na tela — o
+  negativo e' sobre a FORMULA, nao sobre o fenomeno.
+- Acumular pregoes. E' a unica alavanca gratuita: de 25 para 50 pregoes
+  o `t_critico` cai de 4,03 para ~3,50 sem gastar trial nenhum.
