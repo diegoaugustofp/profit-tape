@@ -140,8 +140,8 @@ def checagem_de_prevoo(df: pd.DataFrame, feature: str, horizonte: int,
 
 def _remanescentes_tape(barras: pd.DataFrame, tape: pd.DataFrame,
                         feature: str, horizonte: int, threshold: float,
-                        direcao: str, lado_permitido: str,
-                        x: float) -> pd.DataFrame:
+                        direcao: str, lado_permitido: str, x: float,
+                        apenas_dia: Any = None) -> pd.DataFrame:
     """
     Uma linha por operacao que TOCA -x. Operacoes que nunca tocam sao
     EXCLUIDAS — nao ha grupo de comparacao, e' uma amostra contra zero.
@@ -160,6 +160,11 @@ def _remanescentes_tape(barras: pd.DataFrame, tape: pd.DataFrame,
     linhas: list[dict[str, Any]] = []
     for i in gatilhos:
         dia = barras.at[i, "dia"]
+        # No modo streaming o tape so' tem os negocios de UM pregao, entao
+        # entradas de outros dias nao encontrariam o toque e sairiam como
+        # "nunca tocou" — um falso negativo silencioso.
+        if apenas_dia is not None and dia != apenas_dia:
+            continue
         lado = int(cast(Any, lado_series.at[i]))
         entrada = float(cast(Any, barras.at[i, "close"]))
         janela = barras.loc[i + 1:i + horizonte]
@@ -191,6 +196,59 @@ def _remanescentes_tape(barras: pd.DataFrame, tape: pd.DataFrame,
                                  / max(ts_limite - ts_entrada, 1)),
         })
     return pd.DataFrame(linhas)
+
+
+def _remanescentes_streaming(barras: pd.DataFrame, curated: Path, symbol: str,
+                             feature: str, horizonte: int, threshold: float,
+                             direcao: str, lado_permitido: str,
+                             grade: tuple[float, ...],
+                             so_agressao: bool) -> dict[float, pd.DataFrame]:
+    """
+    Percorre o tape UM PREGAO POR VEZ, calculando os 7 pontos da grade
+    numa passada so'.
+
+    POR QUE STREAMING
+    -----------------
+    O tape de 25 pregoes do WINFUT tem ~81 MILHOES de negocios. Carregar
+    tudo de uma vez estourou a memoria na maquina do operador
+    (2026-08-30): `MemoryError` pedindo 617 MiB para um unico array. O
+    resto do projeto ja' fazia streaming por dia pela mesma razao
+    ("o dataset inteiro estourou 20 GB"), e este modulo nao seguiu o
+    padrao.
+
+    Funciona porque a janela NUNCA atravessa o pregao (purga estrutural):
+    o stop de uma entrada do dia D so' pode ser tocado por negocios do
+    dia D.
+
+    Os 7 pontos saem da MESMA passada: inverter os lacos (dia por fora,
+    grade por dentro) evita reler o tape sete vezes.
+    """
+    from ..features.pipeline import _carregar_dia, _dias_do_symbol
+
+    pastas = {p.name.removeprefix("dt="): p
+              for p in _dias_do_symbol(curated / "trade", symbol)}
+    acumulado: dict[float, list[pd.DataFrame]] = {x: [] for x in grade}
+
+    for n, (rotulo, pasta) in enumerate(sorted(pastas.items()), 1):
+        dia = pd.Timestamp(rotulo).date()
+        barras_dia = barras[barras["dia"] == dia]
+        if barras_dia.empty:
+            continue
+        tape = preparar_tape(_carregar_dia(pasta, symbol),
+                             so_agressao=so_agressao)
+        for x in grade:
+            r = _remanescentes_tape(barras, tape, feature, horizonte,
+                                    threshold, direcao, lado_permitido, x,
+                                    apenas_dia=dia)
+            if len(r):
+                acumulado[x].append(r)
+        log.info("remanescente_tape.dia", i=n, n=len(pastas), dia=rotulo,
+                 negocios=len(tape))
+        del tape
+
+    return {x: (pd.concat(partes, ignore_index=True) if partes
+                else pd.DataFrame())
+            for x, partes in acumulado.items()}
 
 
 def _avaliar_ponto(r: pd.DataFrame, x: float, limiar_z: float,
@@ -419,7 +477,7 @@ def rodar(features_parquet: Path, curated: Path, symbol: str,
     lembrar seria confiar no ponto exatamente onde este projeto ja'
     falhou antes.
     """
-    from ..features.pipeline import _carregar_dia, _dias_do_symbol
+    from ..features.pipeline import _dias_do_symbol
 
     barras = _com_dia(pd.read_parquet(features_parquet))
     limiar_z = limiar_deflacionado(trials_previstos)
@@ -450,16 +508,15 @@ def rodar(features_parquet: Path, curated: Path, symbol: str,
         )
 
     # ---- 3. dado real -------------------------------------------------
-    dias = _dias_do_symbol(curated / "trade", symbol)
-    if not dias:
+    if not _dias_do_symbol(curated / "trade", symbol):
         raise SystemExit(f"nenhum trade de {symbol} — rode curate antes")
-    tape = preparar_tape(
-        pd.concat([_carregar_dia(p, symbol) for p in dias], ignore_index=True),
-        so_agressao=so_agressao)
-    log.info("remanescente_tape.tape", negocios=len(tape), dias=len(dias))
 
-    pontos = rodar_grade(barras, tape, feature, horizonte, threshold,
-                         direcao, lado_permitido, limiar_z, semente=semente)
+    por_x = _remanescentes_streaming(barras, curated, symbol, feature,
+                                     horizonte, threshold, direcao,
+                                     lado_permitido, GRADE_X_CONGELADA,
+                                     so_agressao)
+    pontos = [_avaliar_ponto(por_x[x], x, limiar_z, 2000, semente)
+              for x in GRADE_X_CONGELADA]
     veredito, motivo = decidir(pontos)
 
     saida_dir.mkdir(parents=True, exist_ok=True)

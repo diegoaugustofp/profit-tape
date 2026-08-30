@@ -280,3 +280,92 @@ def test_flow_avisa_quando_nenhuma_barra_fecha() -> None:
     })
     with pytest.raises(ValueError, match="volume_barra"):
         flow.calcular(vazio, agentes=[], tick=5.0)
+
+
+def _cenario_dois_dias() -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Dois pregoes com 8 barras cada; entrada na barra 1 de cada dia."""
+    barras_linhas, tape_linhas = [], []
+    for d, dia_txt in enumerate(("2026-08-24", "2026-08-25")):
+        base = pd.Timestamp(dia_txt, tz="UTC").value + 13 * 3600 * S
+        for i in range(8):
+            barras_linhas.append({
+                "bar_id": d * 8 + i,
+                "ts_close": base + (i + 1) * 60 * S,
+                "close": 100_000.0,
+                "z_teste": 2.0 if i == 1 else 0.0,
+                "dia": pd.Timestamp(dia_txt).date(),
+            })
+        # Um negocio por segundo cobrindo os 8 minutos das barras: um
+        # tape mais curto que a janela faria o toque nunca acontecer, e o
+        # teste passaria a medir a fixture em vez do codigo.
+        for k in range(8 * 60):
+            tape_linhas.append({
+                "ts_ns": base + k * S,
+                "price": 100_000.0 + (60.0 if k > 130 else 0.0),
+                "quantidade": 1, "trade_type": 2,
+            })
+    return pd.DataFrame(barras_linhas), pd.DataFrame(tape_linhas)
+
+
+def test_apenas_dia_evita_falso_negativo_no_streaming() -> None:
+    """
+    No streaming o tape so' tem UM pregao. Sem o filtro `apenas_dia`, as
+    entradas dos outros dias nao encontrariam o toque e sairiam como
+    "nunca tocou" — falso negativo SILENCIOSO, que reduziria o `n` de
+    todos os pontos sem erro nenhum.
+    """
+    barras, tape_bruto = _cenario_dois_dias()
+    tape = preparar_tape(tape_bruto)
+
+    todos = _remanescentes_tape(barras, tape, "z_teste", 3, 1.4,
+                                "contrarian", "venda", 40.0)
+    assert len(todos) == 2, "uma entrada por pregao"
+
+    so_24 = _remanescentes_tape(barras, tape, "z_teste", 3, 1.4,
+                                "contrarian", "venda", 40.0,
+                                apenas_dia=pd.Timestamp("2026-08-24").date())
+    assert len(so_24) == 1
+    assert so_24["dia"].iloc[0] == pd.Timestamp("2026-08-24").date()
+
+
+def test_streaming_e_memoria_dao_o_mesmo_resultado(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """
+    O streaming existe por memoria: 81 MILHOES de negocios estouraram a
+    maquina do operador. Mas otimizacao que muda a resposta nao e'
+    otimizacao — os dois caminhos tem que coincidir.
+
+    O carregamento por dia e' substituido para o teste exercitar a LOGICA
+    de streaming, e nao o layout de parquet do pyarrow (que ja' tem
+    testes proprios em outro lugar).
+    """
+    from pathlib import Path as _Path
+
+    from profittape.research import remanescente_tape as mod
+
+    barras, tape_bruto = _cenario_dois_dias()
+    dias = ["2026-08-24", "2026-08-25"]
+
+    def _dias_falsos(_raiz, _symbol):  # type: ignore[no-untyped-def]
+        return [_Path(f"dt={d}") for d in dias]
+
+    def _carregar_falso(pasta, _symbol):  # type: ignore[no-untyped-def]
+        alvo = pd.Timestamp(pasta.name.removeprefix("dt=")).date()
+        sel = tape_bruto[pd.to_datetime(tape_bruto["ts_ns"], unit="ns").dt.date
+                         == alvo]
+        return sel.reset_index(drop=True)
+
+    monkeypatch.setattr("profittape.features.pipeline._dias_do_symbol",
+                        _dias_falsos)
+    monkeypatch.setattr("profittape.features.pipeline._carregar_dia",
+                        _carregar_falso)
+
+    em_memoria = _remanescentes_tape(barras, preparar_tape(tape_bruto),
+                                     "z_teste", 3, 1.4, "contrarian",
+                                     "venda", 40.0)
+    streaming = mod._remanescentes_streaming(
+        barras, _Path("."), "TESTE", "z_teste", 3, 1.4, "contrarian",
+        "venda", (40.0,), True)[40.0]
+
+    assert len(em_memoria) == len(streaming) == 2
+    assert (sorted(em_memoria["remanescente"])
+            == sorted(streaming["remanescente"]))

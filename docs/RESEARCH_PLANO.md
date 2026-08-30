@@ -2891,3 +2891,30 @@ com a causa. `flow.calcular` passa a checar e explicar.
 
 Portao rodado de novo com `volume_barra=119504`: **CONTRA**, |t| <= 0,98
 nos sete pontos. Passa.
+
+### STREAMING POR PREGAO: 81 milhoes de negocios nao cabem na memoria (2026-08-30h)
+
+`MemoryError` na primeira execucao real, pedindo 617 MiB para um unico
+array. O tape de 25 pregoes do WINFUT tem **80.999.999 negocios**, e eu
+carregava todos de uma vez com `pd.concat`.
+
+O resto do projeto ja' fazia streaming por dia pela mesma razao ("o
+dataset inteiro estourou 20 GB"). Este modulo nao seguiu o padrao.
+
+**Funciona porque a janela nunca atravessa o pregao** (purga estrutural):
+o stop de uma entrada do dia D so' pode ser tocado por negocios do dia D.
+E os 7 pontos da grade saem da MESMA passada — dia por fora, grade por
+dentro — em vez de reler o tape sete vezes.
+
+Duas correcoes juntas:
+
+1. **`preparar_tape` reduz COLUNAS antes de filtrar LINHAS.** O filtro
+   booleano copia o frame; filtrar antes de reduzir fazia o pico carregar
+   as sete colunas do curated em vez de duas.
+2. **`apenas_dia` em `_remanescentes_tape`.** No streaming o tape so' tem
+   um pregao; sem o filtro, entradas de outros dias nao encontrariam o
+   toque e sairiam como "nunca tocou" — falso negativo SILENCIOSO, que
+   reduziria o `n` de todos os pontos sem erro nenhum.
+
+Teste de equivalencia: streaming e modo em memoria tem que devolver o
+MESMO resultado. Otimizacao que muda a resposta nao e' otimizacao.

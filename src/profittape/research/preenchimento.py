@@ -65,10 +65,15 @@ def preparar_tape(df: pd.DataFrame, so_agressao: bool = True) -> pd.DataFrame:
     tape fora de ordem devolveria um `F` posterior sem qualquer erro
     visivel.
     """
+    # Colunas PRIMEIRO, linhas depois. O filtro booleano copia o frame
+    # inteiro; com 80 milhoes de negocios, filtrar antes de reduzir faz o
+    # pico carregar as sete colunas do curated em vez de duas. Foi como
+    # este modulo estourou a memoria na maquina do operador em
+    # 2026-08-30.
+    necessarias = ["ts_ns", "price"] + (["trade_type"] if so_agressao else [])
+    df = df.loc[:, necessarias]
     if so_agressao:
-        df = df[df["trade_type"].isin(_AGRESSAO)]
-    fora = ["ts_ns", "price"]
-    df = df.loc[:, fora]
+        df = df[df["trade_type"].isin(_AGRESSAO)].drop(columns="trade_type")
     if not df["ts_ns"].is_monotonic_increasing:
         df = df.sort_values("ts_ns", kind="stable")
     return df.reset_index(drop=True)
