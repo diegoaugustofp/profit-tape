@@ -41,6 +41,7 @@ log = structlog.get_logger(__name__)
 # entao o parser confere a contagem de campos linha a linha.
 CAMPOS = [
     "data", "hora", "hora_bolsa", "open", "high", "low", "close",
+    "vol_total", "vol_so_agressores",
     "agr_compra", "agr_venda",
     "imbalance", "desloc_norm", "absorcao_dir",
     "media", "desvio", "z",
@@ -48,6 +49,37 @@ CAMPOS = [
 PREFIXO = "ABSDIR|"
 COMPARAVEIS = ["open", "high", "low", "close", "imbalance",
                "desloc_norm", "absorcao_dir", "z"]
+
+# Serie continua ajustada: o WINFUT do grafico e' o contrato continuo,
+# com preco multiplicado por um fator de rolagem (medido em 2026-08-30:
+# k = 1,1578 no trecho de julho/2025). NIVEL de preco nao e' comparavel
+# entre grafico e tape; RAZAO e'. Por isso o OHLC entra na tabela como
+# diagnostico de escala, nunca como criterio de equivalencia.
+SO_DIAGNOSTICO = {"open", "high", "low", "close"}
+
+
+def _numero_ptbr(coluna: pd.Series) -> pd.Series:
+    """
+    Converte numero do Profit, DETECTANDO o formato em vez de assumi-lo.
+
+        "157.722,86300000" -> 157722.863    (pt-BR: . milhar, , decimal)
+        "2.5"              -> 2.5           (en-US: . decimal)
+
+    A deteccao e' por VALOR, nao por configuracao: se o texto tem
+    virgula, o ponto so' pode ser separador de milhar; se nao tem, o
+    ponto e' o decimal. Assumir pt-BR sempre transformaria "2.5" em 25 —
+    e o erro passaria calado, porque o numero continua sendo um numero
+    valido. Assumir en-US sempre transformaria "157.722,863" em NaN, e o
+    comparador ignora NaN: o campo sumiria da tabela em vez de acusar.
+
+    Os dois erros sao silenciosos, e e' por isso que a deteccao vale o
+    codigo a mais.
+    """
+    texto = coluna.astype(str).str.strip()
+    tem_virgula = texto.str.contains(",", regex=False)
+    ptbr = (texto.str.replace(".", "", regex=False)
+                 .str.replace(",", ".", regex=False))
+    return pd.to_numeric(texto.where(~tem_virgula, ptbr), errors="coerce")
 
 
 def carregar_log(caminho: Path) -> tuple[pd.DataFrame, dict[str, int]]:
@@ -57,6 +89,7 @@ def carregar_log(caminho: Path) -> tuple[pd.DataFrame, dict[str, int]]:
     transferiria o trabalho de limpeza para o operador.
     """
     linhas_ok: list[list[str]] = []
+    larguras_vistas: list[list[str]] = []
     n_total = 0
     n_malformadas = 0
     for bruta in caminho.read_text(encoding="utf-8", errors="replace").splitlines():
@@ -67,19 +100,28 @@ def carregar_log(caminho: Path) -> tuple[pd.DataFrame, dict[str, int]]:
         campos = bruta[pos + len(PREFIXO):].strip().split("|")
         if len(campos) != len(CAMPOS):
             n_malformadas += 1
+            larguras_vistas.append(campos)
             continue
         linhas_ok.append(campos)
 
     if not linhas_ok:
+        if n_malformadas:
+            larguras = sorted({len(x) for x in larguras_vistas})
+            raise SystemExit(
+                f"{n_malformadas} linhas 'ABSDIR|' com contagem de campos "
+                f"errada em {caminho}: vi {larguras}, esperava "
+                f"{len(CAMPOS)}. O .ntsl do grafico esta desatualizado em "
+                f"relacao a tools/ntsl_equivalencia.py — a ordem dos "
+                f"campos e' CONGELADA e muda nos dois lados junto."
+            )
         raise SystemExit(
-            f"nenhuma linha '{PREFIXO}' valida em {caminho} — o indicador "
-            "rodou com LogAtivo=1 e o console foi exportado inteiro?"
+            f"nenhuma linha '{PREFIXO}' em {caminho} — o indicador rodou "
+            "com LogAtivo=1 e o console foi exportado inteiro?"
         )
 
     df = pd.DataFrame(linhas_ok, columns=CAMPOS)
     for c in CAMPOS[3:]:
-        df[c] = pd.to_numeric(df[c].str.replace(",", ".", regex=False),
-                              errors="coerce")
+        df[c] = _numero_ptbr(df[c])
 
     n_antes = len(df)
     # O manual avisa que candles passados PODEM ser reprocessados. Se
@@ -152,6 +194,7 @@ def comparar(log_ntsl: Path, features_parquet: Path, segundos: int,
             "dif_mediana": float(dif.median()),
             "dif_p95": float(dif.quantile(0.95)),
             "dif_max": float(dif.max()),
+            "papel": "diagnostico" if campo in SO_DIAGNOSTICO else "equivalencia",
         })
 
     tabela = pd.DataFrame(linhas)

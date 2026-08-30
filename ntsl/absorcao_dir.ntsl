@@ -41,7 +41,10 @@
 //=====================================================================
 
 input
-  Limiar(2.0);              // |z| para colorir. NAO VALIDADO.
+  Limiar(1.75);             // |z| para colorir. NAO VALIDADO.
+                            // 1,75 = 6,3% das barras (~7/pregao no 5m),
+                            // escolhido pela FREQUENCIA de inspecao, nunca
+                            // por resultado. Ver RESEARCH_PLANO 2026-08-30b.
   Janela(50);               // barras do z-score. 5m:50 / 1m:250 (=250 min)
   MostrarLadoOposto(1);     // 1 = pinta tambem o lado negativo
   LogAtivo(1);              // 1 = emite ConsoleLog
@@ -49,6 +52,7 @@ input
 
 var
   sAgrCompra, sAgrVenda, sVolAgr, sImbalance : Float;
+  sVolTotal, sVolSoAgr                       : Float;
   sAmplitude, sDeslocNorm, sAbsorcaoDir      : Float;
   sSoma, sSomaQuad, sMedia, sDesvio, sZ, sD  : Float;
   nIndex                                     : Integer;
@@ -57,6 +61,19 @@ begin
   sAgrCompra := AgressionVolBuy;
   sAgrVenda  := AgressionVolSell;
   sVolAgr    := sAgrCompra + sAgrVenda;
+
+  // Duas versoes do volume total, logadas para DIAGNOSTICO:
+  //   (False, False) = tudo, incluindo leilao e negocios diretos (RLP)
+  //   (False, True)  = so' agressores
+  // O manual avisa que `SoAgressores` SO e' considerado com o opcional
+  // "Plugin Tape Reading"; sem ele o indicador e' sempre calculado como
+  // False, INDEPENDENTE do que for passado — sem erro, sem aviso.
+  // Logo: se as duas colunas forem IDENTICAS em todas as barras, ou o
+  // WIN nao tem RLP nem leilao (implausivel) ou o opcional nao esta
+  // assinado e o parametro esta sendo ignorado em silencio. E' o unico
+  // jeito de detectar essa falha de fora.
+  sVolTotal  := QuantityVol(False, False);
+  sVolSoAgr  := QuantityVol(False, True);
 
   // Barra sem agressao: imbalance indefinido. Zero e' o unico valor que
   // nao inventa direcao (mesma guarda do flow.py).
@@ -151,6 +168,7 @@ begin
       // — barulho alto e diagnosticavel, mas melhor evitar de uma vez.
       ConsoleLog("ABSDIR|" + Date + "|" + Time + "|" + TimeExchange
         + "|" + Open + "|" + High + "|" + Low + "|" + Close
+        + "|" + sVolTotal + "|" + sVolSoAgr
         + "|" + sAgrCompra + "|" + sAgrVenda
         + "|" + sImbalance + "|" + sDeslocNorm + "|" + sAbsorcaoDir
         + "|" + sMedia + "|" + sDesvio + "|" + sZ);

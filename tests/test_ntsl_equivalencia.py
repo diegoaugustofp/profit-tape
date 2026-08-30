@@ -17,8 +17,9 @@ S = 1_000_000_000
 
 def _linha(data: int, hora: int, z: float = 2.5, imb: float = 0.4,
            desloc: float = -0.2) -> str:
-    # ordem: data|hora|hora_bolsa|O|H|L|C|agrC|agrV|imb|desloc|absdir|med|dp|z
-    return (f"ABSDIR|{data}|{hora}|{hora}|100|110|95|97|700|300|"
+    # data|hora|hora_bolsa|O|H|L|C|vol_tot|vol_agr|agrC|agrV|imb|desloc|
+    # absdir|media|desvio|z
+    return (f"ABSDIR|{data}|{hora}|{hora}|100|110|95|97|1200|1000|700|300|"
             f"{imb}|{desloc}|{imb - desloc}|0.1|0.2|{z}")
 
 
@@ -132,3 +133,62 @@ def test_nenhuma_barra_casa_nao_explode(tmp_path) -> None:  # type: ignore[no-un
     r = comparar(arq_log, _parquet_py(tmp_path), segundos=300)  # type: ignore[arg-type]
     assert r["barras_casadas"] == 0
     assert r["tabela"].empty
+
+
+def test_numero_no_formato_do_profit(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """
+    O Profit imprime "157.722,86300000" — separador de milhar E virgula
+    decimal. Trocar so' a virgula produziria "157.722.86300000" -> NaN,
+    e como o comparador ignora NaN o campo sumiria da tabela em vez de
+    acusar erro. Caso real do dump de 2026-08-30.
+    """
+    arq = tmp_path / "console.txt"
+    arq.write_text(
+        "ABSDIR|1250716|1410|1410|157.722,86300000|158.116,51890000|"
+        "157.699,70680000|157.908,11280000|250.000,00|198.891,00|"
+        "116.514,00|82.377,00|0,17163673|0,44444444|-0,27280772|"
+        "0,00|0,00|0,00\n",
+        encoding="utf-8")
+    df, diag = carregar_log(arq)
+    assert diag["barras"] == 1
+    assert df["open"].iloc[0] == pytest.approx(157722.863)
+    assert df["agr_compra"].iloc[0] == pytest.approx(116514.0)
+    assert df["vol_total"].iloc[0] == pytest.approx(250000.0)
+    # e a aritmetica do proprio Profit fecha nesse numero
+    assert df["absorcao_dir"].iloc[0] == pytest.approx(
+        df["imbalance"].iloc[0] - df["desloc_norm"].iloc[0], abs=1e-7)
+
+
+def test_deteccao_de_formato_numerico() -> None:
+    """
+    Os dois erros possiveis sao SILENCIOSOS, por isso a deteccao:
+    assumir pt-BR faria "2.5" virar 25 (numero valido, resultado errado);
+    assumir en-US faria "157.722,863" virar NaN, e o comparador ignora
+    NaN — o campo sumiria da tabela em vez de acusar.
+    """
+    import pandas as pd
+
+    from profittape.tools.ntsl_equivalencia import _numero_ptbr
+
+    s = pd.Series(["157.722,86300000", "2.5", "0,17163673", "-1", "0"])
+    r = _numero_ptbr(s)
+    assert r.iloc[0] == pytest.approx(157722.863)
+    assert r.iloc[1] == pytest.approx(2.5)
+    assert r.iloc[2] == pytest.approx(0.17163673)
+    assert r.iloc[3] == -1.0
+    assert r.iloc[4] == 0.0
+
+
+def test_erro_aponta_a_causa_real_quando_o_ntsl_esta_defasado(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """
+    Caso real: o dump de 2026-08-30 tinha 15 campos e o parser esperava
+    17. A mensagem antiga perguntava se `LogAtivo=1` — mandaria caçar o
+    problema no lugar errado. Tem que dizer QUANTOS campos viu.
+    """
+    arq = tmp_path / "console.txt"
+    arq.write_text("ABSDIR|1|2|3|4|5\nABSDIR|1|2|3|4|5\n", encoding="utf-8")
+    with pytest.raises(SystemExit) as e:
+        carregar_log(arq)
+    msg = str(e.value)
+    assert "[5]" in msg and str(len(CAMPOS)) in msg
+    assert "desatualizado" in msg
