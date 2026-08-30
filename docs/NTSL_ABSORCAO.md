@@ -483,3 +483,56 @@ só apareceu porque o teste novo quebrou com `KeyError`. É a terceira
 falha silenciosa desta sessão — junto com o contador de buracos que
 devolvia zero por construção e o validador de âncoras que achava zero
 links.
+
+
+## EQUIVALÊNCIA FECHADA (2026-08-30)
+
+    so' open  : 21   |  so' close : 21   |  os dois : 6
+    dif mediana open : 1,0 tick  |  close : 1,0 tick
+
+Simetria perfeita entre as duas pontas. Isso resolve a última
+bifurcação: **é o tipo do negócio, não a fronteira de barra.** Fronteira
+afetaria preferencialmente o fechamento — é o último negócio que corre
+risco de cair no balde seguinte, e a abertura não teria por que sofrer
+igual.
+
+### A explicação fecha em três frentes independentes
+
+**Taxa.** As pontas divergem em 27/80 = 33,8% das barras, contra 27,9%
+de RLP+leilão por *volume*. A taxa por negócio ser MAIOR que a por
+volume significa que os negócios de RLP são menores que a média — que é
+exatamente o esperado de internalização de varejo.
+
+**Independência.** Com p = 0,3375 nas duas pontas, o esperado para
+"ambas divergem" é 9,1 e o observado é 6; para "ao menos uma", 44,9
+contra 48. Compatível.
+
+**Magnitude.** Um tick exato nas duas pontas, e o denominador intacto em
+79 de 80 — RLP imprime dentro da faixa e raramente define extremo.
+
+### Conclusão
+
+O indicador NTSL e o pipeline Python calculam **a mesma fórmula**. As
+diferenças são todas conhecidas, medidas e explicadas:
+
+| campo | resultado |
+|---|---|
+| `imbalance` | **exato**, 80/80, diferença máxima 0,000000 |
+| `desloc_norm` | diverge em 47/80, sempre por 1 tick em `open`/`close` |
+| `absorcao_dir` | herda exatamente o erro de `desloc_norm` |
+| OHLC | escala k = 1,020499 (série contínua ajustada) |
+
+**Causa única**: o OHLC do gráfico usa o primeiro e o último negócio de
+*qualquer* tipo; o do profit-tape usa só agressão. Quando o primeiro ou
+o último negócio da barra é RLP ou leilão, `open` ou `close` difere por
+um tick.
+
+Impacto prático no z: `Δz ≈ 0,0139 / 0,38 ≈ 0,037`, cerca de 3,7% de um
+desvio. Perto do limiar de 1,75 isso pode trocar a cor de uma fração
+pequena das barras.
+
+### O que ficou de fora
+
+O `z` não foi comparado — a sobreposição caiu no primeiro dia do
+parquet, onde as janelas têm conteúdo diferente por construção. Para
+fechar: `LogDataInicio = 1260728`.
