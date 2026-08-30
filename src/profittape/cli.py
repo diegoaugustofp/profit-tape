@@ -496,13 +496,19 @@ def ntsl_equivalencia(
     if borda.get("aviso"):
         typer.echo(f"\n  AVISO SOBRE O z: {borda['aviso']}")
     atrib = r["atribuicao_rlp"]
-    if "correlacao_erro_vs_rlp" in atrib:
+    if "barras_com_extremos_iguais" in atrib:
         typer.echo("\n--- de onde vem a divergencia de desloc_norm ---")
-        typer.echo(f"  correlacao |erro| vs fracao de RLP: "
-                   f"{atrib['correlacao_erro_vs_rlp']}")
-        typer.echo(f"  RLP mediano por quartil : {atrib['rlp_mediano_por_quartil']}")
-        typer.echo(f"  erro mediano por quartil: "
-                   f"{atrib['erro_mediano_por_quartil_de_rlp']}")
+        typer.echo(f"  k estimado                     : {atrib['k_estimado']}")
+        typer.echo(f"  barras com extremos IGUAIS     : "
+                   f"{atrib['barras_com_extremos_iguais']} de {atrib['n']}")
+        typer.echo(f"  erro mediano (extremos iguais) : "
+                   f"{atrib['erro_mediano_extremos_iguais']}")
+        typer.echo(f"  erro mediano (extremos difs)   : "
+                   f"{atrib['erro_mediano_extremos_diferentes']}")
+        if "correlacao_erro_vs_amplitude" in atrib:
+            typer.echo(f"  correlacao |erro| vs amplitude : "
+                       f"{atrib['correlacao_erro_vs_amplitude']}"
+                       "   (negativa = efeito de quantizacao)")
     elif atrib.get("situacao"):
         typer.echo(f"\n  atribuicao nao calculada: {atrib['situacao']}")
     if r["barras_casadas"] == 0:

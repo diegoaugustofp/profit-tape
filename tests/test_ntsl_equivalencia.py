@@ -242,31 +242,52 @@ def test_avisa_quando_o_z_cai_na_borda_do_parquet(tmp_path) -> None:  # type: ig
     assert "NAO indica erro de implementacao" in r["z_na_borda"]["aviso"]
 
 
-def test_atribuicao_liga_o_erro_a_fracao_de_rlp(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_atribuicao_separa_pelo_extremo_e_nao_pelo_volume(tmp_path) -> None:  # type: ignore[no-untyped-def]
     """
-    Verificar a CAUSA, não só o sintoma: se o erro vem do RLP no OHLC,
-    ele tem que crescer com a fração de RLP da barra. Aqui o log é
-    construído com essa relação de propósito, e a atribuição tem que
-    detectá-la.
+    A primeira versao desta atribuicao estava ERRADA: correlacionava o
+    erro com a fracao de VOLUME de RLP. Medido em 24/07/2026, a
+    correlacao deu -0,12 e o quartil de MAIOR RLP teve erro ZERO.
+
+    A causa real e' o extremo: `desloc_norm` e razao de inteiros (erro
+    maximo medido = 2/11 exato), e o que muda a razao e' um print TOCAR
+    a maxima ou a minima, nao o volume que ele carrega.
+
+    Aqui metade das barras tem os extremos iguais (erro zero) e metade
+    tem a maxima esticada de um tick. A atribuicao tem que separar as
+    duas por extremo — inclusive com o volume de RLP igual nos dois
+    grupos, que e' o que refuta a explicacao antiga.
     """
     inicio = pd.Timestamp("2026-08-24", tz="UTC") + pd.Timedelta(hours=13)
-    py = pd.read_parquet(_parquet_com_historico(tmp_path))  # type: ignore[arg-type]
+    n = 40
+    py = pd.DataFrame({
+        "bar_id": range(200, 200 + n),
+        "ts_open": [inicio.value + i * 300 * S + 3 * S for i in range(n)],
+        "open": 100.0, "high": 155.0, "low": 100.0, "close": 120.0,
+        "imbalance": 0.4,
+        "desloc_norm": 20.0 / 55.0,
+        "absorcao_dir": 0.4 - 20.0 / 55.0,
+        "z_absorcao_dir": 1.0,
+    })
+    arq_py = tmp_path / "features.parquet"
+    py.to_parquet(arq_py, index=False)
+
     linhas = []
-    for i in range(40):
+    for i in range(n):
         t = (inicio + pd.Timedelta(minutes=5 * i)).tz_convert("America/Sao_Paulo")
-        frac = 0.05 + 0.5 * (i / 40)               # RLP crescente
-        erro = 0.30 * frac                          # erro proporcional
-        desloc = float(py["desloc_norm"].iloc[i]) + erro
-        vt, va = 1000.0, 1000.0 * (1 - frac)
+        hhmm = t.hour * 100 + t.minute
+        estica = (i % 2 == 1)                  # metade com maxima esticada
+        high = 160.0 if estica else 155.0
+        desloc = 20.0 / (high - 100.0)
+        # volume de RLP IDENTICO nos dois grupos: se a atribuicao antiga
+        # (por volume) ainda valesse, ela nao separaria nada aqui.
         linhas.append(
-            f"ABSDIR|1260824|{t.hour * 100 + t.minute}|{t.hour * 100 + t.minute}"
-            f"|100|110|95|97|{vt}|{va}|700|300|0.4|{desloc}|{0.4 - desloc}"
-            f"|0.1|0.2|1.0")
+            f"ABSDIR|1260824|{hhmm}|{hhmm}|100|{high}|100|120"
+            f"|1000|720|700|300|0.4|{desloc}|{0.4 - desloc}|0.1|0.2|1.0")
     arq_log = tmp_path / "console.txt"
     arq_log.write_text("\n".join(linhas), encoding="utf-8")
 
-    r = comparar(arq_log, _parquet_com_historico(tmp_path), segundos=300)  # type: ignore[arg-type]
-    atrib = r["atribuicao_rlp"]
-    assert atrib["correlacao_erro_vs_rlp"] > 0.9
-    q = atrib["erro_mediano_por_quartil_de_rlp"]
-    assert q[0] < q[-1], "erro tem que crescer com o RLP"
+    r = comparar(arq_log, arq_py, segundos=300)
+    a = r["atribuicao_rlp"]
+    assert a["barras_com_extremos_iguais"] == n // 2
+    assert a["erro_mediano_extremos_iguais"] == pytest.approx(0.0, abs=1e-9)
+    assert a["erro_mediano_extremos_diferentes"] > 0.01

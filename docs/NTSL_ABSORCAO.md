@@ -330,3 +330,54 @@ onde o parquet já tem 50 barras de passado.
   o RLP, a previsão acertou por sorte e há outra coisa acontecendo.
 - Mensagem útil para arquivo inexistente (o caso real tinha cedilha no
   nome e produzia 40 linhas de traceback).
+
+
+## A ATRIBUIÇÃO FALHOU, e estava errada (2026-08-30)
+
+Rodada a atribuição sobre as 80 barras de 24/07/2026:
+
+    correlacao |erro| vs fracao de RLP : -0,1219
+    RLP mediano por quartil  : [0,2437  0,2753  0,2864  0,3058]
+    erro mediano por quartil : [0,01788 0,01790 0,01300 0,00000]
+
+Correlação **negativa**, e o quartil de **maior** RLP com erro **zero**.
+O oposto da previsão.
+
+A explicação registrada — "o erro vem do RLP no OHLC, logo cresce com a
+fração de RLP" — está **refutada** pelo próprio diagnóstico construído
+para testá-la. Sem ele, o resultado anterior (divergência presente, do
+tamanho esperado) teria sido lido como confirmação.
+
+### A causa real está na aritmética, não no volume
+
+O erro máximo medido é **exatamente 2/11**. Não é arredondamento — é a
+assinatura de uma razão entre inteiros pequenos.
+
+Com preço na grade de 5 pontos, `(close − open)` e `(high − low)` são
+múltiplos inteiros do tick, então `desloc_norm` é razão de inteiros
+pequenos. O que muda a razão é um print de RLP ou leilão **tocar um
+extremo** — não o volume que ele carrega:
+
+- barra com 35% de RLP, todo impresso dentro da faixa → erro **zero**;
+- barra com 20% de RLP onde um único print fez máxima nova → erro.
+
+E a sensibilidade cai com a amplitude: um tick a mais em 35 muda pouco,
+em 11 muda muito. Como amplitude cresce com volume, e RLP cresce com
+volume, a correlação com a fração de RLP sai **negativa** — foi
+exatamente o observado.
+
+### A atribuição foi trocada
+
+Agora separa as barras em que os **extremos coincidem** (depois de
+dividir pelo k estimado) das em que não coincidem, e mede o erro em cada
+grupo. Se a causa for o extremo, o grupo "extremos iguais" tem erro ~0.
+Reporta também a correlação com a amplitude — negativa confirma
+quantização.
+
+O teste correspondente constrói metade das barras com a máxima esticada
+de um tick e **volume de RLP idêntico nos dois grupos**: se a explicação
+antiga ainda valesse, ela não separaria nada.
+
+Erro meu na primeira tentativa da nova versão: estimei o tick como a
+menor amplitude da amostra e classifiquei tudo como igual. Trocado por
+tolerância relativa, que não depende de estimar o tick.
