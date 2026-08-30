@@ -446,6 +446,53 @@ def portao_absorcao(
 
 
 @app.command()
+def ntsl_equivalencia(
+    log: Path = typer.Option(..., "--log",
+                             help="Dump do console do Profit com as linhas ABSDIR|."),
+    features: Path = typer.Option(..., "--features",
+                                  help="Parquet de data/features_tempo/."),
+    segundos: int = typer.Option(300, "--segundos", help="60 ou 300."),
+    hora_bolsa: bool = typer.Option(
+        False, "--hora-bolsa",
+        help="Usa TimeExchange no lugar de Time. Se NENHUMA barra casar "
+             "com o default, o grafico esta em fuso diferente do da bolsa "
+             "e e' esta a flag que resolve."),
+    tolerancia: float = typer.Option(1e-6, "--tolerancia"),
+    log_level: str = typer.Option("INFO", "--log-level"),
+) -> None:
+    """
+    Confronta o indicador NTSL com as features calculadas em Python.
+
+    NAO devolve "bate / nao bate": devolve a distribuicao da diferenca
+    campo a campo. Duas divergencias sao ESPERADAS e estao previstas por
+    escrito — o OHLC do grafico inclui RLP e leilao, o do profit-tape nao;
+    e nao esta documentado se AgressionVolBuy/Sell excluem RLP. Diferenca
+    so' em desloc_norm aponta para a primeira; diferenca tambem em
+    imbalance aponta para a segunda.
+    """
+    configurar(log_level)
+    from .tools.ntsl_equivalencia import comparar
+
+    r = comparar(log, features, segundos, usar_hora_bolsa=hora_bolsa,
+                 tolerancia=tolerancia)
+    typer.echo("=" * 62)
+    typer.echo("EQUIVALENCIA NTSL <-> profit-tape")
+    typer.echo("=" * 62)
+    for k in ("linhas_com_prefixo", "malformadas", "duplicadas", "barras",
+              "barras_python", "barras_casadas", "sem_par_no_python",
+              "coluna_hora_usada", "tolerancia"):
+        typer.echo(f"  {k:22}: {r[k]}")
+    typer.echo("")
+    if r["tabela"].empty:
+        typer.echo("  nenhum campo comparavel — as barras casaram?")
+    else:
+        typer.echo(r["tabela"].round(6).to_string(index=False))
+    if r["barras_casadas"] == 0:
+        typer.echo("\n  NENHUMA barra casou. Tente --hora-bolsa, ou confira "
+                   "se o --segundos bate com o timeframe do grafico.")
+
+
+@app.command()
 def agents(
     dados: Path = typer.Option(
         Path("data/curated"), "--dados",

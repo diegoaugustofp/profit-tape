@@ -1,0 +1,158 @@
+//=====================================================================
+// absorcao_dir — VISUALIZACAO EXPLORATORIA (nao e' sinal validado)
+//
+// Reproduz no grafico do Profit a feature `absorcao_dir` do profit-tape:
+//
+//     imbalance    = (agr_compra - agr_venda) / (agr_compra + agr_venda)
+//     desloc_norm  = (Close - Open) / (High - Low)
+//     absorcao_dir = imbalance - desloc_norm
+//     z            = (x - media[1..Janela]) / desvio[1..Janela]
+//
+// AVISO QUE NAO E' DECORATIVO
+// ---------------------------
+// Este indicador NAO tem limiar validado. A hipotese que ele desenha foi
+// REPROVADA no IC em 2026-08-30 (CONTRA nas 12 celulas; ver
+// docs/RESEARCH_PLANO.md). O `Limiar` abaixo foi escolhido para ser
+// VISIVEL, nao para ter edge. A barra vermelha significa "esta barra
+// esta na cauda da distribuicao recente desta conta", e nada alem disso.
+//
+// O uso legitimo e' GERAR HIPOTESE: olhar as barras que a sua leitura
+// visual identifica como absorcao e ver o que esta formula deixou de
+// fora. Calibrar `Limiar` olhando o grafico ate "ficar bom" e' overfit
+// visual — se algo aparecer, vira pre-registro novo, testado em amostra
+// NOVA, e nunca uma regra ajustada na tela.
+//
+// EQUIVALENCIA COM O PYTHON: NAO E' EXATA, POR DUAS RAZOES CONHECIDAS
+// -------------------------------------------------------------------
+// 1. O OHLC do grafico inclui TODOS os negocios; o do profit-tape usa
+//    SO agressao (RLP e leilao ficam de fora). Um RLP que imprima uma
+//    nova maxima muda `desloc_norm` aqui e nao muda la.
+// 2. AgressionVolBuy/Sell sao indicadores "TR" da Scalper Trader; nao
+//    esta documentado se excluem RLP. Se nao excluirem, `imbalance`
+//    diverge tambem.
+//
+// O log existe para MEDIR essas divergencias em vez de supo-las. Depois
+// de um replay, rode:
+//     profit-tape ntsl-equivalencia --log <dump> --features <parquet>
+//
+// LICENCA: AgressionVolBuy/Sell exigem Pro, Ultra ou modulo Scalper.
+// Sem isso o indicador nao calcula (nao ha erro, os valores vem zerados
+// — o que e' exatamente o tipo de falha silenciosa que o log revela).
+//=====================================================================
+
+input
+  Limiar(2.0);              // |z| para colorir. NAO VALIDADO.
+  Janela(50);               // barras do z-score. 5m:50 / 1m:250 (=250 min)
+  MostrarLadoOposto(1);     // 1 = pinta tambem o lado negativo
+  LogAtivo(1);              // 1 = emite ConsoleLog
+  LogSomenteSinal(0);       // 1 = loga so' barras coloridas
+
+var
+  sAgrCompra, sAgrVenda, sVolAgr, sImbalance : Float;
+  sAmplitude, sDeslocNorm, sAbsorcaoDir      : Float;
+  sSoma, sSomaQuad, sMedia, sDesvio, sZ, sD  : Float;
+  nIndex                                     : Integer;
+  bPintou                                    : Boolean;
+begin
+  sAgrCompra := AgressionVolBuy;
+  sAgrVenda  := AgressionVolSell;
+  sVolAgr    := sAgrCompra + sAgrVenda;
+
+  // Barra sem agressao: imbalance indefinido. Zero e' o unico valor que
+  // nao inventa direcao (mesma guarda do flow.py).
+  if sVolAgr > 0 then
+    sImbalance := (sAgrCompra - sAgrVenda) / sVolAgr
+  else
+    sImbalance := 0;
+
+  // Barra que nao andou nao tem "para onde o preco fechou".
+  sAmplitude := High - Low;
+  if sAmplitude > 0 then
+    sDeslocNorm := (Close - Open) / sAmplitude
+  else
+    sDeslocNorm := 0;
+
+  sAbsorcaoDir := sImbalance - sDeslocNorm;
+
+  //-------------------------------------------------------------------
+  // z-score ANTI-LOOKAHEAD.
+  // A media e o desvio vem de [1]..[Janela] — a propria barra NAO entra.
+  // Isso replica o `.shift(1)` de features/normalize.py, que e' o unico
+  // ponto do projeto com janela rolante justamente porque e' onde
+  // lookahead se esconde.
+  // Desvio com divisor (Janela-1): ddof=1, igual ao default do pandas.
+  // Divisor errado aqui produz um z sistematicamente diferente do
+  // Python, e a comparacao de equivalencia acusaria sem dizer por que.
+  //-------------------------------------------------------------------
+  sZ := 0;
+  if CurrentBar > Janela then
+  begin
+    sSoma := 0;
+    for nIndex := 1 to Janela do
+      sSoma := sSoma + sAbsorcaoDir[nIndex];
+    sMedia := sSoma / Janela;
+
+    sSomaQuad := 0;
+    for nIndex := 1 to Janela do
+    begin
+      sD := sAbsorcaoDir[nIndex] - sMedia;
+      sSomaQuad := sSomaQuad + sD * sD;
+    end;
+    sDesvio := Sqrt(sSomaQuad / (Janela - 1));
+
+    if sDesvio > 0 then
+      sZ := (sAbsorcaoDir - sMedia) / sDesvio;
+  end;
+
+  Plot(sZ);
+
+  // z positivo = compradores agrediram e o preco fechou contra eles.
+  bPintou := False;
+  if sZ >= Limiar then
+  begin
+    PaintBar(clRed);
+    bPintou := True;
+  end
+  else if (MostrarLadoOposto = 1) and (sZ <= -Limiar) then
+  begin
+    PaintBar(clAqua);
+    bPintou := True;
+  end;
+
+  //-------------------------------------------------------------------
+  // LOG. So' de barras que o motor nao reavalia mais.
+  //
+  // O manual e' explicito: "o mesmo candle pode ser processado diversas
+  // vezes... cada trade pode gerar uma notificacao de reprocessamento",
+  // e a cada tick sao reavaliados "o ultimo e o penultimo candle". Com
+  // ~42.000 negocios por barra de 5m no WINFUT, logar a barra em
+  // formacao produziria dezenas de milhares de linhas por barra.
+  //
+  // CurrentBar <= BarCount - 3 pega a barra a partir da terceira de tras
+  // para frente: fora da janela de reavaliacao por tick. Em replay, cada
+  // barra e' logada uma vez, com dois candles de atraso. Na carga do
+  // historico, o grafico inteiro sai de uma vez.
+  //
+  // Se o motor reprocessar candles passados (o manual avisa que pode
+  // acontecer), haverao linhas duplicadas — por isso o comparador
+  // deduplica por data+hora e REPORTA quantas duplicatas viu, em vez de
+  // esconde-las.
+  //
+  // Campos separados por | para o parser. Ordem CONGELADA: mudar aqui
+  // exige mudar tools/ntsl_equivalencia.py junto.
+  //-------------------------------------------------------------------
+  if (LogAtivo = 1) and (CurrentBar <= BarCount - 3) then
+  begin
+    if (LogSomenteSinal = 0) or bPintou then
+      // Date() vem no formato EasyLanguage 1AnoMesDia (24/08/2026 =>
+      // 1260824, ano deslocado de 1900). Time e TimeExchange sao os DOIS
+      // logados de proposito: se o grafico estiver num fuso diferente do
+      // da bolsa, a juncao pelo campo errado falharia em TODAS as barras
+      // — barulho alto e diagnosticavel, mas melhor evitar de uma vez.
+      ConsoleLog("ABSDIR|" + Date + "|" + Time + "|" + TimeExchange
+        + "|" + Open + "|" + High + "|" + Low + "|" + Close
+        + "|" + sAgrCompra + "|" + sAgrVenda
+        + "|" + sImbalance + "|" + sDeslocNorm + "|" + sAbsorcaoDir
+        + "|" + sMedia + "|" + sDesvio + "|" + sZ);
+  end;
+end;
