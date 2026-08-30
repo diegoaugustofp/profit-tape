@@ -84,6 +84,8 @@ arquivo cresceu demais para navegar so' por titulo cronologico).
 
 - [IMPLEMENTADO: remanescente_tape executa o pre-registro 3 (2026-08-30e)](#implementado-remanescente_tape-executa-o-pre-registro-3-2026-08-30e)
 
+- [RESULTADO DA ROTA B: CONTRA — o stop nao detecta reversao (2026-08-30i)](#resultado-da-rota-b-contra---o-stop-nao-detecta-reversao-2026-08-30i)
+
 **Disciplina/processo do proprio research**
 - [Decisoes aprovadas](#decisoes-aprovadas)
 - [Pre-requisitos antes de escrever research/](#pre-requisitos-antes-de-escrever-research)
@@ -2918,3 +2920,89 @@ Duas correcoes juntas:
 
 Teste de equivalencia: streaming e modo em memoria tem que devolver o
 MESMO resultado. Otimizacao que muda a resposta nao e' otimizacao.
+
+## RESULTADO DA ROTA B: CONTRA - o stop nao detecta reversao (2026-08-30i)
+
+Executado o pre-registro 3 congelado em 2026-08-30d, na ordem exigida.
+25 pregoes, 81 milhoes de negocios, lado venda, `z_agf_3` h=3.
+
+### Os dois portoes bloqueantes passaram
+
+    PRE-VOO   : 25 pregoes | 385 brutos | 194 compra + 178 venda = 372
+                usados: 178 (venda). RECONCILIOU com 29b.
+    PORTAO    : CONTRA sobre ruido puro -> passou
+
+### Resultado
+
+    limiar deflacionado (7 comparacoes): 1,96   |  so_agressao: True
+
+      X     n   media       t      IC95              overshoot
+     40   161  +17,329   0,758  [-36,45 ; +67,25]      0,062
+     60   146   +9,726   0,406  [-43,36 ; +59,13]      0,000
+     80   134   -2,500  -0,107  [-50,04 ; +45,50]      0,000
+    100   124   -1,129  -0,047  [-50,09 ; +49,95]      0,000
+    120   115   -4,348  -0,181  [-51,16 ; +43,57]      0,000
+    150   103  -12,427  -0,547  [-56,70 ; +32,25]      0,000
+    200    85  -13,000  -0,573  [-50,07 ; +27,42]      0,000
+
+    VEREDITO: CONTRA
+
+`n` suficiente nos sete pontos, |t| maximo 0,76, todos os IC95 contendo
+zero.
+
+### O que isso decide
+
+**A hipotese (b) e' FALSA para este sinal.** O stop nao e' detector de
+reversao: no instante em que se sairia a -X, a expectativa de continuar
+ate o fim da janela e' indistinguivel de zero. Pergunta aberta desde
+2026-08-27, agora respondida.
+
+Pelo criterio congelado, o stop **so' se justifica como (a)** - controle
+de drawdown -, e o custo em expectativa dessa escolha precisa ser medido
+em **pre-registro separado**. Trocar expectativa por drawdown e' decisao
+consciente, nao consequencia automatica deste resultado.
+
+### A tendencia na grade e' OBSERVACAO, nao achado
+
+A media cai de +17,3 para -13,0 conforme X sobe (correlacao -0,91 ao
+longo da grade). Ordenado o bastante para tentar.
+
+**Nao e' evidencia.** Nenhum ponto individual passa de |t| 0,76, e os
+sete pontos sao subconjuntos ENCAIXADOS - quem tocou -200 tocou -40
+antes -, entao essa correlacao nao e' um teste independente de nada.
+
+Registrado explicitamente porque testar "a tendencia em si" seria um
+ESTIMADOR NOVO DEPOIS DE VER O RESULTADO: exatamente a selecao que a
+ressalva do pre-registro previu, e que obrigaria a somar as tentativas
+ao contador.
+
+### Achado lateral: o overshoot e' zero em instrumento liquido
+
+`overshoot_medio` deu 0,000 em seis dos sete pontos e 0,062 no primeiro.
+`F` coincide com o nivel do stop praticamente sempre: com ~3,5 milhoes
+de negocios por pregao numa grade de 5 pontos, o primeiro negocio que
+cruza cai EXATAMENTE no nivel.
+
+Consequencia retroativa: toda a discussao de 29c sobre limites
+"pessimista" e "otimista" de preenchimento era **irrelevante na
+pratica** para este instrumento - os dois colapsam no mesmo numero. O
+trabalho de construir `F` exato continua tendo valimento porque foi ele
+que tornou o estimador nao-enviesado por teorema; mas o medo especifico
+do preenchimento era infundado, e so' da' para saber isso medindo.
+
+### Taxa de toque (diagnostico)
+
+Sobre as 178 entradas de venda: 90% tocam -40, 70% tocam -100, 48%
+tocam -200 dentro de 3 barras. Barras de ~119.504 de volume sao grandes
+o bastante para o preco percorrer 200 pontos com frequencia.
+
+### Contabilidade
+
+Deflacao local sobre os 7 pontos, sem somar ao `trials.json`, como
+DECIDIDO no pre-registro. `trials.json` permanece em 504.
+
+### PENDENTE deste mesmo pre-registro
+
+A sensibilidade com `--com-rlp` ainda nao rodou. Esta congelada: se a
+conclusao mudar quando negocios de RLP tambem disparam o stop, isso e'
+achado de microestrutura e tem que aparecer.
