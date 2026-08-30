@@ -30,6 +30,7 @@ de vies. Se reprovar, o bug esta no codigo, nao no desenho.
 
 from __future__ import annotations
 
+import json
 import math
 from pathlib import Path
 from typing import Any, cast
@@ -46,6 +47,41 @@ from .reversao import GRADE_X_CONGELADA, N_MINIMO_POR_PONTO
 from .trials import limiar_deflacionado
 
 log = structlog.get_logger(__name__)
+
+
+def descobrir_volume_barra(features_parquet: Path,
+                           barras: pd.DataFrame) -> tuple[int, str]:
+    """
+    Descobre o `volume_barra` usado ao gerar as features.
+
+    POR QUE PRECISA DESCOBRIR
+    -------------------------
+    O portao monta barras de volume sobre o ruido e precisa da MESMA
+    granularidade do real — geometria diferente compara outra coisa. Mas
+    o valor so' era impresso na tela ao gerar as features, nunca gravado.
+    Pedir ao operador um numero que so' existe no scroll de um terminal
+    antigo e' defeito de desenho, nao falha de memoria dele.
+
+    Duas fontes, nesta ordem:
+
+    1. `resumo.json` ao lado do parquet (gravado a partir de 2026-08-30).
+       Exato.
+    2. INFERIDO de `vol_agr`. Uma barra de volume so' fecha quando a
+       agressao acumulada cruza o limiar, entao todo `vol_agr >= limiar`
+       e o MINIMO entre as barras e' o estimador mais proximo por cima.
+       Aproximado, e reportado como tal.
+    """
+    resumo = features_parquet.parent / "resumo.json"
+    if resumo.exists():
+        dados = json.loads(resumo.read_text(encoding="utf-8"))
+        if "volume_barra" in dados:
+            return int(dados["volume_barra"]), "resumo.json (exato)"
+
+    if "vol_agr" not in barras.columns:
+        raise SystemExit(
+            "sem resumo.json e sem coluna vol_agr: informe --volume-barra")
+    minimo = int(barras["vol_agr"].min())
+    return minimo, f"inferido de min(vol_agr)={minimo} (aproximado)"
 
 
 def _com_dia(barras: pd.DataFrame) -> pd.DataFrame:
@@ -367,11 +403,12 @@ def rodar(features_parquet: Path, curated: Path, symbol: str,
     log.info("remanescente_tape.prevoo", **prevoo)
 
     # ---- 2. portao (bloqueante) --------------------------------------
+    origem_vb = "informado na linha de comando"
     if volume_barra is None:
-        raise SystemExit(
-            "--volume-barra e' obrigatorio: o portao precisa montar barras "
-            "de volume sobre o ruido com a MESMA granularidade do real."
-        )
+        volume_barra, origem_vb = descobrir_volume_barra(features_parquet,
+                                                         barras)
+    log.info("remanescente_tape.volume_barra", valor=volume_barra,
+             origem=origem_vb)
     portao = portao_de_honestidade(volume_barra, horizonte, threshold,
                                    direcao, lado_permitido, limiar_z,
                                    n_dias=n_dias_ruido, semente=semente)
@@ -403,6 +440,8 @@ def rodar(features_parquet: Path, curated: Path, symbol: str,
     tabela.to_csv(saida_dir / "rota_b_remanescente_tape.csv", index=False)
 
     return {
+        "volume_barra": volume_barra,
+        "volume_barra_origem": origem_vb,
         "prevoo": prevoo,
         "portao": {k: portao[k] for k in ("passou", "veredito", "motivo")},
         "limiar_deflacionado": round(limiar_z, 3),

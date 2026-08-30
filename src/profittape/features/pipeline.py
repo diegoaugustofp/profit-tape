@@ -18,6 +18,7 @@ minusculo), depois do concat — identico a versao original.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any, cast
 
@@ -152,7 +153,7 @@ def gerar(
     arquivo = destino / "features.parquet"
     barras_df.to_parquet(arquivo, compression="zstd", index=False)
 
-    return {
+    resumo = {
         "symbol": symbol,
         "trades": total_trades,
         "dias": len(dias),
@@ -167,3 +168,15 @@ def gerar(
         "ambiguas": int(barras_df["label_ambigua"].sum()),
         "arquivo": str(arquivo),
     }
+
+    # RESUMO PERSISTIDO ao lado do parquet.
+    #
+    # `volume_barra` era so' impresso na tela. Quem fosse usar o parquet
+    # dias depois — por exemplo a Rota B, que precisa do MESMO valor para
+    # montar o ruido com a granularidade certa — dependia de achar o
+    # numero no scroll de um terminal antigo. Parametro que define o
+    # dado tem que viajar junto com o dado.
+    (destino / "resumo.json").write_text(
+        json.dumps(resumo, indent=2, ensure_ascii=False, default=str),
+        encoding="utf-8")
+    return resumo

@@ -539,11 +539,12 @@ def rota_b_remanescente(
     features: Path = typer.Option(Path("data/features"), "--features"),
     curated: Path = typer.Option(Path("data/curated"), "--curated"),
     saida: Path = typer.Option(Path("data/research"), "--saida"),
-    volume_barra: int = typer.Option(
-        ..., "--volume-barra",
-        help="O MESMO usado ao gerar as features. O portao monta barras de "
-             "ruido com esta granularidade; errar aqui compara geometrias "
-             "diferentes."),
+    volume_barra: int | None = typer.Option(
+        None, "--volume-barra",
+        help="O MESMO usado ao gerar as features. Se omitido, e' lido do "
+             "resumo.json ao lado do parquet ou, na falta dele, inferido "
+             "de min(vol_agr). O portao monta barras de ruido com esta "
+             "granularidade; errar aqui compara geometrias diferentes."),
     so_agressao: bool = typer.Option(
         True, "--so-agressao/--com-rlp",
         help="Quais negocios disparam o stop. Default True (RLP nao "
@@ -575,6 +576,8 @@ def rota_b_remanescente(
     typer.echo("=" * 66)
     typer.echo("ROTA B — remanescente a partir do toque (pre-registro 2026-08-30d)")
     typer.echo("=" * 66)
+    typer.echo(f"\n  volume_barra: {r['volume_barra']}  "
+               f"({r['volume_barra_origem']})")
     typer.echo("\n--- 1. CHECAGEM DE PRE-VOO (bloqueante) ---")
     for k, v in r["prevoo"].items():
         typer.echo(f"  {k:22}: {v}")

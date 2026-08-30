@@ -190,3 +190,48 @@ def test_estimador_e_calibrado_sobre_ruido_puro() -> None:
     v = r["remanescente"].to_numpy()
     t_stat = v.mean() / (v.std(ddof=1) / np.sqrt(len(v)))
     assert abs(t_stat) < 3.0, f"vies: media={v.mean():.2f} t={t_stat:.2f}"
+
+
+def test_descobre_volume_barra_do_resumo_json(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """
+    Fonte exata. O `volume_barra` era so' impresso na tela ao gerar as
+    features; quem fosse usar o parquet dias depois dependia do scroll de
+    um terminal antigo. Parametro que define o dado viaja com o dado.
+    """
+    import json
+
+    from profittape.research.remanescente_tape import descobrir_volume_barra
+
+    arq = tmp_path / "features.parquet"
+    arq.write_bytes(b"")
+    (tmp_path / "resumo.json").write_text(
+        json.dumps({"symbol": "WINFUT", "volume_barra": 7400}),
+        encoding="utf-8")
+    valor, origem = descobrir_volume_barra(arq, pd.DataFrame())
+    assert valor == 7400 and "exato" in origem
+
+
+def test_infere_volume_barra_de_vol_agr(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """
+    Sem resumo.json, o minimo de `vol_agr` e' o estimador mais proximo
+    por cima: uma barra so' fecha quando a agressao acumulada CRUZA o
+    limiar, entao todo vol_agr >= limiar.
+    """
+    from profittape.research.remanescente_tape import descobrir_volume_barra
+
+    arq = tmp_path / "features.parquet"
+    limiar = 4000
+    rng = np.random.default_rng(2)
+    # cada barra fecha no limiar mais o excesso do ultimo negocio
+    barras = pd.DataFrame({"vol_agr": limiar + rng.integers(0, 250, size=500)})
+    valor, origem = descobrir_volume_barra(arq, barras)
+    assert valor >= limiar
+    assert valor - limiar < 250, "estimativa longe demais do limiar real"
+    assert "aproximado" in origem
+
+
+def test_sem_resumo_e_sem_vol_agr_pede_o_parametro(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    from profittape.research.remanescente_tape import descobrir_volume_barra
+
+    with pytest.raises(SystemExit, match="volume-barra"):
+        descobrir_volume_barra(tmp_path / "features.parquet", pd.DataFrame())

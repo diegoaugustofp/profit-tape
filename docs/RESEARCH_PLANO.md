@@ -2808,7 +2808,36 @@ ajustado por resultado.
 Rodar sobre dado real, na maquina do operador (o tape nao esta no
 sandbox):
 
-    profit-tape rota-b-remanescente WINFUT --volume-barra <o mesmo das features>
+    profit-tape rota-b-remanescente WINFUT
+
+`--volume-barra` deixou de ser obrigatorio: o valor e' lido do
+`resumo.json` ao lado do parquet ou, na falta dele, inferido de
+`min(vol_agr)`. Ver a secao seguinte.
 
 E rodar tambem com `--com-rlp`, como a sensibilidade congelada pede: se
 a conclusao mudar, e' achado de microestrutura e tem que aparecer.
+
+### O `volume_barra` nao era gravado em lugar nenhum (2026-08-30f)
+
+O comando da Rota B pedia `--volume-barra` — o mesmo usado ao gerar as
+features, porque o portao monta barras de ruido com a MESMA
+granularidade e geometria diferente compara outra coisa.
+
+So' que esse valor era apenas IMPRESSO NA TELA por `features`, e nunca
+gravado. Quem fosse usar o parquet dias depois dependia de achar o
+numero no scroll de um terminal antigo. **Pedir um dado que so' existe
+no historico do console e' defeito de desenho, nao falha de memoria de
+quem roda.**
+
+Corrigido em dois niveis:
+
+1. **`features` passa a gravar `resumo.json`** ao lado do parquet, com
+   `volume_barra`, tick inferido, dias, contagens e agentes. Parametro
+   que define o dado viaja junto com o dado.
+2. **Para os parquets antigos, o valor e' INFERIDO** de `min(vol_agr)`:
+   uma barra de volume so' fecha quando a agressao acumulada CRUZA o
+   limiar, entao todo `vol_agr >= limiar` e o minimo e' o estimador mais
+   proximo por cima. Reportado como "aproximado", nunca como exato.
+
+O comando informa a origem do valor na saida — exato ou inferido — para
+a diferenca nao ficar invisivel.
