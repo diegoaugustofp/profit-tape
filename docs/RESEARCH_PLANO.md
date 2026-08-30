@@ -82,6 +82,8 @@ arquivo cresceu demais para navegar so' por titulo cronologico).
 
 - [PRE-REGISTRO 3 DA ROTA B (CONGELADO): expectativa remanescente com F exato (2026-08-30d)](#pre-registro-3-da-rota-b-congelado-expectativa-remanescente-com-f-exato-2026-08-30d)
 
+- [IMPLEMENTADO: remanescente_tape executa o pre-registro 3 (2026-08-30e)](#implementado-remanescente_tape-executa-o-pre-registro-3-2026-08-30e)
+
 **Disciplina/processo do proprio research**
 - [Decisoes aprovadas](#decisoes-aprovadas)
 - [Pre-requisitos antes de escrever research/](#pre-requisitos-antes-de-escrever-research)
@@ -2738,3 +2740,75 @@ Duas consequencias, as duas fixadas aqui:
   caudas ganhadoras de um sinal cujo edge vem de magnitude).
 - Custo em expectativa do stop-como-(a) — pre-registro separado.
 - Stop de corretora do Profit: e' EXECUCAO, nao medicao.
+
+## IMPLEMENTADO: remanescente_tape executa o pre-registro 3 (2026-08-30e)
+
+`src/profittape/research/remanescente_tape.py` +
+`profit-tape rota-b-remanescente`. Modulo NOVO: `remanescente.py`, que
+implementa o estimador reprovado em 29c, fica intacto — o historico de
+um estimador invalido e' parte da auditoria, e a comparacao entre os
+dois documenta a correcao.
+
+### A ordem bloqueante esta no CODIGO
+
+    1. checagem de pre-voo   (bloqueante)
+    2. portao sobre ruido    (bloqueante)
+    3. so' entao o dado real
+
+`rodar()` levanta antes de tocar dado real se o portao nao devolver
+CONTRA. Deixar a ordem a cargo de quem executa seria confiar exatamente
+no ponto onde este projeto ja' falhou.
+
+### PORTAO PASSOU
+
+Ruido puro, 100 pregoes sinteticos, 10.000 barras de volume:
+
+    X     n    media      t     IC95
+     40  592   +0,287   0,066   [ -7,29 ; +8,40]
+     60  490   -0,755  -0,167   [ -8,67 ; +7,97]
+     80  405   -1,062  -0,230   [ -8,86 ; +7,25]
+    100  339   +3,422   0,717   [ -4,96 ; +12,45]
+    120  263   +2,624   0,524   [ -7,05 ; +12,52]
+    150  177   +4,463   0,828   [ -5,03 ; +14,18]
+    200   80   +8,000   1,147   [ -6,07 ; +23,88]
+
+    VEREDITO SOBRE RUIDO: CONTRA  -> portao PASSOU
+
+Comparacao com os dois estimadores anulados, no mesmo tipo de ruido:
+
+    29a (condiciona no MAE_intrabar)  t ~ -25
+    29c (F = extremo da barra)        +30 pts, t entre 8 e 13
+    este (F = primeiro negocio)       |t| <= 1,15, medias em [-1; +8]
+
+### DEFEITO ENCONTRADO NO PROPRIO PORTAO: ele nao conseguia passar
+
+Com 25 pregoes de ruido, X=200 juntava n=18 — abaixo do minimo de 30 —
+e `decidir` devolvia INCONCLUSIVO. Ou seja, o veredito CONTRA era
+**inatingivel por construcao**, e o portao teria reprovado um estimador
+comprovadamente calibrado.
+
+**Um portao que nao consegue passar nao e' portao.** Corrigido: o
+default de ruido virou 100 pregoes (derivado de fazer o ponto mais
+esparso cruzar 30, nao escolhido por resultado), e amostra insuficiente
+agora levanta ERRO explicito em vez de virar reprovacao silenciosa.
+
+Isso e' um caso do mesmo padrao que ja' apareceu tres vezes hoje: um
+verificador que falha de um jeito que parece resultado.
+
+### Calibracao da geometria do ruido
+
+Passo de ±1 tick por negocio faz a amplitude da barra ir com `5·raiz(N)`.
+Para a amplitude cair na faixa da grade de X (40 a 200 pts), sao ~200
+negocios por barra. Com 20.000 negocios/pregao, `volume_barra=200` da
+~100 barras/pregao — a mesma ordem do real. Derivado da aritmetica, nao
+ajustado por resultado.
+
+### O que falta para responder a pergunta
+
+Rodar sobre dado real, na maquina do operador (o tape nao esta no
+sandbox):
+
+    profit-tape rota-b-remanescente WINFUT --volume-barra <o mesmo das features>
+
+E rodar tambem com `--com-rlp`, como a sensibilidade congelada pede: se
+a conclusao mudar, e' achado de microestrutura e tem que aparecer.

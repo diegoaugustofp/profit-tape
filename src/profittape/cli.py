@@ -534,6 +534,65 @@ def ntsl_equivalencia(
 
 
 @app.command()
+def rota_b_remanescente(
+    symbol: str = typer.Argument("WINFUT"),
+    features: Path = typer.Option(Path("data/features"), "--features"),
+    curated: Path = typer.Option(Path("data/curated"), "--curated"),
+    saida: Path = typer.Option(Path("data/research"), "--saida"),
+    volume_barra: int = typer.Option(
+        ..., "--volume-barra",
+        help="O MESMO usado ao gerar as features. O portao monta barras de "
+             "ruido com esta granularidade; errar aqui compara geometrias "
+             "diferentes."),
+    so_agressao: bool = typer.Option(
+        True, "--so-agressao/--com-rlp",
+        help="Quais negocios disparam o stop. Default True (RLP nao "
+             "consome liquidez do livro). Rode os dois: se a conclusao "
+             "mudar, e achado de microestrutura e tem que aparecer."),
+    dias_ruido: int = typer.Option(100, "--dias-ruido"),
+    log_file: Path | None = typer.Option(None, "--log-file"),
+    log_level: str = typer.Option("INFO", "--log-level"),
+) -> None:
+    """
+    ROTA B — expectativa remanescente a partir do toque, com F exato.
+
+    Executa o pre-registro 3 congelado em 2026-08-30d, NA ORDEM:
+    pre-voo (bloqueante), portao de honestidade (bloqueante), dado real.
+    A ordem esta no codigo: se o portao nao devolver CONTRA sobre ruido,
+    o comando aborta antes de olhar qualquer numero real.
+    """
+    configurar(log_level, arquivo=log_file, nivel_arquivo="INFO")
+    from .research.remanescente_tape import rodar
+
+    arquivo = features / f"sym={symbol.upper()}" / "features.parquet"
+    if not arquivo.exists():
+        raise SystemExit(f"nao achei {arquivo} — rode `profit-tape features`")
+
+    r = rodar(arquivo, curated, symbol.strip().upper(), saida,
+              volume_barra=volume_barra, so_agressao=so_agressao,
+              n_dias_ruido=dias_ruido)
+
+    typer.echo("=" * 66)
+    typer.echo("ROTA B — remanescente a partir do toque (pre-registro 2026-08-30d)")
+    typer.echo("=" * 66)
+    typer.echo("\n--- 1. CHECAGEM DE PRE-VOO (bloqueante) ---")
+    for k, v in r["prevoo"].items():
+        typer.echo(f"  {k:22}: {v}")
+    typer.echo("\n--- 2. PORTAO SOBRE RUIDO (bloqueante) ---")
+    typer.echo(f"  veredito: {r['portao']['veredito']}  |  passou: "
+               f"{r['portao']['passou']}")
+    typer.echo("\n--- 3. DADO REAL ---")
+    typer.echo(f"  limiar deflacionado (7 comparacoes): "
+               f"{r['limiar_deflacionado']}")
+    typer.echo(f"  so_agressao: {r['so_agressao']}")
+    typer.echo(r["tabela"][["x", "n", "n_suficiente", "media", "t",
+                            "ic95_baixo", "ic95_alto", "overshoot_medio",
+                            "sig"]].round(3).to_string(index=False))
+    typer.echo(f"\n  VEREDITO: {r['veredito']}")
+    typer.echo(f"  {r['motivo']}")
+
+
+@app.command()
 def agents(
     dados: Path = typer.Option(
         Path("data/curated"), "--dados",
