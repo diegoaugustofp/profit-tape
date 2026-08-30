@@ -3001,8 +3001,45 @@ o bastante para o preco percorrer 200 pontos com frequencia.
 Deflacao local sobre os 7 pontos, sem somar ao `trials.json`, como
 DECIDIDO no pre-registro. `trials.json` permanece em 504.
 
-### PENDENTE deste mesmo pre-registro
+### SENSIBILIDADE COM RLP: resultado IDENTICO, e isso e' um achado
 
-A sensibilidade com `--com-rlp` ainda nao rodou. Esta congelada: se a
-conclusao mudar quando negocios de RLP tambem disparam o stop, isso e'
-achado de microestrutura e tem que aparecer.
+Rodado `--com-rlp`, como o pre-registro exigia.
+
+Primeiro a verificacao de que a flag de fato mudou o dado — sem ela,
+"resultado identico" seria indistinguivel de "a flag nao funcionou":
+
+    negocios por pregao, so agressao -> com RLP
+      24/07  2.810.589 -> 3.917.214   (+39%)
+      27/07  2.737.004 -> 3.889.802   (+42%)
+      28/07  3.325.040 -> 4.576.388   (+38%)
+
+Mais de um milhao de negocios por pregao entraram no tape. E os sete
+pontos deram numeros **IDENTICOS ate a ultima casa** — mesmo `n`, mesma
+media, mesmo `t`, mesmo overshoot de 0,062 em X=40.
+
+**Nenhuma das 1.246 combinacoes (entrada x X) mudou de status.**
+
+### O mecanismo, e por que ele fecha com a equivalencia NTSL
+
+Um print de RLP NUNCA foi o primeiro a cruzar um nivel. Coerente com a
+microestrutura: RLP imprime DENTRO do spread, entao nao alcanca um preco
+que a agressao ainda nao tinha alcancado.
+
+E' o MESMO mecanismo encontrado hoje na equivalencia NTSL, por um
+caminho totalmente diferente: la', o RLP mexia em `open` e `close` (o
+primeiro e o ultimo negocio da barra) mas o denominador `(high - low)`
+batia em 79 de 80 barras. **Cruzar um nivel e' fazer extremo novo**, e o
+RLP nao faz extremo.
+
+Duas medicoes independentes, mesma conclusao sobre a microestrutura.
+
+### Consequencia sobre a decisao de desenho
+
+`so_agressao=True` estava registrado como decisao "empirica, nao obvia",
+justificada por argumento (RLP nao consome liquidez do livro, logo nao
+deveria acionar um stop que la' repousa). Agora e' melhor que
+defensavel: e' **indiferente na pratica** para este instrumento.
+
+O parametro fica, porque o argumento nao vale para instrumento ilíquido
+nem para grade de tick mais grossa — mas para o WINFUT a escolha nao
+muda nada, e isso esta medido em vez de suposto.
