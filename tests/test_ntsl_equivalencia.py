@@ -289,3 +289,45 @@ def test_atribuicao_decompoe_numerador_e_denominador(tmp_path) -> None:  # type:
     assert a["barras_nada_difere"] == 15
     assert a["erro_mediano_nada_difere"] == pytest.approx(0.0, abs=1e-9)
     assert a["tick_estimado"] == pytest.approx(5.0)
+
+
+def test_separa_open_de_close_no_numerador(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """
+    A decomposicao mostrou que o numerador `(close - open)` e' o culpado
+    (46 de 80 barras, exatamente 1 tick). Falta saber QUAL ponta.
+
+    Se o primeiro/ultimo negocio da barra e' de um tipo que um lado
+    inclui e o outro nao, as duas pontas divergem em taxas parecidas. Se
+    so' o fechamento diverge, a causa e' outra — fronteira de barra, que
+    afeta preferencialmente o ultimo negocio.
+    """
+    inicio = pd.Timestamp("2026-08-24", tz="UTC") + pd.Timedelta(hours=13)
+    n = 40
+    py = pd.DataFrame({
+        "bar_id": range(300, 300 + n),
+        "ts_open": [inicio.value + i * 300 * S + 3 * S for i in range(n)],
+        "open": 100.0, "high": 155.0, "low": 100.0, "close": 120.0,
+        "imbalance": 0.4, "desloc_norm": 20.0 / 55.0,
+        "absorcao_dir": 0.4 - 20.0 / 55.0, "z_absorcao_dir": 1.0,
+    })
+    arq_py = tmp_path / "features.parquet"
+    py.to_parquet(arq_py, index=False)
+
+    linhas = []
+    for i in range(n):
+        t_ = (inicio + pd.Timedelta(minutes=5 * i)).tz_convert("America/Sao_Paulo")
+        hhmm = t_.hour * 100 + t_.minute
+        op = 105.0 if i % 4 == 0 else 100.0     # 10 barras: so' open
+        cl = 125.0 if i % 4 == 1 else 120.0     # 10 barras: so' close
+        desloc = (cl - op) / 55.0
+        linhas.append(
+            f"ABSDIR|1260824|{hhmm}|{hhmm}|{op}|155|100|{cl}"
+            f"|1000|720|700|300|0.4|{desloc}|{0.4 - desloc}|0.1|0.2|1.0")
+    arq_log = tmp_path / "console.txt"
+    arq_log.write_text("\n".join(linhas), encoding="utf-8")
+
+    a = comparar(arq_log, arq_py, segundos=300)["atribuicao_rlp"]
+    assert a["barras_so_open"] == 10
+    assert a["barras_so_close"] == 10
+    assert a["barras_open_e_close"] == 0
+    assert a["dif_open_mediana_ticks"] == pytest.approx(1.0)

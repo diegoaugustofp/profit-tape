@@ -514,6 +514,14 @@ def ntsl_equivalencia(
                    f"{atrib['dif_numerador_mediana_ticks']} ticks")
         typer.echo(f"  diferenca mediana do denominador : "
                    f"{atrib['dif_denominador_mediana_ticks']} ticks")
+        typer.echo("\n  qual ponta do numerador diverge (open e close sao o")
+        typer.echo("  primeiro e o ultimo negocio da barra):")
+        typer.echo(f"    so' open  : {atrib['barras_so_open']}"
+                   f"   |  so' close : {atrib['barras_so_close']}"
+                   f"   |  os dois : {atrib['barras_open_e_close']}")
+        typer.echo(f"    dif mediana open  : "
+                   f"{atrib['dif_open_mediana_ticks']} ticks  |  close : "
+                   f"{atrib['dif_close_mediana_ticks']} ticks")
     elif atrib.get("situacao"):
         typer.echo(f"\n  atribuicao nao calculada: {atrib['situacao']}")
     if r["barras_casadas"] == 0:

@@ -225,10 +225,31 @@ def _atribuir_divergencia(juntos: pd.DataFrame) -> dict[str, Any]:
     def mediana(mask: pd.Series[bool]) -> float | None:
         return round(float(erro[mask].median()), 6) if mask.any() else None
 
+    # SEPARA open de close. Se o numerador diverge porque o primeiro ou o
+    # ultimo negocio da barra e' de um tipo que um lado inclui e o outro
+    # nao (RLP), as duas pontas divergem em taxas parecidas. Se so' uma
+    # ponta diverge, a causa e' outra — fronteira de barra, por exemplo,
+    # afeta preferencialmente o ultimo negocio.
+    dif_open = ((d["open_ntsl"] / k) - d["open_py"]).abs()
+    dif_close = ((d["close_ntsl"] / k) - d["close_py"]).abs()
+    open_difere = dif_open > 1e-3 * escala
+    close_difere = dif_close > 1e-3 * escala
+
     return {
         "n": len(d),
         "k_estimado": round(k, 6),
         "tick_estimado": round(tick, 4),
+        "barras_open_difere": int(open_difere.sum()),
+        "barras_close_difere": int(close_difere.sum()),
+        "barras_so_open": int((open_difere & ~close_difere).sum()),
+        "barras_so_close": int((~open_difere & close_difere).sum()),
+        "barras_open_e_close": int((open_difere & close_difere).sum()),
+        "dif_open_mediana_ticks": round(
+            float(dif_open[open_difere].median() / tick), 3)
+        if open_difere.any() else None,
+        "dif_close_mediana_ticks": round(
+            float(dif_close[close_difere].median() / tick), 3)
+        if close_difere.any() else None,
         "barras_so_numerador_difere": int((num_difere & ~den_difere).sum()),
         "barras_so_denominador_difere": int((~num_difere & den_difere).sum()),
         "barras_ambos_diferem": int((num_difere & den_difere).sum()),

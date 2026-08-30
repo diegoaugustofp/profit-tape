@@ -425,3 +425,61 @@ Erro meu na primeira tentativa: estimei o tick pelo gcd das
 igual à amplitude. Trocado para o gcd das diferenças entre **preços
 distintos**, que é onde a grade de fato aparece, com a classificação por
 tolerância relativa para não depender dele.
+
+
+## DECOMPOSIÇÃO CONCLUSIVA (2026-08-30) — é o numerador
+
+    desloc_norm = (close - open) / (high - low)
+    k estimado 1,020499 | tick estimado 5,0
+
+    so' o NUMERADOR (close-open) difere : 46 de 80
+    so' o DENOMINADOR (high-low) difere :  0
+    os dois diferem                     :  1
+    nenhum difere                       : 33   (erro mediano 0,0)
+
+    diferenca mediana do numerador   : 1,0 tick
+    diferenca mediana do denominador : 1,0 tick
+
+Partição perfeita: 33 + 46 + 1 = 80, e os 33 "nada difere" são exatamente
+as 33 barras iguais da linha `desloc_norm`. O denominador diverge em
+**1 de 80**.
+
+`(high − low)` é o mesmo nos dois lados. O que muda é `(close − open)`,
+por **exatamente um tick**. Isso é `open` e/ou `close` — o primeiro e o
+último negócio da barra.
+
+### Sequência de três explicações, duas refutadas
+
+1. "cresce com o volume de RLP" → correlação −0,12, quartil de maior RLP
+   com erro zero. **Refutada.**
+2. "um print de RLP toca um extremo" → 79/80 com extremos idênticos e o
+   erro continuava. **Refutada.**
+3. "o primeiro ou o último negócio da barra difere" → compatível com
+   tudo: denominador intacto, numerador exatamente 1 tick, erro ∝
+   1/amplitude, erro máximo 2/11, 41% de barras exatas.
+
+As duas primeiras reproduziam o **sintoma** — divergência presente, do
+tamanho esperado, ausente quando `imbalance` é exato. Nenhuma era a
+causa. Sem um diagnóstico que testasse a explicação, qualquer uma teria
+sido dada como confirmada.
+
+### Falta separar `open` de `close`
+
+O diagnóstico agora reporta as duas pontas em separado. É o que distingue
+as duas causas ainda possíveis:
+
+- **taxas parecidas nas duas pontas** → é o tipo do negócio (RLP), que
+  um lado inclui e o outro não;
+- **só o fechamento diverge** → é fronteira de barra, que afeta
+  preferencialmente o último negócio, e aí o problema é de qual negócio
+  cai em qual balde, não de preço.
+
+### Erro de processo registrado
+
+Uma edição por substituição de texto reportou sucesso **sem alterar
+nada**: um `ruff --fix` anterior tinha removido as aspas de
+`"pd.Series[bool]"`, então a âncora procurada não existia mais. A falha
+só apareceu porque o teste novo quebrou com `KeyError`. É a terceira
+falha silenciosa desta sessão — junto com o contador de buracos que
+devolvia zero por construção e o validador de âncoras que achava zero
+links.
