@@ -49,6 +49,9 @@ input
   MostrarLadoOposto(1);     // 1 = pinta tambem o lado negativo
   LogAtivo(1);              // 1 = emite ConsoleLog
   LogSomenteSinal(0);       // 1 = loga so' barras coloridas
+  LogDataInicio(0);         // 0 = sem filtro. Formato de Date():
+                            // 1AnoMesDia, entao 01/07/2026 = 1260701.
+  LogDataFim(0);            // 0 = sem filtro. Idem.
 
 var
   sAgrCompra, sAgrVenda, sVolAgr, sImbalance : Float;
@@ -56,7 +59,7 @@ var
   sAmplitude, sDeslocNorm, sAbsorcaoDir      : Float;
   sSoma, sSomaQuad, sMedia, sDesvio, sZ, sD  : Float;
   nIndex                                     : Integer;
-  bPintou                                    : Boolean;
+  bPintou, bNaJanela                         : Boolean;
 begin
   sAgrCompra := AgressionVolBuy;
   sAgrVenda  := AgressionVolSell;
@@ -155,10 +158,32 @@ begin
   // deduplica por data+hora e REPORTA quantas duplicatas viu, em vez de
   // esconde-las.
   //
+  // JANELA DE DATA (LogDataInicio / LogDataFim)
+  //
+  // O console do Profit tem buffer finito (~2.000 linhas medidas em
+  // 2026-08-30). Como a carga de historico processa as barras em ordem
+  // CRONOLOGICA, o buffer enche a partir da barra MAIS ANTIGA e para:
+  // carregando desde 03/2025, as vagas acabaram em 30/06/2026 e agosto
+  // nunca apareceu. Quanto MAIS historico o grafico tem, mais CEDO o log
+  // termina — o oposto do que a intuicao sugere.
+  //
+  // O filtro de data resolve porque o indicador continua CALCULANDO
+  // sobre todo o historico — a janela de 50 barras e o aquecimento do
+  // z-score ficam intactos, sem artefato de borda — e apenas o
+  // ConsoleLog e' suprimido fora da janela. Filtrar reduzindo o periodo
+  // do grafico teria custado o aquecimento; filtrar aqui nao custa nada.
+  //
+  // Nao da para fazer isso pelos parametros do Profit: "tick a tick =
+  // 1 semana" e' limite de backtest/automacao, e o indicador nao o
+  // respeita.
+  //
   // Campos separados por | para o parser. Ordem CONGELADA: mudar aqui
   // exige mudar tools/ntsl_equivalencia.py junto.
   //-------------------------------------------------------------------
-  if (LogAtivo = 1) and (CurrentBar <= BarCount - 3) then
+  bNaJanela := ((LogDataInicio = 0) or (Date >= LogDataInicio))
+           and ((LogDataFim    = 0) or (Date <= LogDataFim));
+
+  if (LogAtivo = 1) and bNaJanela and (CurrentBar <= BarCount - 3) then
   begin
     if (LogSomenteSinal = 0) or bPintou then
       // Date() vem no formato EasyLanguage 1AnoMesDia (24/08/2026 =>

@@ -197,3 +197,72 @@ como o manual descreve. É o único jeito de detectar essa falha de fora.
 
 Se forem diferentes, a razão entre elas dá a fração de RLP+leilão da
 barra, comparável direto com `rlp_frac` do parquet.
+
+
+## O buffer do console enche de trás para frente (2026-08-30)
+
+Medido: o console retém cerca de **2.000 linhas**. A carga de histórico
+processa as barras em ordem **cronológica**, então o buffer enche a
+partir da barra **mais antiga** e para.
+
+Consequência contraintuitiva: **quanto mais histórico o gráfico tem,
+mais cedo o log termina.** Três tentativas seguidas produziram dumps
+cada vez mais antigos — 16/07 a 11/08 de 2025, depois 07/03 a 02/04 de
+2025, depois 10/03/2025 a 30/06/2026. O gráfico tinha agosto de 2026 o
+tempo todo; as vagas é que acabavam antes.
+
+Reduzir o log por barra não resolve — o buffer conta linhas, e mesmo com
+`LogSomenteSinal=1` (6,2 barras/pregão) as 2.001 vagas cobriram 325
+pregões e travaram em 30/06/2026.
+
+Limitar o período pelos parâmetros do Profit também não: **"tick a tick
+= 1 semana" é limite de backtest/automação, e o indicador não o
+respeita** — ele roda sobre tudo que o gráfico carregou.
+
+### Por que a janela de data resolve sem custo
+
+`LogDataInicio` / `LogDataFim` suprimem apenas o `ConsoleLog`. O
+indicador continua **calculando** sobre todo o histórico, então a janela
+de 50 barras e o aquecimento do z-score ficam intactos.
+
+Reduzir o período do gráfico teria o mesmo efeito no buffer, mas custaria
+o aquecimento: as primeiras 50 barras da janela sairiam com `z = 0` e as
+seguintes com estatística de amostra curta. Filtrar no log não custa
+nada disso.
+
+    LogDataInicio = 1260701   (01/07/2026)
+    LogSomenteSinal = 0       (amostra NAO selecionada — ver abaixo)
+
+### Por que desligar `LogSomenteSinal` na equivalência
+
+Logando só as barras coloridas, a amostra fica **selecionada pelo z do
+NTSL**. Se as duas implementações divergirem, só se enxerga as barras
+onde o NTSL achou extremo — e fica-se cego para o caso oposto, onde o
+Python acha extremo e o NTSL não. Para comparar duas implementações, a
+amostra tem que ser independente do resultado de qualquer uma delas.
+
+## Diagnóstico do `SoAgressores`: RESOLVIDO (2026-08-30)
+
+Sobre 2.001 barras reais:
+
+    vol_total == vol_so_agressores em 0,00% das barras (0 de 2.001)
+    mediana vol_total          171.058
+    mediana vol_so_agressores  124.086
+    mediana agrC + agrV        124.086
+
+**O opcional Plugin Tape Reading está ativo** — o `SoAgressores` é
+obedecido, não ignorado em silêncio. A armadilha do manual existe, mas
+não é o caso aqui.
+
+E `AgressionVolBuy + AgressionVolSell` é **exatamente**
+`QuantityVol(False, True)`: razão mediana 1,0000, com p05 e p95 também
+em 1,0000. Duas APIs diferentes, mesmo número, barra a barra.
+
+### Fração de RLP + leilão: 26%
+
+    mediana 0,2603   p95 0,3434   max 0,7125
+
+É a divergência prevista por escrito antes de qualquer medição: o OHLC
+do gráfico inclui esses 26%, o do profit-tape não. Quando a equivalência
+rodar, `desloc_norm` vai divergir por isso — agora com a magnitude
+conhecida de antemão, em vez de virar surpresa.
