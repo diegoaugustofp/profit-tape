@@ -222,6 +222,87 @@ correção de CI de madrugada do dia seguinte. Versões entregues:
 
 ---
 
+## 2026-08-30 — do CONTRA à equivalência NTSL fechada (v1.12 a v1.30)
+
+Dezenove entregas. **Zero trial gasto além dos 12 pré-registrados.**
+
+### A hipótese morreu, e morreu direito
+
+Executado o pré-registro de absorção direcional: **CONTRA nas 12
+células**. Melhor célula `z_absorcao_dir` h=1 no 5m, IC −0,0342 no sinal
+previsto, superando ambos os controles — e ainda assim |t| 3,06 contra
+os 4,03 exigidos. A porta de "falta de poder" do pré-registro 3 não
+abriu: maior consistência 0,82 contra os 0,85 exigidos.
+
+Nada foi resgatado por reanálise. O pré-registro de 29e tinha antecipado
+por escrito que o IC é fraco para efeito de cauda e que mesmo assim
+seria o portão — e foi essa frase que impediu, no fim, transformar um
+negativo em "o teste era inadequado".
+
+### O achado que explica o CONTRA melhor que o IC
+
+`absorcao_dir` é **sub-gaussiana por construção**. `imbalance` e
+`desloc_norm` são limitados a [−1,+1], o composto tem teto [−2,+2], e o
+observado ficou em [−0,847; +0,897]. Sobre 2.698 barras: |z|≥2,5 aparece
+em 0,07% contra 1,24% de uma normal — 6% do esperado.
+
+A hipótese era sobre barras extremas; **a fórmula não consegue produzir
+barras extremas**. Achado algébrico, derivado da distribuição e não do
+resultado, ao calibrar o limiar do indicador por frequência.
+
+### Descoberta de orçamento
+
+O `RESEARCH_PLANO` registrava 42 trials; o `trials.json` real fechava em
+**492**, dos quais 360 (73%) de uma varredura de 8 símbolos que rodou em
+um minuto. O `t_critico` efetivo saltou de 3,31 para 4,03.
+
+### Equivalência NTSL ↔ profit-tape: FECHADA
+
+    imbalance    exato — 80/80, diferenca maxima 0,000000
+    desloc_norm  diverge em 47/80, sempre 1 tick em open/close
+    absorcao_dir herda exatamente o erro de desloc_norm
+    z            reproduz normalize.py com erro 2,4e-8 (1.950 celulas)
+
+Causa única, confirmada por três frentes independentes: o OHLC do
+gráfico usa o primeiro e o último negócio de *qualquer* tipo; o do
+profit-tape usa só agressão.
+
+**Três explicações, duas refutadas pelo próprio diagnóstico.** As duas
+primeiras (volume de RLP; RLP tocando extremo) reproduziam o sintoma
+perfeitamente — divergência presente, do tamanho previsto, ausente
+quando `imbalance` era exato. Em três momentos teria sido possível
+fechar dizendo "divergiu como previsto", certo sobre o sintoma e errado
+sobre a causa.
+
+### Seis erros meus, todos pegos por verificação e não por cuidado
+
+1. **Calibração do portão** errada em duas ordens de grandeza (barra de
+   7 ticks contra 35 reais) — levou a bloquear o braço de 1m por engano.
+   Revogado.
+2. **`_contar_buracos` falso por construção**: a renumeração densa
+   apagava os vazios e o contador devolvia zero para qualquer entrada.
+3. **Validador de âncoras** achando zero links por escapes duplos —
+   reportava "nenhum quebrado" sobre nada. Havia 23 links quebrados.
+4. **Parser de número** produzindo `NaN` silencioso no formato pt-BR; o
+   comparador ignora `NaN`, então o campo sumiria em vez de acusar.
+5. **`str_replace` reportando sucesso sem alterar nada** — um
+   `ruff --fix` anterior tinha mudado a âncora procurada.
+6. **Teste do `z` na borda do parquet**: escolhi o dia da sobreposição
+   sem notar que era o primeiro dia da amostra, onde as janelas têm
+   conteúdo diferente por construção.
+
+### Aprendizados de instrumento
+
+- Buffer do console do Profit enche **de trás para frente**: quanto mais
+  histórico o gráfico tem, mais cedo o log termina.
+- `WINFUT` no gráfico é a **série contínua ajustada** (k medido pela
+  grade de preço).
+- Plugin Tape Reading **confirmado ativo** — `SoAgressores` obedecido.
+- `AgressionVolBuy+Sell` é exatamente `QuantityVol(False, True)`.
+- Histórico de agressão é profundo (13 meses verificados).
+
+Tags `entregue-v1.12` a `entregue-v1.30`.
+
 ## 2026-08-29/30 — indicador de absorção para NTSL: do plano ao CONTRA
 
 Sessão que começou com o pedido de planejar um indicador NTSL de barra

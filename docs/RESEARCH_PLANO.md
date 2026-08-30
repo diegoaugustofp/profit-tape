@@ -76,6 +76,8 @@ arquivo cresceu demais para navegar so' por titulo cronologico).
 
 - [A FORMULA NAO TEM CAUDA: absorcao_dir e sub-gaussiana por construcao (2026-08-30b)](#a-formula-nao-tem-cauda-absorcao_dir-e-sub-gaussiana-por-construcao-2026-08-30b)
 
+- [ESTADO AO FIM DE 2026-08-30: o que esta aberto](#estado-ao-fim-de-2026-08-30-o-que-esta-aberto)
+
 **Disciplina/processo do proprio research**
 - [Decisoes aprovadas](#decisoes-aprovadas)
 - [Pre-requisitos antes de escrever research/](#pre-requisitos-antes-de-escrever-research)
@@ -2396,3 +2398,54 @@ A distincao que torna isso legitimo: escolher o limiar pela FREQUENCIA
 olhar. Escolher pelo RESULTADO ("1,75 pegou umas boas") e' overfit
 visual, e nao deixa de ser porque foi feito com o olho em vez de com um
 otimizador. O limiar continua NAO VALIDADO nos dois casos.
+
+## ESTADO AO FIM DE 2026-08-30: o que esta aberto
+
+### Encerrado
+
+- **Absorcao direcional (`imbalance - desloc_norm`)**: CONTRA nas 12
+  celulas. Encerrada NESTA FORMA. A regra de parada nao autoriza
+  acumular pregoes apos CONTRA.
+- **Equivalencia NTSL <-> profit-tape**: fechada, causa unica
+  identificada e quantificada. Ver `NTSL_ABSORCAO.md`.
+
+### Pendente, em ordem de custo
+
+**1. Fechar o `z` da equivalencia (custo: um dump).**
+A sobreposicao caiu no primeiro dia do parquet, onde as janelas tem
+conteudo diferente por construcao. Basta um dump com
+`LogDataInicio = 1260728`. E' o unico item que ficou pela metade.
+
+**2. Acumular pregoes (custo: zero, e a alavanca mais valiosa).**
+De 25 para 50 pregoes o `t_critico` cai de 4,03 para ~3,50 sem gastar
+trial. Depois de 504 trials, e' o unico jeito de baixar a barra. E a
+captura tem perda documentada, entao confiabilidade de captura melhora
+toda pergunta futura.
+
+**3. Rota B / stop continuo (custo: desenho, zero trial).**
+Travada desde tres pre-registros invalidados pelo portao de honestidade.
+Apareceu no inicio desta sessao uma possivel destravada que nunca foi
+investigada: a automacao do Profit envia stop de verdade a corretora,
+que e' um stop CONTINUO — exatamente o que faltava, dado que a Rota B
+morreu por ser checada so no fechamento de barra.
+
+**4. Nova formalizacao de absorcao (custo: 6 a 12 trials, e so' faz
+sentido com mais pregoes).**
+O CONTRA e' sobre a FORMULA, nao sobre o fenomeno. O achado de
+2026-08-30b aponta a direcao com precisao: para existir cauda, a formula
+precisa de um termo ILIMITADO. `absorcao = vol_agr / range_ticks` e'
+ilimitado; `imbalance` nunca passa de 1. Exige pre-registro NOVO, com a
+ressalva honesta de que nasce depois de ter visto o CONTRA.
+
+**5. Indicador NTSL como exploracao visual (custo: zero).**
+Rotulado como tal. O uso legitimo e' olhar as barras que a leitura
+visual identifica e ver o que a formula deixou de fora — e o mais
+informativo e' o desacordo, nao a concordancia.
+
+### Duas coisas que NAO estao autorizadas
+
+- Reanalisar os dados de 2026-08-30 por quintil, corte de cauda ou
+  qualquer condicional. Antecipado por escrito em 2026-08-29e.
+- Implementar o indicador como SINAL ou adicionar funcao de ordem ao
+  `.ntsl`. O limiar de 1,75 foi escolhido pela frequencia de inspecao e
+  nao e' validado.
