@@ -16,24 +16,24 @@ arquivo cresceu demais para navegar so' por titulo cronologico).
 
 **z_agf_3 / z_agf_4090 (os sinais validados do WINFUT)**
 - [Teste de diferenca entre quintis adjacentes (2026-08-23)](#teste-de-diferenca-entre-quintis-adjacentes-2026-08-23)
-- [Segunda rodada de quintis — z_agf_3 h=1 passa no IC mas morre pelo custo (2026-08-26)](#segunda-rodada-de-quintis-z_agf_3-h1-passa-no-ic-mas-morre-pelo-custo-2026-08-26)
-- [Resultado real do MAE + achado de assimetria compra/venda (2026-08-27)](#resultado-real-do-mae-achado-de-assimetria-compravenda-2026-08-27)
+- [Segunda rodada de quintis — z_agf_3 h=1 passa no IC mas morre pelo custo (2026-08-26)](#segunda-rodada-de-quintis--z_agf_3-h1-passa-no-ic-mas-morre-pelo-custo-2026-08-26)
+- [Resultado real do MAE + achado de assimetria compra/venda (2026-08-27)](#resultado-real-do-mae--achado-de-assimetria-compravenda-2026-08-27)
 - [CORRECAO CRITICA: mae.py rodava sobre amostra inteira, nao out-of-sample (2026-08-27)](#correcao-critica-maepy-rodava-sobre-amostra-inteira-nao-out-of-sample-2026-08-27)
 
 **z_agf_8 (fluxo UBS) — fechado**
 - [FECHADO: z_agf_8 (fluxo UBS) descartado nos dois fronts (2026-08-27)](#fechado-z_agf_8-fluxo-ubs-descartado-nos-dois-fronts-2026-08-27)
 
 **Acoes (VALE3/MGLU3/etc.) — mortas pelo custo**
-- [Custo de transacao em ACOES na XP — ponderacao do operador (2026-08-26)](#custo-de-transacao-em-acoes-na-xp-ponderacao-do-operador-2026-08-26)
+- [Custo de transacao em ACOES na XP — ponderacao do operador (2026-08-26)](#custo-de-transacao-em-acoes-na-xp--ponderacao-do-operador-2026-08-26)
 - [Conclusao final: sinais de acao morrem no teste economico (2026-08-26)](#conclusao-final-sinais-de-acao-morrem-no-teste-economico-2026-08-26)
-- [Como calcular o custo real de acoes — planilha da XP + modulo dedicado (2026-08-28)](#como-calcular-o-custo-real-de-ações-planilha-da-xp-módulo-dedicado-2026-08-28)
+- [Como calcular o custo real de acoes — planilha da XP + modulo dedicado (2026-08-28)](#como-calcular-o-custo-real-de-ações--planilha-da-xp--módulo-dedicado-2026-08-28)
 
 **Restricao de direcao (venda apenas) — decisao aceita**
-- [PRE-REGISTRO: Restricao de direcao — venda apenas (2026-08-27)](#pre-registro-restricao-de-direcao-venda-apenas-2026-08-27)
-- [RESULTADO do pre-registro "Restricao de direcao — venda apenas" (2026-08-27)](#resultado-do-pre-registro-restricao-de-direcao-venda-apenas-2026-08-27)
+- [PRE-REGISTRO: Restricao de direcao — venda apenas (2026-08-27)](#pre-registro-restricao-de-direcao--venda-apenas-2026-08-27)
+- [RESULTADO do pre-registro "Restricao de direcao — venda apenas" (2026-08-27)](#resultado-do-pre-registro-restricao-de-direcao--venda-apenas-2026-08-27)
 
 **Rota B — implementada, depois questionada (PENDENTE redesenho)**
-- [PRE-REGISTRO: Rota B (payoff fixo, alvo/stop) — preparacao (2026-08-27)](#pre-registro-rota-b-payoff-fixo-alvostop-preparacao-2026-08-27)
+- [PRE-REGISTRO: Rota B (payoff fixo, alvo/stop) — preparacao (2026-08-27)](#pre-registro-rota-b-payoff-fixo-alvostop--preparacao-2026-08-27)
 - [Rota B: par CONGELADO, e uma tensao real revelada (2026-08-27)](#rota-b-par-congelado-e-uma-tensao-real-revelada-2026-08-27)
 - [DECISAO: par empirico aceito (2026-08-27)](#decisao-par-empirico-aceito-2026-08-27)
 - ⚠ ver `docs/HISTORICO_DE_SESSOES.md`, sessao 2026-08-27/28: mecanismo
@@ -44,7 +44,7 @@ arquivo cresceu demais para navegar so' por titulo cronologico).
   — revisao do desenho desde o inicio: ALVO descartado como conceito
   para este sinal (incompativel com edge de cauda); stop separado em
   duas hipoteses distintas (limite de perda vs detector de reversao).
-- [IMPLEMENTADO: `reversao-condicional` — executa o pré-registro (2026-08-29)](#implementado-reversao-condicional-executa-o-pré-registro-2026-08-29)
+- [IMPLEMENTADO: `reversao-condicional` — executa o pré-registro (2026-08-29)](#implementado-reversao-condicional--executa-o-pré-registro-2026-08-29)
 - [RESULTADO ANULADO: o pré-registro de 2026-08-29 tinha estimador inválido](#resultado-anulado-o-pré-registro-de-2026-08-29-tinha-estimador-inválido)
 - [PRE-REGISTRO 2: expectativa remanescente a partir do toque (2026-08-29b)](#pre-registro-2-expectativa-remanescente-a-partir-do-toque-2026-08-29b)
 - [PORTAO REPROVOU o desenho do pré-registro 2 (2026-08-29c)](#portao-reprovou-o-desenho-do-pré-registro-2-2026-08-29c)
@@ -54,15 +54,15 @@ arquivo cresceu demais para navegar so' por titulo cronologico).
   segue SEM RESPOSTA; ver o pre-registro 2.
 
 **Risco (drawdown, VaR/ES, circuit breaker)**
-- [Curva de patrimonio / drawdown maximo (2026-08-27)](#curva-de-patrimonio-drawdown-maximo-2026-08-27)
-- [Risco realizado (VaR/ES) — primeiro passo aplicado do RQ (2026-08-27)](#risco-realizado-vares-primeiro-passo-aplicado-do-rq-2026-08-27)
-- [Resultado real do risco-realizado + correcao de bug de exibicao (2026-08-27)](#resultado-real-do-risco-realizado-correcao-de-bug-de-exibicao-2026-08-27)
+- [Curva de patrimonio / drawdown maximo (2026-08-27)](#curva-de-patrimonio--drawdown-maximo-2026-08-27)
+- [Risco realizado (VaR/ES) — primeiro passo aplicado do RQ (2026-08-27)](#risco-realizado-vares--primeiro-passo-aplicado-do-rq-2026-08-27)
+- [Resultado real do risco-realizado + correcao de bug de exibicao (2026-08-27)](#resultado-real-do-risco-realizado--correcao-de-bug-de-exibicao-2026-08-27)
 - [Circuit breaker: com freio vs sem freio, num dia real (2026-08-27)](#circuit-breaker-com-freio-vs-sem-freio-num-dia-real-2026-08-27)
 - [Acompanhamento continuo: efeito do circuit breaker com 25 dias (2026-08-28)](#acompanhamento-continuo-efeito-do-circuit-breaker-com-25-dias-2026-08-28)
 
 **Absorcao direcional / barra de tempo (indicador NTSL) — EM ABERTO**
 - [ORCAMENTO DE TRIALS: o total real e 492, nao 42 (2026-08-29d)](#orcamento-de-trials-o-total-real-e-492-nao-42-2026-08-29d)
-- [PRE-REGISTRO (RASCUNHO, NAO CONGELADO): absorcao direcional em barra de tempo (2026-08-29e)](#pre-registro-rascunho-nao-congelado-absorcao-direcional-em-barra-de-tempo-winfut-1m5m-2026-08-29e)
+- [PRE-REGISTRO (RASCUNHO, NAO CONGELADO): absorcao direcional em barra de tempo (2026-08-29e)](#pre-registro-rascunho-nao-congelado-absorcao-direcional-em-barra-de-tempo--winfut-1m5m-2026-08-29e)
 
 - [RESULTADO DO PORTAO: passou no criterio congelado, mas o nulo empirico condena o braco de 1m (2026-08-29f)](#resultado-do-portao-passou-no-criterio-congelado-mas-o-nulo-empirico-condena-o-braco-de-1m-2026-08-29f)
 
@@ -74,15 +74,17 @@ arquivo cresceu demais para navegar so' por titulo cronologico).
 
 - [RESULTADO: CONTRA nas 12 celulas — a absorcao direcional morre nesta forma (2026-08-30)](#resultado-contra-nas-12-celulas--a-absorcao-direcional-morre-nesta-forma-2026-08-30)
 
+- [A FORMULA NAO TEM CAUDA: absorcao_dir e sub-gaussiana por construcao (2026-08-30b)](#a-formula-nao-tem-cauda-absorcao_dir-e-sub-gaussiana-por-construcao-2026-08-30b)
+
 **Disciplina/processo do proprio research**
 - [Decisoes aprovadas](#decisoes-aprovadas)
 - [Pre-requisitos antes de escrever research/](#pre-requisitos-antes-de-escrever-research)
 - [Disciplina: quando rodar features vs quando rodar research (2026-08-27)](#disciplina-quando-rodar-features-vs-quando-rodar-research-2026-08-27)
 
 **Outras decisoes (2026-08-22/23, nao encaixam nas categorias acima)**
-- [Persistencia de corretora — desenho refinado (ideia do operador, 2026-08-22)](#persistencia-de-corretora-desenho-refinado-ideia-do-operador-2026-08-22)
-- [IMPLEMENTADO (2026-08-22) — regras finais do veredito, pos teste de honestidade](#implementado-2026-08-22-regras-finais-do-veredito-pos-teste-de-honestidade)
-- [PRIMEIRA RODADA REAL + IDENTIFICACAO DO CLUSTER (2026-08-23)](#primeira-rodada-real-identificacao-do-cluster-2026-08-23)
+- [Persistencia de corretora — desenho refinado (ideia do operador, 2026-08-22)](#persistencia-de-corretora--desenho-refinado-ideia-do-operador-2026-08-22)
+- [IMPLEMENTADO (2026-08-22) — regras finais do veredito, pos teste de honestidade](#implementado-2026-08-22--regras-finais-do-veredito-pos-teste-de-honestidade)
+- [PRIMEIRA RODADA REAL + IDENTIFICACAO DO CLUSTER (2026-08-23)](#primeira-rodada-real--identificacao-do-cluster-2026-08-23)
 - [Resultado do teste de diferenca entre quintis (2026-08-23)](#resultado-do-teste-de-diferenca-entre-quintis-2026-08-23)
 
 ---
@@ -2323,3 +2325,74 @@ hipotese futura, nunca como validacao da intuicao.
   negativo e' sobre a FORMULA, nao sobre o fenomeno.
 - Acumular pregoes. E' a unica alavanca gratuita: de 25 para 50 pregoes
   o `t_critico` cai de 4,03 para ~3,50 sem gastar trial nenhum.
+
+## A FORMULA NAO TEM CAUDA: absorcao_dir e sub-gaussiana por construcao (2026-08-30b)
+
+Achado ao calibrar o limiar do indicador NTSL por FREQUENCIA (quantas
+barras inspecionar), nao por resultado. E' uma afirmacao sobre a FORMA
+da variavel, derivada da distribuicao, nao do IC — nao reverte nem
+reinterpreta o veredito CONTRA de 2026-08-30.
+
+### Distribuicao observada (5m, 2.698 barras com z valido)
+
+    media -0,004   desvio 1,027   min -2,44   max +2,69
+
+    limiar   observado    normal    razao
+     1,00      40,77%     31,73%    1,28x
+     1,50      13,68%     13,36%    1,02x
+     1,75       6,30%      8,01%    0,79x
+     2,00       1,82%      4,55%    0,40x
+     2,50       0,07%      1,24%    0,06x
+
+    p90 = 1,60   p95 = 1,79   p99 = 2,10
+    (normal:      1,64          1,96          2,58)
+
+Ombros GORDOS, caudas MAGRAS. Sub-gaussiana — o oposto do que features
+financeiras normalmente sao. Em |z| >= 2,5 a frequencia observada e' 6%
+da que uma normal daria.
+
+### A causa esta na algebra, nao no mercado
+
+`absorcao_dir = imbalance - desloc_norm`, com os dois termos limitados a
+[-1, +1] por construcao. Teto teorico do composto: [-2, +2].
+
+    absorcao_dir observado: [-0,847; +0,897]
+
+Menos da metade do intervalo teorico. E nenhum dos dois termos chega
+perto do proprio extremo numa barra de 5m com ~42.000 negocios:
+`imbalance = ±1` exigiria agressao 100% unilateral; `desloc_norm = ±1`
+exigiria marubozu perfeito (abertura na minima E fechamento na maxima).
+
+### Consequencia sobre a hipotese de 2026-08-29e
+
+A hipotese era sobre barras EXTREMAS — a leitura visual do operador e'
+sobre uma barra que se destaca. A formula escolhida **nao consegue
+produzir barras extremas**: ela sabe dizer "esforco e resultado
+discordaram", mas nunca "discordaram brutalmente", porque a discordancia
+satura em ±2 e na pratica em ±0,9.
+
+Isso e' uma explicacao CANDIDATA para o CONTRA, registrada como tal. Nao
+e' prova de que a hipotese estaria certa com outra formula, e nao
+autoriza reanalisar os dados de 2026-08-30.
+
+### Direcao para uma formalizacao futura (nao pre-registrada ainda)
+
+Para existir cauda, a formula precisa de um termo que POSSA ser extremo.
+`absorcao = vol_agr / range_ticks` e' ilimitado: uma barra pode ter cinco
+vezes o volume normal, enquanto nenhuma barra pode ter `imbalance` cinco
+vezes maior que 1.
+
+Registrado como observacao. Qualquer uso disso exige pre-registro NOVO,
+escrito antes do dado, com trials contados no mesmo contador — e com a
+ressalva honesta de que nasce depois de ter visto o CONTRA.
+
+### Limiar do indicador NTSL, escolhido por FREQUENCIA
+
+`Limiar = 1,75` — 6,3% das barras, ~7 por pregao no 5m, logo acima do
+p95 observado (1,79).
+
+A distincao que torna isso legitimo: escolher o limiar pela FREQUENCIA
+("quero inspecionar as ~6% mais extremas") e' decidir quantas barras
+olhar. Escolher pelo RESULTADO ("1,75 pegou umas boas") e' overfit
+visual, e nao deixa de ser porque foi feito com o olho em vez de com um
+otimizador. O limiar continua NAO VALIDADO nos dois casos.
