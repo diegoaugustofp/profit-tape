@@ -80,7 +80,7 @@ arquivo cresceu demais para navegar so' por titulo cronologico).
 
 - [ROTA B: leitura de F pelo tape — a infraestrutura que destrava (2026-08-30c)](#rota-b-leitura-de-f-pelo-tape--a-infraestrutura-que-destrava-2026-08-30c)
 
-- [PRE-REGISTRO 3 DA ROTA B (RASCUNHO, NAO CONGELADO): expectativa remanescente com F exato (2026-08-30d)](#pre-registro-3-da-rota-b-rascunho-nao-congelado-expectativa-remanescente-com-f-exato-2026-08-30d)
+- [PRE-REGISTRO 3 DA ROTA B (CONGELADO): expectativa remanescente com F exato (2026-08-30d)](#pre-registro-3-da-rota-b-congelado-expectativa-remanescente-com-f-exato-2026-08-30d)
 
 **Disciplina/processo do proprio research**
 - [Decisoes aprovadas](#decisoes-aprovadas)
@@ -2535,11 +2535,15 @@ continuo em producao); o tape resolve a MEDICAO (saber se o stop ajuda).
 Sao problemas diferentes, e mistura-los seria repetir o erro original da
 Rota B, que foi executar de um jeito e medir de outro.
 
-## PRE-REGISTRO 3 DA ROTA B (RASCUNHO, NAO CONGELADO): expectativa remanescente com F exato (2026-08-30d)
+## PRE-REGISTRO 3 DA ROTA B (CONGELADO): expectativa remanescente com F exato (2026-08-30d)
 
-> **NAO CONGELADO.** Escrito depois da infraestrutura de `F`
-> (2026-08-30c) e ANTES de qualquer contato com dado real para esta
-> pergunta. Precisa do congelamento do operador.
+> **CONGELADO em 2026-08-30 pelo operador**, ANTES de qualquer contato
+> com dado real para esta pergunta e antes de qualquer linha do
+> estimador. Ficam fixados: o estimador, as fronteiras temporais, a
+> grade, a decisao de multiplicidade, o portao, a checagem de pre-voo
+> bloqueante, o criterio de decisao e a regra de parada. Alteracao de
+> qualquer um exige pre-registro NOVO, com secao e data proprias — nao
+> editar esta secao.
 >
 > Precedente que acompanha: os dois pre-registros anteriores desta mesma
 > pergunta tambem estavam congelados. O primeiro teve o RESULTADO
@@ -2589,6 +2593,27 @@ Operacoes que nunca tocam sao EXCLUIDAS. **Nao ha grupo de comparacao** —
 e' uma pergunta de UMA amostra contra zero, o que elimina de raiz o
 problema de subconjunto vs superconjunto do primeiro estimador anulado.
 
+### Fronteiras temporais — fixadas aqui porque e' onde um erro passaria calado
+
+`z_agf_3` vive em **barra de volume**; a janela `t..t+h` esta em barras.
+Mas `F` vem do TAPE, que precisa de fronteiras em nanossegundos. Sem
+fixar a traducao, uma implementacao poderia usar o instante errado sem
+produzir erro nenhum — so' um `F` sistematicamente deslocado.
+
+    ts_entrada = ts_close da barra t      (o negocio que formou a entrada)
+    ts_limite  = ts_close da barra t+h    (fim da janela)
+
+As duas colunas existem em `flow.calcular`. Consequencias:
+
+- Intervalo ABERTO em `ts_entrada`: o proprio negocio que originou a
+  entrada nao dispara o stop (ja' e' a semantica de
+  `localizar_toque`).
+- A janela **nunca atravessa o dia**: se `t+h` cai em outro pregao, a
+  operacao e' descartada — mesma purga estrutural de `retornos.py` e de
+  `mae.py`, nao uma regra nova.
+- O preco de entrada e' o `close` da barra t, que e' um preco NEGOCIADO
+  de agressao. O nivel do stop e' `entrada - X * lado`.
+
 ### Custo: medido BRUTO, de proposito
 
 Em τ a escolha e' entre sair agora e segurar. Nos dois ramos paga-se
@@ -2630,13 +2655,16 @@ IMPLEMENTACAO, nao descoberta de vies. A validade vem do teorema; o
 portao verifica se o codigo corresponde a ele. Se reprovar, o bug esta
 no codigo, nao no desenho.
 
-### CHECAGEM DE PRE-VOO (carregada de 29b, ainda pendente)
+### CHECAGEM DE PRE-VOO — BLOQUEANTE (carregada de 29b)
 
 Reconciliar a contagem: a rodada anulada deu **162 operacoes em 22
 pregoes**, enquanto a analise de MAE de 2026-08-27 falava em **336
 gatilhos em 26 dias**. Pode ser compra+venda somados la', mas
 **confirmar, nao assumir** — se a populacao mudou por outro motivo, nada
 mais neste teste e' interpretavel.
+
+Bloqueante: a reconciliacao roda e e' reportada ANTES de qualquer numero
+do estimador. Nao reconciliou, nao interpreta.
 
 ### Criterio de decisao, definido ANTES
 
@@ -2659,22 +2687,48 @@ depois de ver o resultado. INCONCLUSIVO so' permite acumular pregoes e
 rodar de novo com a MESMA grade e o MESMO estimador. Estimador novo
 exige pre-registro novo.
 
-### Contabilidade de multiplicidade — decisao do operador necessaria
+### Multiplicidade — DECIDIDO, nao em aberto
 
-A correcao por 7 comparacoes cobre a grade. **Nao cobre** o fato de esta
-ser a terceira tentativa de estimador para a MESMA pergunta.
+Decisao do operador (2026-08-30): **manter a deflacao local sobre os 7
+pontos da grade, sem somar ao `trials.json`.** O raciocinio, registrado
+para poder ser cobrado depois:
 
-Historico honesto de contatos com dado real para a hipotese (b):
-  - 29a: olhou o dado real, resultado anulado a priori.
-  - 29c: NUNCA tocou o dado real (o portao pegou antes).
-  - este: seria o **segundo** contato real.
+O teorema da estrategia falsa conta o numero de tentativas DAS QUAIS SE
+SELECIONOU O MAXIMO. Olhando o historico da hipotese (b):
 
-Os pre-registros anteriores aplicaram a deflacao localmente sobre os 7
-pontos, sem somar ao `trials.json`. Manter essa convencao e' defensavel
-(o contador global e' do IC, feature x horizonte), mas a multiplicidade
-de estimadores fica sem correcao nenhuma. **Decisao do operador**: somar
-7 ao contador global, manter local, ou registrar a multiplicidade sem
-corrigir. Qualquer das tres serve desde que fique escrita ANTES.
+  - **29a**: olhou dado real, resultado ANULADO com argumento *a
+    priori* (a algebra do vies era demonstravel sem ver o numero). O
+    projeto ja' julgou essa anulacao legitima exatamente porque nao
+    dependeu do resultado — logo nao houve selecao.
+  - **29c**: NUNCA tocou dado real; o portao pegou antes.
+  - **este**: primeiro resultado que sera' interpretado.
+
+Nao houve selecao sobre resultados, entao nao ha multiplicidade de
+estimadores a corrigir. O que existe e' a grade, e ela esta coberta.
+
+**RESSALVA QUE ACOMPANHA A DECISAO, e e' a parte que pode ser cobrada:**
+se esta rodada sair INCONCLUSIVO e um QUARTO estimador for tentado
+DEPOIS de ver o resultado, ai' havera selecao e a contagem tera' que
+passar a incluir as tentativas. Fica escrito agora para que essa
+correcao nao dependa de alguem lembrar.
+
+### A grade e' ANINHADA — registrado antes de interpretar
+
+Quem tocou −200 tocou −40 antes. Os 7 pontos nao sao testes
+independentes: sao subconjuntos encaixados, fortemente e positivamente
+dependentes.
+
+Duas consequencias, as duas fixadas aqui:
+
+1. **A deflacao por 7 comparacoes independentes e' CONSERVADORA** neste
+   caso. Sob dependencia positiva o maximo de 7 estatisticas e' menos
+   extremo que sob independencia, entao o limiar exigido e' mais alto
+   que o necessario. Aceito de proposito: erra para o lado de nao
+   afirmar.
+2. **A monotonicidade exigida no criterio nao e' mecanica.** O
+   encaixamento garante que o `n` cai conforme X sobe, nao que a MEDIA
+   do remanescente siga qualquer direcao. Se fosse mecanica, a condicao
+   nao valeria nada — e' por isso que esta escrito aqui, antes de olhar.
 
 ### Fora deste pre-registro
 
