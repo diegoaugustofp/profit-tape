@@ -78,6 +78,8 @@ arquivo cresceu demais para navegar so' por titulo cronologico).
 
 - [ESTADO AO FIM DE 2026-08-30: o que esta aberto](#estado-ao-fim-de-2026-08-30-o-que-esta-aberto)
 
+- [ROTA B: leitura de F pelo tape — a infraestrutura que destrava (2026-08-30c)](#rota-b-leitura-de-f-pelo-tape--a-infraestrutura-que-destrava-2026-08-30c)
+
 **Disciplina/processo do proprio research**
 - [Decisoes aprovadas](#decisoes-aprovadas)
 - [Pre-requisitos antes de escrever research/](#pre-requisitos-antes-de-escrever-research)
@@ -2449,3 +2451,84 @@ informativo e' o desacordo, nao a concordancia.
 - Implementar o indicador como SINAL ou adicionar funcao de ordem ao
   `.ntsl`. O limiar de 1,75 foi escolhido pela frequencia de inspecao e
   nao e' validado.
+
+## ROTA B: leitura de F pelo tape — a infraestrutura que destrava (2026-08-30c)
+
+Construida a pedido do operador ANTES do pre-registro, por ser
+infraestrutura de MEDICAO (categoria `features`, nao consome trial) e
+conferivel a mao contra um punhado de negocios.
+
+`src/profittape/research/preenchimento.py`.
+
+### O diagnostico: os dois estimadores morreram da mesma coisa
+
+- **2026-08-29a**: condicionava em `MAE_intrabar >= X`, que usa o HIGH
+  da barra. O grupo "nao tocou" ficava com teto de perda X por
+  construcao. Sobre ruido puro, t ~ -25.
+- **2026-08-29c**: media a partir de `F` = extremo da barra de
+  cruzamento. Sobre ruido puro devolveu +30 pontos, t entre 8 e 13.
+
+A raiz e' a mesma: **o extremo de uma barra nao e' um tempo de parada**.
+Ele so' e' conhecido quando a barra FECHA — usa informacao do futuro
+dentro da propria barra. Um stop real nao tem esse privilegio.
+
+### Por que o tape resolve, e e' demonstravel ANTES de rodar
+
+Com o tape, `F` e' o preco do PRIMEIRO NEGOCIO que atinge o nivel. Isso
+e' um tempo de parada legitimo na filtracao dos negocios, e o teorema da
+parada opcional se aplica direto: sob martingal,
+
+    E[preco_final - F] = 0
+
+O estimador DEVE devolver zero no ruido — por teorema, nao por
+esperanca. E' o argumento *a priori* que a regra de anulacao exige, e
+inverte o papel do portao de honestidade: passa a ser confirmacao de
+implementacao, nao descoberta de vies.
+
+### Medido sobre passeio aleatorio simetrico
+
+    nivel  +20 pts:  n=5037  remanescente medio  -0,149  t -0,11
+    nivel  +50 pts:  n=3761  remanescente medio  -0,428  t -0,31
+    nivel +100 pts:  n=1925  remanescente medio  +0,826  t +0,51
+
+Contra t ~ -25 e t ~ +13 dos anulados, no mesmo tipo de ruido.
+
+### Decisao de desenho registrada: quais negocios disparam
+
+Default `so_agressao=True`. RLP e' varejo internalizado bilateralmente —
+nao consome liquidez do livro e nao deveria acionar uma ordem stop que
+la' repousa. E' a mesma regra que ja' rege o relogio das barras e o
+`vol_agr`; manter aqui evita duas definicoes de "negocio" no projeto.
+
+O parametro existe porque a pergunta e' empirica: se a escolha mudar o
+resultado de forma relevante, isso e' um achado sobre microestrutura e
+precisa aparecer, nao ficar escondido num default.
+
+### Semantica fixada
+
+- Intervalo ABERTO no inicio: o negocio que originou a entrada nao
+  dispara o proprio stop.
+- `F` e' o preco NEGOCIADO, nao o nivel. A diferenca e' o overshoot do
+  cruzamento; ignora-la seria supor preenchimento perfeito — o limite
+  "otimista" do pre-registro anulado.
+- Tape reordenado por tempo antes de qualquer busca: "primeiro negocio
+  que cruza" so' faz sentido em sequencia ordenada, e um tape fora de
+  ordem devolveria um `F` posterior sem erro visivel.
+
+### Bug pego na conferencia a mao (regra 4)
+
+O indice do preco era deslocado duas vezes: fatiava a janela e indexava
+com o indice absoluto. O **timestamp saia certo e o preco vinha de outra
+linha** — num agregado, `F` ficaria levemente torto sem nada parecer
+quebrado. Tem teste proprio.
+
+### O que ISTO NAO e'
+
+Nao testa hipotese nenhuma. So' localiza o negocio. O estimador da
+hipotese (b) — expectativa remanescente a partir de τ — exige
+pre-registro NOVO, congelado antes de qualquer contato com dado real.
+
+E o stop de corretora do Profit resolve a EXECUCAO (como manter um stop
+continuo em producao); o tape resolve a MEDICAO (saber se o stop ajuda).
+Sao problemas diferentes, e mistura-los seria repetir o erro original da
+Rota B, que foi executar de um jeito e medir de outro.
