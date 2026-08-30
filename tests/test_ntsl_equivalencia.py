@@ -242,52 +242,50 @@ def test_avisa_quando_o_z_cai_na_borda_do_parquet(tmp_path) -> None:  # type: ig
     assert "NAO indica erro de implementacao" in r["z_na_borda"]["aviso"]
 
 
-def test_atribuicao_separa_pelo_extremo_e_nao_pelo_volume(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_atribuicao_decompoe_numerador_e_denominador(tmp_path) -> None:  # type: ignore[no-untyped-def]
     """
-    A primeira versao desta atribuicao estava ERRADA: correlacionava o
-    erro com a fracao de VOLUME de RLP. Medido em 24/07/2026, a
-    correlacao deu -0,12 e o quartil de MAIOR RLP teve erro ZERO.
+    Duas explicacoes foram refutadas por este diagnostico antes desta:
+    (1) o erro cresceria com o VOLUME de RLP -- correlacao deu -0,12;
+    (2) o erro viria de um print TOCAR um extremo -- mas 79 de 80 barras
+        tinham extremos identicos e o erro continuava la.
 
-    A causa real e' o extremo: `desloc_norm` e razao de inteiros (erro
-    maximo medido = 2/11 exato), e o que muda a razao e' um print TOCAR
-    a maxima ou a minima, nao o volume que ele carrega.
+    Se o denominador bate, a diferenca esta no NUMERADOR: `open` e
+    `close` sao o primeiro e o ultimo negocio, e um RLP dentro da faixa
+    muda um deles sem mexer em maxima nem minima.
 
-    Aqui metade das barras tem os extremos iguais (erro zero) e metade
-    tem a maxima esticada de um tick. A atribuicao tem que separar as
-    duas por extremo — inclusive com o volume de RLP igual nos dois
-    grupos, que e' o que refuta a explicacao antiga.
+    Aqui: 1/3 das barras so' com numerador diferente, 1/3 so' com
+    denominador, 1/3 sem diferenca. A decomposicao tem que separar as
+    tres.
     """
     inicio = pd.Timestamp("2026-08-24", tz="UTC") + pd.Timedelta(hours=13)
-    n = 40
+    n = 45
     py = pd.DataFrame({
         "bar_id": range(200, 200 + n),
         "ts_open": [inicio.value + i * 300 * S + 3 * S for i in range(n)],
         "open": 100.0, "high": 155.0, "low": 100.0, "close": 120.0,
-        "imbalance": 0.4,
-        "desloc_norm": 20.0 / 55.0,
-        "absorcao_dir": 0.4 - 20.0 / 55.0,
-        "z_absorcao_dir": 1.0,
+        "imbalance": 0.4, "desloc_norm": 20.0 / 55.0,
+        "absorcao_dir": 0.4 - 20.0 / 55.0, "z_absorcao_dir": 1.0,
     })
     arq_py = tmp_path / "features.parquet"
     py.to_parquet(arq_py, index=False)
 
     linhas = []
     for i in range(n):
-        t = (inicio + pd.Timedelta(minutes=5 * i)).tz_convert("America/Sao_Paulo")
-        hhmm = t.hour * 100 + t.minute
-        estica = (i % 2 == 1)                  # metade com maxima esticada
-        high = 160.0 if estica else 155.0
-        desloc = 20.0 / (high - 100.0)
-        # volume de RLP IDENTICO nos dois grupos: se a atribuicao antiga
-        # (por volume) ainda valesse, ela nao separaria nada aqui.
+        t_ = (inicio + pd.Timedelta(minutes=5 * i)).tz_convert("America/Sao_Paulo")
+        hhmm = t_.hour * 100 + t_.minute
+        caso = i % 3
+        close = 125.0 if caso == 0 else 120.0     # numerador difere
+        high = 160.0 if caso == 1 else 155.0      # denominador difere
+        desloc = (close - 100.0) / (high - 100.0)
         linhas.append(
-            f"ABSDIR|1260824|{hhmm}|{hhmm}|100|{high}|100|120"
+            f"ABSDIR|1260824|{hhmm}|{hhmm}|100|{high}|100|{close}"
             f"|1000|720|700|300|0.4|{desloc}|{0.4 - desloc}|0.1|0.2|1.0")
     arq_log = tmp_path / "console.txt"
     arq_log.write_text("\n".join(linhas), encoding="utf-8")
 
-    r = comparar(arq_log, arq_py, segundos=300)
-    a = r["atribuicao_rlp"]
-    assert a["barras_com_extremos_iguais"] == n // 2
-    assert a["erro_mediano_extremos_iguais"] == pytest.approx(0.0, abs=1e-9)
-    assert a["erro_mediano_extremos_diferentes"] > 0.01
+    a = comparar(arq_log, arq_py, segundos=300)["atribuicao_rlp"]
+    assert a["barras_so_numerador_difere"] == 15
+    assert a["barras_so_denominador_difere"] == 15
+    assert a["barras_nada_difere"] == 15
+    assert a["erro_mediano_nada_difere"] == pytest.approx(0.0, abs=1e-9)
+    assert a["tick_estimado"] == pytest.approx(5.0)

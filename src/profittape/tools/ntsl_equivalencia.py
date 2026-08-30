@@ -31,6 +31,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 import structlog
 
@@ -158,75 +159,89 @@ def _data_easylanguage(valor: int) -> tuple[int, int, int]:
 
 def _atribuir_divergencia(juntos: pd.DataFrame) -> dict[str, Any]:
     """
-    VERIFICA a causa da divergencia de `desloc_norm`.
+    DECOMPOE a divergencia de `desloc_norm` em numerador e denominador.
 
-    HISTORICO DESTA FUNCAO — a primeira versao estava ERRADA
-    --------------------------------------------------------
-    Ela correlacionava o erro com a FRACAO DE VOLUME de RLP da barra,
-    supondo que mais RLP => mais erro. Medido em 24/07/2026: correlacao
-    -0,12, e o quartil de MAIOR RLP com erro ZERO. Previsao refutada
-    pelo proprio diagnostico que a testava.
+    DUAS EXPLICACOES ANTERIORES FORAM REFUTADAS POR ESTA FUNCAO
+    -----------------------------------------------------------
+    (1) "o erro cresce com a fracao de VOLUME de RLP da barra".
+        Medido em 24/07/2026: correlacao -0,12, e o quartil de MAIOR RLP
+        com erro ZERO. Refutada.
 
-    A causa real esta na aritmetica. Com preco na grade de 5 pontos,
-    `(close-open)` e `(high-low)` sao multiplos inteiros do tick, logo
-    `desloc_norm` e' RAZAO DE INTEIROS PEQUENOS — o erro maximo medido
-    foi exatamente 2/11. O que muda a razao e' um print de RLP ou leilao
-    TOCAR UM EXTREMO, nao o volume que ele carrega: uma barra com 35% de
-    RLP impresso dentro da faixa da erro ZERO; outra com 20% onde um
-    unico print fez maxima nova da erro.
+    (2) "o erro vem de um print de RLP TOCAR um extremo, mudando
+        (high-low)". Medido: 79 das 80 barras tem os extremos IDENTICOS
+        e o erro mediano nesse grupo e' 0,0137 — o erro geral. Refutada.
 
-    E a sensibilidade cai com a amplitude (um tick a mais em 35 muda
-    pouco; em 11 muda muito). Como amplitude cresce com volume e RLP
-    tambem, a correlacao com a fracao de RLP sai NEGATIVA — foi o
-    observado.
+    Se o denominador bate, a diferenca esta no NUMERADOR. `open` e
+    `close` sao o PRIMEIRO e o ULTIMO negocio da barra: um print de RLP
+    dentro da faixa nao mexe em maxima nem minima, mas muda a abertura
+    ou o fechamento se for o primeiro ou o ultimo. Com ~28% do volume em
+    RLP, isso acontece com frequencia — e explica os 41% de barras
+    exatas (aquelas em que nem o primeiro nem o ultimo negocio foi RLP).
 
-    Esta versao testa o mecanismo certo: separa as barras em que os
-    EXTREMOS coincidem das em que nao coincidem, e mede o erro em cada
-    grupo. Se a causa for mesmo o extremo, o grupo "extremos iguais"
-    tem que ter erro ~0.
+    Esta versao mede numerador e denominador SEPARADAMENTE, em ticks.
+    Nao ha para onde a causa fugir: ou o numerador diverge, ou o
+    denominador, ou os dois.
     """
-    faltando = [c for c in ("desloc_norm_ntsl", "desloc_norm_py",
-                            "high_ntsl", "high_py", "low_ntsl", "low_py",
-                            "close_ntsl", "close_py")
-                if c not in juntos.columns]
+    precisa = ("desloc_norm_ntsl", "desloc_norm_py", "high_ntsl", "high_py",
+               "low_ntsl", "low_py", "open_ntsl", "open_py",
+               "close_ntsl", "close_py")
+    faltando = [c for c in precisa if c not in juntos.columns]
     if faltando:
         return {"situacao": f"colunas ausentes: {faltando}"}
 
-    d = juntos.dropna(subset=["desloc_norm_ntsl", "desloc_norm_py",
-                              "high_ntsl", "high_py", "low_ntsl", "low_py"])
+    d = juntos.dropna(subset=list(precisa))
     if len(d) < 8:
         return {"situacao": f"amostra pequena demais ({len(d)} barras)"}
 
-    # k robusto: a serie do grafico e' o contrato continuo AJUSTADO, entao
-    # so' a razao entre os niveis e' comparavel. Mediana em vez de media
-    # porque uma unica barra divergente arrastaria o fator.
+    # k robusto: so' a RAZAO entre niveis e' comparavel (serie ajustada).
     k = float((d["close_ntsl"] / d["close_py"]).median())
-    amp_n = (d["high_ntsl"] - d["low_ntsl"]) / k
-    amp_p = d["high_py"] - d["low_py"]
-    # Tolerancia RELATIVA, nao em ticks: estimar o tick a partir da
-    # amostra e' fragil (a primeira versao usou a MENOR amplitude como
-    # tick e classificou tudo como igual). k tem erro ~1e-6 por ser
-    # mediana de uma razao; 1e-3 separa isso de uma diferenca de um tick,
-    # que numa barra de 35 ticks vale 2,9%.
-    extremos_iguais = (amp_n - amp_p).abs() <= 1e-3 * amp_p.abs()
+    num_n = (d["close_ntsl"] - d["open_ntsl"]) / k
+    num_p = d["close_py"] - d["open_py"]
+    den_n = (d["high_ntsl"] - d["low_ntsl"]) / k
+    den_p = d["high_py"] - d["low_py"]
 
+    # Tick estimado pela GRADE DE PRECO do parquet (gcd das diferencas
+    # entre precos distintos), nao pelas amplitudes: a primeira versao
+    # usou o gcd das amplitudes e, num caso onde todas valiam o mesmo,
+    # devolveu a propria amplitude como "tick".
+    precos = np.unique(np.concatenate(
+        [d["open_py"], d["high_py"], d["low_py"], d["close_py"]]))
+    difs = np.diff(precos)
+    difs = np.round(difs[difs > 0]).astype(np.int64)
+    tick = float(np.gcd.reduce(difs)) if len(difs) else 1.0
+    if tick <= 0:
+        tick = 1.0
+
+    # Classificacao por tolerancia RELATIVA ao denominador — que e' a
+    # escala que importa para a razao — e nao em ticks: assim ela nao
+    # depende de o tick ter sido bem estimado.
+    escala = den_p.abs().where(den_p.abs() > 0, 1.0)
+    dif_num = (num_n - num_p).abs()
+    dif_den = (den_n - den_p).abs()
+    num_difere = dif_num > 1e-3 * escala
+    den_difere = dif_den > 1e-3 * escala
     erro = (d["desloc_norm_ntsl"] - d["desloc_norm_py"]).abs()
-    saida: dict[str, Any] = {
+
+    def mediana(mask: pd.Series[bool]) -> float | None:
+        return round(float(erro[mask].median()), 6) if mask.any() else None
+
+    return {
         "n": len(d),
         "k_estimado": round(k, 6),
-        "barras_com_extremos_iguais": int(extremos_iguais.sum()),
-        "erro_mediano_extremos_iguais": (
-            round(float(erro[extremos_iguais].median()), 6)
-            if extremos_iguais.any() else None),
-        "erro_mediano_extremos_diferentes": (
-            round(float(erro[~extremos_iguais].median()), 6)
-            if (~extremos_iguais).any() else None),
+        "tick_estimado": round(tick, 4),
+        "barras_so_numerador_difere": int((num_difere & ~den_difere).sum()),
+        "barras_so_denominador_difere": int((~num_difere & den_difere).sum()),
+        "barras_ambos_diferem": int((num_difere & den_difere).sum()),
+        "barras_nada_difere": int((~num_difere & ~den_difere).sum()),
+        "erro_mediano_nada_difere": mediana(~num_difere & ~den_difere),
+        "erro_mediano_so_numerador": mediana(num_difere & ~den_difere),
+        "dif_numerador_mediana_ticks": round(
+            float(dif_num[num_difere].median() / tick), 3)
+        if num_difere.any() else None,
+        "dif_denominador_mediana_ticks": round(
+            float(dif_den[den_difere].median() / tick), 3)
+        if den_difere.any() else None,
     }
-    # Sensibilidade: se o erro e' de quantizacao, ele cai com a amplitude.
-    if amp_p.std() > 0 and erro.std() > 0:
-        saida["correlacao_erro_vs_amplitude"] = round(
-            float(erro.corr(amp_p)), 4)
-    return saida
 
 
 def _barras_na_borda(juntos: pd.DataFrame, py: pd.DataFrame,

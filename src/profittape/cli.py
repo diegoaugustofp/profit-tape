@@ -496,19 +496,24 @@ def ntsl_equivalencia(
     if borda.get("aviso"):
         typer.echo(f"\n  AVISO SOBRE O z: {borda['aviso']}")
     atrib = r["atribuicao_rlp"]
-    if "barras_com_extremos_iguais" in atrib:
+    if "barras_so_numerador_difere" in atrib:
         typer.echo("\n--- de onde vem a divergencia de desloc_norm ---")
-        typer.echo(f"  k estimado                     : {atrib['k_estimado']}")
-        typer.echo(f"  barras com extremos IGUAIS     : "
-                   f"{atrib['barras_com_extremos_iguais']} de {atrib['n']}")
-        typer.echo(f"  erro mediano (extremos iguais) : "
-                   f"{atrib['erro_mediano_extremos_iguais']}")
-        typer.echo(f"  erro mediano (extremos difs)   : "
-                   f"{atrib['erro_mediano_extremos_diferentes']}")
-        if "correlacao_erro_vs_amplitude" in atrib:
-            typer.echo(f"  correlacao |erro| vs amplitude : "
-                       f"{atrib['correlacao_erro_vs_amplitude']}"
-                       "   (negativa = efeito de quantizacao)")
+        typer.echo("    desloc_norm = (close - open) / (high - low)")
+        typer.echo(f"  k estimado {atrib['k_estimado']} | "
+                   f"tick estimado {atrib['tick_estimado']}")
+        typer.echo(f"  so' o NUMERADOR (close-open) difere : "
+                   f"{atrib['barras_so_numerador_difere']} de {atrib['n']}")
+        typer.echo(f"  so' o DENOMINADOR (high-low) difere : "
+                   f"{atrib['barras_so_denominador_difere']}")
+        typer.echo(f"  os dois diferem                     : "
+                   f"{atrib['barras_ambos_diferem']}")
+        typer.echo(f"  nenhum difere                       : "
+                   f"{atrib['barras_nada_difere']}"
+                   f"  (erro mediano {atrib['erro_mediano_nada_difere']})")
+        typer.echo(f"  diferenca mediana do numerador   : "
+                   f"{atrib['dif_numerador_mediana_ticks']} ticks")
+        typer.echo(f"  diferenca mediana do denominador : "
+                   f"{atrib['dif_denominador_mediana_ticks']} ticks")
     elif atrib.get("situacao"):
         typer.echo(f"\n  atribuicao nao calculada: {atrib['situacao']}")
     if r["barras_casadas"] == 0:

@@ -381,3 +381,47 @@ antiga ainda valesse, ela não separaria nada.
 Erro meu na primeira tentativa da nova versão: estimei o tick como a
 menor amplitude da amostra e classifiquei tudo como igual. Trocado por
 tolerância relativa, que não depende de estimar o tick.
+
+
+## A SEGUNDA EXPLICAÇÃO TAMBÉM FOI REFUTADA (2026-08-30)
+
+    k estimado                     : 1,020499
+    barras com extremos IGUAIS     : 79 de 80
+    erro mediano (extremos iguais) : 0,013699
+    erro mediano (extremos difs)   : 0,018768
+    correlacao |erro| vs amplitude : -0,4113
+
+**79 das 80 barras têm os extremos idênticos** — `(high − low)` bate nos
+dois lados — e o erro mediano nesse grupo é 0,0137, praticamente o erro
+geral. A explicação "um print de RLP toca um extremo" está refutada.
+
+Duas hipóteses derrubadas em sequência pelo mesmo diagnóstico. A
+primeira (volume de RLP) reproduzia o sintoma; a segunda (extremo)
+também. Nenhuma das duas era a causa.
+
+### Se o denominador bate, a diferença está no numerador
+
+`open` e `close` são o **primeiro e o último negócio** da barra. Um
+print de RLP dentro da faixa não mexe em máxima nem mínima — mas muda a
+abertura ou o fechamento se calhar de ser o primeiro ou o último. Com
+~28% do volume em RLP, isso acontece com frequência.
+
+Bate com tudo o que foi medido: amplitude igual em 79/80, erro ∝
+1/amplitude (correlação −0,41), erro como razão de inteiros (máximo
+exatamente 2/11) e 41% de barras exatas — aquelas em que nem o primeiro
+nem o último negócio foi RLP.
+
+### O diagnóstico agora decompõe, em vez de correlacionar
+
+    desloc_norm = (close - open) / (high - low)
+
+Separa as barras em quatro grupos — só o numerador difere, só o
+denominador, os dois, nenhum — e reporta o erro mediano de cada um, mais
+a diferença mediana de numerador e denominador em ticks. Não há para
+onde a causa fugir.
+
+Erro meu na primeira tentativa: estimei o tick pelo gcd das
+**amplitudes**, e num caso em que todas valiam o mesmo o "tick" saiu
+igual à amplitude. Trocado para o gcd das diferenças entre **preços
+distintos**, que é onde a grade de fato aparece, com a classificação por
+tolerância relativa para não depender dele.
