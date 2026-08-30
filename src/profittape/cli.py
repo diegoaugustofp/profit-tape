@@ -457,6 +457,11 @@ def ntsl_equivalencia(
         help="Usa TimeExchange no lugar de Time. Se NENHUMA barra casar "
              "com o default, o grafico esta em fuso diferente do da bolsa "
              "e e' esta a flag que resolve."),
+    janela_z: int = typer.Option(
+        50, "--janela-z",
+        help="Janela do z-score, em barras. Usada para avisar quando as "
+             "barras casadas caem no inicio do parquet, onde o z NAO e' "
+             "comparavel por construcao."),
     tolerancia: float = typer.Option(1e-6, "--tolerancia"),
     log_level: str = typer.Option("INFO", "--log-level"),
 ) -> None:
@@ -474,7 +479,7 @@ def ntsl_equivalencia(
     from .tools.ntsl_equivalencia import comparar
 
     r = comparar(log, features, segundos, usar_hora_bolsa=hora_bolsa,
-                 tolerancia=tolerancia)
+                 janela_z=janela_z, tolerancia=tolerancia)
     typer.echo("=" * 62)
     typer.echo("EQUIVALENCIA NTSL <-> profit-tape")
     typer.echo("=" * 62)
@@ -487,6 +492,19 @@ def ntsl_equivalencia(
         typer.echo("  nenhum campo comparavel — as barras casaram?")
     else:
         typer.echo(r["tabela"].round(6).to_string(index=False))
+    borda = r["z_na_borda"]
+    if borda.get("aviso"):
+        typer.echo(f"\n  AVISO SOBRE O z: {borda['aviso']}")
+    atrib = r["atribuicao_rlp"]
+    if "correlacao_erro_vs_rlp" in atrib:
+        typer.echo("\n--- de onde vem a divergencia de desloc_norm ---")
+        typer.echo(f"  correlacao |erro| vs fracao de RLP: "
+                   f"{atrib['correlacao_erro_vs_rlp']}")
+        typer.echo(f"  RLP mediano por quartil : {atrib['rlp_mediano_por_quartil']}")
+        typer.echo(f"  erro mediano por quartil: "
+                   f"{atrib['erro_mediano_por_quartil_de_rlp']}")
+    elif atrib.get("situacao"):
+        typer.echo(f"\n  atribuicao nao calculada: {atrib['situacao']}")
     if r["barras_casadas"] == 0:
         typer.echo("\n  NENHUMA barra casou. Tente --hora-bolsa, ou confira "
                    "se o --segundos bate com o timeframe do grafico.")

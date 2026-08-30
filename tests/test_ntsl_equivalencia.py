@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -192,3 +193,80 @@ def test_erro_aponta_a_causa_real_quando_o_ntsl_esta_defasado(tmp_path) -> None:
     msg = str(e.value)
     assert "[5]" in msg and str(len(CAMPOS)) in msg
     assert "desatualizado" in msg
+
+
+def test_arquivo_inexistente_da_mensagem_util(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """40 linhas de traceback para um caminho errado nao ajudam ninguem."""
+    with pytest.raises(SystemExit) as e:
+        carregar_log(tmp_path / "nao_existe.txt")
+    assert "nao achei" in str(e.value) and "acento" in str(e.value)
+
+
+def _parquet_com_historico(tmp_path, n_barras: int = 200) -> object:  # type: ignore[no-untyped-def]
+    """Parquet com bar_id comecando em 0, para exercitar o aviso de borda."""
+    rng = np.random.default_rng(1)
+    inicio = pd.Timestamp("2026-08-24", tz="UTC").value + 13 * 3600 * S
+    df = pd.DataFrame({
+        "bar_id": range(n_barras),
+        "ts_open": [inicio + i * 300 * S + 3 * S for i in range(n_barras)],
+        "open": 100.0, "high": 110.0, "low": 95.0, "close": 97.0,
+        "imbalance": 0.4,
+        "desloc_norm": rng.normal(-0.2, 0.05, n_barras),
+        "absorcao_dir": 0.6,
+        "z_absorcao_dir": rng.normal(0, 1, n_barras),
+    })
+    arq = tmp_path / "features.parquet"
+    df.to_parquet(arq, index=False)
+    return arq
+
+
+def test_avisa_quando_o_z_cai_na_borda_do_parquet(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """
+    Caso real (2026-08-30): a sobreposição caiu em 24/07, o PRIMEIRO dia
+    do parquet. Ali o z do Python normaliza contra uma janela mais curta
+    que a do gráfico — divergência não indica erro de implementação.
+    Sem o aviso, seria lida como bug.
+    """
+    inicio = pd.Timestamp("2026-08-24", tz="UTC") + pd.Timedelta(hours=13)
+    linhas = []
+    for i in range(10):  # primeiras barras => dentro da janela de 50
+        t = (inicio + pd.Timedelta(minutes=5 * i)).tz_convert("America/Sao_Paulo")
+        linhas.append(_linha(1260824, t.hour * 100 + t.minute))
+    arq_log = tmp_path / "console.txt"
+    arq_log.write_text("\n".join(linhas), encoding="utf-8")
+
+    r = comparar(arq_log, _parquet_com_historico(tmp_path),  # type: ignore[arg-type]
+                 segundos=300, janela_z=50)
+    assert r["barras_casadas"] > 0
+    assert r["z_na_borda"]["z_comparavel"] is False
+    assert "NAO indica erro de implementacao" in r["z_na_borda"]["aviso"]
+
+
+def test_atribuicao_liga_o_erro_a_fracao_de_rlp(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """
+    Verificar a CAUSA, não só o sintoma: se o erro vem do RLP no OHLC,
+    ele tem que crescer com a fração de RLP da barra. Aqui o log é
+    construído com essa relação de propósito, e a atribuição tem que
+    detectá-la.
+    """
+    inicio = pd.Timestamp("2026-08-24", tz="UTC") + pd.Timedelta(hours=13)
+    py = pd.read_parquet(_parquet_com_historico(tmp_path))  # type: ignore[arg-type]
+    linhas = []
+    for i in range(40):
+        t = (inicio + pd.Timedelta(minutes=5 * i)).tz_convert("America/Sao_Paulo")
+        frac = 0.05 + 0.5 * (i / 40)               # RLP crescente
+        erro = 0.30 * frac                          # erro proporcional
+        desloc = float(py["desloc_norm"].iloc[i]) + erro
+        vt, va = 1000.0, 1000.0 * (1 - frac)
+        linhas.append(
+            f"ABSDIR|1260824|{t.hour * 100 + t.minute}|{t.hour * 100 + t.minute}"
+            f"|100|110|95|97|{vt}|{va}|700|300|0.4|{desloc}|{0.4 - desloc}"
+            f"|0.1|0.2|1.0")
+    arq_log = tmp_path / "console.txt"
+    arq_log.write_text("\n".join(linhas), encoding="utf-8")
+
+    r = comparar(arq_log, _parquet_com_historico(tmp_path), segundos=300)  # type: ignore[arg-type]
+    atrib = r["atribuicao_rlp"]
+    assert atrib["correlacao_erro_vs_rlp"] > 0.9
+    q = atrib["erro_mediano_por_quartil_de_rlp"]
+    assert q[0] < q[-1], "erro tem que crescer com o RLP"

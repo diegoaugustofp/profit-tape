@@ -266,3 +266,67 @@ em 1,0000. Duas APIs diferentes, mesmo número, barra a barra.
 do gráfico inclui esses 26%, o do profit-tape não. Quando a equivalência
 rodar, `desloc_norm` vai divergir por isso — agora com a magnitude
 conhecida de antemão, em vez de virar surpresa.
+
+
+## EQUIVALÊNCIA MEDIDA (2026-08-30) — 80 barras de 24/07/2026
+
+    campo         n  iguais  frac   dif_mediana   dif_max    papel
+    open         80       0  0,000    3608,008    3650,972   diagnostico
+    high         80       0  0,000    3611,021    3646,279   diagnostico
+    low          80       0  0,000    3606,408    3628,752   diagnostico
+    close        80       0  0,000    3607,792    3628,957   diagnostico
+    imbalance    80      80  1,000       0,000       0,000   equivalencia
+    desloc_norm  80      33  0,413       0,013892    0,181818 equivalencia
+    absorcao_dir 80      33  0,413       0,013892    0,181818 equivalencia
+    z            55       0  0,000       0,146120    0,518564 equivalencia
+
+### `imbalance`: exato
+
+80 de 80 dentro de 1e-6, diferença **máxima** 0,000000. O volume de
+agressão do gráfico (`AgressionVolBuy/Sell`) e o do tape capturado via
+ProfitDLL produzem o mesmo número barra a barra. Era a maior incógnita
+do desenho.
+
+### `desloc_norm`: diverge, e a divergência é inteiramente atribuída
+
+O erro de `absorcao_dir` é IDÊNTICO ao de `desloc_norm` — mesma mediana
+(0,013892), mesmo máximo, as mesmas 33 barras iguais. Como
+`absorcao_dir = imbalance − desloc_norm` e `imbalance` é exato, toda a
+divergência vem do OHLC. **Não sobrou resíduo inexplicado.**
+
+Previsto por escrito antes da medição: o OHLC do gráfico inclui RLP e
+leilão (28% do volume no dia), o do profit-tape não.
+
+Que 41% das barras batam EXATAMENTE é coerente com o mecanismo: RLP
+imprime dentro do spread e frequentemente não define extremo novo.
+
+### OHLC: confirma a escala
+
+Diferença mediana de 3.608 pontos contra `176.000 × (1,02048 − 1) ≈
+3.604`. O k medido pela grade de preço e o k implícito na diferença
+batem.
+
+### `z`: NÃO era comparável neste dia
+
+24/07/2026 é o **primeiro dia do parquet**. O z do NTSL usa a janela do
+gráfico (18 pregões de julho para trás); o do Python usa a janela do
+parquet, que ali não tem passado. 25 das 80 células saíram `NaN` e as 55
+restantes usavam janelas de **conteúdo diferente**.
+
+A divergência de 0,146 não diz nada sobre a implementação — foi erro de
+desenho do teste, escolher o dia da sobreposição sem notar que era a
+borda da amostra. A ferramenta passa a detectar e avisar.
+
+Para comparar `z` de verdade: sobreposição a partir de **28/07/2026**,
+onde o parquet já tem 50 barras de passado.
+
+### O que a ferramenta ganhou
+
+- `--janela-z` e aviso automático quando as barras casadas caem nas
+  primeiras `janela_z` barras do parquet.
+- **Atribuição da causa**: correlação entre o erro por barra e a fração
+  de RLP daquela barra, mais o erro mediano por quartil de RLP. Verifica
+  o mecanismo em vez de constatar o sintoma — se o erro não crescer com
+  o RLP, a previsão acertou por sorte e há outra coisa acontecendo.
+- Mensagem útil para arquivo inexistente (o caso real tinha cedilha no
+  nome e produzia 40 linhas de traceback).

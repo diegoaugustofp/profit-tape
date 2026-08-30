@@ -88,6 +88,16 @@ def carregar_log(caminho: Path) -> tuple[pd.DataFrame, dict[str, int]]:
     mistura mensagens de outras fontes, e exigir arquivo limpo so'
     transferiria o trabalho de limpeza para o operador.
     """
+    if not caminho.exists():
+        # 40 linhas de traceback para um caminho errado nao ajudam
+        # ninguem. Caso real: o arquivo tinha cedilha no nome.
+        raise SystemExit(
+            f"nao achei {caminho}\n"
+            "  - o nome do dump costuma ter acento (ex.: automacao.txt vs "
+            "automação.txt)\n"
+            "  - no PowerShell, ponha o caminho entre aspas"
+        )
+
     linhas_ok: list[list[str]] = []
     larguras_vistas: list[list[str]] = []
     n_total = 0
@@ -146,8 +156,85 @@ def _data_easylanguage(valor: int) -> tuple[int, int, int]:
     return 1900 + valor // 10000, (valor // 100) % 100, valor % 100
 
 
+def _atribuir_divergencia(juntos: pd.DataFrame) -> dict[str, Any]:
+    """
+    VERIFICA a causa da divergencia de `desloc_norm`, em vez de supor.
+
+    A previsao registrada antes da medicao: o OHLC do grafico inclui RLP
+    e leilao (~28% do volume), o do profit-tape nao. Se essa e' mesmo a
+    causa, o erro por barra tem que CRESCER com a fracao de RLP da
+    barra. Se nao crescer, a previsao acertou por sorte e ha outra coisa
+    acontecendo — e a diferenca entre as duas situacoes so' aparece se
+    alguem olhar.
+    """
+    if "desloc_norm_ntsl" not in juntos or "desloc_norm_py" not in juntos:
+        return {"situacao": "sem colunas para atribuir"}
+    if "vol_total" not in juntos or "vol_so_agressores" not in juntos:
+        return {"situacao": "log sem volume total — use o .ntsl >= v1.24"}
+
+    d = juntos[["desloc_norm_ntsl", "desloc_norm_py",
+                "vol_total", "vol_so_agressores"]].dropna()
+    if len(d) < 8:
+        return {"situacao": f"amostra pequena demais ({len(d)} barras)"}
+
+    erro = (d["desloc_norm_ntsl"] - d["desloc_norm_py"]).abs()
+    frac = 1.0 - d["vol_so_agressores"] / d["vol_total"]
+    if frac.std() == 0 or erro.std() == 0:
+        return {"situacao": "sem variacao para correlacionar"}
+
+    quartis = pd.qcut(frac, 4, labels=False, duplicates="drop")
+    return {
+        "n": len(d),
+        "correlacao_erro_vs_rlp": round(float(erro.corr(frac)), 4),
+        "erro_mediano_por_quartil_de_rlp": [
+            round(float(v), 6) for v in erro.groupby(quartis).median()
+        ],
+        "rlp_mediano_por_quartil": [
+            round(float(v), 4) for v in frac.groupby(quartis).median()
+        ],
+    }
+
+
+def _barras_na_borda(juntos: pd.DataFrame, py: pd.DataFrame,
+                     janela_z: int) -> dict[str, Any]:
+    """
+    Avisa quando o `z` NAO e' comparavel por construcao.
+
+    O z do NTSL usa a janela do GRAFICO, que costuma ter meses de
+    historico. O do Python usa a janela do PARQUET. Nas primeiras
+    `janela_z` barras do parquet as duas janelas tem CONTEUDO diferente
+    — o Python normaliza contra menos passado, ou contra passado nenhum
+    (NaN).
+
+    Caso real (2026-08-30): a sobreposicao caiu em 24/07, o primeiro dia
+    do parquet. 25 das 80 celulas sairam NaN e as 55 restantes usavam
+    janelas diferentes. Divergencia de z ali nao diz NADA sobre a
+    implementacao — e sem este aviso seria lida como bug.
+    """
+    if "bar_id" not in py.columns or py.empty:
+        return {"situacao": "sem bar_id no parquet"}
+    limite = int(py["bar_id"].min()) + janela_z
+    if "bar_id" not in juntos.columns:
+        return {"situacao": "sem bar_id no merge"}
+    na_borda = int((juntos["bar_id"] < limite).sum())
+    return {
+        "barras_casadas_na_borda": na_borda,
+        "janela_z": janela_z,
+        "z_comparavel": na_borda == 0,
+        "aviso": (
+            "" if na_borda == 0 else
+            f"{na_borda} das {len(juntos)} barras casadas estao nas "
+            f"primeiras {janela_z} barras do parquet: ali o z do Python "
+            "normaliza contra uma janela mais curta que a do grafico, "
+            "entao a divergencia de z NAO indica erro de implementacao. "
+            "Use um dia mais distante do inicio do parquet."
+        ),
+    }
+
+
 def comparar(log_ntsl: Path, features_parquet: Path, segundos: int,
              usar_hora_bolsa: bool = False,
+             janela_z: int = 50,
              tolerancia: float = 1e-6) -> dict[str, Any]:
     ntsl, diag = carregar_log(log_ntsl)
     py = pd.read_parquet(features_parquet)
@@ -198,6 +285,8 @@ def comparar(log_ntsl: Path, features_parquet: Path, segundos: int,
         })
 
     tabela = pd.DataFrame(linhas)
+    atribuicao = _atribuir_divergencia(juntos)
+    borda = _barras_na_borda(juntos, py, janela_z)
     log.info("ntsl_equivalencia.resumo", barras_ntsl=diag["barras"],
              barras_casadas=len(juntos), duplicadas=diag["duplicadas"])
     return {
@@ -207,5 +296,7 @@ def comparar(log_ntsl: Path, features_parquet: Path, segundos: int,
         "sem_par_no_python": int(len(ntsl) - len(juntos)),
         "coluna_hora_usada": coluna_hora,
         "tolerancia": tolerancia,
+        "atribuicao_rlp": atribuicao,
+        "z_na_borda": borda,
         "tabela": tabela,
     }
