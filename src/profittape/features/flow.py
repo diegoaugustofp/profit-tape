@@ -88,6 +88,20 @@ def calcular(df: pd.DataFrame, agentes: list[int], tick: float,
     def _vwap(x: pd.DataFrame) -> float:
         return float(np.average(x["price"], weights=x["quantidade"]))
 
+    # Entrada sem nenhum negocio de agressao produz um groupby vazio, e
+    # `apply` sobre ele devolve um DataFrame com as colunas ORIGINAIS —
+    # que ao ser atribuido a uma coluna unica estoura com "Cannot set a
+    # DataFrame with multiple columns". O erro do pandas nao diz nada
+    # sobre a causa. Caso real (2026-08-30): o gerador de ruido do portao
+    # da Rota B produzia menos volume por dia que o `volume_barra`, entao
+    # nenhuma barra fechava.
+    if agr.empty:
+        raise ValueError(
+            "nenhum negocio de agressao apos o corte de barras: verifique "
+            "se `volume_barra` nao esta maior que o volume disponivel por "
+            "pregao (todas as barras viraram parciais e foram descartadas)"
+        )
+
     # Ignorar tipo, justificado (2026-08-28): limitacao conhecida do
     # pandas-stubs -- os overloads de DataFrameGroupBy.apply() nao casam
     # bem com include_groups=False + uma callable com assinatura concreta

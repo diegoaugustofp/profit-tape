@@ -235,3 +235,48 @@ def test_sem_resumo_e_sem_vol_agr_pede_o_parametro(tmp_path) -> None:  # type: i
 
     with pytest.raises(SystemExit, match="volume-barra"):
         descobrir_volume_barra(tmp_path / "features.parquet", pd.DataFrame())
+
+
+def test_ruido_escala_a_quantidade_pelo_volume_barra() -> None:
+    """
+    Bug real (2026-08-30): o gerador fixava 20.000 negocios de 1 contrato
+    por pregao. Com o `volume_barra` real do WINFUT (119.504), o dia
+    inteiro somava 20.000 de volume e NENHUMA barra fechava — tudo virava
+    parcial, era descartado, e o groupby vazio estourava dentro de
+    `flow.calcular` com um erro do pandas que nao dizia nada sobre a
+    causa.
+
+    Duas escalas independentes: o numero de NEGOCIOS controla a geometria
+    do preco; a QUANTIDADE por negocio faz a barra fechar onde deve.
+    """
+    from profittape.features import bars
+    from profittape.research.remanescente_tape import gerar_ruido
+
+    vb = 119_504
+    ruido = gerar_ruido(volume_barra=vb, n_dias=3, barras_por_dia=20)
+    barrado, _ = bars.atribuir_barras(ruido, vb)
+    assert not barrado.empty, "nenhuma barra fechou"
+    fechadas = barrado["bar_id"].nunique()
+    assert fechadas >= 3 * 15, f"poucas barras: {fechadas}"
+    # geometria preservada: ~200 negocios por barra
+    assert 150 <= len(barrado) / fechadas <= 260
+
+
+def test_flow_avisa_quando_nenhuma_barra_fecha() -> None:
+    """
+    O erro do pandas ("Cannot set a DataFrame with multiple columns")
+    nao dizia nada sobre a causa. Agora diz.
+    """
+    from profittape.features import flow
+
+    vazio = pd.DataFrame({
+        "bar_id": pd.Series(dtype="int64"),
+        "ts_ns": pd.Series(dtype="int64"),
+        "price": pd.Series(dtype="float64"),
+        "quantidade": pd.Series(dtype="int64"),
+        "trade_type": pd.Series(dtype="int64"),
+        "agente_comprador": pd.Series(dtype="int64"),
+        "agente_vendedor": pd.Series(dtype="int64"),
+    })
+    with pytest.raises(ValueError, match="volume_barra"):
+        flow.calcular(vazio, agentes=[], tick=5.0)

@@ -2841,3 +2841,53 @@ Corrigido em dois niveis:
 
 O comando informa a origem do valor na saida — exato ou inferido — para
 a diferenca nao ficar invisivel.
+
+### CHECAGEM DE PRE-VOO: RECONCILIOU (2026-08-30g)
+
+Primeira execucao na maquina do operador:
+
+    pregoes            : 25
+    gatilhos_brutos    : 385
+    validos_compra     : 194
+    validos_venda      : 178
+    validos_ambos      : 372
+    usados_neste_teste : 178   (venda apenas)
+
+A duvida de 29b era se "336 gatilhos em 26 dias" incluia os dois lados,
+enquanto a rodada anulada usava 162 (venda apenas, 22 pregoes).
+
+**A hipotese estrutural CONFIRMA**: venda sozinha da' 178 contra 372 dos
+dois lados — praticamente metade, e 178/25 pregoes = 7,1/dia contra
+162/22 = 7,4/dia da rodada anulada. Mesma populacao.
+
+**Ressalva registrada**: 372 em 25 pregoes da' 14,9/dia contra 336 em 26
+dias = 12,9/dia, uma diferenca de ~15%. As duas amostras nao cobrem as
+mesmas datas, entao a diferenca e' esperada — mas fica anotada, porque o
+pre-registro exige confirmar e nao assumir. O que estava em duvida (se
+336 eram os dois lados somados) esta respondido.
+
+### DOIS DEFEITOS NO PORTAO, corrigidos (2026-08-30g)
+
+**1. O gerador de ruido nao escalava com `volume_barra`.** Fixava 20.000
+negocios de 1 contrato por pregao. Com o `volume_barra` real do WINFUT
+(119.504, inferido de `min(vol_agr)`), o dia inteiro somava 20.000 de
+volume e NENHUMA barra fechava — tudo virava parcial e era descartado.
+
+A causa e' ter confundido duas escalas independentes:
+
+  - **geometria do preco**: quantos NEGOCIOS cabem numa barra (~200 poem
+    a amplitude na faixa da grade de X);
+  - **escala de volume**: quantos CONTRATOS fecham a barra (o
+    `volume_barra` real).
+
+Corrigido separando: o numero de negocios controla a geometria, a
+QUANTIDADE por negocio e' derivada de `volume_barra`.
+
+**2. O erro nao dizia o que era.** O `groupby` vazio fazia `apply`
+devolver um DataFrame com as colunas originais, e atribuir isso a uma
+coluna unica estourava com "Cannot set a DataFrame with multiple
+columns" — um erro do pandas, tres niveis abaixo, sem relacao aparente
+com a causa. `flow.calcular` passa a checar e explicar.
+
+Portao rodado de novo com `volume_barra=119504`: **CONTRA**, |t| <= 0,98
+nos sete pontos. Passa.

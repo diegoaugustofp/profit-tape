@@ -281,18 +281,37 @@ def rodar_grade(barras: pd.DataFrame, tape: pd.DataFrame, feature: str,
     return pontos
 
 
-def gerar_ruido(n_dias: int = 25, negocios_por_dia: int = 20_000,
+def gerar_ruido(volume_barra: int, barras_por_dia: int = 100,
+                negocios_por_barra: int = 200, n_dias: int = 100,
                 tick: float = 5.0, preco_inicial: float = 140_000.0,
                 semente: int = 20260830) -> pd.DataFrame:
     """
     Passeio aleatorio simetrico, negocio a negocio, sem edge nenhum.
 
-    Caminho CONTINUO na grade de tick: o preco anda um tick por vez, e
-    todo extremo foi de fato visitado. Um gerador que sorteasse extremos
-    por fora do caminho produziria barras impossiveis — defeito real
-    encontrado no portao de 2026-08-29c.
+    DUAS ESCALAS INDEPENDENTES, E CONFUNDI-LAS QUEBRA O PORTAO
+    ----------------------------------------------------------
+    - **Geometria do preco**: quantos NEGOCIOS cabem numa barra. Com
+      passo de um tick, a amplitude vai com `tick * raiz(N)`, e ~200
+      negocios poem a amplitude na faixa da grade de X (40 a 200 pts).
+    - **Escala de volume**: quantos CONTRATOS fecham a barra. E' o
+      `volume_barra` das features reais, e nao tem relacao nenhuma com a
+      geometria.
+
+    A primeira versao fixava 20.000 negocios de 1 contrato por pregao.
+    Com o `volume_barra` real (119.504 no WINFUT), o dia inteiro somava
+    20.000 de volume e **nenhuma barra fechava** — tudo virava parcial,
+    era descartado, e o `groupby` vazio estourava dentro de
+    `flow.calcular` com um erro do pandas que nao dizia nada sobre a
+    causa.
+
+    Corrigido separando as duas: o numero de negocios controla a
+    geometria, e a QUANTIDADE por negocio e derivada de `volume_barra`
+    para a barra fechar onde deve.
     """
     rng = np.random.default_rng(semente)
+    quantidade = max(1, round(volume_barra / negocios_por_barra))
+    negocios_por_dia = negocios_por_barra * barras_por_dia
+
     partes = []
     t0 = 0
     for d in range(n_dias):
@@ -301,7 +320,7 @@ def gerar_ruido(n_dias: int = 25, negocios_por_dia: int = 20_000,
         partes.append(pd.DataFrame({
             "ts_ns": t0 + np.arange(negocios_por_dia, dtype=np.int64) * 1_000_000,
             "price": precos,
-            "quantidade": np.ones(negocios_por_dia, dtype=np.int64),
+            "quantidade": np.full(negocios_por_dia, quantidade, dtype=np.int64),
             "trade_type": 2,
             "agente_comprador": 1,
             "agente_vendedor": 2,
@@ -328,8 +347,16 @@ def portao_de_honestidade(volume_barra: int, horizonte: int, threshold: float,
     A feature de entrada e' ruido INDEPENDENTE do preco: se o gatilho
     carregasse informacao, o teste nao seria sobre zero edge.
     """
-    tape_bruto = gerar_ruido(n_dias=n_dias, semente=semente)
+    tape_bruto = gerar_ruido(volume_barra=volume_barra, n_dias=n_dias,
+                             semente=semente)
     barras_id, _ = bars.atribuir_barras(tape_bruto, volume_barra)
+    if barras_id.empty:
+        raise SystemExit(
+            f"nenhuma barra de ruido fechou com volume_barra={volume_barra:,}. "
+            "O gerador escala a quantidade por negocio a partir do "
+            "volume_barra; se isto aconteceu, ha' incompatibilidade entre os "
+            "dois — nao interprete nada."
+        )
     barras = flow.calcular(barras_id, agentes=[], tick=5.0)
     barras = _com_dia(barras)
 
