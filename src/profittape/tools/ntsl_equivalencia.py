@@ -193,8 +193,32 @@ def _atribuir_divergencia(juntos: pd.DataFrame) -> dict[str, Any]:
     if len(d) < 8:
         return {"situacao": f"amostra pequena demais ({len(d)} barras)"}
 
-    # k robusto: so' a RAZAO entre niveis e' comparavel (serie ajustada).
-    k = float((d["close_ntsl"] / d["close_py"]).median())
+    # k POR PREGAO, nao global.
+    #
+    # A serie continua do grafico troca de contrato nas rolagens, e o
+    # fator de ajuste muda junto. Medido em 28/07-21/08/2026: k =
+    # 1,020480 ate 11/08 e k = 1,000000 de 12/08 em diante — a rolagem
+    # caiu DENTRO da amostra.
+    #
+    # Um k global vira media de dois regimes e contamina tudo: dividir
+    # por k errado desloca open/close em ~2%, que num numerador tipico
+    # vira ~1 tick — indistinguivel do efeito que se quer medir. A
+    # primeira versao global reportou "diferenca mediana de 1,0 tick" e
+    # "682 ticks" no diagnostico de pontas, os dois artefatos do k.
+    #
+    # Estimado por pregao pela mediana da razao entre fechamentos: dentro
+    # de um pregao nao ha rolagem, entao k e' constante ali.
+    if "chave_data" in d.columns:
+        k_por_dia = (d["close_ntsl"] / d["close_py"]).groupby(
+            d["chave_data"]).transform("median")
+    else:
+        k_por_dia = pd.Series(
+            float((d["close_ntsl"] / d["close_py"]).median()), index=d.index)
+    k = k_por_dia
+    k_resumo = {str(dia): round(float(v), 6) for dia, v in
+                (d["close_ntsl"] / d["close_py"]).groupby(
+                    d["chave_data"]).median().items()} \
+        if "chave_data" in d.columns else {}
     num_n = (d["close_ntsl"] - d["open_ntsl"]) / k
     num_p = d["close_py"] - d["open_py"]
     den_n = (d["high_ntsl"] - d["low_ntsl"]) / k
@@ -237,7 +261,8 @@ def _atribuir_divergencia(juntos: pd.DataFrame) -> dict[str, Any]:
 
     return {
         "n": len(d),
-        "k_estimado": round(k, 6),
+        "k_por_pregao": k_resumo,
+        "k_distintos": len(set(k_resumo.values())),
         "tick_estimado": round(tick, 4),
         "barras_open_difere": int(open_difere.sum()),
         "barras_close_difere": int(close_difere.sum()),

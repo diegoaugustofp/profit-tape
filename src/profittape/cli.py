@@ -499,8 +499,12 @@ def ntsl_equivalencia(
     if "barras_so_numerador_difere" in atrib:
         typer.echo("\n--- de onde vem a divergencia de desloc_norm ---")
         typer.echo("    desloc_norm = (close - open) / (high - low)")
-        typer.echo(f"  k estimado {atrib['k_estimado']} | "
-                   f"tick estimado {atrib['tick_estimado']}")
+        typer.echo(f"  tick estimado {atrib['tick_estimado']} | "
+                   f"fatores k distintos: {atrib['k_distintos']}")
+        if atrib["k_distintos"] > 1:
+            typer.echo("    ATENCAO: houve ROLAGEM dentro da amostra. k por pregao:")
+            for dia, kv in sorted(atrib["k_por_pregao"].items()):
+                typer.echo(f"      {dia}: {kv}")
         typer.echo(f"  so' o NUMERADOR (close-open) difere : "
                    f"{atrib['barras_so_numerador_difere']} de {atrib['n']}")
         typer.echo(f"  so' o DENOMINADOR (high-low) difere : "

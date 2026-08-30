@@ -536,3 +536,48 @@ pequena das barras.
 O `z` não foi comparado — a sobreposição caiu no primeiro dia do
 parquet, onde as janelas têm conteúdo diferente por construção. Para
 fechar: `LogDataInicio = 1260728`.
+
+
+## ROLAGEM DENTRO DA AMOSTRA invalidou a atribuição (2026-08-30)
+
+Rodada sobre **2.001 barras** (28/07 a 21/08/2026, 19 pregões, todos
+longe da borda do parquet):
+
+    imbalance    2001/2001 iguais, diferenca maxima 0,000000
+    desloc_norm  1045/2001 (52%), mediana 0,000000, max 1,103876
+    z            mediana 0,031623, max 3,025623
+
+`imbalance` exato sobre 19 pregões — a conclusão de 24/07 se sustenta em
+amostra 25 vezes maior. E o `z` com mediana 0,0316 confirma a propagação
+prevista (≈0,037).
+
+### O diagnóstico de pontas deu 682 ticks — e a causa era minha
+
+29% dos `open` batiam **exatamente**, o que é impossível se todos os
+preços estivessem escalados pelo mesmo k. Medido por pregão:
+
+    28/07 a 11/08 : k = 1,020480
+    12/08 a 21/08 : k = 1,000000
+
+**Houve rolagem de contrato dentro da amostra.** A série contínua passou
+a apontar para o contrato corrente, que não precisa de ajuste.
+
+Um k global vira média dos dois regimes. Dividir por k errado desloca
+`open` e `close` em ~2%, que num numerador típico vale **~1 tick** —
+indistinguível do efeito que se queria medir. A "diferença mediana de
+1,0 tick" e os "682 ticks" do diagnóstico de pontas eram os dois
+artefatos do meu k.
+
+Isso significa que a atribuição de 24/07 — feita num único pregão, onde
+k é constante por construção — continua válida; mas o número de 1 tick
+que ela produziu **não** pode ser extrapolado para a janela inteira sem
+o k por pregão.
+
+### Corrigido
+
+`k` passa a ser estimado **por pregão** (mediana da razão entre
+fechamentos; dentro de um pregão não há rolagem). O comando avisa
+quando detecta mais de um fator e lista os valores por dia.
+
+Teste de regressão com dado idêntico nos dois lados e dois fatores k
+diferentes: com k por pregão o erro tem que ser exatamente zero.

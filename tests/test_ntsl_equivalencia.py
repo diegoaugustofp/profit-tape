@@ -331,3 +331,47 @@ def test_separa_open_de_close_no_numerador(tmp_path) -> None:  # type: ignore[no
     assert a["barras_so_close"] == 10
     assert a["barras_open_e_close"] == 0
     assert a["dif_open_mediana_ticks"] == pytest.approx(1.0)
+
+
+def test_k_por_pregao_lida_com_rolagem(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """
+    Caso real (28/07-21/08/2026): a serie continua trocou de contrato no
+    meio da amostra e o fator de ajuste saltou de 1,02048 para 1,0.
+
+    Um k global vira media dos dois regimes e desloca open/close em ~2%
+    — que num numerador tipico vale ~1 tick, indistinguivel do efeito
+    que se quer medir. A versao global reportou "1,0 tick" de diferenca
+    mediana e "682 ticks" no diagnostico de pontas: os dois artefatos.
+
+    Aqui o dado e' IDENTICO nos dois lados; so' o fator muda de dia. Com
+    k por pregao o erro tem que ser zero.
+    """
+    linhas, registros, bar = [], [], 0
+    for dia, k in (("1260810", 1.02048), ("1260812", 1.0)):
+        base = pd.Timestamp(f"2026-08-{dia[-2:]}", tz="UTC") + pd.Timedelta(hours=13)
+        for i in range(30):
+            t_ = (base + pd.Timedelta(minutes=5 * i)).tz_convert("America/Sao_Paulo")
+            hhmm = t_.hour * 100 + t_.minute
+            o, h, low, c = 100000.0, 100150.0, 99950.0, 100100.0
+            registros.append({
+                "bar_id": bar, "ts_open": base.value + i * 300 * S + 3 * S,
+                "open": o, "high": h, "low": low, "close": c,
+                "imbalance": 0.4, "desloc_norm": (c - o) / (h - low),
+                "absorcao_dir": 0.4 - (c - o) / (h - low),
+                "z_absorcao_dir": 1.0,
+            })
+            bar += 1
+            linhas.append(
+                f"ABSDIR|{dia}|{hhmm}|{hhmm}|{o * k}|{h * k}|{low * k}|{c * k}"
+                f"|1000|720|700|300|0.4|{(c - o) / (h - low)}"
+                f"|{0.4 - (c - o) / (h - low)}|0.1|0.2|1.0")
+
+    arq_py = tmp_path / "features.parquet"
+    pd.DataFrame(registros).to_parquet(arq_py, index=False)
+    arq_log = tmp_path / "console.txt"
+    arq_log.write_text("\n".join(linhas), encoding="utf-8")
+
+    a = comparar(arq_log, arq_py, segundos=300)["atribuicao_rlp"]
+    assert a["k_distintos"] == 2, "tem que detectar os dois regimes"
+    assert a["barras_nada_difere"] == 60, "com k por pregao, nada difere"
+    assert a["barras_so_open"] == 0 and a["barras_so_close"] == 0
