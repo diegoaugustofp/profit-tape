@@ -77,7 +77,7 @@ distribuicao da diferenca campo a campo.
 
 1. Abra o grafico no timeframe desejado, com `Janela` coerente.
 2. Rode o replay do dia.
-3. Exporte o console inteiro para um `.txt` (lixo em volta e' tolerado).
+3. Tire o conteudo do console para um `.txt` (lixo em volta e' tolerado).
 4. Compare:
 
 ```powershell
@@ -86,6 +86,38 @@ profit-tape ntsl-equivalencia `
   --features data\features_tempo\sym=WINFUT\tf=5m\features.parquet `
   --segundos 300
 ```
+
+## Onde o log e' gravado: em lugar nenhum do disco
+
+**O NTSL nao tem escrita em arquivo.** Nao existe `WriteFile`,
+`SaveToFile` nem equivalente no manual; a unica funcionalidade chamada
+"exportar" e' a do CODIGO-FONTE da estrategia, nao de dados.
+
+`ConsoleLog` escreve numa JANELA da interface — o terminal de console de
+depuracao quando o codigo roda como indicador, ou a janela de Detalhes
+da Automacao quando roda como automacao. De la o conteudo precisa ser
+tirado a mao.
+
+NAO VERIFICADO: como exatamente se extrai conteudo dessa janela
+(copiar-e-colar? opcao de salvar?). O manual nao descreve, e nao tenho
+como testar. Se a extracao pela janela de indicador for ruim, rodar o
+mesmo codigo como AUTOMACAO joga os logs em Detalhes da Automacao, que
+talvez extraia melhor — a verificar na pratica.
+
+### O volume e' pequeno, e isso resolve o problema
+
+    5m : 113 linhas por pregao
+    1m : 565 linhas por pregao
+
+Copiar a mao e' viavel. E `LogSomenteSinal=1` reduz a poucas linhas.
+
+### A comparacao nao precisa do pregao inteiro
+
+O que a equivalencia responde e' se as duas implementacoes calculam o
+MESMO numero. Uma divergencia sistematica de OHLC por RLP aparece em 20
+barras tao bem quanto em 113. Para o primeiro teste, um punhado de
+linhas basta — e coincide com o teste de janela curta que ja deve ser
+feito primeiro de qualquer forma.
 
 ## Falha silenciosa a vigiar
 
