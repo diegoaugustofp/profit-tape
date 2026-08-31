@@ -2411,54 +2411,62 @@ otimizador. O limiar continua NAO VALIDADO nos dois casos.
 
 ## ESTADO AO FIM DE 2026-08-30: o que esta aberto
 
-### Encerrado
+Atualizado ao fim da sessao (v1.42). `trials.json` = **504**.
 
-- **Absorcao direcional (`imbalance - desloc_norm`)**: CONTRA nas 12
-  celulas. Encerrada NESTA FORMA. A regra de parada nao autoriza
-  acumular pregoes apos CONTRA.
-- **Equivalencia NTSL <-> profit-tape**: fechada, causa unica
-  identificada e quantificada. Ver `NTSL_ABSORCAO.md`.
+### ENCERRADO nesta sessao
 
-### Pendente, em ordem de custo
+| pergunta | veredito | onde |
+|---|---|---|
+| Absorcao direcional prediz retorno? | **CONTRA** nas 12 celulas | 2026-08-30 |
+| O indicador NTSL calcula o mesmo que o Python? | **SIM**, divergencia de 1 tick atribuida | 2026-08-30i |
+| O stop e detector de reversao (hipotese b)? | **CONTRA**, confirmado com e sem RLP | 2026-08-30i/j |
 
-**1. Fechar o `z` da equivalencia (custo: um dump).**
-A sobreposicao caiu no primeiro dia do parquet, onde as janelas tem
-conteudo diferente por construcao. Basta um dump com
-`LogDataInicio = 1260728`. E' o unico item que ficou pela metade.
+Nenhum dos tres pode ser reaberto acumulando pregoes: CONTRA e' veredito
+final pela regra de parada. Reabrir exige formalizacao NOVA com
+pre-registro proprio, e a ressalva ja' escrita cobra a multiplicidade.
 
-**2. Acumular pregoes (custo: zero, e a alavanca mais valiosa).**
-De 25 para 50 pregoes o `t_critico` cai de 4,03 para ~3,50 sem gastar
-trial. Depois de 504 trials, e' o unico jeito de baixar a barra. E a
-captura tem perda documentada, entao confiabilidade de captura melhora
-toda pergunta futura.
+### PENDENTE, em ordem de CUSTO
 
-**3. Rota B / stop continuo (custo: desenho, zero trial).**
-Travada desde tres pre-registros invalidados pelo portao de honestidade.
-Apareceu no inicio desta sessao uma possivel destravada que nunca foi
-investigada: a automacao do Profit envia stop de verdade a corretora,
-que e' um stop CONTINUO — exatamente o que faltava, dado que a Rota B
-morreu por ser checada so no fechamento de barra.
+**1. Acumular pregoes — custo ZERO, ja' rodando.**
+E' a unica alavanca que baixa a barra sem gastar trial: 25 pregoes dao
+`t_critico` 4,07; 100 dao 3,23. Depois satura (500 dao 3,09). Com ~25
+pregoes/mes, sao ~3 meses ate 100. **Continua sendo a via principal**,
+acima de qualquer ideia nova.
 
-**4. Nova formalizacao de absorcao (custo: 6 a 12 trials, e so' faz
-sentido com mais pregoes).**
-O CONTRA e' sobre a FORMULA, nao sobre o fenomeno. O achado de
-2026-08-30b aponta a direcao com precisao: para existir cauda, a formula
-precisa de um termo ILIMITADO. `absorcao = vol_agr / range_ticks` e'
-ilimitado; `imbalance` nunca passa de 1. Exige pre-registro NOVO, com a
-ressalva honesta de que nasce depois de ter visto o CONTRA.
+**2. Stop como CONTROLE DE DRAWDOWN — custo: pre-registro + rodada.**
+E' o que o CONTRA de hoje deixou explicitamente em aberto. Nao e'
+hipotese sobre o mercado: e' um trade-off mensuravel — quanto de
+expectativa se paga por quanto de reducao de drawdown. Motivacao viva:
+Calmar 0,23 na rodada de 25 dias. Exige pre-registro proprio; o de hoje
+diz isso com todas as letras.
 
-**5. Indicador NTSL como exploracao visual (custo: zero).**
-Rotulado como tal. O uso legitimo e' olhar as barras que a leitura
-visual identifica e ver o que a formula deixou de fora — e o mais
-informativo e' o desacordo, nao a concordancia.
+**3. Robustez de regime do `z_agf_3` — BLOQUEADA por instrumento.**
+O gráfico tem anos de historico, mas `z_agf_3` vive em barra de VOLUME
+com relogio de agressao e o grafico so' da barra de TEMPO. Uma variante
+em barra de tempo SERIA testavel, mas e' feature nova e exige
+pre-registro.
 
-### Duas coisas que NAO estao autorizadas
+**4. Nova formalizacao da absorcao — so' com mais amostra.**
+O CONTRA e' sobre a FORMULA, nao sobre o fenomeno. A direcao esta
+registrada: para existir cauda, a formula precisa de termo ILIMITADO
+(`vol_agr / range_ticks` e' ilimitado; `imbalance` nunca passa de 1).
+Pre-registro NOVO, com a ressalva honesta de que nasce depois do CONTRA.
+
+**5. Forward test em DEMO — custo zero de trial.**
+Mecanica de execucao, nao evidencia estatistica.
+
+### NAO AUTORIZADO
 
 - Reanalisar os dados de 2026-08-30 por quintil, corte de cauda ou
-  qualquer condicional. Antecipado por escrito em 2026-08-29e.
-- Implementar o indicador como SINAL ou adicionar funcao de ordem ao
-  `.ntsl`. O limiar de 1,75 foi escolhido pela frequencia de inspecao e
-  nao e' validado.
+  qualquer condicional (antecipado por escrito em 29e).
+- Testar "a tendencia da grade" da Rota B: seria estimador novo DEPOIS
+  de ver o resultado, e a ressalva do pre-registro 3 manda somar as
+  tentativas ao contador.
+- Implementar o indicador NTSL como SINAL, ou adicionar funcao de ordem
+  ao `.ntsl`. Limiar 1,75 escolhido por frequencia de inspecao, NAO
+  validado.
+- Usar o backtest do Profit como validacao (ver politica do historico).
+- Olhar o historico do grafico fora de um pre-registro congelado.
 
 ## ROTA B: leitura de F pelo tape — a infraestrutura que destrava (2026-08-30c)
 

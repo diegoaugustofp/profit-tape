@@ -222,6 +222,99 @@ correção de CI de madrugada do dia seguinte. Versões entregues:
 
 ---
 
+## 2026-08-30/31 — sessão completa: CONTRA na absorção, equivalência fechada, Rota B respondida (v1.12 a v1.42)
+
+**31 entregas. Zero trial gasto além dos 12 pré-registrados.** O
+`trials.json` permanece em 504.
+
+Três perguntas em aberto foram FECHADAS, todas com resposta negativa —
+e negativo aqui é resultado, não fracasso.
+
+### 1. Absorção direcional: CONTRA nas 12 células
+
+Melhor célula com o sinal previsto e superando ambos os controles, mas
+|t| 3,06 contra os 4,03 exigidos. A porta de "falta de poder" não abriu
+por 0,03 de consistência.
+
+**O achado que explica melhor que o IC**: `absorcao_dir` é
+**sub-gaussiana por construção**. Os dois termos são limitados a
+[-1,+1], o composto satura em [-0,85; +0,90], e |z| >= 2,5 aparece em 6%
+da frequência de uma normal. A hipótese era sobre barras extremas; a
+fórmula não consegue produzir barras extremas. Álgebra, não estatística.
+
+### 2. Equivalência NTSL <-> profit-tape: FECHADA
+
+    imbalance    EXATO   2001/2001, diferenca maxima 0,000000
+    desloc_norm  1 tick  47% das barras, so em open/close
+    z            2,4e-8  reproduz normalize.py
+
+Causa única: o OHLC do gráfico usa o primeiro e o último negócio de
+QUALQUER tipo; o do profit-tape usa só agressão.
+
+**Três explicações, duas refutadas pelo próprio diagnóstico.** As duas
+primeiras reproduziam o SINTOMA perfeitamente — divergência presente, do
+tamanho previsto, ausente quando `imbalance` era exato. Em três momentos
+teria sido possível fechar dizendo "divergiu como previsto", certo sobre
+o sintoma e errado sobre a causa.
+
+### 3. Rota B: CONTRA — o stop não detecta reversão
+
+Pergunta aberta desde 2026-08-27, respondida. |t| máximo 0,76 nos sete
+pontos, `n` suficiente em todos, IC95 contendo zero.
+
+**O que destravou**: `F` exato lido do tape negócio a negócio. Os dois
+estimadores anteriores morreram da mesma causa — o extremo de uma barra
+não é tempo de parada, só é conhecido no fechamento e usa informação do
+futuro dentro da barra. Com `F` = primeiro negócio a cruzar, o teorema
+da parada opcional dá `E[preço_final - F] = 0`: o estimador é
+não-enviesado POR TEOREMA, e o portão vira confirmação de implementação.
+
+**Sensibilidade com RLP: resultado idêntico até a última casa**, com o
+tape 39% maior. Nenhuma das 1.246 combinações mudou de status — um print
+de RLP nunca foi o primeiro a cruzar um nível. Fecha com a equivalência
+NTSL por caminho independente: cruzar um nível é fazer extremo novo, e o
+RLP não faz extremo.
+
+### Descobertas de infraestrutura que mudaram decisões
+
+- **Orçamento real era 492 trials, não 42.** 73% gastos numa varredura
+  de 8 símbolos que rodou em um minuto. `t_critico` saltou de 3,31 para
+  4,03.
+- **Buffer do console enche de trás para frente**: mais histórico no
+  gráfico = log termina mais cedo. Três dumps vieram cada vez mais
+  antigos antes de o padrão aparecer.
+- **`WINFUT` no gráfico é série contínua ajustada**, com `k` mudando nas
+  rolagens (1,020480 -> 1,000000 dentro da própria amostra).
+- **Plugin Tape Reading confirmado ativo**; `AgressionVolBuy+Sell` é
+  exatamente `QuantityVol(False, True)`.
+- **`volume_barra` não era gravado** em lugar nenhum — só impresso na
+  tela. Agora `features` grava `resumo.json`.
+
+### NOVE erros meus, todos pegos por verificação e nenhum por cuidado
+
+1. Calibração do portão errada em duas ordens de grandeza — bloqueou o
+   braço de 1m sem motivo.
+2. `_contar_buracos` falso por construção: devolvia zero para qualquer
+   entrada.
+3. Validador de âncoras achando zero links e reportando "nenhum
+   quebrado" sobre nada — havia 23 quebrados.
+4. Parser de número produzindo `NaN` silencioso; o comparador ignora
+   `NaN`, então o campo sumiria em vez de acusar.
+5. `str_replace` reportando sucesso sem alterar nada.
+6. Teste do `z` na borda do parquet — janelas de conteúdo diferente por
+   construção.
+7. **Portão que não conseguia passar**: `CONTRA` inatingível por falta
+   de amostra sintética.
+8. **SHA errado numa verificação** que teria confirmado falsamente a
+   versão errada.
+9. **Commit com a suíte vermelha**: `pytest | tail && git commit` — o
+   `tail` retorna zero.
+
+O padrão que atravessa quase todos: **um verificador que falha de um
+jeito que parece resultado.**
+
+Tags `entregue-v1.12` a `entregue-v1.42`.
+
 ## 2026-08-30 — do CONTRA à equivalência NTSL fechada (v1.12 a v1.30)
 
 Dezenove entregas. **Zero trial gasto além dos 12 pré-registrados.**
