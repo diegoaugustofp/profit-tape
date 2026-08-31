@@ -44,6 +44,23 @@ import pandas as pd
 
 from .walkforward import gerar_folds
 
+# CRITERIO CONGELADO (2026-08-31, pre-registro do stop continuo). NAO e'
+# exposto como opcao de CLI de PROPOSITO -- mesmo padrao de reversao.py.
+# O operador fixou este numero ANTES de ver a quebra por lado dos tres
+# regimes: o agregado ja estava na tela (sem stop +11,8 > close +9,7 >
+# continuo +9,5), mas o numero que decide -- a diferenca pareada no lado
+# de VENDA -- ainda nao tinha sido calculado por ninguem.
+#
+# ENQUADRAMENTO: nao e' teste de superioridade. A mudanca se justifica por
+# CONFORMIDADE (o stop de 500 sai em ate' -805 hoje: excesso mediana 65,
+# maximo 305) e por limitacao de cauda. Ao P&L cabe so' provar que isso
+# nao custa caro -- por isso NAO-INFERIORIDADE, com o limite abaixo.
+#
+# Referencia usada para calibrar a escolha: a venda rende +26 bruto com
+# custo ~11, ou seja ~15 pts/op liquidos. Ceder 3 e' ceder ~1/5 do edge
+# liquido em troca do teto da cauda.
+LIMITE_NAO_INFERIORIDADE_PTS = -3.0
+
 
 def _sinal_de_entrada(z: pd.Series, threshold: float, direcao: str) -> pd.Series:
     """+1 = compra, -1 = venda, 0 = nao dispara. Mesma regra de
@@ -64,7 +81,17 @@ def _sinal_de_entrada(z: pd.Series, threshold: float, direcao: str) -> pd.Series
 def analisar_mae(arquivo_features: Path, feature: str, horizonte: int,
                  threshold_entrada: float, direcao: str,
                  stop_catastrofico_pontos: float, saida: Path,
-                 treino_min: int = 3, teste_dias: int = 2) -> dict[str, Any]:
+                 treino_min: int = 3, teste_dias: int = 2,
+                 n_bootstrap: int = 2000,
+                 semente: int = 20260831) -> dict[str, Any]:
+    # IMPORT LOCAL, nao no topo: remanescente.py ja importa
+    # _sinal_de_entrada DESTE modulo, entao um import de modulo aqui
+    # fecharia um ciclo (mae -> remanescente -> mae) e quebraria a carga.
+    # Reusar _bootstrap_bloco em vez de reimplementar e' deliberado -- a
+    # convencao de reamostrar PREGAO INTEIRO (nunca operacao individual)
+    # precisa ser a mesma em todo o projeto, e ja e' usada em
+    # remanescente.py e remanescente_tape.py.
+    from .remanescente import _bootstrap_bloco
     df = pd.read_parquet(arquivo_features)
     if "dia" not in df.columns:
         df["dia"] = pd.to_datetime(df["ts_close"], unit="ns", utc=True).dt.date
@@ -186,6 +213,12 @@ def analisar_mae(arquivo_features: Path, feature: str, horizonte: int,
             "excesso_close": (excursao_no_cruz - S) if bateu_close else float("nan"),
             "pnl_stop_close": pnl_stop_close,
             "pnl_stop_continuo": pnl_stop_continuo,
+            # DIFERENCA PAREADA (2026-08-31, pre-registro): os dois regimes
+            # agem sobre as MESMAS operacoes, entao comparar duas medias
+            # soltas joga fora a informacao de pareamento e infla o ruido.
+            # Aqui a diferenca e' exatamente zero em toda operacao nao
+            # afetada -- a variancia vem so' das que algum stop toca.
+            "dif_pareada": pnl_stop_continuo - pnl_stop_close,
         })
 
     r = pd.DataFrame(linhas)
@@ -211,8 +244,19 @@ def analisar_mae(arquivo_features: Path, feature: str, horizonte: int,
                    "n_batido_stop_intrabar": 0,
                    "pct_batido_stop_intrabar": float("nan"),
                    "n_marginais": 0,
-                   "n_marginais_positivas": 0}
+                   "n_marginais_positivas": 0,
+                   "pnl_medio_sem_stop": float("nan"),
+                   "pnl_medio_stop_close": float("nan"),
+                   "pnl_medio_stop_continuo": float("nan"),
+                   "dif_pareada_media": float("nan"),
+                   "n_afetadas": 0,
+                   "ic95_baixo": float("nan"),
+                   "ic95_alto": float("nan")}
         marginais_lado = sub[sub["marginal_so_intrabar"]]
+        # Bootstrap por BLOCO DE PREGAO (nunca operacao individual --
+        # operacoes do mesmo dia sao dependentes). Mesma funcao ja usada em
+        # remanescente.py e remanescente_tape.py, nao reimplementada.
+        boot = _bootstrap_bloco(sub, "dif_pareada", n_bootstrap, semente)
         return {
             "n": len(sub),
             "pnl_bruto_medio": sub["pnl_final_h"].mean(),
@@ -234,6 +278,18 @@ def analisar_mae(arquivo_features: Path, feature: str, horizonte: int,
             # escolher o alvo.
             "mfe_close_mediana": sub["mfe_close"].median(),
             "pct_batido_stop": sub["teria_batido_stop"].mean(),
+            # TRES REGIMES POR LADO (2026-08-31b): agregado nao serve --
+            # a compra tem MAIS marginais que operacoes que ja batem
+            # (10 contra 7) e nao tem edge (-1,4 bruto, abaixo do custo),
+            # entao ela puxa o agregado para baixo enquanto o EA nem opera
+            # esse lado.
+            "pnl_medio_sem_stop": sub["pnl_final_h"].mean(),
+            "pnl_medio_stop_close": sub["pnl_stop_close"].mean(),
+            "pnl_medio_stop_continuo": sub["pnl_stop_continuo"].mean(),
+            "dif_pareada_media": sub["dif_pareada"].mean(),
+            "n_afetadas": int((sub["dif_pareada"] != 0).sum()),
+            "ic95_baixo": boot["ic95_baixo"],
+            "ic95_alto": boot["ic95_alto"],
         }
 
     # Quebra por lado (2026-08-27, achado real): threshold_entrada simetrico
@@ -243,6 +299,19 @@ def analisar_mae(arquivo_features: Path, feature: str, horizonte: int,
     # da tabela de quintis (que usa quintil, nao o threshold exato do EA).
     stats_compra = _stats_lado(r[r["lado"] == 1])
     stats_venda = _stats_lado(r[r["lado"] == -1])
+
+    # VEREDITO do criterio congelado (ver LIMITE_NAO_INFERIORIDADE_PTS no
+    # topo). Avaliado SO' sobre o lado de VENDA -- o EA roda venda-apenas,
+    # e o agregado mistura um lado que ele nem opera.
+    ic_baixo_venda = stats_venda["ic95_baixo"]
+    if stats_venda["n"] == 0:
+        veredito = "INCONCLUSIVO — nenhuma operacao de venda na amostra"
+    elif ic_baixo_venda != ic_baixo_venda:   # NaN
+        veredito = "INCONCLUSIVO — bootstrap sem amostras validas suficientes"
+    elif ic_baixo_venda > LIMITE_NAO_INFERIORIDADE_PTS:
+        veredito = "FAVORAVEL — nao-inferioridade sustentada"
+    else:
+        veredito = "CONTRA — nao-inferioridade NAO sustentada"
 
     resumo = {
         "feature": feature, "horizonte": horizonte,
@@ -286,6 +355,8 @@ def analisar_mae(arquivo_features: Path, feature: str, horizonte: int,
         "n_marginais_positivas": n_marginais_pos,
         "pct_marginais_positivas": (n_marginais_pos / n_marginais
                                     if n_marginais else float("nan")),
+        "limite_nao_inferioridade": LIMITE_NAO_INFERIORIDADE_PTS,
+        "veredito": veredito,
         "stats_compra": stats_compra,
         "stats_venda": stats_venda,
     }
@@ -373,6 +444,28 @@ def analisar_mae(arquivo_features: Path, feature: str, horizonte: int,
         f"- pnl final mediana: {resumo['pnl_marginais_mediana']:+.1f} pts",
         f"- terminaram POSITIVAS: {n_marginais_pos} de {n_marginais} "
         f"({resumo['pct_marginais_positivas']:.1%})\n",
+        "\n## PRE-REGISTRO: nao-inferioridade do stop continuo (2026-08-31)\n",
+        "Criterio CONGELADO pelo operador ANTES desta rodada, e antes de a "
+        "quebra por lado dos tres regimes existir. NAO e' teste de "
+        "superioridade: a mudanca se justifica por CONFORMIDADE (o stop de "
+        "500 sai em ate' -805 hoje) e por limitacao de cauda; ao P&L cabe "
+        "so' provar que isso nao custa caro.\n",
+        f"- **Criterio**: sobre o lado de VENDA apenas, IC95 bootstrap "
+        f"(bloco de pregao) da diferenca PAREADA (stop continuo - stop "
+        f"close) em pts/operacao. Aceita se o limite INFERIOR do IC for "
+        f"maior que {LIMITE_NAO_INFERIORIDADE_PTS:.1f} pts/op. Rejeita "
+        f"caso contrario, INDEPENDENTEMENTE do sinal da media.\n",
+        "Pareado de proposito: os dois regimes agem sobre as MESMAS "
+        "operacoes, e a diferenca e' exatamente zero em toda operacao nao "
+        "afetada -- comparar duas medias soltas jogaria fora o pareamento "
+        "e inflaria o ruido.\n",
+        f"- diferenca pareada media (venda): "
+        f"{resumo['stats_venda']['dif_pareada_media']:+.2f} pts/op",
+        f"- IC95: [{resumo['stats_venda']['ic95_baixo']:+.2f} ; "
+        f"{resumo['stats_venda']['ic95_alto']:+.2f}]",
+        f"- operacoes afetadas: {resumo['stats_venda']['n_afetadas']} de "
+        f"{resumo['stats_venda']['n']}\n",
+        f"### VEREDITO: {veredito}\n",
         "\n## Quebra por lado (compra vs venda)\n",
         "threshold_entrada simetrico para compra e venda pode esconder "
         "uma assimetria real de edge -- um lado pode carregar o sinal "
@@ -403,7 +496,28 @@ def analisar_mae(arquivo_features: Path, feature: str, horizonte: int,
         f"({resumo['stats_venda']['n_marginais_positivas']}) |",
         "\nO EA roda VENDA-APENAS: a linha que decide o pre-registro e' a "
         "da venda, nao o agregado. As tres perdas alem do limite no replay "
-        "de 25 pregoes sao todas de venda.",
+        "de 25 pregoes sao todas de venda.\n",
+        "### Os tres regimes POR LADO (pnl bruto medio/operacao)\n",
+        "| lado | sem stop | stop no CLOSE | stop CONTINUO | "
+        "dif pareada | IC95 | afetadas |",
+        "|---|---|---|---|---|---|---|",
+        f"| compra | {resumo['stats_compra']['pnl_medio_sem_stop']:+.1f} | "
+        f"{resumo['stats_compra']['pnl_medio_stop_close']:+.1f} | "
+        f"{resumo['stats_compra']['pnl_medio_stop_continuo']:+.1f} | "
+        f"{resumo['stats_compra']['dif_pareada_media']:+.2f} | "
+        f"[{resumo['stats_compra']['ic95_baixo']:+.2f} ; "
+        f"{resumo['stats_compra']['ic95_alto']:+.2f}] | "
+        f"{resumo['stats_compra']['n_afetadas']} |",
+        f"| venda | {resumo['stats_venda']['pnl_medio_sem_stop']:+.1f} | "
+        f"{resumo['stats_venda']['pnl_medio_stop_close']:+.1f} | "
+        f"{resumo['stats_venda']['pnl_medio_stop_continuo']:+.1f} | "
+        f"{resumo['stats_venda']['dif_pareada_media']:+.2f} | "
+        f"[{resumo['stats_venda']['ic95_baixo']:+.2f} ; "
+        f"{resumo['stats_venda']['ic95_alto']:+.2f}] | "
+        f"{resumo['stats_venda']['n_afetadas']} |",
+        "\nA linha de COMPRA esta aqui como diagnostico, nao como decisao: "
+        "o EA nao opera esse lado, e ele tem MAIS marginais que operacoes "
+        "que ja batem no close.",
         "\nSe um lado tem pnl bruto medio abaixo do custo de transacao "
         "(tipicamente ~11pts no WIN) e o outro bem acima, o threshold "
         "simetrico esta operando um lado sem edge real ao lado de um "

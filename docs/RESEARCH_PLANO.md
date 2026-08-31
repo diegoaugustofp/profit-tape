@@ -63,6 +63,10 @@ arquivo cresceu demais para navegar so' por titulo cronologico).
   — premissa CONFIRMADA no parquet; instrumento entregue, resultado
   pendente da rodada do Diego. Errata: o antigo "pnl com stop
   hipotético" media o regime contínuo e o rotulava como o atual.
+- [PRÉ-REGISTRO: stop contínuo, não-inferioridade (2026-08-31c) — CONGELADO](#pré-registro-stop-contínuo-não-inferioridade-2026-08-31c--congelado)
+  — 0/16 marginais positivas (o modo de falha temido NÃO ocorre), mas o
+  contínuo dispara onde hoje não dispara (venda 10→16). Critério: IC95
+  pareado na venda, limite inferior > −3,0 pts/op.
 - [Curva de patrimonio / drawdown maximo (2026-08-27)](#curva-de-patrimonio--drawdown-maximo-2026-08-27)
 - [Risco realizado (VaR/ES) — primeiro passo aplicado do RQ (2026-08-27)](#risco-realizado-vares--primeiro-passo-aplicado-do-rq-2026-08-27)
 - [Resultado real do risco-realizado + correcao de bug de exibicao (2026-08-27)](#resultado-real-do-risco-realizado--correcao-de-bug-de-exibicao-2026-08-27)
@@ -3503,3 +3507,93 @@ Decisões de desenho já acordadas, a congelar no pré-registro:
 
 Critério de decisão será de **CONFORMIDADE, não de P&L**: os 270 pts em 3
 operações não calibram nada (regra 3).
+
+## PRÉ-REGISTRO: stop contínuo, não-inferioridade (2026-08-31c) — CONGELADO
+
+### Resultado do pré-voo que motivou este pré-registro
+
+`mae-analise` sobre curated, 336 gatilhos OOS, limiar 500:
+
+| | close (hoje) | contínuo (proposto) | marginais |
+|---|---|---|---|
+| agregado | 17 (5,1%) | 33 (9,8%) | 16 |
+| compra | 7 (4,0%) | 17 (9,8%) | 10 |
+| **venda** | **10 (6,2%)** | **16 (9,9%)** | **6** |
+
+**O modo de falha que se temia NÃO se materializou**: 0 de 16 marginais
+terminaram positivas. O stop contínuo não está cortando caudas ganhadoras
+neste sinal — as operações que tocam −500 intrabar e não no close são
+perdedoras (pnl médio −390,3 se deixadas correr).
+
+**Mas apareceu um custo que o registro de 31/08a não contava.** As
+marginais terminam em −390,3 e o stop contínuo as mata em −500: cortar
+cada uma custa ~110 pts. O "270 pts a menos" registrado antes contou só a
+economia nas três que já batiam, e não contou que o contínuo **também
+dispara onde hoje não dispara** (venda: 10 → 16).
+
+Conformidade, medida: excesso do close além do limite — mediana 65,
+máximo **305**. Um "stop de 500" que sai em −805 no pior caso não é um
+stop de 500 pontos.
+
+Agregado dos três regimes: sem stop +11,8 > close +9,7 > contínuo +9,5.
+Os três em ordem decrescente — o stop, em qualquer forma, custa
+expectativa. Isso não é argumento contra ele: é o prêmio do seguro.
+
+### Motivação
+
+O stop catastrófico é seguro de CAPITAL, não dispositivo de expectativa.
+Ele não cumpre a própria especificação: checado só no close, deixa a perda
+chegar a −805 num limite de 500. A mudança se justifica por
+**conformidade e limitação de cauda**, não por P&L — e a diferença entre
+os dois regimes de stop (+9,7 contra +9,5, com 33 de 336 afetadas) é
+indistinguível de ruído.
+
+**Se alguém apresentar esta mudança como ganho de 270 pts, está lendo
+errado.**
+
+### O que exatamente muda
+
+Só o stop catastrófico passa a ser avaliado a cada negócio. Nada mais.
+Congelado junto (decisões de desenho de 31/08b):
+
+1. Saída por tempo continua na barra (é o relógio que o research mediu).
+   Rota B fora de escopo (parada por CONTRA).
+2. Preço de saída: a impressão que cruzou, não o limite.
+3. Reentrada na mesma barra da saída: **proibida** (hoje sair no close já
+   impede entrada naquela barra; liberar seria segunda mudança disfarçada).
+4. `bar_id_saida` = id da barra em formação, saída marcada como intrabarra
+   no log — senão `barras_duracao` mente.
+5. `queue.Full`: o stop fica armado, o descarte só adia para a próxima
+   impressão. Limitação conhecida, não tratada.
+
+### CRITÉRIO DE DECISÃO — congelado ANTES da rodada
+
+Enquadramento: **não-inferioridade, não superioridade.**
+
+> Sobre o lado de **VENDA apenas**, IC95 bootstrap (bloco de pregão, 2000
+> reamostragens, semente fixa) da diferença **pareada**
+> `(stop contínuo − stop close)` em pts/operação.
+> **Aceita** se o limite INFERIOR do IC for maior que **−3,0 pts/op**.
+> **Rejeita** caso contrário, INDEPENDENTEMENTE do sinal da média.
+
+Pareado de propósito: os dois regimes agem sobre as MESMAS operações, e a
+diferença é exatamente zero em toda operação não afetada — comparar duas
+médias soltas jogaria fora o pareamento e inflaria o ruído.
+
+Venda apenas: o EA não opera compra, e a compra tem MAIS marginais que
+operações que já batem (10 contra 7) sem edge nenhum (−1,4 bruto, abaixo
+do custo) — ela contamina o agregado com um lado que não está em jogo.
+
+O −3,0 foi fixado pelo operador **antes** de a quebra por lado existir.
+Referência de calibração: a venda rende +26 bruto, custo ~11, ~15 pts/op
+líquidos; ceder 3 é ceder ~1/5 do edge líquido em troca do teto da cauda.
+
+Congelado no código como `mae.LIMITE_NAO_INFERIORIDADE_PTS`, **não**
+exposto como opção de CLI (mesmo padrão de `reversao.py`): mudar exige
+editar código e escrever pré-registro novo.
+
+Não gasta trial: engenharia de risco sobre sinal já validado pelo IC.
+
+### Estado
+
+Instrumento entregue em `entregue-v1.49`. **Resultado ainda não observado.**

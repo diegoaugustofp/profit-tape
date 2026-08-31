@@ -535,3 +535,27 @@ manhã. Nenhuma mudança de comportamento do EA.
 
 **Pendente**: rodar `features` + `mae-analise` e escrever o pré-registro
 com o teto de frequência comprometido ANTES de ver o efeito no P&L.
+
+### Continuação (2026-08-31c) — pré-voo rodou, pré-registro congelado
+
+- **Pré-voo rodou** (`entregue-v1.48`): o modo de falha que se temia NÃO
+  se materializou — 0 de 16 marginais terminaram positivas. O stop
+  contínuo não corta caudas ganhadoras neste sinal.
+- **Mas apareceu um custo não contado**: as marginais terminam em −390,3 e
+  o contínuo as mata em −500 (~110 pts cada). O "270 pts a menos"
+  registrado de manhã contou só a economia nas três que já batiam, e não
+  que o contínuo também dispara onde hoje não dispara (venda 10 → 16).
+- **Conformidade medida**: excesso do close além do limite — mediana 65,
+  máximo 305. Um stop de 500 que sai em −805 não é um stop de 500.
+- **Lacuna do instrumento v1.48 corrigida**: os três regimes de P&L saíam
+  só agregados, e a compra (sem edge, 10 marginais contra 7 que já batem)
+  puxava o agregado de um lado que o EA nem opera.
+- **Pré-registro CONGELADO** (`entregue-v1.49`): não-inferioridade, não
+  superioridade. IC95 bootstrap pareado (bloco de pregão) sobre a VENDA,
+  aceita se o limite inferior > −3,0 pts/op. Limite fixado pelo operador
+  antes de a quebra por lado existir; congelado no código, não exposto
+  como opção de CLI.
+- 389 testes, ruff limpo, mypy strict limpo. Dois cenários conferidos à
+  mão antes dos testes (CONTRA e FAVORAVEL, IC determinístico com um dia).
+
+**Pendente**: rodar e observar o veredito.

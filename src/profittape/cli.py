@@ -1422,6 +1422,22 @@ def mae_analise(
                    f"({s['pct_batido_stop_intrabar']:.1%})  "
                    f"marginais={s['n_marginais']} "
                    f"(positivas: {s['n_marginais_positivas']})")
+    typer.echo("\n  TRES REGIMES POR LADO (pnl bruto medio/operacao):")
+    for nome, s in (("compra", r["stats_compra"]), ("venda ", r["stats_venda"])):
+        typer.echo(f"    {nome}: sem stop={s['pnl_medio_sem_stop']:+.1f}  "
+                   f"close={s['pnl_medio_stop_close']:+.1f}  "
+                   f"continuo={s['pnl_medio_stop_continuo']:+.1f}  "
+                   f"dif pareada={s['dif_pareada_media']:+.2f}  "
+                   f"IC95=[{s['ic95_baixo']:+.2f} ; {s['ic95_alto']:+.2f}]  "
+                   f"afetadas={s['n_afetadas']}")
+    typer.echo("\n" + "=" * 62)
+    typer.echo("PRE-REGISTRO (criterio congelado): lado VENDA, IC95 da "
+               "diferenca pareada")
+    typer.echo(f"  aceita se limite inferior > "
+               f"{r['limite_nao_inferioridade']:.1f} pts/op")
+    typer.echo(f"  observado: {r['stats_venda']['ic95_baixo']:+.2f}")
+    typer.echo(f"  VEREDITO: {r['veredito']}")
+    typer.echo("=" * 62)
     typer.echo(f"\nrelatorio: {r['relatorio']}")
 
 

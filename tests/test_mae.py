@@ -11,7 +11,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from profittape.research.mae import _sinal_de_entrada, analisar_mae
+from profittape.research.mae import (
+    LIMITE_NAO_INFERIORIDADE_PTS,
+    _sinal_de_entrada,
+    analisar_mae,
+)
 
 
 def test_sinal_de_entrada_contrarian() -> None:
@@ -445,3 +449,131 @@ def test_relatorio_traz_os_tres_regimes_e_a_errata(tmp_path: Path) -> None:
     assert "VENDA-APENAS" in conteudo
     # a chave enganosa nao volta por acidente
     assert "pnl_medio_com_stop_hipotetico" not in r
+
+
+# ---------------------------------------------------------------------------
+# DIFERENCA PAREADA + VEREDITO DO CRITERIO CONGELADO (2026-08-31b).
+# Cenarios CONFERIDOS A MAO antes destes testes (regra 4).
+#
+#   Cenario 1 (_df_tres_regimes, o stop continuo CUSTA):
+#     Op A: close=+10, continuo=-50 -> d=-60 | Op B: close=-65, cont=-50 -> d=+15
+#     media = -22.5. UM dia -> bootstrap por bloco colapsa em [-22.5;-22.5].
+#     -22.5 < -3.0 -> CONTRA
+#
+#   Cenario 2 (_df_pareado_favoravel, o stop continuo AJUDA):
+#     Op X: closes 180,150,140 highs 185,155,145 -> close=-80, cont=-50, d=+30
+#     Op Y: nao cruza em nenhum regime -> d=0
+#     media = +15 -> IC [15;15] -> +15 > -3.0 -> FAVORAVEL, afetadas=1
+# ---------------------------------------------------------------------------
+
+def _df_pareado_favoravel() -> pd.DataFrame:
+    return pd.DataFrame({
+        "dia": ["2026-01-01"] * 10,
+        "ts_close": np.arange(10) * 10**11,
+        "close": [50, 100, 180, 150, 140, 100, 90, 95, 85, 60],
+        "high":  [51, 101, 185, 155, 145, 101, 105, 110, 108, 61],
+        "low":   [49,  99, 175, 145, 135,  99,  85,  90,  80, 59],
+        "z_agf_3": [0, 1.5, 0, 0, 0, 1.5, 0, 0, 0, 0],
+    })
+
+
+def test_limite_de_nao_inferioridade_esta_congelado_no_modulo() -> None:
+    """O criterio nao e' opcao de CLI de proposito (mesmo padrao de
+    reversao.py): mudar exige editar o codigo e um pre-registro novo."""
+    assert LIMITE_NAO_INFERIORIDADE_PTS == -3.0
+
+
+def test_diferenca_pareada_e_zero_em_operacao_nao_afetada(tmp_path: Path) -> None:
+    """O pareamento so' tem variancia nas operacoes que algum stop toca --
+    e' isso que o torna melhor que comparar duas medias soltas."""
+    arq = tmp_path / "features.parquet"
+    _df_pareado_favoravel().to_parquet(arq, index=False)
+    r = analisar_mae(arq, "z_agf_3", horizonte=3, threshold_entrada=1.4,
+                     direcao="contrarian", stop_catastrofico_pontos=50,
+                     saida=tmp_path / "out", treino_min=0)
+    t = r["tabela"]
+    assert t["dif_pareada"].iloc[0] == 30.0   # Op X: -50 - (-80)
+    assert t["dif_pareada"].iloc[1] == 0.0    # Op Y: nenhum regime toca
+    assert r["stats_venda"]["n_afetadas"] == 1
+
+
+def test_veredito_contra_quando_o_continuo_custa(tmp_path: Path) -> None:
+    arq = tmp_path / "features.parquet"
+    _df_tres_regimes().to_parquet(arq, index=False)
+    r = analisar_mae(arq, "z_agf_3", horizonte=3, threshold_entrada=1.4,
+                     direcao="contrarian", stop_catastrofico_pontos=50,
+                     saida=tmp_path / "out", treino_min=0)
+    v = r["stats_venda"]
+    assert v["dif_pareada_media"] == -22.5
+    assert v["ic95_baixo"] == -22.5   # um so' dia -> IC deterministico
+    assert v["ic95_alto"] == -22.5
+    assert r["veredito"].startswith("CONTRA")
+
+
+def test_veredito_favoravel_quando_o_continuo_ajuda(tmp_path: Path) -> None:
+    arq = tmp_path / "features.parquet"
+    _df_pareado_favoravel().to_parquet(arq, index=False)
+    r = analisar_mae(arq, "z_agf_3", horizonte=3, threshold_entrada=1.4,
+                     direcao="contrarian", stop_catastrofico_pontos=50,
+                     saida=tmp_path / "out", treino_min=0)
+    v = r["stats_venda"]
+    assert v["dif_pareada_media"] == 15.0
+    assert v["ic95_baixo"] == 15.0
+    assert r["veredito"].startswith("FAVORAVEL")
+
+
+def test_veredito_avalia_a_venda_e_ignora_a_compra(tmp_path: Path) -> None:
+    """O EA roda venda-apenas: um lado de compra desastroso nao pode
+    derrubar o veredito, e um lado de venda ausente nao pode aprova-lo."""
+    arq = tmp_path / "features.parquet"
+    _df_basico().to_parquet(arq, index=False)   # so' compra, nenhuma venda
+    r = analisar_mae(arq, "z_agf_3", horizonte=3, threshold_entrada=1.4,
+                     direcao="contrarian", stop_catastrofico_pontos=500,
+                     saida=tmp_path / "out", treino_min=0)
+    assert r["stats_venda"]["n"] == 0
+    assert r["veredito"].startswith("INCONCLUSIVO")
+
+
+def test_tres_regimes_saem_quebrados_por_lado(tmp_path: Path) -> None:
+    """A lacuna da v1.48: os tres regimes so' existiam agregados, e o
+    agregado mistura um lado que o EA nem opera."""
+    arq = tmp_path / "features.parquet"
+    _df_tres_regimes().to_parquet(arq, index=False)
+    r = analisar_mae(arq, "z_agf_3", horizonte=3, threshold_entrada=1.4,
+                     direcao="contrarian", stop_catastrofico_pontos=50,
+                     saida=tmp_path / "out", treino_min=0)
+    v = r["stats_venda"]
+    assert v["pnl_medio_sem_stop"] == -15.0
+    assert v["pnl_medio_stop_close"] == -27.5
+    assert v["pnl_medio_stop_continuo"] == -50.0
+    # lado vazio devolve o esqueleto completo, sem KeyError
+    c = r["stats_compra"]
+    assert pd.isna(c["pnl_medio_stop_continuo"])
+    assert pd.isna(c["ic95_baixo"])
+    assert c["n_afetadas"] == 0
+
+
+def test_relatorio_traz_o_pre_registro_e_o_veredito(tmp_path: Path) -> None:
+    arq = tmp_path / "features.parquet"
+    _df_tres_regimes().to_parquet(arq, index=False)
+    r = analisar_mae(arq, "z_agf_3", horizonte=3, threshold_entrada=1.4,
+                     direcao="contrarian", stop_catastrofico_pontos=50,
+                     saida=tmp_path / "out", treino_min=0)
+    conteudo = Path(r["relatorio"]).read_text(encoding="utf-8")
+    assert "PRE-REGISTRO" in conteudo
+    assert "VEREDITO" in conteudo
+    assert "-3.0 pts/op" in conteudo
+    assert "Os tres regimes POR LADO" in conteudo
+
+
+def test_semente_fixa_torna_o_bootstrap_reprodutivel(tmp_path: Path) -> None:
+    """Duas rodadas identicas precisam dar o MESMO IC -- senao o veredito
+    dependeria da sorte da rodada, nao do dado."""
+    arq = tmp_path / "features.parquet"
+    _df_pareado_favoravel().to_parquet(arq, index=False)
+    kwargs = dict(horizonte=3, threshold_entrada=1.4, direcao="contrarian",
+                  stop_catastrofico_pontos=50, treino_min=0)
+    a = analisar_mae(arq, "z_agf_3", saida=tmp_path / "a", **kwargs)
+    b = analisar_mae(arq, "z_agf_3", saida=tmp_path / "b", **kwargs)
+    assert a["stats_venda"]["ic95_baixo"] == b["stats_venda"]["ic95_baixo"]
+    assert a["veredito"] == b["veredito"]
