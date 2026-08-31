@@ -579,42 +579,63 @@ de 5 pregoes com dica de `--raiz-raw` (incidente do mesmo dia: rodou
 sobre 1 pregao e devolveu parcelas 1,00 por tautologia).
 
 
-## Recuperacao de tape perdido: verificar ANTES de confiar (2026-08-31)
+## Recuperacao de tape perdido: o `backfill` JA' RESOLVE (2026-08-31)
 
-O incidente de 2026-08-25 (processo morreu com exit code 1, causa nunca
-confirmada) deixou um pregao incompleto. A pergunta: da' para recuperar?
+**Pergunta**: se o `record` ficar dias parado, da' para recuperar?
 
-**Duas funcoes, limites diferentes** — confundi-las custou uma resposta
-errada:
+**Resposta: sim, e ja' esta provado em producao.** O historico de 24/07 a
+24/08 foi construido pelo `backfill` — um mes inteiro recuperado. Nao e'
+so' documentacao.
 
-    RequestSerieHistory   series de BARRAS      WIN: 8 dias (tabela)
-    GetHistoryTrades      NEGOCIOS individuais  data inicial ate 30 dias
+    profit-tape backfill --inicio 2026-08-25 --fim 2026-08-26 \
+        --ticker WINFUT --por-dia
 
-O limite de 30 dias aparece so' na descricao do `NL_HISTORY_PERIOD_LIMIT`,
-nao numa tabela por ativo. **Pode haver limite do WIN que o manual nao
-tabela.**
+`--fim` e' EXCLUSIVO: para incluir o dia X, informe X+1.
 
-E `THistoryTradeCallback` entrega os MESMOS campos de
-`TNewTradeCallback` (preco, quantidade, agentes, `nTradeType`), menos o
-`bEdit`.
+### Os dados sao os MESMOS do tempo real
 
-### O primeiro uso NAO e' preencher buraco
+Verificado em `profitdll/client.py`: `TNewTradeCallback` (linha 233) e
+`THistoryTradeCallback` (linha 369) constroem o **mesmo objeto `Trade`**
+e publicam no **mesmo `Stream.TRADE`**. Preco, quantidade, agentes e
+`trade_type` sao identicos.
 
-"Esta documentado" e "funciona" sao coisas diferentes. Em 2026-08-31,
-`AgressionVolBuy/Sell` devolveu ZERO em 2.001 barras sem erro nenhum,
-enquanto `QuantityVol` funcionava na mesma barra.
+Unica diferenca: `is_edit` vem da DLL no tempo real e e' `False` fixo no
+historico — edicao so' existe ao vivo.
 
-Entao: pedir um dia que JA' TEMOS e comparar negocio a negocio. Se
-bater, a recuperacao e' confiavel. Se nao bater, saber ANTES vale mais
-que um parquet preenchido com dado silenciosamente diferente.
+### TRES FUNCOES, e confundi-las custou caro nesta sessao
 
-`recorder/recuperacao.py` compara em DUAS etapas:
+    GetHistoryTrades      NEGOCIOS individuais   30 dias   <- o backfill usa
+    RequestSerieHistory   serie 1-Trade          8 dias (WIN)
+    RequestSerieHistory   serie de BARRAS        10.000 candles
 
-1. **Chave** (`trade_number` + preco + quantidade): quem esta so' de um
-   lado.
-2. **Conteudo** das linhas que casaram (`trade_type`, agentes): pega
-   "veio tudo, mas sem a agressao" — a falha mais provavel dado o
-   historico deste projeto. Contar linhas nao basta: dois conjuntos
-   podem ter o mesmo tamanho e conteudo diferente.
+A tabela de "8 dias para WIN" e' da serie **1-Trade**, nao do
+`GetHistoryTrades`. Eu apliquei ao segundo por engano e concluí que a
+janela era de 8 dias, quando o `backfill` ja' operava com 30.
 
-Comparar com conjunto vazio NAO passa por "confere" — nao mede nada.
+### RequestSerieHistory: mapeado, NAO implementado
+
+Decisao registrada em 2026-08-31.
+
+**Serie 1-Trade nao serve**: 8 dias para WIN contra os 30 do
+`GetHistoryTrades`. Estritamente pior.
+
+**Serie de BARRAS** daria ~92 pregoes no 5m (10.000 candles / ~108 por
+pregao) — quatro meses, o equivalente programatico do historico profundo
+do grafico, sem os ~17 dumps manuais pelo console.
+
+**Por que nao implementar agora:**
+
+1. A serie de barras provavelmente **nao traz agressao**, so' OHLC e
+   volume — a mesma limitacao ja' medida no grafico fora da janela de
+   uma semana. Sem agressao, `imbalance` e `absorcao_dir` ficam de fora.
+2. **Nenhuma hipotese atual usa o que ele entrega.** `z_agf_3` e' de
+   agressao e vive em barra de VOLUME.
+3. Custo real: binding novo com callback de ponteiro e `TranslateTrade`.
+
+**Duvida que decide, e que o manual nao esclarece**: se o volume da
+serie vem separado por agressor (como `QuantityVol(False, True)` faz no
+NTSL). Se vier, a serie de barras permitiria `imbalance` em quatro meses
+— o que mudaria a conta.
+
+**Quando reconsiderar**: se aparecer formalizacao que dependa so' de
+OHLC e volume. Ai' ele vira a forma mais barata de amostra grande.
