@@ -658,6 +658,69 @@ def absorcao_diagnostico(
 
 
 @app.command()
+def triagem(
+    coluna: str = typer.Argument(..., help="Feature candidata a triar."),
+    features: Path = typer.Option(
+        Path("data/features_tempo/sym=WINFUT/tf=5m/features.parquet"),
+        "--features"),
+    contra: str | None = typer.Option(
+        None, "--contra",
+        help="Features existentes, separadas por virgula. Sem isto, "
+             "compara com TODAS as numericas do parquet."),
+    numerador: str | None = typer.Option(None, "--numerador"),
+    denominador: str | None = typer.Option(
+        None, "--denominador",
+        help="Se a candidata e' uma razao, declare as partes: razao entre "
+             "quantidades que andam juntas e' quase constante."),
+    log_level: str = typer.Option("INFO", "--log-level"),
+) -> None:
+    """
+    Tria uma feature candidata ANTES de gastar trial.
+
+    Olha so' a FORMA da variavel — redundancia, cauda, construcao — e
+    NUNCA toca em retorno. Categoria `features`: zero trial.
+
+    REPROVA e' bloqueante para pre-registro. PASSA nao autoriza nada:
+    so' significa que nao da' para descartar olhando a forma.
+    """
+    configurar(log_level)
+    from .features.triagem import triar_parquet
+
+    if not features.exists():
+        raise SystemExit(f"nao achei {features}")
+    r = triar_parquet(features, coluna,
+                      contra.split(",") if contra else None,
+                      numerador, denominador)
+
+    typer.echo("=" * 64)
+    typer.echo(f"TRIAGEM DE `{coluna}`  ->  {r['veredito']}")
+    typer.echo("=" * 64)
+    for m in r["motivos"]:
+        typer.echo(f"  !! {m}")
+    if not r["motivos"]:
+        typer.echo("  nenhum defeito de forma detectado")
+        typer.echo("  (PASSA nao autoriza nada — so' que nao da' para")
+        typer.echo("   descartar olhando a forma)")
+
+    typer.echo("\n--- REDUNDANCIA (|corr| >= 0,95 reprova) ---")
+    typer.echo(pd.DataFrame(r["redundancia"]).head(8).to_string(index=False))
+
+    c = r["cauda"]
+    if "pct_acima_de_2_5_sd" in c:
+        typer.echo("\n--- CAUDA ---")
+        typer.echo(f"  {c['pct_acima_de_2_5_sd']}% acima de 2,5 desvios "
+                   f"| normal: {c['pct_esperado_sob_normal']}% "
+                   f"| razao: {c['razao_com_a_normal']}x")
+        typer.echo(f"  faixa observada: [{c['min']}, {c['max']}]")
+
+    if "correlacao_numerador_denominador" in r["razao"]:
+        typer.echo("\n--- RAZAO ---")
+        typer.echo(f"  corr(numerador, denominador) = "
+                   f"{r['razao']['correlacao_numerador_denominador']:+.4f}")
+        typer.echo(f"  {r['razao']['nota']}")
+
+
+@app.command()
 def agents(
     dados: Path = typer.Option(
         Path("data/curated"), "--dados",

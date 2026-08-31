@@ -111,6 +111,8 @@ arquivo cresceu demais para navegar so' por titulo cronologico).
 
 - [DIAGNOSTICO 2026-08-31: absorcao_dir E desloc_norm disfarcado, e o esforco NAO tem cauda](#diagnostico-2026-08-31-absorcao_dir-e-desloc_norm-disfarcado-e-o-esforco-nao-tem-cauda)
 
+- [TRIAGEM DE FEATURE: a etapa que faltava entre formalizar e pre-registrar (2026-08-31)](#triagem-de-feature-a-etapa-que-faltava-entre-formalizar-e-pre-registrar-2026-08-31)
+
 **Disciplina/processo do proprio research**
 - [Decisoes aprovadas](#decisoes-aprovadas)
 - [Pre-requisitos antes de escrever research/](#pre-requisitos-antes-de-escrever-research)
@@ -3882,3 +3884,58 @@ isso da' para verificar ANTES de gastar trial, com uma correlacao.
 seria escolher depois de ver o resultado — e sem um mecanismo que
 sobreviva a esta checagem de redundancia, nao ha' pre-registro a
 escrever.
+
+## TRIAGEM DE FEATURE: a etapa que faltava entre formalizar e pre-registrar (2026-08-31)
+
+`profit-tape triagem <coluna>` — categoria `features`, **zero trial**.
+Olha so' a FORMA da variavel e **nunca toca em retorno**.
+
+### O buraco no processo
+
+O pipeline ia de "formalizei uma feature" direto para "pre-registrei um
+teste". Duas formalizacoes morreram nessa lacuna, e as duas por
+propriedades que uma correlacao revelaria em segundos:
+
+| candidata | custo | defeito | como seria pego |
+|---|---|---|---|
+| `absorcao_dir` | **12 trials + CONTRA** | `corr(., -desloc_norm) = 0,9883` | redundancia |
+| `esforco` | 0 (pego a tempo) | `corr(vol, amplitude) = +0,892` | razao entre partes |
+
+A licao comum: **eu previ uma propriedade e conclui outra.** "Ilimitado"
+nao implica "tem cauda"; "combina dois termos" nao implica "mede algo
+novo". Prever nao e' verificar.
+
+### As tres checagens
+
+**Redundancia** — correlacao com cada feature existente E com o negativo
+dela. O sinal engana: -0,988 parece "oposto, logo diferente", mas e' a
+mesma informacao trocada de sinal. Acima de 0,95 em modulo, a candidata
+e' uma feature existente renomeada.
+
+**Cauda** — fracao de |z| >= 2,5 desvios, comparada com os 1,24% de uma
+normal. Abaixo de metade disso, a variavel e' sub-gaussiana e uma
+hipotese sobre eventos extremos nao tem o que medir.
+
+**Razao entre partes** — se a candidata e' uma razao, mede a correlacao
+entre numerador e denominador. Acima de 0,7, a razao e' quase constante
+por construcao, e isso NAO aparece olhando so' a razao pronta.
+
+### Erro meu no primeiro criterio de cauda
+
+Usei a razao `p99/p50` do |z| com corte em 2,0. Ela **errava os dois
+casos reais**: aprovava `absorcao_dir` (2,34x) e dava ao `esforco` mais
+cauda que uma normal (4,30x contra 3,85x).
+
+Razao entre dois quantis e' instavel e nao se compara a referencia
+nenhuma. Trocado pela fracao acima de 2,5 desvios contra a normal, que
+acerta os dois: 0,00x para `absorcao_dir`, 1,23x para o `esforco`.
+
+O criterio errado so' apareceu porque rodei nos dois casos historicos
+antes de aceitar o modulo — a mesma pratica que este comando existe para
+institucionalizar.
+
+### O que a triagem NAO faz
+
+Nao diz se a feature PREDIZ alguma coisa. **PASSA nao autoriza nada** —
+so' significa que nao da' para descartar olhando a forma. **REPROVA e'
+bloqueante** para pre-registro.
