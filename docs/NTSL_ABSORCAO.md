@@ -581,3 +581,43 @@ quando detecta mais de um fator e lista os valores por dia.
 
 Teste de regressão com dado idêntico nos dois lados e dois fatores k
 diferentes: com k por pregão o erro tem que ser exatamente zero.
+
+
+## Restricoes do Profit, consolidadas (2026-08-30)
+
+Reunidas aqui porque estavam espalhadas por varias secoes e esquecer
+delas custou tres dumps inuteis num unico dia.
+
+| restricao | consequencia pratica |
+|---|---|
+| console retem ~2.000 linhas | limita o dump por rodada |
+| buffer enche de TRAS PARA FRENTE | mais historico no grafico = log termina mais CEDO |
+| "tick a tick = 1 semana" | e' de BACKTEST/AUTOMACAO; o indicador ignora |
+| backtest so' aceita estrategia automatizada | codigo precisa ter funcao do modulo backtest |
+| `WINFUT` = serie continua AJUSTADA | `k` muda nas rolagens; nivel nao e' comparavel |
+| `SoAgressores` sem Plugin Tape Reading | vira `False` em SILENCIO (confirmado ativo aqui) |
+| `VolumeAtPrice` | historico curto |
+| livro | sem historico na automacao |
+
+**A saida para o buffer** e' `LogDataInicio`/`LogDataFim`, que suprimem
+apenas o `ConsoleLog`. O indicador continua CALCULANDO sobre todo o
+historico, entao a janela de 50 barras e o aquecimento do z-score ficam
+intactos — reduzir o periodo do grafico teria o mesmo efeito no buffer
+mas custaria o aquecimento.
+
+**Custo de extrair historico longo**: ~2.000 linhas por dump, janela de
+data ajustada a mao. Para 300 pregoes com log completo (113
+barras/pregao) seriam ~17 dumps. Viavel, mas entra na conta antes de
+prometer amostra grande.
+
+### O backtest do Profit nao substitui o pipeline
+
+So' aceita estrategias automatizadas — o codigo precisa conter funcoes
+do modulo backtest para ser classificado como tal, e por isso o
+`absorcao_dir.ntsl` (so' `Plot`/`PaintBar`/`ConsoleLog`) aparece como
+indicador.
+
+Mas a limitacao que importa nao e' essa: o backtest do Profit nao tem
+validacao cruzada purgada, limiar deflacionado, portao de honestidade
+nem contador de trials. Ver `RESEARCH_PLANO.md`, secao "POLITICA DO
+HISTORICO DO GRAFICO".

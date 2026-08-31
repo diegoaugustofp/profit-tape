@@ -86,6 +86,8 @@ arquivo cresceu demais para navegar so' por titulo cronologico).
 
 - [RESULTADO DA ROTA B: CONTRA — o stop nao detecta reversao (2026-08-30i)](#resultado-da-rota-b-contra---o-stop-nao-detecta-reversao-2026-08-30i)
 
+- [POLITICA DO HISTORICO DO GRAFICO: conjunto de validacao CEGO (2026-08-30j)](#politica-do-historico-do-grafico-conjunto-de-validacao-cego-2026-08-30j)
+
 **Disciplina/processo do proprio research**
 - [Decisoes aprovadas](#decisoes-aprovadas)
 - [Pre-requisitos antes de escrever research/](#pre-requisitos-antes-de-escrever-research)
@@ -3043,3 +3045,113 @@ defensavel: e' **indiferente na pratica** para este instrumento.
 O parametro fica, porque o argumento nao vale para instrumento ilíquido
 nem para grade de tick mais grossa — mas para o WINFUT a escolha nao
 muda nada, e isso esta medido em vez de suposto.
+
+## POLITICA DO HISTORICO DO GRAFICO: conjunto de validacao CEGO (2026-08-30j)
+
+Registrada ANTES de qualquer uso e ANTES de haver tentacao concreta.
+Politica escrita depois da tentacao nao vale nada.
+
+### O ativo que se gasta uma vez
+
+O Profit Chart tem anos de historico que a captura via ProfitDLL nao
+tem (25 pregoes em 2026-08-30). Esse historico **nunca foi olhado para
+formar hipotese nenhuma**, e e' isso que o torna valioso.
+
+Se for usado para aumentar o `n` de hipoteses formadas nos 25 pregoes,
+vira apenas uma busca maior — o teorema da estrategia falsa cobra por
+ela igual. Se for reservado, uma hipotese aprovada no tape pode levar
+**UM tiro** nele, e isso e' a evidencia mais forte que este projeto
+consegue produzir: fora da amostra, em regimes diferentes.
+
+**Cada olhada informal queima uma parte do ativo.**
+
+### REGRA
+
+1. O historico do grafico e' **CEGO**. Nao se olha para formar hipotese,
+   nao se olha para "dar uma conferida", nao se olha para calibrar
+   limiar.
+2. Uso permitido: **um** teste por hipotese, com pre-registro proprio,
+   escrito e congelado ANTES de qualquer contato.
+3. **Proibido combinar numa amostra unica** com o tape. Sao instrumentos
+   de medicao diferentes (`desloc_norm` difere em 47% das barras, sempre
+   1 tick em open/close) e a mistura destroi a propriedade de ser fora
+   da amostra — que e' a unica razao de o conjunto valer alguma coisa.
+4. Toda rodada sobre o grafico entra no `trials.json` normalmente.
+
+### O que E' e o que NAO E' reproduzivel (medido em 2026-08-30)
+
+    imbalance    EXATO      2001/2001, diferenca maxima 0,000000
+    desloc_norm  1 tick     47% das barras, so em open/close
+    z-score      2,4e-8     mesma janela, shift e divisor
+
+    NAO reproduzivel:
+      barra de VOLUME com relogio de agressao -> o grafico da barra de TEMPO
+      qualquer coisa negocio a negocio        -> F exato, tick imbalance
+
+**Consequencia que limita muito o uso imediato**: `z_agf_3`, o unico
+sinal validado, vive em barra de VOLUME e **nao e' testavel no
+grafico**. `absorcao_dir` seria testavel (barra de tempo) mas ja' recebeu
+CONTRA.
+
+### RESTRICOES OPERACIONAIS do Profit, medidas hoje
+
+Estas limitam o que e' possivel extrair, e esquecer delas custou tres
+dumps inuteis em 2026-08-30:
+
+**Buffer do console ~2.000 linhas, que enche de TRAS PARA FRENTE.** A
+carga de historico processa em ordem cronologica, entao o buffer enche a
+partir da barra MAIS ANTIGA e para. Quanto mais historico o grafico tem,
+mais CEDO o log termina. Reduzir o log por barra nao resolve (o buffer
+conta linhas). A solucao e' `LogDataInicio`/`LogDataFim` no proprio
+`.ntsl`, que suprimem so' o `ConsoleLog` e preservam o aquecimento do
+z-score.
+
+**"Tick a tick = 1 semana" e' limite de BACKTEST/AUTOMACAO**, e o
+indicador nao o respeita — ele roda sobre tudo que o grafico carregou.
+Observacao do operador que destravou o impasse.
+
+**Extrair historico longo e' caro em passos manuais**: um dump de ~2.000
+linhas por vez, com janela de data ajustada a mao. Para 300 pregoes com
+log completo (113 barras/pregao) seriam ~17 dumps. E' viavel, mas
+precisa entrar na conta antes de prometer amostra grande.
+
+**Serie continua AJUSTADA**: `WINFUT` no grafico e' o contrato continuo,
+com fator `k` que MUDA nas rolagens (medido: 1,020480 ate 11/08 e
+1,000000 de 12/08 em diante — a rolagem caiu dentro da amostra). Nivel
+de preco nao e' comparavel; razao e'. Qualquer feature que use nivel
+precisa de `k` POR PREGAO.
+
+### BACKTEST DO PROFIT NAO E' VALIDACAO
+
+Registrado explicitamente porque a tentacao e' obvia e o custo seria
+alto.
+
+O modulo de backtest do Profit so' aceita **estrategias automatizadas**
+(o codigo precisa conter funcoes do modulo backtest para ser
+classificado como tal). Mas a limitacao que importa nao e' essa: e' que
+o backtest dele **nao tem** validacao cruzada purgada, limiar
+deflacionado, portao de honestidade nem contador de trials.
+
+Usar o resultado dele como confirmacao importaria uma metodologia muito
+mais fraca — exatamente a que os 504 trials e o `t_critico` de 4,07
+existem para evitar. Uma curva de capital bonita no Profit seria mais um
+SINTOMA batendo, e 2026-08-30 mostrou tres vezes seguidas que sintoma
+batendo nao e' causa confirmada.
+
+**Usos legitimos do NTSL**, ambos valiosos e nenhum deles evidencia
+estatistica:
+  - inspecao VISUAL (ver o que a formula deixou de fora);
+  - mecanica de EXECUCAO em conta demo (forward test).
+
+### Ganho de poder, para dimensionar a decisao
+
+    pregoes  folds  t_critico   (limiar_z = 3,055 com 504 trials)
+       25      11     4,07
+       50      23     3,46
+      100      48     3,23
+      200      98     3,14
+      500     248     3,09
+
+O salto grande e' o primeiro: de 25 para 100 pregoes. Depois satura. A
+via principal continua sendo **acumular tape** (zero trial, ja' rodando,
+~3 meses ate 100 pregoes), nao extrair historico do grafico.

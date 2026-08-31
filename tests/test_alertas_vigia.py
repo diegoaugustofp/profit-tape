@@ -76,12 +76,38 @@ def test_vigia_ok_quando_tudo_normal(tmp_path: Path) -> None:
 
 
 def test_vigia_detecta_travado(tmp_path: Path) -> None:
-    """Iniciou, mas o ultimo heartbeat e' de ha' muito tempo -> travado."""
+    """
+    Iniciou, mas o ultimo heartbeat e' de ha' muito tempo -> travado.
+
+    TESTE DEPENDENTE DE RELOGIO, corrigido em 2026-08-31.
+    ----------------------------------------------------
+    A versao anterior fixava o evento de inicio em "09:00 de HOJE" e o
+    heartbeat em "agora - 20 min". Entre a meia-noite e as 09:00 isso
+    monta um cenario IMPOSSIVEL: o heartbeat cai no dia anterior e o
+    inicio fica MAIS RECENTE que ele. O vigia entao le "acabou de
+    iniciar" e devolve `ok` — leitura correta de um cenario incoerente.
+
+    O defeito era do teste, nao do `checar`. Pego as 00:11 UTC de
+    2026-08-31, depois de passar o dia inteiro verde.
+
+    Ancorar so' em `agora - N min` tambem nao basta: `_ler_linhas_de_hoje`
+    filtra pelo DIA CORRENTE, entao logo apos a meia-noite os dois eventos
+    cairiam em ontem e o vigia leria zero linhas (`nao_iniciou`). O
+    cenario e' construido dentro do dia de hoje, recuando a partir de
+    `agora` mas nunca antes das 00:00.
+    """
     log_file = tmp_path / "log.jsonl"
-    hoje = datetime.now(UTC).strftime("%Y-%m-%dT")
-    antigo = (datetime.now(UTC) - timedelta(minutes=20)).isoformat().replace("+00:00", "Z")
+    agora = datetime.now(UTC)
+    # Recua o quanto der sem sair do dia; o teste so' precisa que o
+    # heartbeat seja mais VELHO que `limite_parado_min` e mais NOVO que o
+    # evento de inicio.
+    desde_meia_noite = agora.hour * 60 + agora.minute
+    atraso_hb = min(20, max(7, desde_meia_noite // 2))
+    atraso_ini = min(60, max(atraso_hb + 1, desde_meia_noite))
+    inicio = (agora - timedelta(minutes=atraso_ini)).isoformat().replace("+00:00", "Z")
+    antigo = (agora - timedelta(minutes=atraso_hb)).isoformat().replace("+00:00", "Z")
     _escrever_log_json(log_file, [
-        {"timestamp": hoje + "09:00:00.000000Z", "event": "recorder.subscrito"},
+        {"timestamp": inicio, "event": "recorder.subscrito"},
         {"timestamp": antigo, "event": "recorder.heartbeat", "linhas": 500},
     ])
     veredito = checar(
@@ -89,6 +115,39 @@ def test_vigia_detecta_travado(tmp_path: Path) -> None:
         abertura_local="00:00", fechamento_local="23:59", limite_parado_min=6.0,
     )
     assert veredito == "travado"
+
+
+def test_vigia_detecta_travado_logo_apos_a_meia_noite(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """
+    Regressao do bug de relogio: as 00:11 UTC o teste acima falhava.
+
+    Aqui o horario e' FIXADO em 00:05 em vez de depender de quando a
+    suite roda — um teste que so' quebra de madrugada e' pior que um
+    teste que quebra sempre, porque passa o dia inteiro verde.
+    """
+    import profittape.vigia as v
+
+    class _Relogio(datetime):
+        @classmethod
+        def now(cls, tz=None):  # type: ignore[no-untyped-def]
+            base = datetime(2026, 8, 31, 0, 5, tzinfo=UTC)
+            return base if tz else base.replace(tzinfo=None)
+
+    monkeypatch.setattr(v, "datetime", _Relogio)
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d)
+        log_file = tmp / "log.jsonl"
+        _escrever_log_json(log_file, [
+            {"timestamp": "2026-08-31T00:00:00.000000Z",
+             "event": "recorder.subscrito"},
+            {"timestamp": "2026-08-31T00:01:00.000000Z",
+             "event": "recorder.heartbeat", "linhas": 500},
+        ])
+        # heartbeat de 00:01, agora sao 00:05 -> 4 min, abaixo do limite
+        assert v.checar(log_file, tmp / "a.yaml", tmp / "e.json",
+                        abertura_local="00:00", fechamento_local="23:59",
+                        limite_parado_min=2.0) == "travado"
 
 
 def test_vigia_fora_do_pregao_nao_verifica(tmp_path: Path) -> None:
