@@ -729,3 +729,47 @@ estava confirmado no ProfitClient).
 
 12 testes novos (5 do EABridge isolado + 2 de integracao ponta a
 ponta + retrocompatibilidade). 299 testes.
+
+
+## CORRETORA E' DIFERENTE POR CONTA (2026-08-31)
+
+Suposicao anterior REFUTADA. O codigo tinha um `id_corretora` unico, com
+o comentario "normalmente e' o mesmo para as duas (mesma corretora, XP)".
+
+Com a licenca corrigida, `profit-tape ea-contas` devolveu:
+
+    corretora_id=32006  Simulador                   -> conta DEMO
+    corretora_id=1003   XP Investimentos CCTVM S/A  -> conta REAL
+
+A demo fica numa corretora simulada da Nelogica; a real, na corretora de
+verdade. Sao pares `(corretora, conta)` distintos.
+
+### O bug que isso escondia
+
+As tres chamadas de `SendOrder` em `execucao.py` usavam
+`self._rot.id_corretora` — o campo unico — enquanto a conta vinha de
+`conta_para()`. **Com `usar_conta_real=True`, a ordem sairia com a conta
+da XP e o ID da corretora Simulador.**
+
+Isso nao produz erro de configuracao. Na melhor hipotese o roteamento
+rejeita; na pior vai para o lugar errado. E' o tipo de defeito que so'
+aparece com dinheiro em risco — e nunca apareceu porque nunca se enviou
+ordem real.
+
+### Variaveis de ambiente
+
+    ROTEAMENTO_SENHA_ROTEAMENTO=...
+    ROTEAMENTO_ID_CORRETORA_DEMO=32006
+    ROTEAMENTO_ID_ACCOUNT_DEMO=1000357256
+    ROTEAMENTO_ID_CORRETORA_REAL=1003
+    ROTEAMENTO_ID_ACCOUNT_REAL=3813830
+
+`ROTEAMENTO_ID_CORRETORA` (sem sufixo) continua valendo como fallback da
+DEMO, para nao quebrar `.env` antigo.
+
+`conta_para()` passa a devolver o **par** `(corretora, conta)` em vez da
+conta sozinha. Devolver o par e' o ponto: separa-los permite combinar a
+corretora de uma com a conta da outra, e a DLL nao valida a combinacao.
+
+Conta real exige **os dois** campos preenchidos, com erro explicito
+citando a medicao. Ter a conta real sem a corretora real falha.

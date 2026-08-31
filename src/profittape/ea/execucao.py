@@ -63,7 +63,13 @@ class ExecutorDeOrdens:
         # Resolve a conta JA' NA CONSTRUCAO — se estiver mal configurada,
         # falha ruidosamente antes de qualquer sinal aparecer, nao no meio
         # do pregao na primeira ordem.
-        self._conta = roteamento.conta_para(usar_conta_real)
+        # Corretora e conta viajam JUNTAS. Ate 2026-08-31 a conta vinha de
+        # `conta_para()` e a corretora de `self._rot.id_corretora` -- um
+        # campo unico. Com a licenca corrigida, `ea-contas` mostrou que a
+        # demo esta na corretora 32006 (Simulador) e a real na 1003 (XP):
+        # usar conta real com a corretora do campo unico enviaria a ordem
+        # da XP com o ID do simulador. Nao da' erro de configuracao.
+        self._corretora, self._conta = roteamento.conta_para(usar_conta_real)
         if not roteamento.senha_roteamento:
             raise SystemExit(
                 "ROTEAMENTO_SENHA_ROTEAMENTO nao configurada no .env — "
@@ -76,19 +82,19 @@ class ExecutorDeOrdens:
 
         if decisao.acao == Acao.COMPRAR:
             ordem_id = self._dll.SendMarketBuyOrder(
-                self._conta, self._rot.id_corretora, self._rot.senha_roteamento,
+                self._conta, self._corretora, self._rot.senha_roteamento,
                 self._ticker, self._bolsa, self._quantidade)
             verbo = "compra a mercado"
         elif decisao.acao == Acao.VENDER:
             ordem_id = self._dll.SendMarketSellOrder(
-                self._conta, self._rot.id_corretora, self._rot.senha_roteamento,
+                self._conta, self._corretora, self._rot.senha_roteamento,
                 self._ticker, self._bolsa, self._quantidade)
             verbo = "venda a mercado"
         elif decisao.acao == Acao.ZERAR:
             # ATENCAO ordem de argumentos DIFERENTE: senha em 5o lugar
             # (depois de ticker/bolsa) — conferido no manual, ver bindings.py.
             ordem_id = self._dll.SendZeroPositionAtMarket(
-                self._conta, self._rot.id_corretora,
+                self._conta, self._corretora,
                 self._ticker, self._bolsa, self._rot.senha_roteamento)
             verbo = "zerar a mercado"
         else:  # pragma: no cover — enum fechado

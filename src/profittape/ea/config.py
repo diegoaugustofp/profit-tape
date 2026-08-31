@@ -32,39 +32,74 @@ class RoteamentoConfig(BaseSettings):
     lado da corretora/B3, nao do protocolo Nelogade em si).
 
     id_account_demo / id_account_real: os DOIS pwcIDAccount que o
-    GetAccount() do Diego retorna. pwcIDCorretora normalmente e' o mesmo
-    para as duas (mesma corretora, XP), mas o campo existe por conta caso
-    real e demo estejam em corretoras diferentes.
+    GetAccount() retorna.
+
+    CORRETORA E' DIFERENTE POR CONTA -- suposicao anterior REFUTADA.
+    ---------------------------------------------------------------
+    O comentario aqui dizia "pwcIDCorretora normalmente e' o mesmo para
+    as duas (mesma corretora, XP)". O `ea-contas` de 2026-08-31, com a
+    licenca ja' corrigida, mostrou o contrario:
+
+        corretora_id=32006  Simulador                   -> conta DEMO
+        corretora_id=1003   XP Investimentos CCTVM S/A  -> conta REAL
+
+    A demo fica numa corretora simulada da Nelogica; a real, na corretora
+    de verdade. Sao pares (corretora, conta) distintos, e um `id_corretora`
+    unico so' funcionava porque nunca se enviou ordem real.
+
+    Por que isso e' perigoso: mandar ordem com a corretora errada nao da'
+    erro de CONFIGURACAO. Da' erro de roteamento na melhor hipotese, e na
+    pior vai para o lugar errado. O par tem que viajar junto.
     """
     model_config = SettingsConfigDict(env_prefix="ROTEAMENTO_", env_file=".env",
                                       extra="ignore")
 
     senha_roteamento: str = ""
+    # `id_corretora` (sem sufixo) fica como FALLBACK do par demo, para
+    # nao quebrar .env antigo. Novos devem usar os dois campos abaixo.
     id_corretora: str = ""
+    id_corretora_demo: str = ""
+    id_corretora_real: str = ""
     id_account_demo: str = ""
     id_account_real: str = ""
 
-    def conta_para(self, usar_conta_real: bool) -> str:
+    def conta_para(self, usar_conta_real: bool) -> tuple[str, str]:
         """
-        Ponto UNICO de decisao real-vs-demo no codigo inteiro. Qualquer
-        chamada de envio de ordem passa por aqui -- nunca hardcode
-        id_account_real direto numa chamada de SendOrder.
+        Ponto UNICO de decisao real-vs-demo no codigo inteiro. Devolve o
+        PAR `(id_corretora, id_account)` -- nunca so' a conta.
+
+        Devolver o par e' o ponto: corretora e conta sao coordenadas do
+        MESMO destino, e separa-las permite combinar a corretora de uma
+        com a conta da outra. Nenhum campo isolado carrega essa
+        informacao, e a DLL nao valida a combinacao.
         """
         if usar_conta_real:
-            if not self.id_account_real:
+            faltando = [
+                nome for nome, valor in
+                (("ROTEAMENTO_ID_ACCOUNT_REAL", self.id_account_real),
+                 ("ROTEAMENTO_ID_CORRETORA_REAL", self.id_corretora_real))
+                if not valor
+            ]
+            if faltando:
                 raise SystemExit(
-                    "usar_conta_real=True mas ROTEAMENTO_ID_ACCOUNT_REAL "
-                    "nao esta configurado -- nao ha' como confirmar que "
-                    "e' a conta certa. Configure explicitamente antes."
+                    f"usar_conta_real=True mas falta {', '.join(faltando)}.\n"
+                    "  A conta real vive numa corretora DIFERENTE da demo\n"
+                    "  (medido em 2026-08-31: demo=32006 'Simulador',\n"
+                    "  real=1003 'XP Investimentos'). Os dois campos sao\n"
+                    "  obrigatorios: mandar ordem com a corretora errada\n"
+                    "  nao da' erro de configuracao.\n"
+                    "  Rode `profit-tape ea-contas` e preencha o .env."
                 )
-            return self.id_account_real
-        if not self.id_account_demo:
+            return self.id_corretora_real, self.id_account_real
+
+        corretora_demo = self.id_corretora_demo or self.id_corretora
+        if not self.id_account_demo or not corretora_demo:
             raise SystemExit(
-                "ROTEAMENTO_ID_ACCOUNT_DEMO nao configurado -- rode "
-                "GetAccount() uma vez (ver docs/EA_ARQUITETURA.md) e "
+                "ROTEAMENTO_ID_ACCOUNT_DEMO / ROTEAMENTO_ID_CORRETORA_DEMO "
+                "nao configurados -- rode `profit-tape ea-contas` e "
                 "preencha o .env antes de rodar o EA, mesmo em dry_run."
             )
-        return self.id_account_demo
+        return corretora_demo, self.id_account_demo
 
 
 class SinalConfig(BaseModel):

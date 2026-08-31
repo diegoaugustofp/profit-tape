@@ -116,7 +116,7 @@ def test_roteamento_conta_real_exige_config_propria() -> None:
 
     from profittape.ea.config import RoteamentoConfig
 
-    r = RoteamentoConfig(id_account_demo="123")   # so' demo configurado
+    r = RoteamentoConfig(id_account_demo="123", id_corretora_demo="32006")
     with pytest.raises(SystemExit, match="ROTEAMENTO_ID_ACCOUNT_REAL"):
         r.conta_para(usar_conta_real=True)
 
@@ -124,9 +124,72 @@ def test_roteamento_conta_real_exige_config_propria() -> None:
 def test_roteamento_com_as_duas_contas_configuradas_escolhe_certo() -> None:
     from profittape.ea.config import RoteamentoConfig
 
-    r = RoteamentoConfig(id_account_demo="DEMO123", id_account_real="REAL456")
-    assert r.conta_para(usar_conta_real=False) == "DEMO123"
-    assert r.conta_para(usar_conta_real=True) == "REAL456"
+    r = RoteamentoConfig(id_account_demo="DEMO123", id_corretora_demo="32006",
+                         id_account_real="REAL456", id_corretora_real="1003")
+    assert r.conta_para(usar_conta_real=False) == ("32006", "DEMO123")
+    assert r.conta_para(usar_conta_real=True) == ("1003", "REAL456")
+
+
+def test_conta_real_exige_a_CORRETORA_real_tambem() -> None:
+    """
+    Suposicao REFUTADA em 2026-08-31: o codigo assumia uma corretora unica
+    para as duas contas ("normalmente e' o mesmo, mesma corretora XP"). Com
+    a licenca corrigida, `ea-contas` mostrou
+
+        corretora_id=32006  Simulador                   -> DEMO
+        corretora_id=1003   XP Investimentos CCTVM S/A  -> REAL
+
+    Ter a conta real SEM a corretora real tem que falhar. Mandar ordem com
+    a corretora errada nao produz erro de configuracao -- e' o tipo de
+    defeito que so' aparece com dinheiro em risco.
+    """
+    import pytest
+
+    from profittape.ea.config import RoteamentoConfig
+
+    r = RoteamentoConfig(id_account_demo="D", id_corretora_demo="32006",
+                         id_account_real="REAL456")   # falta a corretora
+    with pytest.raises(SystemExit, match="ROTEAMENTO_ID_CORRETORA_REAL"):
+        r.conta_para(usar_conta_real=True)
+
+
+def test_id_corretora_antigo_continua_valendo_para_a_demo() -> None:
+    """Retrocompatibilidade: `.env` com o campo unico nao quebra."""
+    from profittape.ea.config import RoteamentoConfig
+
+    r = RoteamentoConfig(id_account_demo="D", id_corretora="32006")
+    assert r.conta_para(usar_conta_real=False) == ("32006", "D")
+
+
+def test_a_corretora_do_par_e_a_que_vai_na_ordem() -> None:
+    """
+    O bug real: as chamadas de SendOrder usavam `id_corretora` (campo
+    unico) enquanto a conta vinha do par. Com a conta real, isso enviaria
+    a ordem da XP com o ID do Simulador.
+    """
+    from profittape.ea.config import RoteamentoConfig
+    from profittape.ea.decisao import Acao, Decisao
+    from profittape.ea.execucao import ExecutorDeOrdens
+
+    enviadas = []
+
+    class _DLL:
+        def SendMarketBuyOrder(self, conta, corretora, senha, ticker,
+                               bolsa, qtd):
+            enviadas.append((conta, corretora))
+            return 1
+
+    rot = RoteamentoConfig(
+        senha_roteamento="x",
+        id_corretora="32006",          # campo antigo, da demo
+        id_account_demo="DEMO", id_corretora_demo="32006",
+        id_account_real="REAL", id_corretora_real="1003")
+
+    ex = ExecutorDeOrdens(_DLL(), rot, "WINFUT", "F", 1, usar_conta_real=True)
+    ex.executar(Decisao(acao=Acao.COMPRAR, motivo="teste",
+                        sinal_valor=2.0, feature="z_teste"))
+    assert enviadas == [("REAL", "1003")], (
+        "a ordem tem que sair com a corretora do PAR, nao com id_corretora")
 
 
 def test_eaconfig_default_usar_conta_real_e_falso() -> None:

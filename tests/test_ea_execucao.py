@@ -39,8 +39,12 @@ class _FakeDllOrdens:
 
 
 def _rot() -> RoteamentoConfig:
-    return RoteamentoConfig(senha_roteamento="s3nh4", id_corretora="85",
-                            id_account_demo="DEMO123", id_account_real="REAL456")
+    # Corretoras DIFERENTES por conta, como a licenca real (2026-08-31):
+    # demo=32006 'Simulador', real=1003 'XP'. A fixture antiga tinha uma
+    # corretora unica ('85'), o que escondia a troca.
+    return RoteamentoConfig(senha_roteamento="s3nh4",
+                            id_account_demo="DEMO123", id_corretora_demo="85",
+                            id_account_real="REAL456", id_corretora_real="1003")
 
 
 def _executor(dll, usar_conta_real: bool = False) -> ExecutorDeOrdens:

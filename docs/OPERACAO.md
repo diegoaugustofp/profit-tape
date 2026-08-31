@@ -577,3 +577,44 @@ Uso recomendado daqui em diante, nesta ordem:
 O `decomposicao-drawdown` tambem ganhou guarda: recusa populacao abaixo
 de 5 pregoes com dica de `--raiz-raw` (incidente do mesmo dia: rodou
 sobre 1 pregao e devolveu parcelas 1,00 por tautologia).
+
+
+## Recuperacao de tape perdido: verificar ANTES de confiar (2026-08-31)
+
+O incidente de 2026-08-25 (processo morreu com exit code 1, causa nunca
+confirmada) deixou um pregao incompleto. A pergunta: da' para recuperar?
+
+**Duas funcoes, limites diferentes** — confundi-las custou uma resposta
+errada:
+
+    RequestSerieHistory   series de BARRAS      WIN: 8 dias (tabela)
+    GetHistoryTrades      NEGOCIOS individuais  data inicial ate 30 dias
+
+O limite de 30 dias aparece so' na descricao do `NL_HISTORY_PERIOD_LIMIT`,
+nao numa tabela por ativo. **Pode haver limite do WIN que o manual nao
+tabela.**
+
+E `THistoryTradeCallback` entrega os MESMOS campos de
+`TNewTradeCallback` (preco, quantidade, agentes, `nTradeType`), menos o
+`bEdit`.
+
+### O primeiro uso NAO e' preencher buraco
+
+"Esta documentado" e "funciona" sao coisas diferentes. Em 2026-08-31,
+`AgressionVolBuy/Sell` devolveu ZERO em 2.001 barras sem erro nenhum,
+enquanto `QuantityVol` funcionava na mesma barra.
+
+Entao: pedir um dia que JA' TEMOS e comparar negocio a negocio. Se
+bater, a recuperacao e' confiavel. Se nao bater, saber ANTES vale mais
+que um parquet preenchido com dado silenciosamente diferente.
+
+`recorder/recuperacao.py` compara em DUAS etapas:
+
+1. **Chave** (`trade_number` + preco + quantidade): quem esta so' de um
+   lado.
+2. **Conteudo** das linhas que casaram (`trade_type`, agentes): pega
+   "veio tudo, mas sem a agressao" — a falha mais provavel dado o
+   historico deste projeto. Contar linhas nao basta: dois conjuntos
+   podem ter o mesmo tamanho e conteudo diferente.
+
+Comparar com conjunto vazio NAO passa por "confere" — nao mede nada.
