@@ -695,3 +695,52 @@ Ele mede a distribuicao do esforco e a separacao A/B sobre os pregoes
 capturados. **Nao testa predicao** — e' o insumo empirico para um
 pre-registro futuro, que continua exigindo ser escrito e congelado
 antes.
+
+
+## AGRESSAO ZERADA: a falha silenciosa aconteceu de verdade (2026-08-31)
+
+Dump de WINFUT 5m, 24/07 a 19/08/2026, 2.001 barras:
+
+    QuantityVol(False, False)  mediana  108.534   funciona
+    QuantityVol(False, True)   mediana   78.115   funciona, e DIFERE
+    AgressionVolBuy            maximo         0   ZERO
+    AgressionVolSell           maximo         0   ZERO
+
+    absorcao_dir == -desloc_norm em 2001 de 2001 barras
+
+**O dado de agressao EXISTIA.** `QuantityVol(False, True)` separou
+agressor de nao-agressor (78.115 contra 108.534), o que so' e' possivel
+com o Plugin Tape Reading ativo. Uma API entregou o dado e a outra
+devolveu zero na MESMA barra.
+
+Nao e' licenca, nao e' simbolo, nao e' timeframe: o periodo 24/07-19/08
+**se sobrepoe a dois dumps que funcionaram no mesmo dia** (01/07-24/07 e
+28/07-21/08, ambos com agressao valida).
+
+Hipotese que resta: `QuantityVol` vem do volume consolidado da barra,
+que acompanha o historico do grafico, enquanto `AgressionVolBuy/Sell`
+dependem do dado tick a tick que o Profit baixa SOB DEMANDA. Grafico
+recriado ou recarregado ainda nao tem esse dado, e as funcoes devolvem
+zero em vez de esperar. **Testavel**: deixar o grafico aberto no periodo
+e gerar o dump de novo.
+
+### Por que isso e' grave
+
+Com `imbalance = 0`:
+
+    absorcao_dir = 0 - desloc_norm = -desloc_norm
+
+O indicador passa a medir **deslocamento normalizado com o sinal
+trocado**. As cores continuam pintando, o log continua saindo, os
+numeros continuam plausiveis. Era o risco levantado na primeira sessao
+como "aviso nao decorativo" — e ele se materializou.
+
+### Guarda no parser
+
+`carregar_log` agora RECUSA log com agressao zerada e volume presente,
+explicando a causa e o que fazer.
+
+A checagem compara as DUAS fontes de proposito: agressao zero COM volume
+zero e' barra sem negocio (normal, tem teste proprio) e nao dispara.
+Agressao zero COM volume presente e' contradicao. Uma guarda que grita a
+toa acaba desligada.

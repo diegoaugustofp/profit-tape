@@ -83,6 +83,66 @@ def _numero_ptbr(coluna: pd.Series) -> pd.Series:
     return pd.to_numeric(texto.where(~tem_virgula, ptbr), errors="coerce")
 
 
+def _recusar_agressao_zerada(linhas: list[list[str]], caminho: Path) -> None:
+    """
+    Recusa log em que a AGRESSAO veio zerada mas o VOLUME nao.
+
+    A falha e' silenciosa e produz numeros plausiveis, entao so' um
+    verificador a pega. Com `AgressionVolBuy/Sell` em zero, `imbalance`
+    vira zero e
+
+        absorcao_dir = imbalance - desloc_norm = -desloc_norm
+
+    O indicador passa a medir DESLOCAMENTO NORMALIZADO COM O SINAL
+    TROCADO, sem erro e sem aviso. As cores continuam pintando, o log
+    continua saindo, e a comparacao de equivalencia acusaria divergencia
+    em `imbalance` sem dizer que a causa e' dado ausente.
+
+    Caso real (2026-08-31): WINFUT 5m, mesmo simbolo, mesmo timeframe e
+    periodo SOBREPOSTO a dois dumps que funcionaram no mesmo dia. Nas
+    2.001 barras, `AgressionVolBuy` e `AgressionVolSell` deram ZERO
+    enquanto `QuantityVol(False, True)` deu 78.115 contra 108.534 do
+    total — ou seja, o dado de agressao EXISTIA e uma API o entregou
+    enquanto a outra devolveu zero.
+
+    Por isso a checagem compara as DUAS fontes: agressao zerada com
+    volume presente e' contradicao, nao ausencia de negocio.
+    """
+    if not linhas:
+        return
+    i_vt, i_ac, i_av = (CAMPOS.index("vol_total"), CAMPOS.index("agr_compra"),
+                        CAMPOS.index("agr_venda"))
+
+    def _n(x: str) -> float:
+        try:
+            return float(x.replace(".", "").replace(",", ".")
+                         if "," in x else x)
+        except ValueError:
+            return 0.0
+
+    suspeitas = sum(1 for c in linhas
+                    if _n(c[i_ac]) == 0 and _n(c[i_av]) == 0
+                    and _n(c[i_vt]) > 0)
+    if suspeitas == 0:
+        return
+    frac = suspeitas / len(linhas)
+    raise SystemExit(
+        f"AGRESSAO ZERADA em {suspeitas} de {len(linhas)} barras "
+        f"({frac:.0%}), com volume total presente.\n"
+        "\n"
+        "  AgressionVolBuy/Sell devolveram zero enquanto QuantityVol\n"
+        "  funcionou — o dado existe e uma das APIs nao o entregou.\n"
+        "\n"
+        "  Com imbalance=0, absorcao_dir vira EXATAMENTE -desloc_norm:\n"
+        "  o indicador mede deslocamento com o sinal trocado, sem erro\n"
+        "  e sem aviso. Comparar assim nao mede nada.\n"
+        "\n"
+        "  Provavel causa: o dado tick a tick ainda nao foi baixado para\n"
+        "  a janela do grafico. Deixe o grafico aberto no periodo (ou\n"
+        "  role sobre ele) e gere o dump de novo."
+    )
+
+
 def carregar_log(caminho: Path) -> tuple[pd.DataFrame, dict[str, int]]:
     """
     Le o dump do ConsoleLog. Tolera lixo em volta: o console do Profit
@@ -114,6 +174,8 @@ def carregar_log(caminho: Path) -> tuple[pd.DataFrame, dict[str, int]]:
             larguras_vistas.append(campos)
             continue
         linhas_ok.append(campos)
+
+    _recusar_agressao_zerada(linhas_ok, caminho)
 
     if not linhas_ok:
         if n_malformadas:

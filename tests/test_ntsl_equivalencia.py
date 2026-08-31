@@ -375,3 +375,43 @@ def test_k_por_pregao_lida_com_rolagem(tmp_path) -> None:  # type: ignore[no-unt
     assert a["k_distintos"] == 2, "tem que detectar os dois regimes"
     assert a["barras_nada_difere"] == 60, "com k por pregao, nada difere"
     assert a["barras_so_open"] == 0 and a["barras_so_close"] == 0
+
+
+def test_recusa_log_com_agressao_zerada(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """
+    Caso real (2026-08-31): WINFUT 5m, periodo SOBREPOSTO a dois dumps
+    que funcionaram no mesmo dia, e `AgressionVolBuy/Sell` deram ZERO nas
+    2.001 barras — enquanto `QuantityVol(False, True)` deu 78.115 contra
+    108.534 do total. O dado de agressao EXISTIA; uma API o entregou e a
+    outra devolveu zero.
+
+    Com `imbalance = 0`, `absorcao_dir` vira EXATAMENTE `-desloc_norm`:
+    o indicador mede deslocamento com o sinal trocado, sem erro e sem
+    aviso. As cores continuam pintando e o log continua saindo.
+
+    A checagem compara as DUAS fontes de propósito: agressao zerada COM
+    volume presente e' contradicao, nao ausencia de negocio (madrugada,
+    leilao, feriado).
+    """
+    arq = tmp_path / "console.txt"
+    arq.write_text("\n".join(
+        f"ABSDIR|1260724|{900 + i}|{900 + i}|100|110|95|97"
+        f"|250000|173825|0|0|0.0|0.6|-0.6|0.1|0.2|0.0|0.0" for i in range(10)),
+        encoding="utf-8")
+    with pytest.raises(SystemExit, match="AGRESSAO ZERADA"):
+        carregar_log(arq)
+
+
+def test_barra_sem_negocio_algum_nao_e_recusada(tmp_path) -> None:
+    """
+    Agressao zero COM volume zero e' barra sem negocio — normal, e nao
+    pode disparar a guarda. Recusar aqui transformaria a protecao em
+    falso positivo, e uma guarda que grita a toa acaba desligada.
+    """
+    arq = tmp_path / "console.txt"
+    arq.write_text("\n".join(
+        f"ABSDIR|1260724|{900 + i}|{900 + i}|100|100|100|100"
+        f"|0|0|0|0|0.0|0.0|0.0|0.1|0.2|0.0|0.0" for i in range(10)),
+        encoding="utf-8")
+    _, diag = carregar_log(arq)
+    assert diag["barras"] == 10
