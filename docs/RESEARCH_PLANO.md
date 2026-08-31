@@ -54,6 +54,7 @@ arquivo cresceu demais para navegar so' por titulo cronologico).
   segue SEM RESPOSTA; ver o pre-registro 2.
 
 **Risco (drawdown, VaR/ES, circuit breaker)**
+- [DRAWDOWN: desenho da pergunta + pré-voo implementado (2026-08-30k)](#drawdown-desenho-da-pergunta--pré-voo-implementado-2026-08-30k)
 - [Curva de patrimonio / drawdown maximo (2026-08-27)](#curva-de-patrimonio--drawdown-maximo-2026-08-27)
 - [Risco realizado (VaR/ES) — primeiro passo aplicado do RQ (2026-08-27)](#risco-realizado-vares--primeiro-passo-aplicado-do-rq-2026-08-27)
 - [Resultado real do risco-realizado + correcao de bug de exibicao (2026-08-27)](#resultado-real-do-risco-realizado--correcao-de-bug-de-exibicao-2026-08-27)
@@ -2434,6 +2435,8 @@ pregoes/mes, sao ~3 meses ate 100. **Continua sendo a via principal**,
 acima de qualquer ideia nova.
 
 **2. Stop como CONTROLE DE DRAWDOWN — custo: pre-registro + rodada.**
+→ desenho e pré-voo em 2026-08-30k; decisões pendentes do operador
+  (regra de aceite, grade de L) antes do pré-registro.
 E' o que o CONTRA de hoje deixou explicitamente em aberto. Nao e'
 hipotese sobre o mercado: e' um trade-off mensuravel — quanto de
 expectativa se paga por quanto de reducao de drawdown. Motivacao viva:
@@ -3163,3 +3166,134 @@ estatistica:
 O salto grande e' o primeiro: de 25 para 100 pregoes. Depois satura. A
 via principal continua sendo **acumular tape** (zero trial, ja' rodando,
 ~3 meses ate 100 pregoes), nao extrair historico do grafico.
+
+## DRAWDOWN: desenho da pergunta + pré-voo implementado (2026-08-30k)
+
+Item 2 da lista de pendências. Descendente direto da separação (a)/(b)
+feita em 29/08: o CONTRA da Rota B deixou (a) — stop como controle de
+drawdown — explicitamente em aberto.
+
+### O que o CONTRA da Rota B muda nesta pergunta
+
+Se E[remanescente | tocou −X] ≈ 0 para todo X, um stop por operação em X
+tem custo esperado em expectativa de **aproximadamente zero**: ao
+disparar, sai-se em F ≈ nível e abre-se mão de E[close_fim − F] ≈ 0. O
+"trade-off expectativa vs drawdown" pode nem ser trade-off em
+expectativa — só em variância.
+
+Ressalva que não pode sumir: os IC95 daquela rodada são da ordem de
+**±50 pts por operação stopada**. O ponto estima zero; o intervalo não
+sabe. "Custo ≈ 0" e "custo desconhecido dentro de ±50" são frases
+diferentes, e a segunda é a verdadeira.
+
+### Regra 0 aplicada: de onde vem o drawdown?
+
+Antes de escolher mecanismo, decompor. Cada fonte aponta para um
+mecanismo diferente:
+
+| fonte do drawdown | mecanismo |
+|---|---|
+| poucas operações grandes | stop por operação mais apertado que 500 |
+| sequência de perdas médias | circuit breaker / dimensionamento |
+| um ou dois dias ruins | limite de perda diária |
+
+O que já está medido aponta em direções conflitantes: o stop de 500 já
+morde (4,5%) e MELHORA a média — a cauda catastrófica está coberta; o
+circuit breaker deu −328 em 7 disparos; +629 num único dia de 25 diz
+que a série é dominada por eventos raros.
+
+### Quarto mecanismo, trazido pelo operador: TRAILING de 150 pts
+
+Prática manual do operador no WIN: risco sempre 150 pts; ao andar
++150, stop vai a 0; ao andar +300, stop vai a +150 — sempre 150 atrás
+do máximo. Aplicado à mão, às vezes falha; às vezes stopou e depois
+andou, às vezes salvou. Empírico, sem estatística.
+
+Três coisas a registrar sobre isso ANTES de qualquer medição:
+
+1. **É mecanismo distinto do que a Rota B testou.** A Rota B mediu stop
+   FIXO a partir da entrada. O trailing condiciona em outro evento
+   ("chegou a +150 e devolveu 150"), e E[remanescente] nesse evento
+   NÃO foi medido. Não se pode importar o CONTRA para cá.
+2. **150 é PRIOR, não calibração.** Vem da operação discricionária, em
+   outro relógio, outro sinal. `z_agf_3` com h=3 em barras de ~120k
+   pode ter caminhos completamente diferentes. Mecanismo antes de
+   número — o 150 entra na grade, não como resposta.
+3. **Modo de falha específico num sinal de cauda contrarian:** o
+   caminho "+150 → volta a 0 (stop) → corre a +400". O trailing corta
+   exatamente a cauda que paga se essa forma for frequente em 3 barras.
+   É mensurável, e é a pergunta.
+
+Bônus que não é estatístico: mecanizar uma regra manual que "às vezes
+falha" tem valor de consistência mesmo a benefício estatístico zero.
+Mas o EA não é a operação manual — esse argumento não transfere o
+número, só a motivação.
+
+### Estimador, com o argumento de não-viés ANTES do código
+
+- Stop por operação em X, e trailing: replay contrafactual sobre o
+  TAPE. Toda operação que aciona sai em F (overshoot medido em zero);
+  as demais seguem iguais. Recalcula-se curva, drawdown, Calmar.
+  **F é tempo de parada na sequência de negócios** — para o fixo E para
+  o trailing (o nível do trailing depende só do passado do caminho).
+  Mesmo teorema que salvou a Rota B. Nenhum extremo de barra.
+- Limite diário em L: replay sobre a SEQUÊNCIA DE OPERAÇÕES — após
+  perda acumulada ≤ −L no dia, as seguintes não existem. Tempo de
+  parada na sequência de operações, sem lookahead.
+- Variabilidade: bootstrap por bloco de pregão.
+
+### O portão aqui tem forma diferente
+
+Sobre operações EMBARALHADAS (mesma marginal, sequência destruída), um
+limite diário AINDA reduz drawdown — por variância, a custo zero. Isso
+é real, não artefato. Então o portão não é pass/fail: o benefício
+sobre o embaralhado é a componente de **variância**; o excesso sobre o
+real é a componente de **regime** ("dia ruim continua ruim"). As duas
+são legítimas, significam coisas diferentes, e o relatório precisa
+separá-las em vez de somar.
+
+### Seleção e reuso de amostra, às claras
+
+São os mesmos 25 pregões da Rota B. Não é teste de descoberta, então
+não há limiar deflacionado para hackear — mas escolher X depois de ver
+a tabela ainda é seleção. Grade de X: a mesma congelada {40…200} + o
+500 atual + o 150 do operador (já está). Grade de L e regra de aceite:
+fixadas no pré-registro, ANTES.
+
+Com 25 dias e um valendo +629, drawdown é estatística de 1 a 3
+eventos. "Inconclusivo" precisa estar escrito antes, e é o resultado
+mais provável.
+
+### DECISÕES PENDENTES do operador (não são medição)
+
+- **Regra de aceite**: quanto de expectativa se paga por quanto de
+  redução de drawdown? Métrica (Calmar? drawdown a expectativa
+  constante?) e tolerância.
+- **Grade de L** (sugestão para reagir: {200, 300, 500, 800} pts).
+
+### PRÉ-VOO IMPLEMENTADO: `decomposicao-drawdown`
+
+Descritivo, não consome trial. Dois passos, porque o replay em lote
+**não persistia as operações** — só imprimia o resumo e a lista morria
+com o processo:
+
+1. `GestorDeRisco.historico_detalhado`: registro rico por operação
+   (lado, preços, barras, P&L, motivo). `historico_pnl` e
+   `historico_operacoes` inalterados. **Não é mudança de
+   comportamento** — o gestor decide igual, só anota mais.
+   `ea-replay-lote` passa a persistir em
+   `data/research/operacoes_replay.parquet` (`--saida-operacoes`).
+2. `research/decomposicao_drawdown.py` + comando
+   `decomposicao-drawdown`: os 3 maiores drawdowns, cada um decomposto
+   em três parcelas (3 piores operações / pior dia / maior sequência,
+   cada uma sobre a profundidade). **Regra de classificação fixada
+   antes de ver número**: fonte dominante = maior parcela, só se
+   ≥ 0,50; senão DIFUSO. As parcelas se sobrepõem, não somam 1, e uma
+   pode passar de 1. Robustez: jackknife por pregão e bootstrap por
+   bloco sobre o drawdown máximo.
+
+Conferido à mão (série de 8 operações: drawdowns 260 e 40; parcelas
+1,077 / 0,692 / 0,769). 8 testes novos, 367 no total.
+
+Rodar: `ea-replay-lote -c config/ea_venda_apenas.yaml` (persiste), depois
+`decomposicao-drawdown`.

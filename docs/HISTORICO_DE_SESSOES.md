@@ -29,6 +29,61 @@ documentos de assunto — só resuma e aponte.
 
 ---
 
+## 2026-08-30 (noite) — drawdown: desenho + pré-voo (v1.45)
+
+Continuação da sessão de 29/08, depois de atualizar o clone para
+v1.44. Três perguntas já estavam fechadas na sessão do dia; esta abre a
+única que o CONTRA da Rota B deixou explicitamente em aberto.
+
+### Avaliação do estado, à luz do que a outra sessão fechou
+- Rota B respondida (CONTRA) pelo caminho da fita — o que eu tinha
+  chamado de "substrato correto" no fim de 29/08. Overshoot medido em
+  zero: toda a discussão de 29c sobre limites de preenchimento era
+  irrelevante na prática para o WINFUT. Registrado como correção do que
+  eu argumentei.
+- O diagnóstico do operador ("misturamos barra de preço com barra de
+  volume") estava certo no centro (o problema ERA a barra) e errado nas
+  bordas: não era específico de volume, e a Rota B era respondível
+  neste modelo — não precisava ir para outro.
+- Backfill histórico: fechado. `GetHistoryTrades` rejeita >30 dias; os
+  25 pregões JÁ SÃO o máximo retroativo.
+- **A barra de 4,07 não é feita de amostra**: 504 trials fixam o piso em
+  3,05; 100 pregões só compram 0,28. Esperar 3 meses é a alavanca mais
+  fraca, não a mais forte. Caminhos sem esperar levantados com risco e
+  trade-off: recontar trials efetivos (maior efeito, maior risco
+  epistêmico), WDO em paralelo (dado independente hoje, 1 trial),
+  perguntas sem limiar de descoberta (drawdown, forward test, deploy do
+  validado), gastar zero. Operador escolheu: drawdown, depois WDO,
+  depois recontagem.
+
+### Drawdown — desenho
+- O CONTRA reframeia a pergunta: stop fixo tem custo esperado ≈ 0 em
+  expectativa, com IC ±50/op. O trade-off pode ser só de variância.
+- Regra 0 aplicada: DECOMPOR antes de escolher mecanismo. Três fontes,
+  três mecanismos. Quarto mecanismo trazido pelo operador (trailing de
+  150) registrado com três ressalvas: é distinto do que a Rota B testou,
+  150 é prior e não calibração, e o modo de falha em sinal de cauda
+  contrarian ("+150 → 0 → +400") é mensurável.
+- Estimadores com argumento de não-viés ANTES do código (tempo de
+  parada na fita / na sequência de operações). Portão em forma nova:
+  separar componente de variância (embaralhado) de componente de regime.
+- Decisões pendentes do operador: regra de aceite e grade de L.
+
+### Pré-voo implementado (v1.45)
+- Descoberta: `ea-replay-lote` NÃO persistia as operações. Registro rico
+  no gestor (`historico_detalhado`, sem mudança de comportamento) +
+  persistência em parquet.
+- `decomposicao-drawdown`: 3 maiores drawdowns, três parcelas cada,
+  regra de dominância fixada antes (≥ 0,50 senão DIFUSO), jackknife e
+  bootstrap por pregão. Conferido à mão. 8 testes, 367 no total.
+- Meu validador de âncoras ad hoc estava ERRADO (colapsava `--` em `-`);
+  o oficial `tools/valida_ancoras.py` é o certo. Só ele daqui em diante.
+
+### Pendências
+- Operador roda `ea-replay-lote` (persiste) e `decomposicao-drawdown`.
+- Com a fonte dominante em mãos + regra de aceite + grade de L:
+  pré-registro do trade-off.
+
 ## 2026-08-30/31 — sessão completa: CONTRA na absorção, equivalência fechada, Rota B respondida (v1.12 a v1.42)
 
 **31 entregas. Zero trial gasto além dos 12 pré-registrados.** O

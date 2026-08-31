@@ -946,6 +946,12 @@ def ea_replay(
 def ea_replay_lote(
     config: Path = typer.Option(Path("config/ea.yaml"), "-c", "--config"),
     raiz_raw: Path = typer.Option(Path("data/raw"), "--raiz-raw"),
+    saida_operacoes: Path = typer.Option(
+        Path("data/research/operacoes_replay.parquet"), "--saida-operacoes",
+        help="Onde persistir TODAS as operacoes do lote, uma linha por "
+             "operacao, em ordem cronologica. Input da decomposicao de "
+             "drawdown (2026-08-30). Antes disto o replay so' imprimia o "
+             "resumo e a lista morria com o processo."),
     ignorar_circuit_breaker: bool = typer.Option(
         False, "--ignorar-circuit-breaker",
         help="SO' PARA ANALISE: nao interrompe apos 3 perdas seguidas, "
@@ -1009,6 +1015,7 @@ def ea_replay_lote(
 
     por_dia: list[dict[str, Any]] = []
     todas_operacoes: list[float] = []
+    registros_operacoes: list[dict[str, Any]] = []
     todas_operacoes_com_lado: list[tuple[int, float]] = []
     # "sem freio" completo (2026-08-27, pergunta real do operador: "por
     # lado" nao deveria ter com/sem freio tambem?). Para dias em que o
@@ -1064,6 +1071,13 @@ def ea_replay_lote(
         })
         todas_operacoes.extend(svc.gestor.historico_pnl)
         todas_operacoes_com_lado.extend(svc.gestor.historico_operacoes)
+        for seq, op in enumerate(svc.gestor.historico_detalhado, start=1):
+            registros_operacoes.append({
+                "dia": dia, "seq_no_dia": seq, "lado": op.lado,
+                "preco_entrada": op.preco_entrada, "preco_saida": op.preco_saida,
+                "bar_id_entrada": op.bar_id_entrada, "bar_id_saida": op.bar_id_saida,
+                "pnl_liquido": op.pnl_liquido, "motivo": op.motivo,
+            })
         if comparar_circuit_breaker:
             # svc_sem_freio existe so' quando o freio disparou neste dia;
             # senao, com/sem freio sao identicos -- reusa svc mesmo.
@@ -1089,6 +1103,15 @@ def ea_replay_lote(
     perdas = [p for p in todas_operacoes if p <= 0]
     pnl_total = sum(todas_operacoes)
     dias_bloqueados = sum(1 for d in por_dia if d["bloqueado"])
+
+    if registros_operacoes:
+        import pandas as pd
+        saida_operacoes.parent.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame(registros_operacoes).to_parquet(saida_operacoes, index=False)
+        log.info("ea.replay_lote_operacoes_persistidas",
+                 arquivo=str(saida_operacoes), n=len(registros_operacoes))
+        typer.echo(f"\noperacoes persistidas: {saida_operacoes} "
+                   f"({len(registros_operacoes)} linhas)")
 
     typer.echo("\n" + "=" * 62)
     typer.echo("RESUMO DO LOTE")
@@ -1499,6 +1522,47 @@ def remanescente_apos_toque(
                    f"{p['t_otim']:7.2f}")
     typer.echo(f"\n  VEREDITO: {r['veredito']}")
     typer.echo(f"  {r['justificativa']}")
+    typer.echo(f"\nrelatorio: {r['relatorio']}")
+
+
+@app.command()
+def decomposicao_drawdown(
+    operacoes: Path = typer.Option(
+        Path("data/research/operacoes_replay.parquet"), "--operacoes",
+        help="Saida de `ea-replay-lote --saida-operacoes`."),
+    saida: Path = typer.Option(Path("data/research"), "--saida"),
+    n_bootstrap: int = typer.Option(2000, "--n-bootstrap"),
+) -> None:
+    """
+    PRE-VOO da pergunta de drawdown (2026-08-30): de onde vem o drawdown
+    maximo -- poucas operacoes grandes, uma sequencia, ou um dia ruim?
+    Cada resposta aponta para um mecanismo diferente (stop por operacao /
+    circuit breaker / limite diario). Regra 0: fonte antes de numero.
+
+    Descritivo. NAO consome trial. Nao simula nada, nao escolhe numero.
+    """
+    from .research.decomposicao_drawdown import decompor_drawdown
+
+    if not operacoes.exists():
+        raise SystemExit(f"nao achei {operacoes} — rode `ea-replay-lote` "
+                         "(ele persiste as operacoes desde v1.45)")
+    r = decompor_drawdown(operacoes, saida, n_bootstrap=n_bootstrap)
+    jk, bt = r["jackknife"], r["bootstrap"]
+    typer.echo("=" * 70)
+    typer.echo(f"DECOMPOSICAO DO DRAWDOWN — {r['n_operacoes']} ops, "
+               f"{r['n_dias']} pregoes, P&L {r['pnl_total']:+.1f}")
+    typer.echo("=" * 70)
+    typer.echo(f"  drawdown maximo : {r['drawdown_maximo']:.1f} pts   Calmar {r['calmar']:.2f}")
+    typer.echo(f"  jackknife/dia   : [{jk['minimo']:.1f} ; {jk['maximo']:.1f}]")
+    typer.echo(f"  bootstrap/dia   : mediana {bt['mediana']:.1f}  "
+               f"IC95 [{bt['ic95_baixo']:.1f} ; {bt['ic95_alto']:.1f}]\n")
+    typer.echo(f"  {'#':>2} {'prof':>7} {'ops':>4} {'dias':>4} {'OPS':>6} {'DIA':>6} "
+               f"{'SEQ':>6}  dominante")
+    for i, d in enumerate(r["trechos"], start=1):
+        typer.echo(f"  {i:2d} {d['profundidade']:7.1f} {d['n_operacoes']:4d} "
+                   f"{d['n_dias']:4d} {d['parcela_operacoes']:6.2f} "
+                   f"{d['parcela_dias']:6.2f} {d['parcela_sequencia']:6.2f}  "
+                   f"{d['fonte_dominante']}")
     typer.echo(f"\nrelatorio: {r['relatorio']}")
 
 

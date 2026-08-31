@@ -33,6 +33,24 @@ from .config import RiscoConfig
 log = structlog.get_logger(__name__)
 
 
+@dataclass(frozen=True)
+class OperacaoFechada:
+    """
+    Registro RICO de uma operacao fechada (2026-08-30, pre-voo da pergunta
+    de drawdown). historico_pnl e historico_operacoes continuam existindo
+    e inalterados -- isto so' ACRESCENTA o que faltava para decompor o
+    drawdown: precos, barras, motivo. Nao e' mudanca de comportamento:
+    o gestor decide exatamente igual, so' anota mais.
+    """
+    lado: int
+    preco_entrada: float
+    preco_saida: float
+    bar_id_entrada: int
+    bar_id_saida: int | None
+    pnl_liquido: float
+    motivo: str | None
+
+
 @dataclass
 class PosicaoAberta:
     lado: int              # +1 comprado, -1 vendido
@@ -82,6 +100,7 @@ class GestorDeRisco:
         # edge, ou distribuidas nos dois?). Nao muda historico_pnl (usado
         # em teste ja existente) -- so' adiciona o lado ao lado do pnl.
         self.historico_operacoes: list[tuple[int, float]] = []
+        self.historico_detalhado: list[OperacaoFechada] = []
 
     # ------------------------------------------------------------- estado
     def em_posicao(self) -> bool:
@@ -150,7 +169,8 @@ class GestorDeRisco:
             return f"saida por tempo: {p.horizonte} barra(s) desde a entrada"
         return None
 
-    def registrar_fechamento(self, preco: float, bar_id_saida: int | None = None) -> float:
+    def registrar_fechamento(self, preco: float, bar_id_saida: int | None = None,
+                             motivo: str | None = None) -> float:
         """
         Fecha a posicao, devolve o P&L LIQUIDO em pontos (bruto - custo).
         Atualiza o circuit breaker: perda liquida incrementa a sequencia,
@@ -172,6 +192,10 @@ class GestorDeRisco:
         self.pnl_dia_pontos += pnl_liquido
         self.historico_pnl.append(pnl_liquido)
         self.historico_operacoes.append((p.lado, pnl_liquido))
+        self.historico_detalhado.append(OperacaoFechada(
+            lado=p.lado, preco_entrada=p.preco_entrada, preco_saida=preco,
+            bar_id_entrada=p.bar_id_entrada, bar_id_saida=bar_id_saida,
+            pnl_liquido=pnl_liquido, motivo=motivo))
 
         if pnl_liquido < 0:
             self.perdas_consecutivas += 1

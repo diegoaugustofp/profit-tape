@@ -192,7 +192,7 @@ class EAService:
                 d = Decisao(Acao.ZERAR, motivo, 0.0, "_risco")
                 decisoes.append(d)
                 self._executar_e_simular(d)
-                self.gestor.registrar_fechamento(barra.close, barra.bar_id)
+                self.gestor.registrar_fechamento(barra.close, barra.bar_id, motivo)
             return decisoes
 
         # 2. Zerado: circuit breaker primeiro, sinal depois.
@@ -241,7 +241,8 @@ class EAService:
                     sinal_valor=0.0, feature="_encerramento")
         self._executar_e_simular(d)
         if self.gestor.em_posicao() and self._ultimo_close is not None:
-            self.gestor.registrar_fechamento(self._ultimo_close)
+            self.gestor.registrar_fechamento(self._ultimo_close,
+                                             motivo="encerramento do dia")
         log.info("ea.encerramento_dia", posicao_zerada=True,
                  pnl_dia_pontos=round(self.gestor.pnl_dia_pontos, 1))
         return d
