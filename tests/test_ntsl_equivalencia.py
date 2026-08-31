@@ -182,17 +182,26 @@ def test_deteccao_de_formato_numerico() -> None:
 
 def test_erro_aponta_a_causa_real_quando_o_ntsl_esta_defasado(tmp_path) -> None:  # type: ignore[no-untyped-def]
     """
-    Caso real: o dump de 2026-08-30 tinha 15 campos e o parser esperava
-    17. A mensagem antiga perguntava se `LogAtivo=1` — mandaria caçar o
-    problema no lugar errado. Tem que dizer QUANTOS campos viu.
+    A mensagem tem que dizer QUAL campo falta, nao so' contar.
+
+    Contar e' ambiguo: a LINHA tem um token a mais que os campos, porque
+    o proprio 'ABSDIR' entra na separacao por '|'. Em 2026-08-31 o
+    operador contou os tokens da linha, viu 18, e concluiu —
+    corretamente pela contagem dele — que o formato estava certo. A
+    mensagem antiga ("vi [17], esperava 18") nao resolvia a duvida; a
+    nova nomeia o campo ausente.
     """
     arq = tmp_path / "console.txt"
-    arq.write_text("ABSDIR|1|2|3|4|5\nABSDIR|1|2|3|4|5\n", encoding="utf-8")
+    # 17 campos depois do prefixo: falta so' o z_imbalance
+    linha = ("ABSDIR|1260824|900|900|100|110|95|97|1000|900|500|400"
+             "|0.1|0.2|-0.1|0.0|1.0|1.5")
+    arq.write_text(f"{linha}\n{linha}\n", encoding="utf-8")
     with pytest.raises(SystemExit) as e:
         carregar_log(arq)
     msg = str(e.value)
-    assert "[5]" in msg and str(len(CAMPOS)) in msg
-    assert "desatualizado" in msg
+    assert "z_imbalance" in msg, "tem que NOMEAR o campo que falta"
+    assert "DEPOIS do prefixo" in msg, "tem que desfazer a ambiguidade"
+    assert "[17]" in msg and str(len(CAMPOS)) in msg
 
 
 def test_arquivo_inexistente_da_mensagem_util(tmp_path) -> None:  # type: ignore[no-untyped-def]

@@ -180,12 +180,25 @@ def carregar_log(caminho: Path) -> tuple[pd.DataFrame, dict[str, int]]:
     if not linhas_ok:
         if n_malformadas:
             larguras = sorted({len(x) for x in larguras_vistas})
+            # Contar nao basta: "vi 17, esperava 18" e' ambiguo, porque a
+            # LINHA tem 18 tokens separados por | (o prefixo ABSDIR conta
+            # como um) e apenas 17 CAMPOS depois do prefixo. Em
+            # 2026-08-31 o operador contou os tokens da linha, viu 18 e
+            # concluiu — corretamente, pela contagem dele — que o formato
+            # estava certo. Dizer QUAL campo falta remove a ambiguidade.
+            faltando = ""
+            if larguras and larguras[-1] < len(CAMPOS):
+                ausentes = CAMPOS[larguras[-1]:]
+                faltando = (f"\n  Faltam os campos: {', '.join(ausentes)}"
+                            f"\n  (o `.ntsl` do grafico e' anterior a eles)")
             raise SystemExit(
-                f"{n_malformadas} linhas 'ABSDIR|' com contagem de campos "
-                f"errada em {caminho}: vi {larguras}, esperava "
-                f"{len(CAMPOS)}. O .ntsl do grafico esta desatualizado em "
-                f"relacao a tools/ntsl_equivalencia.py — a ordem dos "
-                f"campos e' CONGELADA e muda nos dois lados junto."
+                f"formato do log incompativel em {caminho}:\n"
+                f"  vi {larguras} campos DEPOIS do prefixo 'ABSDIR|', "
+                f"esperava {len(CAMPOS)}.\n"
+                f"  Atencao: a LINHA tem um token a mais, porque o proprio\n"
+                f"  'ABSDIR' conta na separacao por '|'. A conta que vale\n"
+                f"  e' a de DEPOIS do prefixo.{faltando}\n"
+                f"  Ordem dos campos e' CONGELADA: muda nos dois lados junto."
             )
         raise SystemExit(
             f"nenhuma linha '{PREFIXO}' em {caminho} — o indicador rodou "

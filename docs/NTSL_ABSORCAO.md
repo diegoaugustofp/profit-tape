@@ -778,3 +778,33 @@ Para acumular serie longa de agressao a partir do grafico seria preciso
 um dump por semana, toda semana, indefinidamente. E' possivel, mas e'
 exatamente o que o `record` via ProfitDLL ja' faz sozinho e melhor —
 motivo a mais para acumular tape ser a via principal.
+
+
+## Contagem de campos: 17 depois do prefixo, 18 tokens na linha
+
+Ambiguidade real que custou uma ida e volta em 2026-08-31.
+
+    ABSDIR|1260824|900|900|...|1,82745364
+    ^^^^^^ conta na separacao por "|", mas NAO e' um campo
+
+    tokens da linha inteira   : 18
+    campos DEPOIS do prefixo  : 17   <- e' esta que vale
+    o parser espera           : 18
+
+O operador contou os tokens da linha, viu 18, e concluiu — corretamente
+pela contagem dele — que o `.ntsl` estava atualizado. A mensagem antiga
+("vi [17], esperava 18") nao desfazia a duvida: os dois numeros
+apareciam, sem dizer em relacao a que.
+
+**A mensagem agora NOMEIA o campo ausente** e avisa da ambiguidade:
+
+    formato do log incompativel:
+      vi [17] campos DEPOIS do prefixo 'ABSDIR|', esperava 18.
+      Atencao: a LINHA tem um token a mais, porque o proprio
+      'ABSDIR' conta na separacao por '|'. A conta que vale
+      e' a de DEPOIS do prefixo.
+      Faltam os campos: z_imbalance
+      (o `.ntsl` do grafico e' anterior a eles)
+
+Regra geral: **contar e' ambiguo, nomear nao e'.** Vale para qualquer
+mensagem de formato.
