@@ -109,6 +109,8 @@ arquivo cresceu demais para navegar so' por titulo cronologico).
 
 - [POLITICA DO HISTORICO DO GRAFICO: conjunto de validacao CEGO (2026-08-30j)](#politica-do-historico-do-grafico-conjunto-de-validacao-cego-2026-08-30j)
 
+- [DIAGNOSTICO 2026-08-31: absorcao_dir E desloc_norm disfarcado, e o esforco NAO tem cauda](#diagnostico-2026-08-31-absorcao_dir-e-desloc_norm-disfarcado-e-o-esforco-nao-tem-cauda)
+
 **Disciplina/processo do proprio research**
 - [Decisoes aprovadas](#decisoes-aprovadas)
 - [Pre-requisitos antes de escrever research/](#pre-requisitos-antes-de-escrever-research)
@@ -3796,3 +3798,87 @@ Quando a fita acumulada dobrar (~50 pregões), refazer a medição dos três
 regimes **como acompanhamento**, para saber o sinal real do efeito de
 expectativa. Isso não é gate: a mudança já terá sido feita por
 conformidade. Serve para saber quanto ela custou.
+
+## DIAGNOSTICO 2026-08-31: absorcao_dir E desloc_norm disfarcado, e o esforco NAO tem cauda
+
+653 barras de 5m, 24/08 a 31/08/2026, com agressao valida em todas.
+Categoria `features`: descritivo, zero trial.
+
+### 1. `absorcao_dir` correlaciona 0,9883 com `-desloc_norm`
+
+Com a agressao funcionando perfeitamente, a formula mede praticamente a
+MESMA coisa que media quando a agressao vinha ZERADA.
+
+    desvio de imbalance    0,1175
+    desvio de desloc_norm  0,4864     -> 4,1x maior
+    corr(imbalance, desloc_norm)  +0,862
+    corr(absorcao_dir, -desloc_norm)  +0,9883
+
+Dois efeitos somados: `desloc_norm` domina a subtracao por 4x em desvio,
+e o pouco que `imbalance` traria ja' esta contido nele (quem agride
+empurra o preco).
+
+**Isso amarra tres achados que pareciam separados**: a formula ser
+sub-gaussiana, o CONTRA nas 12 celulas, e a ausencia de casos A abaixo.
+Todos sintomas do mesmo defeito — `absorcao_dir` e' `desloc_norm`
+disfarcado.
+
+E valida por outro caminho a exigencia de `z_desloc_norm` como controle
+obrigatorio no pre-registro: sem ele, um resultado positivo da absorcao
+seria indistinguivel de um resultado do deslocamento puro.
+
+### 2. O caso A e' RARO POR CONSTRUCAO
+
+Das 34 barras pintadas: **ZERO casos A**, 18 `B_queda_sem_esforco` e 16
+`B_alta_sem_esforco`.
+
+    familia vermelha (z >= +1,75): z_imbalance de -2,09 a +0,07, mediana -1,25
+    familia aqua     (z <= -1,75): z_imbalance de +0,22 a +1,98, mediana +0,91
+
+O `imbalance` esta sistematicamente no sinal OPOSTO ao que o caso A
+exige. Nao e' o limiar: com `LimiarImb = 0` ainda so' 1 caso A de 34.
+
+A razao e' aritmetica. Para `z_absorcao_dir` ficar alto, `desloc_norm`
+precisa ser baixo; como os dois andam juntos (+0,862), `imbalance`
+tambem fica baixo — o sinal contrario ao do caso A.
+
+**Consequencia para o indicador**: vermelho e aqua vao aparecer
+raramente. Amarelo e fucsia sao o que a formula de fato detecta: livro
+fino.
+
+### 3. MINHA HIPOTESE DO ESFORCO ESTA REFUTADA
+
+Registrado em 2026-08-30b: "para existir cauda, a formula precisa de um
+termo ILIMITADO — `vol_agr / range_ticks` e' ilimitado". **Errado.**
+
+    esforco (contratos por tick)
+      p50 2.133 | p95 3.177 | p99 3.621 | max 4.268
+      razao p99/p50 = 1,70x     (uma variavel de cauda daria 5x, 10x)
+
+    esforco mediano por leitura:
+      nao_pintou           2.130
+      B_queda_sem_esforco  2.099
+      B_alta_sem_esforco   2.323
+
+Nao separa nada, e nao tem cauda.
+
+**Causa**: `corr(vol_agr, amplitude_ticks) = +0,892`. Barra grande tem
+mais volume E mais amplitude; dividir um pelo outro CANCELA os dois. A
+correlacao do esforco com a amplitude cai para +0,095 — a divisao
+normalizou bem demais.
+
+### A licao, que vale mais que o esforco
+
+Eu previ a propriedade "ilimitado" e conclui "portanto tem cauda". **Sao
+coisas diferentes**: `absorcao_dir` e' limitado e sem cauda; `esforco` e'
+ilimitado e tambem sem cauda.
+
+Para a proxima formalizacao: nao basta o termo ser ilimitado — ele
+precisa MEDIR ALGO QUE O OUTRO TERMO NAO MEDE. Uma razao entre duas
+quantidades que ja' andam juntas e' quase constante por construcao, e
+isso da' para verificar ANTES de gastar trial, com uma correlacao.
+
+**Nenhuma direcao substituta esta proposta aqui.** Propor uma agora
+seria escolher depois de ver o resultado — e sem um mecanismo que
+sobreviva a esta checagem de redundancia, nao ha' pre-registro a
+escrever.
