@@ -14,12 +14,165 @@ consulte o documento de assunto correspondente:
 
 ## Como adicionar uma entrada nova (para sessões futuras)
 
+> **Entrada por SESSÃO, nunca por marco intermediário.** Em 2026-08-30
+> uma sessão longa ganhou duas entradas — uma escrita no meio (v1.12 a
+> v1.30) e outra no fim (v1.12 a v1.42) — que se sobrepunham e ainda
+> ficaram fora de ordem cronológica. Se a sessão continuar depois de já
+> ter entrada, **edite a existente** em vez de acrescentar outra.
+>
+> Ordem do arquivo: **mais recente primeiro**.
+
 Ao final de cada sessão, adicione uma entrada abaixo (mais recente no
 topo), seguindo o modelo: data, resumo por assunto, tags entregues,
 pendências que ficaram em aberto. Não repita detalhe que já está nos
 documentos de assunto — só resuma e aponte.
 
 ---
+
+## 2026-08-30/31 — sessão completa: CONTRA na absorção, equivalência fechada, Rota B respondida (v1.12 a v1.42)
+
+**31 entregas. Zero trial gasto além dos 12 pré-registrados.** O
+`trials.json` permanece em 504.
+
+Três perguntas em aberto foram FECHADAS, todas com resposta negativa —
+e negativo aqui é resultado, não fracasso.
+
+### 1. Absorção direcional: CONTRA nas 12 células
+
+Melhor célula com o sinal previsto e superando ambos os controles, mas
+|t| 3,06 contra os 4,03 exigidos. A porta de "falta de poder" não abriu
+por 0,03 de consistência.
+
+A porta do pré-registro 3 (promover por falta de poder) não abriu:
+maior consistência **0,82** contra os 0,85 exigidos.
+
+**O achado que explica melhor que o IC**: `absorcao_dir` é
+**sub-gaussiana por construção**. Os dois termos são limitados a
+[-1,+1], logo o composto tem teto [-2,+2] — e o observado ficou em
+**[-0,847; +0,897]**, menos da metade. |z| >= 2,5 aparece em 6% da
+frequência de uma normal. A hipótese era sobre barras extremas; a
+fórmula não consegue produzir barras extremas. Álgebra, não estatística.
+
+### 2. Equivalência NTSL <-> profit-tape: FECHADA
+
+    imbalance    EXATO   2001/2001, diferenca maxima 0,000000
+    desloc_norm  1 tick  47% das barras, so em open/close
+    z            2,4e-8  reproduz normalize.py
+
+Causa única: o OHLC do gráfico usa o primeiro e o último negócio de
+QUALQUER tipo; o do profit-tape usa só agressão.
+
+**Três explicações, duas refutadas pelo próprio diagnóstico.** As duas
+primeiras reproduziam o SINTOMA perfeitamente — divergência presente, do
+tamanho previsto, ausente quando `imbalance` era exato. Em três momentos
+teria sido possível fechar dizendo "divergiu como previsto", certo sobre
+o sintoma e errado sobre a causa.
+
+### 3. Rota B: CONTRA — o stop não detecta reversão
+
+Pergunta aberta desde 2026-08-27, respondida. |t| máximo 0,76 nos sete
+pontos, `n` suficiente em todos, IC95 contendo zero.
+
+**O que destravou**: `F` exato lido do tape negócio a negócio. Os dois
+estimadores anteriores morreram da mesma causa — o extremo de uma barra
+não é tempo de parada, só é conhecido no fechamento e usa informação do
+futuro dentro da barra. Com `F` = primeiro negócio a cruzar, o teorema
+da parada opcional dá `E[preço_final - F] = 0`: o estimador é
+não-enviesado POR TEOREMA, e o portão vira confirmação de implementação.
+
+**Sensibilidade com RLP: resultado idêntico até a última casa**, com o
+tape 39% maior. Nenhuma das 1.246 combinações mudou de status — um print
+de RLP nunca foi o primeiro a cruzar um nível. Fecha com a equivalência
+NTSL por caminho independente: cruzar um nível é fazer extremo novo, e o
+RLP não faz extremo.
+
+### Descobertas de infraestrutura que mudaram decisões
+
+- **Orçamento real era 492 trials, não 42.** O `RESEARCH_PLANO`
+  registrava "42 trials" desde 2026-08-23 e nunca foi atualizado; o
+  `trials.json` real fecha em 492. 73% vieram de uma varredura de 8
+  símbolos (WDOFUT, PETR4, VALE3, ITUB4, BOVA11, BBAS3, MGLU3, WEGE3)
+  que rodou em ~1 minuto — e o contador está CERTO em cobrar por ela: os
+  oito foram olhados procurando algum passar. `t_critico` saltou de 3,31
+  para 4,03.
+- **Buffer do console enche de trás para frente**: mais histórico no
+  gráfico = log termina mais cedo. Três dumps vieram cada vez mais
+  antigos antes de o padrão aparecer.
+- **`WINFUT` no gráfico é série contínua ajustada**, com `k` mudando nas
+  rolagens (1,020480 -> 1,000000 dentro da própria amostra).
+- **Plugin Tape Reading confirmado ativo**; `AgressionVolBuy+Sell` é
+  exatamente `QuantityVol(False, True)`.
+- **`volume_barra` não era gravado** em lugar nenhum — só impresso na
+  tela. Agora `features` grava `resumo.json`.
+
+### NOVE erros meus, todos pegos por verificação e nenhum por cuidado
+
+1. Calibração do portão errada em duas ordens de grandeza — bloqueou o
+   braço de 1m sem motivo.
+2. `_contar_buracos` falso por construção: devolvia zero para qualquer
+   entrada.
+3. Validador de âncoras achando zero links e reportando "nenhum
+   quebrado" sobre nada — havia 23 quebrados.
+4. Parser de número produzindo `NaN` silencioso; o comparador ignora
+   `NaN`, então o campo sumiria em vez de acusar.
+5. `str_replace` reportando sucesso sem alterar nada.
+6. Teste do `z` na borda do parquet — janelas de conteúdo diferente por
+   construção.
+7. **Portão que não conseguia passar**: `CONTRA` inatingível por falta
+   de amostra sintética.
+8. **SHA errado numa verificação** que teria confirmado falsamente a
+   versão errada.
+9. **Commit com a suíte vermelha**: `pytest | tail && git commit` — o
+   `tail` retorna zero.
+
+O padrão que atravessa quase todos: **um verificador que falha de um
+jeito que parece resultado.**
+
+Tags `entregue-v1.12` a `entregue-v1.42`.
+
+
+## 2026-08-29/30 — indicador de absorção para NTSL: do plano ao CONTRA
+
+Sessão que começou com o pedido de planejar um indicador NTSL de barra
+de absorção para o Profit Chart, e terminou com a hipótese encerrada
+pelo próprio método, sem nenhuma linha de NTSL escrita.
+
+**Inversão de arquitetura.** O roadmap inicial era indicador → sinal →
+robô. O manual do NTSL mostrou que as funções de agressão são
+licenciadas (Pro/Ultra/Scalper), que `VolumeAtPrice` tem histórico
+documentadamente curto, que o livro não tem histórico nenhum na
+automação, e que `SoAgressores` é **silenciosamente ignorado** sem o
+opcional Plugin Tape Reading. Conclusão: pesquisa no profit-tape, NTSL
+como camada de visualização e execução.
+
+**Descoberta de orçamento.** O `RESEARCH_PLANO.md` registrava 42 trials
+desde 2026-08-23; o `trials.json` real fechava em **492**, dos quais 360
+(73%) vieram de uma varredura de 8 símbolos que rodou em ~1 minuto. O
+`t_critico` efetivo saltou de 3,31 para 4,03. Registrado como lição:
+varredura ampla é barata em máquina e cara em orçamento estatístico.
+
+**Três erros meus, achados antes de custar trial.** (1) O gerador de
+ruído do portão errou a escala em duas ordens de grandeza — barra de 7
+ticks contra os 35 reais — o que inflou o viés de bounce e me levou a
+bloquear o braço de 1m por engano; revogado após recalibração.
+(2) `_contar_buracos` era falso por construção: a renumeração densa dos
+baldes apagava os vazios e o contador devolvia zero para qualquer
+entrada. (3) O `--log-file` dos comandos novos herdava o nível do
+console e sairia vazio.
+
+**Resultado.** CONTRA nas 12 células. Melhor célula: `z_absorcao_dir`
+h=1 no 5m, IC −0,0342 no sinal previsto, superando ambos os controles,
+mas com |t| 3,06 contra os 4,03 exigidos. A porta de "falta de poder" do
+pré-registro 3 não abriu — maior consistência 0,82, contra os 0,85
+exigidos. Detalhe em `RESEARCH_PLANO.md`.
+
+**O que a sessão preservou.** Nada foi resgatado por reanálise. O
+pré-registro de 2026-08-29e antecipou por escrito que o IC é fraco para
+efeito de cauda e que mesmo assim seria o portão — e essa frase foi o
+que impediu, no fim, transformar um negativo em "o teste era
+inadequado".
+
+Tags `entregue-v1.12` a `entregue-v1.20`.
 
 ## Sessão 2026-08-29 (revisão de desenho da Rota B)
 
@@ -221,223 +374,6 @@ correção de CI de madrugada do dia seguinte. Versões entregues:
 - `research` aguardando mais dias (decisão do operador).
 
 ---
-
-## 2026-08-30/31 — sessão completa: CONTRA na absorção, equivalência fechada, Rota B respondida (v1.12 a v1.42)
-
-**31 entregas. Zero trial gasto além dos 12 pré-registrados.** O
-`trials.json` permanece em 504.
-
-Três perguntas em aberto foram FECHADAS, todas com resposta negativa —
-e negativo aqui é resultado, não fracasso.
-
-### 1. Absorção direcional: CONTRA nas 12 células
-
-Melhor célula com o sinal previsto e superando ambos os controles, mas
-|t| 3,06 contra os 4,03 exigidos. A porta de "falta de poder" não abriu
-por 0,03 de consistência.
-
-**O achado que explica melhor que o IC**: `absorcao_dir` é
-**sub-gaussiana por construção**. Os dois termos são limitados a
-[-1,+1], o composto satura em [-0,85; +0,90], e |z| >= 2,5 aparece em 6%
-da frequência de uma normal. A hipótese era sobre barras extremas; a
-fórmula não consegue produzir barras extremas. Álgebra, não estatística.
-
-### 2. Equivalência NTSL <-> profit-tape: FECHADA
-
-    imbalance    EXATO   2001/2001, diferenca maxima 0,000000
-    desloc_norm  1 tick  47% das barras, so em open/close
-    z            2,4e-8  reproduz normalize.py
-
-Causa única: o OHLC do gráfico usa o primeiro e o último negócio de
-QUALQUER tipo; o do profit-tape usa só agressão.
-
-**Três explicações, duas refutadas pelo próprio diagnóstico.** As duas
-primeiras reproduziam o SINTOMA perfeitamente — divergência presente, do
-tamanho previsto, ausente quando `imbalance` era exato. Em três momentos
-teria sido possível fechar dizendo "divergiu como previsto", certo sobre
-o sintoma e errado sobre a causa.
-
-### 3. Rota B: CONTRA — o stop não detecta reversão
-
-Pergunta aberta desde 2026-08-27, respondida. |t| máximo 0,76 nos sete
-pontos, `n` suficiente em todos, IC95 contendo zero.
-
-**O que destravou**: `F` exato lido do tape negócio a negócio. Os dois
-estimadores anteriores morreram da mesma causa — o extremo de uma barra
-não é tempo de parada, só é conhecido no fechamento e usa informação do
-futuro dentro da barra. Com `F` = primeiro negócio a cruzar, o teorema
-da parada opcional dá `E[preço_final - F] = 0`: o estimador é
-não-enviesado POR TEOREMA, e o portão vira confirmação de implementação.
-
-**Sensibilidade com RLP: resultado idêntico até a última casa**, com o
-tape 39% maior. Nenhuma das 1.246 combinações mudou de status — um print
-de RLP nunca foi o primeiro a cruzar um nível. Fecha com a equivalência
-NTSL por caminho independente: cruzar um nível é fazer extremo novo, e o
-RLP não faz extremo.
-
-### Descobertas de infraestrutura que mudaram decisões
-
-- **Orçamento real era 492 trials, não 42.** 73% gastos numa varredura
-  de 8 símbolos que rodou em um minuto. `t_critico` saltou de 3,31 para
-  4,03.
-- **Buffer do console enche de trás para frente**: mais histórico no
-  gráfico = log termina mais cedo. Três dumps vieram cada vez mais
-  antigos antes de o padrão aparecer.
-- **`WINFUT` no gráfico é série contínua ajustada**, com `k` mudando nas
-  rolagens (1,020480 -> 1,000000 dentro da própria amostra).
-- **Plugin Tape Reading confirmado ativo**; `AgressionVolBuy+Sell` é
-  exatamente `QuantityVol(False, True)`.
-- **`volume_barra` não era gravado** em lugar nenhum — só impresso na
-  tela. Agora `features` grava `resumo.json`.
-
-### NOVE erros meus, todos pegos por verificação e nenhum por cuidado
-
-1. Calibração do portão errada em duas ordens de grandeza — bloqueou o
-   braço de 1m sem motivo.
-2. `_contar_buracos` falso por construção: devolvia zero para qualquer
-   entrada.
-3. Validador de âncoras achando zero links e reportando "nenhum
-   quebrado" sobre nada — havia 23 quebrados.
-4. Parser de número produzindo `NaN` silencioso; o comparador ignora
-   `NaN`, então o campo sumiria em vez de acusar.
-5. `str_replace` reportando sucesso sem alterar nada.
-6. Teste do `z` na borda do parquet — janelas de conteúdo diferente por
-   construção.
-7. **Portão que não conseguia passar**: `CONTRA` inatingível por falta
-   de amostra sintética.
-8. **SHA errado numa verificação** que teria confirmado falsamente a
-   versão errada.
-9. **Commit com a suíte vermelha**: `pytest | tail && git commit` — o
-   `tail` retorna zero.
-
-O padrão que atravessa quase todos: **um verificador que falha de um
-jeito que parece resultado.**
-
-Tags `entregue-v1.12` a `entregue-v1.42`.
-
-## 2026-08-30 — do CONTRA à equivalência NTSL fechada (v1.12 a v1.30)
-
-Dezenove entregas. **Zero trial gasto além dos 12 pré-registrados.**
-
-### A hipótese morreu, e morreu direito
-
-Executado o pré-registro de absorção direcional: **CONTRA nas 12
-células**. Melhor célula `z_absorcao_dir` h=1 no 5m, IC −0,0342 no sinal
-previsto, superando ambos os controles — e ainda assim |t| 3,06 contra
-os 4,03 exigidos. A porta de "falta de poder" do pré-registro 3 não
-abriu: maior consistência 0,82 contra os 0,85 exigidos.
-
-Nada foi resgatado por reanálise. O pré-registro de 29e tinha antecipado
-por escrito que o IC é fraco para efeito de cauda e que mesmo assim
-seria o portão — e foi essa frase que impediu, no fim, transformar um
-negativo em "o teste era inadequado".
-
-### O achado que explica o CONTRA melhor que o IC
-
-`absorcao_dir` é **sub-gaussiana por construção**. `imbalance` e
-`desloc_norm` são limitados a [−1,+1], o composto tem teto [−2,+2], e o
-observado ficou em [−0,847; +0,897]. Sobre 2.698 barras: |z|≥2,5 aparece
-em 0,07% contra 1,24% de uma normal — 6% do esperado.
-
-A hipótese era sobre barras extremas; **a fórmula não consegue produzir
-barras extremas**. Achado algébrico, derivado da distribuição e não do
-resultado, ao calibrar o limiar do indicador por frequência.
-
-### Descoberta de orçamento
-
-O `RESEARCH_PLANO` registrava 42 trials; o `trials.json` real fechava em
-**492**, dos quais 360 (73%) de uma varredura de 8 símbolos que rodou em
-um minuto. O `t_critico` efetivo saltou de 3,31 para 4,03.
-
-### Equivalência NTSL ↔ profit-tape: FECHADA
-
-    imbalance    exato — 80/80, diferenca maxima 0,000000
-    desloc_norm  diverge em 47/80, sempre 1 tick em open/close
-    absorcao_dir herda exatamente o erro de desloc_norm
-    z            reproduz normalize.py com erro 2,4e-8 (1.950 celulas)
-
-Causa única, confirmada por três frentes independentes: o OHLC do
-gráfico usa o primeiro e o último negócio de *qualquer* tipo; o do
-profit-tape usa só agressão.
-
-**Três explicações, duas refutadas pelo próprio diagnóstico.** As duas
-primeiras (volume de RLP; RLP tocando extremo) reproduziam o sintoma
-perfeitamente — divergência presente, do tamanho previsto, ausente
-quando `imbalance` era exato. Em três momentos teria sido possível
-fechar dizendo "divergiu como previsto", certo sobre o sintoma e errado
-sobre a causa.
-
-### Seis erros meus, todos pegos por verificação e não por cuidado
-
-1. **Calibração do portão** errada em duas ordens de grandeza (barra de
-   7 ticks contra 35 reais) — levou a bloquear o braço de 1m por engano.
-   Revogado.
-2. **`_contar_buracos` falso por construção**: a renumeração densa
-   apagava os vazios e o contador devolvia zero para qualquer entrada.
-3. **Validador de âncoras** achando zero links por escapes duplos —
-   reportava "nenhum quebrado" sobre nada. Havia 23 links quebrados.
-4. **Parser de número** produzindo `NaN` silencioso no formato pt-BR; o
-   comparador ignora `NaN`, então o campo sumiria em vez de acusar.
-5. **`str_replace` reportando sucesso sem alterar nada** — um
-   `ruff --fix` anterior tinha mudado a âncora procurada.
-6. **Teste do `z` na borda do parquet**: escolhi o dia da sobreposição
-   sem notar que era o primeiro dia da amostra, onde as janelas têm
-   conteúdo diferente por construção.
-
-### Aprendizados de instrumento
-
-- Buffer do console do Profit enche **de trás para frente**: quanto mais
-  histórico o gráfico tem, mais cedo o log termina.
-- `WINFUT` no gráfico é a **série contínua ajustada** (k medido pela
-  grade de preço).
-- Plugin Tape Reading **confirmado ativo** — `SoAgressores` obedecido.
-- `AgressionVolBuy+Sell` é exatamente `QuantityVol(False, True)`.
-- Histórico de agressão é profundo (13 meses verificados).
-
-Tags `entregue-v1.12` a `entregue-v1.30`.
-
-## 2026-08-29/30 — indicador de absorção para NTSL: do plano ao CONTRA
-
-Sessão que começou com o pedido de planejar um indicador NTSL de barra
-de absorção para o Profit Chart, e terminou com a hipótese encerrada
-pelo próprio método, sem nenhuma linha de NTSL escrita.
-
-**Inversão de arquitetura.** O roadmap inicial era indicador → sinal →
-robô. O manual do NTSL mostrou que as funções de agressão são
-licenciadas (Pro/Ultra/Scalper), que `VolumeAtPrice` tem histórico
-documentadamente curto, que o livro não tem histórico nenhum na
-automação, e que `SoAgressores` é **silenciosamente ignorado** sem o
-opcional Plugin Tape Reading. Conclusão: pesquisa no profit-tape, NTSL
-como camada de visualização e execução.
-
-**Descoberta de orçamento.** O `RESEARCH_PLANO.md` registrava 42 trials
-desde 2026-08-23; o `trials.json` real fechava em **492**, dos quais 360
-(73%) vieram de uma varredura de 8 símbolos que rodou em ~1 minuto. O
-`t_critico` efetivo saltou de 3,31 para 4,03. Registrado como lição:
-varredura ampla é barata em máquina e cara em orçamento estatístico.
-
-**Três erros meus, achados antes de custar trial.** (1) O gerador de
-ruído do portão errou a escala em duas ordens de grandeza — barra de 7
-ticks contra os 35 reais — o que inflou o viés de bounce e me levou a
-bloquear o braço de 1m por engano; revogado após recalibração.
-(2) `_contar_buracos` era falso por construção: a renumeração densa dos
-baldes apagava os vazios e o contador devolvia zero para qualquer
-entrada. (3) O `--log-file` dos comandos novos herdava o nível do
-console e sairia vazio.
-
-**Resultado.** CONTRA nas 12 células. Melhor célula: `z_absorcao_dir`
-h=1 no 5m, IC −0,0342 no sinal previsto, superando ambos os controles,
-mas com |t| 3,06 contra os 4,03 exigidos. A porta de "falta de poder" do
-pré-registro 3 não abriu — maior consistência 0,82, contra os 0,85
-exigidos. Detalhe em `RESEARCH_PLANO.md`.
-
-**O que a sessão preservou.** Nada foi resgatado por reanálise. O
-pré-registro de 2026-08-29e antecipou por escrito que o IC é fraco para
-efeito de cauda e que mesmo assim seria o portão — e essa frase foi o
-que impediu, no fim, transformar um negativo em "o teste era
-inadequado".
-
-Tags `entregue-v1.12` a `entregue-v1.20`.
 
 ## Sessões anteriores (antes de 2026-08-27)
 
