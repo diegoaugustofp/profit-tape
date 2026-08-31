@@ -8,6 +8,7 @@ esta demorando. Ver docs/BOAS_PRATICAS_PROGRESSO.md.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -77,6 +78,10 @@ def test_progresso_mostra_contador_e_marcador_inicio_fim_por_dia(tmp_path: Path)
         "ea-replay-lote", "-c", str(cfg),
         "--raiz-raw", str(tmp_path / "raw"),
         "--saida", str(tmp_path / "out"),
+        # SEM ISTO o comando escreve em data/research/ RELATIVO AO CWD
+        # (default de --saida-operacoes) -- o teste vazava para fora do
+        # tmp_path, sujava o repositorio e quebrava a CI. Ver v1.50.
+        "--saida-operacoes", str(tmp_path / "out" / "operacoes.parquet"),
     ])
     assert resultado.exit_code == 0, resultado.output
 
@@ -100,6 +105,10 @@ def test_progresso_tambem_vai_para_o_log_file(tmp_path: Path) -> None:
         "ea-replay-lote", "-c", str(cfg),
         "--raiz-raw", str(tmp_path / "raw"),
         "--saida", str(tmp_path / "out"),
+        # SEM ISTO o comando escreve em data/research/ RELATIVO AO CWD
+        # (default de --saida-operacoes) -- o teste vazava para fora do
+        # tmp_path, sujava o repositorio e quebrava a CI. Ver v1.50.
+        "--saida-operacoes", str(tmp_path / "out" / "operacoes.parquet"),
         "--log-file", str(log_file),
     ])
     assert resultado.exit_code == 0, resultado.output
@@ -126,6 +135,10 @@ def test_relatorio_lote_quebra_por_lado(tmp_path: Path) -> None:
         "ea-replay-lote", "-c", str(cfg),
         "--raiz-raw", str(tmp_path / "raw"),
         "--saida", str(tmp_path / "out"),
+        # SEM ISTO o comando escreve em data/research/ RELATIVO AO CWD
+        # (default de --saida-operacoes) -- o teste vazava para fora do
+        # tmp_path, sujava o repositorio e quebrava a CI. Ver v1.50.
+        "--saida-operacoes", str(tmp_path / "out" / "operacoes.parquet"),
     ])
     assert resultado.exit_code == 0, resultado.output
     assert "por lado (pnl" in resultado.output
@@ -148,6 +161,10 @@ def test_comparar_circuit_breaker_nao_combina_com_ignorar(tmp_path: Path) -> Non
         "ea-replay-lote", "-c", str(cfg),
         "--raiz-raw", str(tmp_path / "raw"),
         "--saida", str(tmp_path / "out"),
+        # SEM ISTO o comando escreve em data/research/ RELATIVO AO CWD
+        # (default de --saida-operacoes) -- o teste vazava para fora do
+        # tmp_path, sujava o repositorio e quebrava a CI. Ver v1.50.
+        "--saida-operacoes", str(tmp_path / "out" / "operacoes.parquet"),
         "--ignorar-circuit-breaker", "--comparar-circuit-breaker",
     ])
     assert resultado.exit_code != 0
@@ -173,6 +190,10 @@ def test_comparar_circuit_breaker_mostra_com_e_sem_freio(tmp_path: Path) -> None
         "ea-replay-lote", "-c", str(cfg),
         "--raiz-raw", str(tmp_path / "raw"),
         "--saida", str(tmp_path / "out"),
+        # SEM ISTO o comando escreve em data/research/ RELATIVO AO CWD
+        # (default de --saida-operacoes) -- o teste vazava para fora do
+        # tmp_path, sujava o repositorio e quebrava a CI. Ver v1.50.
+        "--saida-operacoes", str(tmp_path / "out" / "operacoes.parquet"),
         "--comparar-circuit-breaker",
     ])
     assert resultado.exit_code == 0, resultado.output
@@ -200,6 +221,10 @@ def test_por_lado_com_comparar_mostra_tambem_sem_freio(tmp_path: Path) -> None:
         "ea-replay-lote", "-c", str(cfg),
         "--raiz-raw", str(tmp_path / "raw"),
         "--saida", str(tmp_path / "out"),
+        # SEM ISTO o comando escreve em data/research/ RELATIVO AO CWD
+        # (default de --saida-operacoes) -- o teste vazava para fora do
+        # tmp_path, sujava o repositorio e quebrava a CI. Ver v1.50.
+        "--saida-operacoes", str(tmp_path / "out" / "operacoes.parquet"),
         "--comparar-circuit-breaker",
     ])
     assert resultado.exit_code == 0, resultado.output
@@ -222,6 +247,10 @@ def test_por_lado_sem_comparar_nao_mostra_secao_extra(tmp_path: Path) -> None:
         "ea-replay-lote", "-c", str(cfg),
         "--raiz-raw", str(tmp_path / "raw"),
         "--saida", str(tmp_path / "out"),
+        # SEM ISTO o comando escreve em data/research/ RELATIVO AO CWD
+        # (default de --saida-operacoes) -- o teste vazava para fora do
+        # tmp_path, sujava o repositorio e quebrava a CI. Ver v1.50.
+        "--saida-operacoes", str(tmp_path / "out" / "operacoes.parquet"),
     ])
     assert resultado.exit_code == 0, resultado.output
     assert "SEM o circuit breaker" not in resultado.output
@@ -243,6 +272,10 @@ def test_curva_de_patrimonio_aparece_no_relatorio(tmp_path: Path) -> None:
         "ea-replay-lote", "-c", str(cfg),
         "--raiz-raw", str(tmp_path / "raw"),
         "--saida", str(tmp_path / "out"),
+        # SEM ISTO o comando escreve em data/research/ RELATIVO AO CWD
+        # (default de --saida-operacoes) -- o teste vazava para fora do
+        # tmp_path, sujava o repositorio e quebrava a CI. Ver v1.50.
+        "--saida-operacoes", str(tmp_path / "out" / "operacoes.parquet"),
     ])
     assert resultado.exit_code == 0, resultado.output
     assert "curva de patrimonio" in resultado.output
@@ -253,3 +286,41 @@ def test_curva_de_patrimonio_aparece_no_relatorio(tmp_path: Path) -> None:
     conteudo = arquivos_md[0].read_text(encoding="utf-8")
     assert "Curva de patrimonio / drawdown" in conteudo
     assert "capital inicial: R$5,000.00" in conteudo
+
+
+def test_nao_escreve_nada_fora_do_tmp_path(tmp_path: Path, monkeypatch: Any) -> None:
+    """
+    GUARDA DE REGRESSAO (2026-08-31, incidente real da CI).
+
+    `--saida-operacoes` tem default RELATIVO (`data/research/operacoes_replay
+    .parquet`, v1.45). Os testes deste arquivo nao o sobrescreviam, entao
+    todo `ea-replay-lote` de teste escrevia em `data/research/` A PARTIR DO
+    CWD -- ou seja, dentro do repositorio. Onde o CWD e' gravavel isso passa
+    silenciosamente (so' suja a arvore); onde nao e', quebra com
+    PermissionError. Sete testes vermelhos na CI por quatro entregas.
+
+    Este teste roda o comando com o CWD num diretorio vazio e prova que
+    NADA e' criado ali -- se alguem adicionar uma saida nova com default
+    relativo e esquecer de aponta-la para tmp_path, isto falha na hora, e
+    falha por PRESENCA de arquivo (deterministico), nao por permissao de
+    sistema de arquivos (que depende de rodar como root ou nao).
+    """
+    cwd_limpo = tmp_path / "cwd"
+    cwd_limpo.mkdir()
+    monkeypatch.chdir(cwd_limpo)
+
+    dias = ["2026-08-24"]
+    _preparar_dias(tmp_path / "raw", dias)
+    cfg = tmp_path / "ea.yaml"
+    _config(cfg)
+
+    resultado = runner.invoke(app, [
+        "ea-replay-lote", "-c", str(cfg),
+        "--raiz-raw", str(tmp_path / "raw"),
+        "--saida", str(tmp_path / "out"),
+        "--saida-operacoes", str(tmp_path / "out" / "operacoes.parquet"),
+    ])
+    assert resultado.exit_code == 0, resultado.output
+    assert list(cwd_limpo.iterdir()) == [], (
+        f"o comando escreveu fora do tmp_path: "
+        f"{[p.name for p in cwd_limpo.iterdir()]}")

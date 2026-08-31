@@ -67,6 +67,14 @@ arquivo cresceu demais para navegar so' por titulo cronologico).
   — 0/16 marginais positivas (o modo de falha temido NÃO ocorre), mas o
   contínuo dispara onde hoje não dispara (venda 10→16). Critério: IC95
   pareado na venda, limite inferior > −3,0 pts/op.
+- [RESULTADO: não-inferioridade deu CONTRA por 0,28 (2026-08-31c2)](#resultado-não-inferioridade-deu-contra-por-028-2026-08-31c2)
+  — CONTRA, e o veredito fica. Lição: o gate virava com 2 pregões; o
+  limiar foi congelado sem verificar se o instrumento resolvia a
+  diferença.
+- [PRÉ-REGISTRO: stop contínuo como CONFORMIDADE (2026-08-31d)](#pré-registro-stop-contínuo-como-conformidade-2026-08-31d)
+  — aguardando congelamento. Critério determinístico, sem IC. Três termos
+  aceitos explicitamente, incluindo efeito de expectativa de sinal
+  desconhecido.
 - [Curva de patrimonio / drawdown maximo (2026-08-27)](#curva-de-patrimonio--drawdown-maximo-2026-08-27)
 - [Risco realizado (VaR/ES) — primeiro passo aplicado do RQ (2026-08-27)](#risco-realizado-vares--primeiro-passo-aplicado-do-rq-2026-08-27)
 - [Resultado real do risco-realizado + correcao de bug de exibicao (2026-08-27)](#resultado-real-do-risco-realizado--correcao-de-bug-de-exibicao-2026-08-27)
@@ -3597,3 +3605,155 @@ Não gasta trial: engenharia de risco sobre sinal já validado pelo IC.
 ### Estado
 
 Instrumento entregue em `entregue-v1.49`. **Resultado ainda não observado.**
+
+## RESULTADO: não-inferioridade deu CONTRA por 0,28 (2026-08-31c2)
+
+Critério congelado: limite inferior do IC95 pareado na venda > −3,0 pts/op.
+
+| lado | sem stop | stop CLOSE | stop CONTÍNUO | dif pareada | IC95 | afetadas |
+|---|---|---|---|---|---|---|
+| compra | −1,4 | +0,6 | −3,3 | **−3,94** | [−7,94 ; +0,21] | 16 |
+| venda | +26,0 | +19,4 | +23,2 | **+3,86** | **[−3,28 ; +13,42]** | 16 |
+
+**VEREDITO: CONTRA.** Observado −3,28 contra o critério de −3,0.
+
+A quebra por lado se justificou sozinha: o agregado (+9,7 contra +9,5)
+escondia dois efeitos de sinal oposto e magnitude parecida. Decidir pelo
+agregado teria sido decidir sobre um número que não descreve nenhum dos
+dois lados.
+
+**O que foi rejeitado não é "o stop contínuo é pior".** A média pareada na
+venda é favorável (+3,86). O que falhou foi demonstrar não-inferioridade
+com 16 operações afetadas em 162 e um IC de 17 pontos de largura.
+
+**Saídas erradas, registradas para não parecerem razoáveis depois**:
+baixar o limiar para −4; usar a média em vez do IC; e sobretudo **rodar de
+novo com outra semente** — com 2000 reamostragens o limite inferior tem
+erro de Monte Carlo próprio e 0,28 pode caber dentro dele, então outra
+semente provavelmente passaria. `semente=20260831` estava congelada no
+pré-registro exatamente para isso não ser uma opção.
+
+Lição de construção de instrumento (ver 31/08d para a conta): o gate
+virava com **2 pregões** de dado novo. Antes de congelar um limiar,
+verificar se o instrumento resolve a diferença que o limiar decide.
+
+## PRÉ-REGISTRO: stop contínuo como CONFORMIDADE (2026-08-31d)
+
+> **Status: aguardando congelamento pelo operador.** Nada implementado até
+> este documento ser confirmado.
+
+### O que veio antes, e por que este pré-registro existe
+
+O pré-registro de não-inferioridade (31/08c) deu **CONTRA**: limite
+inferior do IC95 pareado na venda em −3,28 contra um critério de −3,0.
+**Esse veredito fica.** Não é reaberto, não é re-rodado com outra semente,
+não tem o limiar ajustado. A pergunta "o P&L veta a mudança?" foi feita e
+a resposta foi "não dá para demonstrar que não veta".
+
+O que se aprendeu ao analisar o resultado é que **aquele gate não tinha
+resolução para a pergunta**. Conta: a distância da média (+3,86) ao limite
+inferior (−3,28) é 7,14; para passar de −3,0 bastaria essa distância cair
+para 6,86 — 4%. Como a largura do IC escala com 1/√(pregões):
+
+```
+√(n/25) = 7,14/6,86 = 1,041   →   n ≈ 27 pregões
+```
+
+**Dois pregões separavam CONTRA de FAVORÁVEL.** Um gate que vira com dois
+dias não estava medindo o dado; estava medindo quais dois dias entraram —
+ainda mais com só 16 de 162 operações afetadas. O erro foi de construção,
+e é meu (Claude): escolhi −3,0 sem verificar se o instrumento distinguia
+−3,0 de −3,5. Não distinguia. Fica como lição registrada: **antes de
+congelar um limiar, verificar se o instrumento resolve a diferença que o
+limiar pretende decidir.**
+
+Isso NÃO reabre o veredito. O que faz é mudar qual pergunta decide.
+
+### A pergunta certa é de conformidade, não de expectativa
+
+O stop catastrófico é seguro de CAPITAL. Ele não cumpre a própria
+especificação: checado só no fechamento de barra, deixa a perda chegar a
+−805 num limite de 500 (excesso mediana 65, máximo 305, medido em 336
+gatilhos OOS).
+
+Isso não é hipótese sobre o mercado; é um defeito de implementação de uma
+spec já decidida. E ele **já contaminou análise real**: a decomposição de
+drawdown de 31/08 concluiu que os trechos 2 e 3 eram "dominados por
+operações isoladas" — as tais −626, −601, −576, que são desse tamanho
+justamente porque o stop sai no close em vez de no limite. Toda
+decomposição, curva de patrimônio e replay futuro carrega o defeito
+enquanto ele existir. Corrigi-lo não muda a decisão de trading; muda a
+confiabilidade de todo instrumento que mede o EA.
+
+### Motivação declarada pelo operador
+
+Corrigir um defeito conhecido para que resultados futuros não precisem ser
+lidos com a ressalva "isto pode estar afetado pelo bug do stop".
+
+### O que exatamente muda
+
+Só o stop catastrófico passa a ser avaliado a cada negócio, no mesmo
+`processar_trade_bruto` que já recebe todos eles. Congelado junto:
+
+1. Saída por tempo continua avaliada na barra (é o relógio que o research
+   mediu). Rota B permanece fora de escopo.
+2. Preço de saída: a impressão que cruzou, não o limite.
+3. Reentrada na mesma barra da saída: **proibida**.
+4. `bar_id_saida` = id da barra em formação, com a saída marcada como
+   intrabarra no log.
+5. `queue.Full`: o stop fica armado; o descarte só adia para a próxima
+   impressão. Limitação conhecida, não tratada.
+
+### CRITÉRIO DE DECISÃO — conformidade, determinístico
+
+> No replay dos 25 pregões de `data/curated`, **nenhuma operação fecha com
+> excursão contra superior ao limite mais a granularidade da impressão que
+> cruzou**. Verificado operação a operação em `operacoes_replay.parquet`,
+> não por agregado.
+>
+> FAVORÁVEL se a condição vale para todas as operações.
+> CONTRA se qualquer operação a viola — o que significaria que a
+> implementação não faz o que diz, e o veredito seria sobre o código, não
+> sobre o mercado.
+
+Sem IC, sem bootstrap, sem tamanho de amostra: é verificação de
+especificação. Não gasta trial.
+
+### OS TRÊS TERMOS ACEITOS, escritos sem maquiagem
+
+Registrados explicitamente para que ninguém (inclusive nós) leia esta
+mudança depois como se ela tivesse sido validada por P&L:
+
+1. **A pergunta de P&L foi feita e voltou inconclusiva.** Efeito estimado
+   +3,86 pts/op na venda, IC95 [−3,28 ; +13,42]. **O sinal do efeito é
+   desconhecido.** Este pré-registro aceita um efeito de expectativa
+   desconhecido em troca de um mecanismo que cumpre a spec. É decisão do
+   operador, não conclusão estatística.
+
+2. **As 6 operações extras vêm junto e não dá para separar.** Não existe
+   variante que corrija a conformidade sem armar o stop contra preço
+   intrabarra: sair no limite exigiria preenchimento num preço que já
+   passou. Na venda o stop passa de 10 para 16 disparos em 162 operações;
+   as 6 novas custam ~110 pts cada (terminam em −390 em média se deixadas
+   correr, e o stop as mata em −500).
+
+3. **Risco residual nomeado.** A linha de compra deu −3,94 [−7,94 ; +0,21].
+   Se o +3,86 da venda for ruído em torno de um valor verdadeiro parecido
+   com o da compra, o custo é ~4 pts/op sobre ~15 pts/op de edge líquido.
+   **Não dá para descartar isso com o dado atual.**
+
+### O que este pré-registro NÃO autoriza
+
+- Reabrir o veredito de não-inferioridade de 31/08c.
+- Apresentar a mudança como ganho de P&L, ou citar os "270 pts" de 31/08a
+  (número que contava só a economia nas três que já batiam, sem os
+  disparos novos).
+- Estender a checagem contínua a alvo, stop tático ou Rota B — cada um
+  exigiria pré-registro próprio.
+
+### Reexame previsto
+
+Quando a fita acumulada dobrar (~50 pregões), refazer a medição dos três
+regimes **como acompanhamento**, para saber o sinal real do efeito de
+expectativa. Isso não é gate: a mudança já terá sido feita por
+conformidade. Serve para saber quanto ela custou.

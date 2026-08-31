@@ -559,3 +559,30 @@ com o teto de frequência comprometido ANTES de ver o efeito no P&L.
   mão antes dos testes (CONTRA e FAVORAVEL, IC determinístico com um dia).
 
 **Pendente**: rodar e observar o veredito.
+
+### Continuação (2026-08-31d) — CONTRA registrado, CI consertada, pré-registro de conformidade
+
+- **Veredito da não-inferioridade: CONTRA** (−3,28 contra critério de
+  −3,0). Mantido. Registradas as saídas erradas que a margem de 0,28
+  tornava tentadoras, sobretudo trocar a semente do bootstrap.
+- **Lição de construção de instrumento**: o gate virava com 2 pregões de
+  dado novo (conta em 31/08d). Congelei um limiar sem verificar se o
+  instrumento resolvia a diferença que ele decidia.
+- **Incidente da CI resolvido** (7 testes vermelhos desde a v1.45):
+  `--saida-operacoes` tem default relativo (`data/research/...`, v1.45) e
+  os testes de `ea-replay-lote` não o sobrescreviam — escreviam dentro do
+  repositório a partir do CWD. Onde o CWD é gravável passa silenciosamente
+  (só suja a árvore); na CI, `PermissionError`.
+- **Descoberta sobre a verificação de Claude**: o sandbox roda como
+  **root**, que ignora permissão de diretório — demonstrado com `chmod
+  555` (escrita bem-sucedida). Toda falha desta classe é invisível aqui.
+  Guarda de regressão adicionada que falha por PRESENÇA DE ARQUIVO num CWD
+  limpo, não por permissão — determinística em qualquer usuário. Verifiquei
+  que a guarda falha de fato ao reintroduzir o bug.
+- **Pré-registro de conformidade escrito** (31/08d), aguardando
+  congelamento: critério determinístico, sem IC, mais os três termos
+  aceitos explicitamente (efeito de expectativa de sinal desconhecido, 6
+  disparos extras inseparáveis, risco residual de ~4 pts/op).
+- 390 testes, coverage 78%, ruff limpo, mypy strict limpo. **Passei a
+  rodar `pytest --cov` como a CI faz** — as entregas v1.46 a v1.49 foram
+  verificadas sem ele.
