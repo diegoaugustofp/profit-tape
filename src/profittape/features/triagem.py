@@ -181,13 +181,42 @@ def triar(candidata: pd.Series, existentes: pd.DataFrame,
     }
 
 
+def _serie(df: pd.DataFrame, nome_ou_expr: str) -> pd.Series:
+    """
+    Resolve um nome de coluna OU uma expressao sobre as colunas.
+
+    Uma triagem que so' aceita coluna GRAVADA nao serve para o caso de
+    uso principal — triar candidata NOVA, que por definicao ainda nao
+    esta no parquet. `esforco` e `amplitude` sao derivadas, e a primeira
+    versao deste comando falhava com "nao tem a coluna `esforco`".
+
+    Usa `DataFrame.eval`, cujo parser e' restrito a operacoes sobre
+    colunas: nao aceita import, chamada de funcao arbitraria nem acesso a
+    atributo.
+    """
+    if nome_ou_expr in df.columns:
+        return df[nome_ou_expr]
+    try:
+        valor = df.eval(nome_ou_expr)
+    except Exception as erro:
+        raise SystemExit(
+            f"`{nome_ou_expr}` nao e' coluna do parquet nem expressao "
+            f"valida sobre as colunas.\n  erro: {erro}\n"
+            f"  colunas disponiveis: {sorted(df.columns)[:20]}..."
+        ) from erro
+    if not isinstance(valor, pd.Series):
+        raise SystemExit(f"`{nome_ou_expr}` nao resultou numa serie")
+    return valor
+
+
 def triar_parquet(features_parquet: Path, coluna: str,
                   contra: list[str] | None = None,
                   numerador: str | None = None,
-                  denominador: str | None = None) -> dict[str, Any]:
+                  denominador: str | None = None,
+                  expr: str | None = None) -> dict[str, Any]:
     df = pd.read_parquet(features_parquet)
-    if coluna not in df.columns:
-        raise SystemExit(f"{features_parquet} nao tem a coluna `{coluna}`")
+    candidata = _serie(df, expr or coluna)
+    candidata.name = coluna
 
     if contra:
         faltando = [c for c in contra if c not in df.columns]
@@ -202,8 +231,9 @@ def triar_parquet(features_parquet: Path, coluna: str,
         outras = df.select_dtypes("number").drop(
             columns=[c for c in excluir if c in df.columns])
 
-    r = triar(df[coluna], outras,
-              df[numerador] if numerador else None,
-              df[denominador] if denominador else None)
+    r = triar(candidata, outras,
+              _serie(df, numerador) if numerador else None,
+              _serie(df, denominador) if denominador else None)
+    r["expressao"] = expr or coluna
     log.info("triagem.resumo", coluna=coluna, veredito=r["veredito"])
     return r

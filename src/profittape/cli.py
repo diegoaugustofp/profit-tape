@@ -667,11 +667,19 @@ def triagem(
         None, "--contra",
         help="Features existentes, separadas por virgula. Sem isto, "
              "compara com TODAS as numericas do parquet."),
-    numerador: str | None = typer.Option(None, "--numerador"),
+    expr: str | None = typer.Option(
+        None, "--expr",
+        help="Expressao que DEFINE a candidata, quando ela ainda nao esta "
+             "no parquet. Ex.: --expr \"vol_agr / ((high-low)/5)\". Sem "
+             "isto, `coluna` e' lida do parquet."),
+    numerador: str | None = typer.Option(
+        None, "--numerador",
+        help="Nome de coluna OU expressao."),
     denominador: str | None = typer.Option(
         None, "--denominador",
-        help="Se a candidata e' uma razao, declare as partes: razao entre "
-             "quantidades que andam juntas e' quase constante."),
+        help="Nome de coluna OU expressao. Se a candidata e' uma razao, "
+             "declare as partes: razao entre quantidades que andam juntas "
+             "e' quase constante por construcao."),
     log_level: str = typer.Option("INFO", "--log-level"),
 ) -> None:
     """
@@ -690,10 +698,12 @@ def triagem(
         raise SystemExit(f"nao achei {features}")
     r = triar_parquet(features, coluna,
                       contra.split(",") if contra else None,
-                      numerador, denominador)
+                      numerador, denominador, expr)
 
     typer.echo("=" * 64)
     typer.echo(f"TRIAGEM DE `{coluna}`  ->  {r['veredito']}")
+    if r.get("expressao") and r["expressao"] != coluna:
+        typer.echo(f"  definida como: {r['expressao']}")
     typer.echo("=" * 64)
     for m in r["motivos"]:
         typer.echo(f"  !! {m}")

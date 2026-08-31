@@ -125,3 +125,44 @@ def test_razao_com_partes_independentes_nao_e_penalizada() -> None:
 def test_nao_declarada_como_razao_nao_dispara_o_criterio() -> None:
     d = _diagnostico_de_razao(None, None)
     assert "situacao" in d and "risco_de_cancelamento" not in d
+
+
+def _parquet_de_teste(tmp_path, n: int = 1200):  # type: ignore[no-untyped-def]
+    rng = np.random.default_rng(21)
+    amp = rng.gamma(9.0, 5.0, n)
+    df = pd.DataFrame({
+        "high": 100_000 + amp * 5, "low": 100_000.0,
+        "vol_agr": 2100 * amp + rng.normal(0, 12_000, n),
+        "imbalance": rng.normal(0, 0.12, n),
+        "desloc_norm": rng.normal(0, 0.49, n),
+    })
+    arq = tmp_path / "features.parquet"
+    df.to_parquet(arq, index=False)
+    return arq
+
+
+def test_tria_candidata_DERIVADA_que_nao_esta_no_parquet(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """
+    O caso de uso PRINCIPAL: triar candidata NOVA, que por definicao
+    ainda nao foi gravada. A primeira versao so' aceitava coluna
+    existente e falhava com "nao tem a coluna `esforco`" — inutil
+    justamente para o que a triagem existe.
+    """
+    from profittape.features.triagem import triar_parquet
+
+    r = triar_parquet(_parquet_de_teste(tmp_path), "esforco",
+                      expr="vol_agr / ((high - low) / 5)",
+                      numerador="vol_agr", denominador="(high - low) / 5")
+    assert r["veredito"] == "REPROVA"
+    assert any("RAZAO ENTRE PARTES" in m for m in r["motivos"])
+    assert r["expressao"] == "vol_agr / ((high - low) / 5)"
+
+
+def test_expressao_invalida_lista_as_colunas(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """A mensagem tem que dizer o que existe, nao so' o que falta."""
+    import pytest
+
+    from profittape.features.triagem import triar_parquet
+
+    with pytest.raises(SystemExit, match="colunas disponiveis"):
+        triar_parquet(_parquet_de_teste(tmp_path), "nao_existe")

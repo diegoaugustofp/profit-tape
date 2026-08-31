@@ -3934,6 +3934,39 @@ O criterio errado so' apareceu porque rodei nos dois casos historicos
 antes de aceitar o modulo — a mesma pratica que este comando existe para
 institucionalizar.
 
+### Rodada sobre o parquet real (25 pregoes, 2.723 barras)
+
+    TRIAGEM DE `absorcao_dir`  ->  REPROVA
+      !! REDUNDANTE com `desloc_norm` (correlacao -0,9863)
+      !! SEM CAUDA: 0,0% acima de 2,5 desvios contra 1,24% de uma normal
+
+           feature  correlacao  redundante
+       desloc_norm     -0,9863        True
+     z_desloc_norm     -0,9679        True
+    tick_imbalance     -0,7890       False
+         imbalance     -0,7807       False
+
+O -0,9863 sobre 2.723 barras confirma o -0,9883 medido sobre as 653 do
+dump. E apareceu um par que eu nao tinha visto: `z_desloc_norm` tambem
+sai redundante (-0,9679).
+
+Faixa observada de `absorcao_dir`: **[-0,8467; +0,8968]** contra o teto
+teorico [-2,+2] — a mesma saturacao registrada em 2026-08-30b, agora
+reproduzida por outro caminho.
+
+### Candidata DERIVADA: `--expr`
+
+A primeira versao so' aceitava coluna GRAVADA e falhava com "nao tem a
+coluna `esforco`" — inutil para o caso de uso principal, que e' triar
+candidata NOVA, por definicao ainda nao gravada.
+
+    profit-tape triagem esforco \
+      --expr "vol_agr / ((high - low) / 5)" \
+      --numerador vol_agr --denominador "(high - low) / 5"
+
+Usa `DataFrame.eval`, cujo parser e' restrito a operacoes sobre colunas:
+nao aceita import, chamada arbitraria nem acesso a atributo.
+
 ### O que a triagem NAO faz
 
 Nao diz se a feature PREDIZ alguma coisa. **PASSA nao autoriza nada** —
