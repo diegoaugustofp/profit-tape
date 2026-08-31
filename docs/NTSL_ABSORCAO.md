@@ -808,3 +808,31 @@ apareciam, sem dizer em relacao a que.
 
 Regra geral: **contar e' ambiguo, nomear nao e'.** Vale para qualquer
 mensagem de formato.
+
+
+## O `.ntsl` nunca emitiu o campo novo (2026-08-31)
+
+Bug meu, achado pelo operador lendo o codigo.
+
+Acrescentei `z_imbalance` ao parser e a sete fixtures de teste. A edicao
+do `.ntsl` procurava a ancora `sDp`, mas a variavel real chama-se
+`sDesvio` — a substituicao **nao casou e reportou sucesso sem alterar
+nada**.
+
+Resultado: o indicador seguiu emitindo 17 campos, o parser passou a
+exigir 18, **e a suite inteira continuou VERDE** — porque nenhum teste
+lia o `.ntsl`. Passei tres mensagens pedindo para recolar o arquivo no
+Profit quando o problema estava do meu lado.
+
+### O teste que faltava
+
+`test_o_ntsl_emite_exatamente_os_campos_que_o_parser_espera` conta os
+separadores na chamada de `ConsoleLog` e compara com `CAMPOS`, alem de
+exigir que a variavel do ultimo campo apareca na chamada.
+
+Verificado que ele PEGA a regressao: com o `.ntsl` antigo, falha com
+"o .ntsl emite 17 campos e o parser espera 18".
+
+O `.ntsl` e o parser sao dois lados da mesma ordem congelada, e ate
+agora nada os amarrava — a ordem so' existia como comentario nos dois
+arquivos.

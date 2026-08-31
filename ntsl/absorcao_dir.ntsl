@@ -270,6 +270,7 @@ begin
         + "|" + sVolTotal + "|" + sVolSoAgr
         + "|" + sAgrCompra + "|" + sAgrVenda
         + "|" + sImbalance + "|" + sDeslocNorm + "|" + sAbsorcaoDir
-        + "|" + sMedia + "|" + sDesvio + "|" + sZ);
+        + "|" + sMedia + "|" + sDesvio + "|" + sZ
+        + "|" + sZImb);
   end;
 end;

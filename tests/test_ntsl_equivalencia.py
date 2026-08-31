@@ -424,3 +424,42 @@ def test_barra_sem_negocio_algum_nao_e_recusada(tmp_path) -> None:
         encoding="utf-8")
     _, diag = carregar_log(arq)
     assert diag["barras"] == 10
+
+
+def test_o_ntsl_emite_exatamente_os_campos_que_o_parser_espera() -> None:
+    """
+    O `.ntsl` e o parser sao DOIS lados da mesma ordem congelada, e ate
+    2026-08-31 nada os amarrava.
+
+    O que aconteceu: acrescentei `z_imbalance` ao parser e a sete
+    fixtures, mas a edicao do `.ntsl` procurava uma ancora que nao
+    existia (`sDp` em vez de `sDesvio`) e **reportou sucesso sem alterar
+    nada**. O indicador seguiu emitindo 17 campos, o parser passou a
+    exigir 18, e a suite inteira continuou VERDE — porque nenhum teste
+    lia o `.ntsl`.
+
+    Quem achou foi o operador, lendo o codigo. Este teste existe para a
+    proxima vez ser o CI a achar.
+    """
+    from pathlib import Path as _P
+
+    ntsl = (_P(__file__).resolve().parents[1] / "ntsl"
+            / "absorcao_dir.ntsl").read_text(encoding="utf-8")
+
+    inicio = ntsl.index('ConsoleLog("ABSDIR|')
+    fim = ntsl.index(");", inicio)
+    chamada = ntsl[inicio:fim]
+
+    # "ABSDIR|" + A + "|" + B + ... -> cada '"|"' separa um campo, e o
+    # prefixo ja' embute o primeiro separador.
+    n_campos = chamada.count('"|"') + 1
+    assert n_campos == len(CAMPOS), (
+        f"o .ntsl emite {n_campos} campos e o parser espera {len(CAMPOS)}. "
+        f"A ordem e' CONGELADA: mude nos DOIS lados."
+    )
+    # o ultimo campo do parser tem que aparecer na chamada
+    ultima_var = {"z_imbalance": "sZImb", "z": "sZ"}[CAMPOS[-1]]
+    assert ultima_var in chamada, (
+        f"o parser espera '{CAMPOS[-1]}' por ultimo, mas '{ultima_var}' "
+        "nao aparece no ConsoleLog"
+    )
