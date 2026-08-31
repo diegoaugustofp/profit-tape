@@ -598,6 +598,7 @@ delas custou tres dumps inuteis num unico dia.
 | `SoAgressores` sem Plugin Tape Reading | vira `False` em SILENCIO (confirmado ativo aqui) |
 | `VolumeAtPrice` | historico curto |
 | livro | sem historico na automacao |
+| **tick a tick retido 1 SEMANA** | **`AgressionVolBuy/Sell` = ZERO fora da janela** |
 
 **A saida para o buffer** e' `LogDataInicio`/`LogDataFim`, que suprimem
 apenas o `ConsoleLog`. O indicador continua CALCULANDO sobre todo o
@@ -717,12 +718,20 @@ Nao e' licenca, nao e' simbolo, nao e' timeframe: o periodo 24/07-19/08
 **se sobrepoe a dois dumps que funcionaram no mesmo dia** (01/07-24/07 e
 28/07-21/08, ambos com agressao valida).
 
-Hipotese que resta: `QuantityVol` vem do volume consolidado da barra,
-que acompanha o historico do grafico, enquanto `AgressionVolBuy/Sell`
-dependem do dado tick a tick que o Profit baixa SOB DEMANDA. Grafico
-recriado ou recarregado ainda nao tem esse dado, e as funcoes devolvem
-zero em vez de esperar. **Testavel**: deixar o grafico aberto no periodo
-e gerar o dump de novo.
+**RESPONDIDO em 2026-08-31**: e' limite de RETENCAO. A documentacao do
+Profit diz que o dado **tick a tick e' mantido por uma semana**.
+
+Confirmado com dado: dump de 24/08 a 31/08 (dentro da semana) devolveu
+agressao valida em 648 de 648 barras, medianas 44.726 e 43.996 — o
+mesmo grafico, o mesmo simbolo, o mesmo `.ntsl`.
+
+Minha hipotese anterior ("grafico recriado ainda nao baixou o dado")
+estava ERRADA, e a diferenca importa: carregamento pendente se resolve
+esperando; **retencao nao se resolve de jeito nenhum**. Quem achou a
+resposta foi o operador, na documentacao.
+
+`QuantityVol` continua funcionando fora da janela porque vem do volume
+consolidado da barra, que acompanha o historico do grafico.
 
 ### Por que isso e' grave
 
@@ -744,3 +753,28 @@ A checagem compara as DUAS fontes de proposito: agressao zero COM volume
 zero e' barra sem negocio (normal, tem teste proprio) e nao dispara.
 Agressao zero COM volume presente e' contradicao. Uma guarda que grita a
 toa acaba desligada.
+
+
+## JANELA UTIL DO INDICADOR: uma semana
+
+Consolidando o achado de 2026-08-31, porque ele muda o que da' para
+fazer com o `.ntsl`:
+
+    OHLC + QuantityVol           anos de historico
+    AgressionVolBuy/Sell         ULTIMA SEMANA
+
+Como `absorcao_dir` depende de `imbalance`, que depende da agressao, o
+indicador so' produz numero VALIDO na ultima semana. Fora dela ele
+produz numero PLAUSIVEL e errado: `-desloc_norm`.
+
+**Como usar na pratica**
+
+    LogDataInicio = <segunda-feira da semana corrente>
+
+Um dump por semana, ~550 barras no 5m — bem abaixo do buffer de 2.000
+linhas, entao o problema do buffer some junto.
+
+Para acumular serie longa de agressao a partir do grafico seria preciso
+um dump por semana, toda semana, indefinidamente. E' possivel, mas e'
+exatamente o que o `record` via ProfitDLL ja' faz sozinho e melhor —
+motivo a mais para acumular tape ser a via principal.

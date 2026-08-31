@@ -3125,6 +3125,45 @@ consegue produzir: fora da amostra, em regimes diferentes.
    da amostra — que e' a unica razao de o conjunto valer alguma coisa.
 4. Toda rodada sobre o grafico entra no `trials.json` normalmente.
 
+### CORRECAO CRITICA (2026-08-31): a agressao so' existe na ULTIMA SEMANA
+
+**Esta politica foi escrita com uma premissa ERRADA e precisa ser lida
+com esta correcao.**
+
+Medido: dump de 24/07 devolveu `AgressionVolBuy/Sell` = ZERO em 2.001
+barras; dump de 24/08 a 31/08 (mesma semana) devolveu valores validos em
+648 de 648, medianas 44.726 e 43.996. A documentacao do Profit confirma:
+o dado **tick a tick e' retido por uma semana**.
+
+E' limite de RETENCAO, nao de carregamento — nenhuma espera resolve. (A
+hipotese anterior, "grafico recriado ainda nao baixou o dado", estava
+errada; foi o operador quem achou a resposta na documentacao.)
+
+**O que sobra do historico profundo do grafico:**
+
+    OHLC + volume total          ANOS de historico
+    agressao (imbalance, etc.)   ULTIMA SEMANA apenas
+
+**Consequencia sobre esta politica**: o grafico continua sendo um
+conjunto cego valioso, mas **so' para features que nao usem agressao**.
+`imbalance`, `absorcao_dir` e as quatro cores estao TODAS fora — sao de
+agressao.
+
+Isso soma-se ao limite ja' registrado (o grafico so' da' barra de TEMPO,
+e `z_agf_3` vive em barra de VOLUME). Os dois juntos reduzem o uso
+imediato do historico do grafico a praticamente nada:
+
+| feature | barra de tempo? | agressao? | testavel no grafico? |
+|---|---|---|---|
+| `z_agf_3` | nao (volume) | sim | **NAO** |
+| `absorcao_dir` | sim | sim | so' na ultima semana |
+| qualquer coisa de OHLC puro | sim | nao | **SIM**, anos |
+
+**O que NAO muda**: a equivalencia ja' fechada (rodou dentro da janela,
+2.001 barras) e o pipeline `profit-tape`, que captura via ProfitDLL e
+ACUMULA em disco — e' justamente por isso que acumular tape continua
+sendo a via principal.
+
 ### O que E' e o que NAO E' reproduzivel (medido em 2026-08-30)
 
     imbalance    EXATO      2001/2001, diferenca maxima 0,000000
