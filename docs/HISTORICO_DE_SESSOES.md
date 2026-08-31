@@ -29,7 +29,7 @@ documentos de assunto — só resuma e aponte.
 
 ---
 
-## 2026-08-30 (noite) — drawdown: desenho + pré-voo (v1.45)
+## 2026-08-30/31 — drawdown: desenho + pré-voo (v1.45–v1.46)
 
 Continuação da sessão de 29/08, depois de atualizar o clone para
 v1.44. Três perguntas já estavam fechadas na sessão do dia; esta abre a
@@ -79,8 +79,31 @@ v1.44. Três perguntas já estavam fechadas na sessão do dia; esta abre a
 - Meu validador de âncoras ad hoc estava ERRADO (colapsava `--` em `-`);
   o oficial `tools/valida_ancoras.py` é o certo. Só ele daqui em diante.
 
+### 31/08 — dois pré-voos falharam, do jeito certo (v1.46)
+- 1a rodada: `data/raw` local só tinha 27/08 → 5 ops em 1 pregão →
+  parcelas 1,00/1,00/1,00 por tautologia. Checagem de população pegou.
+  Causa já documentada em OPERACAO.md como "recomendação não
+  implementada". Agora implementada: `decomposicao-drawdown` recusa
+  < 5 pregões.
+- 2a rodada, apontada para o backup: 25 pregões, MAS **147 ops / +3883 /
+  Calmar 2,85** contra **157 / +418 / 0,23** de 28/08. Mesmo código
+  (`git diff` em `ea/`: zero linhas), mesmo config. Replay é
+  determinístico ⇒ os ARQUIVOS diferem. Hipóteses: backup não é cópia
+  fiel (incidente dos 96 footers + re-download via GetHistoryTrades sem
+  reentregas), ou leu de curated (dedup). Toca o conflito de docs
+  (errata 21/08 "sem duplicata" vs 22/08 "volume real é metade") — agora
+  com número: 9× no P&L. **Anterior ao drawdown.** Nenhum dos dois tem
+  direito a ser chamado de "a rodada de 25 dias".
+- `inspect` ficou 8h mudo tentando responder: concatenava 25 pregões em
+  memória sem imprimir. Corrigido (contagem por metadados em segundos,
+  guarda de tamanho, `--dia`, progresso). 7 testes, 374 no total.
+
 ### Pendências
-- Operador roda `ea-replay-lote` (persiste) e `decomposicao-drawdown`.
+- Operador: `inspect <backup> --contagem` e `inspect data\curated
+  --contagem`; qual `--raiz-raw` usou na 2a rodada; `duplicatas` sobre
+  um dia presente nas duas árvores.
+- Só depois de reconciliar: `decomposicao-drawdown` sobre a árvore
+  certa.
 - Com a fonte dominante em mãos + regra de aceite + grade de L:
   pré-registro do trade-off.
 

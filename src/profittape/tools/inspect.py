@@ -47,7 +47,62 @@ def _msg(texto: str) -> None:
     print(texto, flush=True)
 
 
-def resumir(caminho: Path, stream: str = "trade") -> None:
+LIMITE_LINHAS_SEM_CONFIRMACAO = 20_000_000
+
+
+def contar_por_dia(alvo: Path) -> list[dict[str, Any]]:
+    """
+    Contagem por particao dt= lendo SO' o footer de cada parquet (metadados):
+    arquivos, linhas, bytes. Nao carrega dado nenhum -- segundos mesmo em
+    HDD USB com 25 pregoes, contra horas do resumo completo.
+
+    Esta e' a pergunta que o operador faz na pratica ("quantos dias, quanto
+    de cada, e' a mesma populacao?") e ela nao precisa de nada alem do
+    footer. Incidente real (2026-08-30/31): inspect ficou 8h mudo tentando
+    concatenar 25 pregoes (~88M linhas) em memoria, quando a resposta
+    procurada cabia num footer.
+    """
+    import re as _re
+
+    import pyarrow.parquet as pq
+
+    por_dia: dict[str, dict[str, Any]] = {}
+    for arq in sorted(alvo.rglob("*.parquet")):
+        if arq.name.endswith(".inprogress"):
+            continue
+        m = _re.search(r"dt=([0-9-]+)", str(arq))
+        dt = m.group(1) if m else "(sem dt=)"
+        d = por_dia.setdefault(dt, {"dt": dt, "arquivos": 0, "linhas": 0,
+                                    "bytes": 0, "ilegiveis": 0})
+        d["arquivos"] += 1
+        try:
+            d["bytes"] += arq.stat().st_size
+            d["linhas"] += pq.ParquetFile(arq).metadata.num_rows
+        except Exception:
+            d["ilegiveis"] += 1          # footer ausente: o relatorio() ja avisa
+    return sorted(por_dia.values(), key=lambda r: r["dt"])
+
+
+def _imprimir_contagem(linhas_por_dia: list[dict[str, Any]], alvo: Path) -> int:
+    print("=" * 78)
+    print(f"CONTAGEM POR DIA (metadados, sem carregar dado) — {alvo.resolve()}")
+    print("=" * 78)
+    print(f"  {'dt':<12} {'arquivos':>8} {'linhas':>14} {'MB':>9} {'ilegiveis':>9}")
+    total = 0
+    for r in linhas_por_dia:
+        total += r["linhas"]
+        print(f"  {r['dt']:<12} {r['arquivos']:>8} {r['linhas']:>14,} "
+              f"{r['bytes'] / 1e6:>9.1f} {r['ilegiveis'] or '':>9}")
+    print(f"  {'TOTAL':<12} {sum(r['arquivos'] for r in linhas_por_dia):>8} "
+          f"{total:>14,} {sum(r['bytes'] for r in linhas_por_dia) / 1e6:>9.1f}")
+    print(f"  dias: {len(linhas_por_dia)}")
+    return total
+
+
+def resumir(caminho: Path, stream: str = "trade", dia: str | None = None,
+            completo: bool = False, so_contagem: bool = False) -> None:
+    import time as _time
+    t0 = _time.monotonic()
     candidato = caminho / stream
     if candidato.exists():
         alvo = candidato
@@ -74,6 +129,17 @@ def resumir(caminho: Path, stream: str = "trade") -> None:
     # antigo, esquecido, e devolveu um relatorio de dado JA CORRIGIDO parecendo
     # o incidente antigo — sem erro, sem aviso, so' silenciosamente errado.
     _msg(f"Escaneando arquivos parquet em {alvo.resolve()} ...")
+    total_meta = _imprimir_contagem(contar_por_dia(alvo), alvo)
+    _msg(f"  (contagem em {_time.monotonic() - t0:.1f}s)\n")
+    if so_contagem:
+        return
+    if dia is None and total_meta > LIMITE_LINHAS_SEM_CONFIRMACAO and not completo:
+        _msg(f"Arvore com {total_meta:,} linhas: a auditoria completa carrega TUDO em "
+             f"memoria e leva horas em HDD/USB (incidente real: 8h em silencio).")
+        _msg("  Para auditar UM dia:        inspect <caminho> --dia 2026-08-11")
+        _msg("  Para forcar a arvore toda:  inspect <caminho> --completo")
+        _msg("  So' a contagem acima:       inspect <caminho> --contagem")
+        return
     corrompidos, _ = relatorio(alvo)
     # ds.dataset varre QUALQUER arquivo no diretorio, inclusive os
     # .parquet.inprogress (escrita interrompida) — o relatorio acima ja os
@@ -85,7 +151,10 @@ def resumir(caminho: Path, stream: str = "trade") -> None:
     arquivos_validos = [
         str(p) for p in alvo.rglob("*.parquet")
         if not p.name.endswith(".inprogress")
+        and (dia is None or f"dt={dia}" in str(p))
     ]
+    if dia is not None and not arquivos_validos:
+        raise SystemExit(f"nenhum arquivo .parquet em {alvo.resolve()} para dt={dia}")
     if not arquivos_validos:
         raise SystemExit(
             f"nenhum arquivo .parquet finalizado em {alvo.resolve()} "
@@ -120,7 +189,10 @@ def resumir(caminho: Path, stream: str = "trade") -> None:
     import re as _re
 
     import pyarrow as _pa
-    for frag in dataset.get_fragments():
+    fragmentos = list(dataset.get_fragments())
+    linhas_acum = 0
+    t_loop = _time.monotonic()
+    for i, frag in enumerate(fragmentos, start=1):
         try:
             # Cada fragmento pode ter schema proprio (rodadas diferentes). Pede
             # so' as colunas que ELE tem, entre as desejadas — evita derrubar o
@@ -139,8 +211,15 @@ def resumir(caminho: Path, stream: str = "trade") -> None:
                         "dt", _pa.array([m.group(1)] * t.num_rows, _pa.string())
                     )
             fragmentos_ok.append(t)
+            linhas_acum += t.num_rows
         except Exception as exc:
             problemas.append((frag.path, type(exc).__name__ + ": " + str(exc)[:120]))
+        # Progresso a cada arquivo: era AQUI que o inspect ficava mudo por
+        # horas. Convencao do projeto: [i/N] + acumulado + decorrido + ETA.
+        dec = _time.monotonic() - t_loop
+        eta = dec / i * (len(fragmentos) - i)
+        _msg(f"  [{i}/{len(fragmentos)}] {linhas_acum:,} linhas  "
+             f"decorrido {dec / 60:.1f}min  restante~{eta / 60:.1f}min")
     if problemas:
         print(f"\n  ATENCAO: {len(problemas)} arquivo(s) ilegiveis, PULADOS:")
         for caminho_arquivo, erro in problemas[:10]:

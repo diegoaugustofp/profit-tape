@@ -546,3 +546,34 @@ lacuna é registrada de propósito, não escondida.
 2026-08-29, a partir de um fragmento do diagnóstico original fornecido
 pelo operador — a sessão original não foi localizada nas conversas
 pesquisadas.)
+
+
+## INCIDENTE: inspect 8h mudo em 25 pregoes — corrigido (2026-08-31)
+
+`inspect G:\data\raw` ficou 8 horas sem emitir nada. Causa, no codigo:
+depois de "Carregando N arquivo(s)..." o inspect entrava num loop que
+CONCATENA A ARVORE INTEIRA em memoria (~88M linhas em 25 pregoes) sem
+imprimir nada ate' o fim. Em HDD USB isso e' horas, e pode nem caber na
+RAM. E' a mesma licao do pyarrow que `remanescente_tape` ja' tinha
+aprendido (streaming por dia); o inspect era anterior.
+
+Correcao, em tres partes:
+
+1. **Contagem por dia via METADADOS, sempre primeiro.** Le so' o footer
+   de cada parquet: arquivos, linhas, MB, ilegiveis por `dt=`. Segundos.
+   E' o que responde a pergunta que estava sendo feita ("e' a mesma
+   populacao?"). `inspect <raiz> --contagem` para SO' isso.
+2. **Guarda de tamanho.** Acima de 20M linhas (por metadado), a
+   auditoria completa NAO roda sem `--completo` explicito. Para auditar
+   um dia: `inspect <raiz> --dia 2026-08-11`.
+3. **Progresso `[i/N]` com ETA** dentro do loop que era mudo.
+
+Uso recomendado daqui em diante, nesta ordem:
+
+    profit-tape inspect G:\data\raw --contagem        # segundos
+    profit-tape inspect data\curated --contagem
+    profit-tape inspect G:\data\raw --dia 2026-08-11  # um dia, completo
+
+O `decomposicao-drawdown` tambem ganhou guarda: recusa populacao abaixo
+de 5 pregoes com dica de `--raiz-raw` (incidente do mesmo dia: rodou
+sobre 1 pregao e devolveu parcelas 1,00 por tautologia).

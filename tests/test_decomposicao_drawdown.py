@@ -84,11 +84,17 @@ def test_difuso_quando_nenhuma_parcela_chega_a_metade() -> None:
 
 
 def test_ponta_a_ponta_gera_relatorio(tmp_path: Path) -> None:
+    # 3 dias da serie conferida a mao + 3 dias de ganhos pequenos (nao
+    # criam drawdown novo, so' satisfazem o minimo de 5 pregoes).
+    ops = _ops()
+    extra = pd.DataFrame({"dia": [date(2026, 8, 4), date(2026, 8, 5), date(2026, 8, 6)],
+                          "seq_no_dia": [1, 1, 1], "pnl_liquido": [5.0, 5.0, 5.0]})
+    ops = pd.concat([ops, extra], ignore_index=True)
     arq = tmp_path / "ops.parquet"
-    _ops().to_parquet(arq, index=False)
+    ops.to_parquet(arq, index=False)
     r = decompor_drawdown(arq, tmp_path / "out", n_bootstrap=50)
     assert r["drawdown_maximo"] == 260.0
-    assert r["calmar"] == pytest.approx(PNL.sum() / 260.0)
+    assert r["calmar"] == pytest.approx((PNL.sum() + 15.0) / 260.0)
     assert len(r["trechos"]) == 2
     assert r["jackknife"]["minimo"] <= r["jackknife"]["maximo"]
     texto = Path(r["relatorio"]).read_text(encoding="utf-8")
@@ -114,3 +120,14 @@ def test_gestor_registra_operacao_detalhada() -> None:
     # os historicos antigos continuam iguais (retrocompatibilidade)
     assert g.historico_pnl == [pnl]
     assert g.historico_operacoes == [(-1, pnl)]
+
+
+def test_recusa_populacao_de_um_pregao(tmp_path: Path) -> None:
+    """Incidente 2026-08-31: 5 ops em 1 pregao -> parcelas 1,00 por
+    tautologia. Agora recusa com dica de --raiz-raw."""
+    ops = pd.DataFrame({"dia": [date(2026, 8, 27)] * 5, "seq_no_dia": range(1, 6),
+                        "pnl_liquido": [599.0, 499.0, -56.0, -181.0, -206.0]})
+    arq = tmp_path / "ops.parquet"
+    ops.to_parquet(arq, index=False)
+    with pytest.raises(SystemExit, match="populacao insuficiente"):
+        decompor_drawdown(arq, tmp_path / "out", n_bootstrap=10)

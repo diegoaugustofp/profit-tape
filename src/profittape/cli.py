@@ -125,11 +125,26 @@ def doctor(
 def inspect(
     caminho: Path = typer.Argument(..., help="Diretorio ou arquivo Parquet."),
     stream: str = typer.Option("trade", "--stream"),
+    dia: str | None = typer.Option(
+        None, "--dia", help="Auditoria completa de UM dt=YYYY-MM-DD apenas."),
+    completo: bool = typer.Option(
+        False, "--completo",
+        help="Forca a auditoria completa da arvore inteira mesmo se for grande "
+             "(carrega tudo em memoria; horas em HDD/USB)."),
+    contagem: bool = typer.Option(
+        False, "--contagem",
+        help="So' a contagem por dia via metadados (segundos). E' o que "
+             "responde 'e' a mesma populacao?'."),
 ) -> None:
-    """Resumo do que foi gravado: contagem, cobertura temporal, tipos de negocio."""
+    """
+    Resumo do que foi gravado. SEMPRE comeca pela contagem por dia lida dos
+    footers (segundos). A auditoria completa (que carrega o dado) so' roda
+    para um --dia, para arvores pequenas, ou com --completo explicito --
+    incidente real: 8h mudo tentando concatenar 25 pregoes em memoria.
+    """
     from .tools.inspect import resumir
 
-    resumir(caminho, stream)
+    resumir(caminho, stream, dia=dia, completo=completo, so_contagem=contagem)
 
 
 @app.command()

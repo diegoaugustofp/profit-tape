@@ -57,6 +57,7 @@ import structlog
 log = structlog.get_logger(__name__)
 
 LIMIAR_DOMINANTE = 0.50
+MINIMO_PREGOES = 5
 
 
 @dataclass(frozen=True)
@@ -206,6 +207,16 @@ def decompor_drawdown(arquivo_operacoes: Path, saida: Path,
     if len(ops) < 2:
         raise SystemExit("menos de 2 operacoes: nao ha' curva para decompor")
 
+    n_dias = int(ops["dia"].nunique())
+    if n_dias < MINIMO_PREGOES:
+        # Incidente real (2026-08-31): replay rodou sobre 1 pregao (data/raw
+        # local so' tinha o ultimo dia; o resto estava no backup) e a
+        # decomposicao devolveu parcelas 1,00/1,00/1,00 -- tautologia de um
+        # dia so', que parece resultado. Recusar e' mais honesto que reportar.
+        raise SystemExit(
+            f"populacao insuficiente: {len(ops)} operacoes em {n_dias} pregao(oes). "
+            f"Minimo {MINIMO_PREGOES}. Provavel --raiz-raw errado no ea-replay-lote "
+            "(confira `inspect <raiz> --contagem` antes: quantos dt= existem la').")
     pnl = ops["pnl_liquido"].to_numpy(dtype=float)
     trechos = drawdowns(pnl, quantos=3)
     if not trechos:
