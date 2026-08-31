@@ -59,6 +59,10 @@ arquivo cresceu demais para navegar so' por titulo cronologico).
   — ENCERRADO: a premissa (Calmar 0,23) era dado contaminado; sobre
   curated Calmar 4,08. Achado real: stop catastrófico checado só no
   close, três perdas além de 500.
+- [STOP CONTÍNUO: pré-voo instrumentado, três regimes de saída (2026-08-31b)](#stop-contínuo-pré-voo-instrumentado-três-regimes-de-saída-2026-08-31b)
+  — premissa CONFIRMADA no parquet; instrumento entregue, resultado
+  pendente da rodada do Diego. Errata: o antigo "pnl com stop
+  hipotético" media o regime contínuo e o rotulava como o atual.
 - [Curva de patrimonio / drawdown maximo (2026-08-27)](#curva-de-patrimonio--drawdown-maximo-2026-08-27)
 - [Risco realizado (VaR/ES) — primeiro passo aplicado do RQ (2026-08-27)](#risco-realizado-vares--primeiro-passo-aplicado-do-rq-2026-08-27)
 - [Resultado real do risco-realizado + correcao de bug de exibicao (2026-08-27)](#resultado-real-do-risco-realizado--correcao-de-bug-de-exibicao-2026-08-27)
@@ -3404,3 +3408,98 @@ sinal no mesmo dado. Compatível com ruído (EP ~32), mas a direção pede
 olhar: o EA executa 99 de ~178 gatilhos por "uma posição de cada vez".
 Se isso seleciona sistematicamente o primeiro gatilho de cada
 aglomerado, é um filtro que ninguém pré-registrou.
+
+## STOP CONTÍNUO: pré-voo instrumentado, três regimes de saída (2026-08-31b)
+
+Sessão de DESENHO (regra 7) para a pendência aberta ontem: fazer o gestor
+de risco reagir por negócio em vez de esperar o fechamento da barra.
+Nenhuma mudança de comportamento do EA foi feita — só instrumentação de
+medição, que não gasta trial.
+
+### A premissa foi confirmada antes de qualquer coisa
+
+Pendência explícita deixada ontem ("conferir no `operacoes_replay.parquet`
+o `motivo` dessas três operações") — fechada:
+
+| lado | entrada | saída | pnl líquido | motivo |
+|---|---|---|---|---|
+| −1 | 174090 | 174705 | −626 | STOP CATASTROFICO: 615 pts contra (limite 500) |
+| −1 | 169055 | 169645 | −601 | STOP CATASTROFICO: 590 pts contra (limite 500) |
+| −1 | 171630 | 172195 | −576 | STOP CATASTROFICO: 565 pts contra (limite 500) |
+
+As três piores logo abaixo (−436, −421, −371) saíram por tempo, todas
+abaixo de 500. **Todas as três são de venda.** Ao contrário do drawdown,
+esta premissa se sustenta: o mecanismo vivo não cumpre a própria spec.
+
+### Descoberta de percurso: o caminho por trade já existe
+
+Ao vivo, `_on_trade` já enfileira TODO negócio e o loop principal já chama
+`processar_trade_bruto(t)` para cada um — o que acontece é que o núcleo
+retorna cedo quando a barra não fecha. Não é preciso callback novo, thread
+nova nem mudança de latência: a cadência por negócio já está lá. Isso
+torna a implementação cirúrgica, **não** dispensa o desenho.
+
+### O risco de desenho, e por que ele precisa de número antes
+
+O stop de 500 é seguro de CAUDA, não stop tático. Morde em 3 de 99
+operações no close. A pergunta que decide tudo: **quantas operações tocam
+−500 no meio da barra e voltam?** Se forem as mesmas 3, é conformidade
+pura. Se dobrar ou mais, o guarda de cauda vira stop TÁTICO — e o projeto
+já tem veredito sobre o que stop apertado faz num sinal de ~43% de acerto
+que ganha por magnitude.
+
+O relatório existente NÃO respondia isso: `mae.py` calculava
+`mae_intrabar` mas só reportava p90/p99/máximo dele — a contagem no
+limiar (`n_teria_batido_stop`) era calculada **só sobre `mae_close`**.
+
+### ERRATA: o número antigo media o regime errado
+
+`pnl_medio_com_stop_hipotetico` substituía o resultado por `-stop` sempre
+que `mae_close` cruzava. Isso modela o stop saindo EXATAMENTE no limite —
+que é o comportamento do regime CONTÍNUO, não do que roda hoje (o de hoje
+sai no close da barra que cruzou: −615, não −500). **Aquele número media
+o regime proposto e o rotulava como o atual; os dois regimes nunca tinham
+sido separados.** Removido, com errata no relatório gerado.
+
+### O que o instrumento passa a medir
+
+- **Frequência** no limiar, nos dois regimes, quebrada POR LADO (o EA roda
+  venda-apenas; a venda já bate mais no close, 6,2% contra 4,0%).
+- **Conformidade**: o excesso do close além do limite quando cruza —
+  média/mediana/máximo. É a falha de granularidade, medida (615 − 500 = 115).
+- **Três regimes** de P&L bruto médio: sem stop / stop no CLOSE (preço real
+  da barra que cruzou) / stop CONTÍNUO (~ −S na impressão que cruza).
+- **Conjunto MARGINAL** — as operações com `mae_intrabar ≥ S` mas
+  `mae_close < S`, as que só o contínuo mata: quantas são, qual o P&L
+  delas se deixadas correr, e **quantas terminaram positivas**. Este é o
+  número do veredito.
+
+Limitação registrada e não corrigida: o regime contínuo é OTIMISTA por uma
+granularidade de tick (modela saída exata em −S, mas uma impressão pode
+pular o limite). High/low de barra não carrega a sequência de impressões
+necessária para medir esse pulo.
+
+Conferido à mão antes dos testes (regra 4): duas vendas, entrada 100, h=3,
+stop=50 — 11 valores esperados calculados no papel, todos batendo
+(marginal +10 positiva; excesso 15; médias −15,0 / −27,5 / −50,0).
+
+### Ainda EM ABERTO — nada foi decidido
+
+Rodar `features` + `mae-analise --feature z_agf_3 --horizonte 3
+--threshold-entrada 1.4 --stop-catastrofico-pontos 500`. Só depois do
+resultado da linha de VENDA se escreve o pré-registro, com teto de
+frequência comprometido ANTES de ver o efeito no P&L.
+
+Decisões de desenho já acordadas, a congelar no pré-registro:
+1. Escopo: **só** o stop catastrófico vira contínuo. Saída por tempo
+   continua na barra (é o relógio que o research mediu). Rota B fora.
+2. Preço de saída: a impressão que cruzou, não o limite.
+3. Reentrada na mesma barra: **proibida** (hoje sair no close já impede
+   entrada naquela barra; liberar seria uma segunda mudança disfarçada).
+4. `bar_id_saida`: id da barra em formação, com a saída marcada como
+   intrabarra no log — senão `barras_duracao` mente.
+5. Negócio descartado em `queue.Full`: o stop fica armado, o descarte só
+   adia para a próxima impressão. Limitação conhecida, não tratada.
+
+Critério de decisão será de **CONFORMIDADE, não de P&L**: os 270 pts em 3
+operações não calibram nada (regra 3).

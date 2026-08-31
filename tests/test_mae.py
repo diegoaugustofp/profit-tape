@@ -315,3 +315,133 @@ def test_quebra_por_lado_inclui_mfe_mediana(tmp_path: Path) -> None:
 
     conteudo = Path(r["relatorio"]).read_text(encoding="utf-8")
     assert "MFE_close mediana" in conteudo
+
+
+# ---------------------------------------------------------------------------
+# TRES REGIMES DE SAIDA (2026-08-31, pre-voo do stop continuo).
+# Cenario CONFERIDO A MAO antes destes testes (regra 4 da disciplina):
+# duas vendas, entrada 100, h=3, stop=50.
+#
+#   Op A (idx1): closes 130,120,90 | highs 155,140,125
+#     exc_close    = 30, 20, -10 -> MAE_close    = 30  (NAO cruza)
+#     exc_intrabar = 55, 40,  25 -> MAE_intrabar = 55  (CRUZA)
+#     -> MARGINAL, pnl_final = (90-100)*-1 = +10 (POSITIVA)
+#   Op B (idx5): closes 165,150,140 | highs 170,155,145
+#     exc_close    = 65, 50, 40 -> primeiro cruzamento em 65 (excesso 15)
+#     -> pnl_final = -40, stop close = -65, stop continuo = -50
+#
+#   agregados: sem stop -15.0 | stop close -27.5 | stop continuo -50.0
+# ---------------------------------------------------------------------------
+
+def _df_tres_regimes() -> pd.DataFrame:
+    return pd.DataFrame({
+        "dia": ["2026-01-01"] * 10,
+        "ts_close": np.arange(10) * 10**11,
+        "close": [50, 100, 130, 120, 90, 100, 165, 150, 140, 60],
+        "high":  [51, 101, 155, 140, 125, 101, 170, 155, 145, 61],
+        "low":   [49,  99, 125, 115,  85,  99, 160, 145, 135, 59],
+        "z_agf_3": [0, 1.5, 0, 0, 0, 1.5, 0, 0, 0, 0],   # vende em 1 e 5
+    })
+
+
+def _rodar_tres_regimes(tmp_path: Path) -> dict:
+    arq = tmp_path / "features.parquet"
+    _df_tres_regimes().to_parquet(arq, index=False)
+    return analisar_mae(arq, "z_agf_3", horizonte=3, threshold_entrada=1.4,
+                        direcao="contrarian", stop_catastrofico_pontos=50,
+                        saida=tmp_path / "out", treino_min=0)
+
+
+def test_stop_continuo_dispara_onde_o_close_nao_dispara(tmp_path: Path) -> None:
+    """A pergunta que decide o desenho: o continuo morde mais que o close?
+    Op A cruza 50 no high (55) mas nunca no close (30) -- e' exatamente a
+    classe de operacao que o stop continuo mata a mais."""
+    r = _rodar_tres_regimes(tmp_path)
+    assert r["n_teria_batido_stop"] == 1            # so' a Op B
+    assert r["n_teria_batido_stop_intrabar"] == 2   # A e B
+    t = r["tabela"]
+    assert not t["teria_batido_stop"].iloc[0]
+    assert t["teria_batido_stop_intrabar"].iloc[0]
+
+
+def test_marginais_sao_as_que_so_o_continuo_mata(tmp_path: Path) -> None:
+    """O conjunto do veredito: se as marginais terminam POSITIVAS, o stop
+    continuo esta cortando a cauda que paga a conta."""
+    r = _rodar_tres_regimes(tmp_path)
+    assert r["n_marginais"] == 1
+    assert r["n_marginais_positivas"] == 1
+    assert r["pct_marginais_positivas"] == 1.0
+    assert r["pnl_marginais_medio"] == 10.0   # Op A deixada correr: +10
+    t = r["tabela"]
+    assert t["marginal_so_intrabar"].iloc[0]       # Op A e' marginal
+    assert not t["marginal_so_intrabar"].iloc[1]   # Op B bate nos dois
+
+
+def test_stop_no_close_sai_no_preco_real_nao_no_limite(tmp_path: Path) -> None:
+    """O bug que esta versao existe para consertar: o stop do close NAO sai
+    em -50, sai em -65 (o close da barra que cruzou). E' o analogo das
+    perdas reais de -615/-590/-565 contra um limite de 500."""
+    r = _rodar_tres_regimes(tmp_path)
+    t = r["tabela"]
+    assert t["pnl_stop_close"].iloc[1] == -65.0      # preco REAL do close
+    assert t["pnl_stop_continuo"].iloc[1] == -50.0   # ~ no limite
+    assert t["excesso_close"].iloc[1] == 15.0        # 65 - 50
+    assert r["excesso_close_medio"] == 15.0
+    assert r["excesso_close_max"] == 15.0
+
+
+def test_operacao_que_nao_bate_stop_nenhum_mantem_pnl_do_horizonte(tmp_path: Path) -> None:
+    """Retrocompatibilidade do calculo: sem cruzamento, os tres regimes
+    coincidem com a saida por tempo -- o stop nao inventa saida."""
+    arq = tmp_path / "features.parquet"
+    _df_basico().to_parquet(arq, index=False)   # compra, MAE_intrabar=10
+    r = analisar_mae(arq, "z_agf_3", horizonte=3, threshold_entrada=1.4,
+                     direcao="contrarian", stop_catastrofico_pontos=500,
+                     saida=tmp_path / "out", treino_min=0)
+    t = r["tabela"]
+    assert not t["teria_batido_stop"].iloc[0]
+    assert not t["teria_batido_stop_intrabar"].iloc[0]
+    assert not t["marginal_so_intrabar"].iloc[0]
+    assert pd.isna(t["excesso_close"].iloc[0])
+    assert t["pnl_stop_close"].iloc[0] == t["pnl_final_h"].iloc[0]
+    assert t["pnl_stop_continuo"].iloc[0] == t["pnl_final_h"].iloc[0]
+    assert r["n_marginais"] == 0
+    assert pd.isna(r["pct_marginais_positivas"])
+
+
+def test_media_dos_tres_regimes(tmp_path: Path) -> None:
+    """Conferido a mao: (10-40)/2, (10-65)/2, (-50-50)/2."""
+    r = _rodar_tres_regimes(tmp_path)
+    assert r["pnl_medio_sem_stop"] == -15.0
+    assert r["pnl_medio_stop_close"] == -27.5
+    assert r["pnl_medio_stop_continuo"] == -50.0
+
+
+def test_contagem_por_lado_separa_close_de_continuo(tmp_path: Path) -> None:
+    """O EA roda venda-apenas: a contagem que decide o pre-registro e' a do
+    lado, nao a agregada."""
+    r = _rodar_tres_regimes(tmp_path)
+    v = r["stats_venda"]
+    assert v["n"] == 2
+    assert v["n_batido_stop"] == 1
+    assert v["n_batido_stop_intrabar"] == 2
+    assert v["n_marginais"] == 1
+    assert v["n_marginais_positivas"] == 1
+    # lado sem nenhuma operacao devolve o esqueleto completo, sem KeyError
+    c = r["stats_compra"]
+    assert c["n"] == 0
+    assert c["n_batido_stop_intrabar"] == 0
+    assert c["n_marginais"] == 0
+
+
+def test_relatorio_traz_os_tres_regimes_e_a_errata(tmp_path: Path) -> None:
+    r = _rodar_tres_regimes(tmp_path)
+    conteudo = Path(r["relatorio"]).read_text(encoding="utf-8")
+    assert "FREQUENCIA" in conteudo
+    assert "CONFORMIDADE" in conteudo
+    assert "TRES REGIMES" in conteudo
+    assert "MARGINAIS" in conteudo
+    assert "ERRATA" in conteudo
+    assert "VENDA-APENAS" in conteudo
+    # a chave enganosa nao volta por acidente
+    assert "pnl_medio_com_stop_hipotetico" not in r

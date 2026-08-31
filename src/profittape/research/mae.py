@@ -18,13 +18,19 @@ Metodologia:
     de barra, nao intrabar continuo). Este e' o numero PRIMARIO: o que o
     nosso sistema de verdade teria visto.
   - MAE_intrabar: pior excursao usando o LOW (se comprado) ou HIGH (se
-    vendido) de cada barra -- limite mais severo, o que uma ordem de stop
-    reagindo em tempo real (nao so' no fechamento) poderia ter sofrido.
-    Reportado como referencia adicional -- nosso sistema real NAO monitora
-    intrabar, entao este numero e' teorico/conservador, nao o que
-    aconteceria na pratica hoje.
+    vendido) de cada barra -- o que uma ordem de stop reagindo por negocio
+    (nao so' no fechamento) teria visto.
   - Nunca cruza o dia (mesmo purge estrutural de retornos.py -- as ultimas
     h barras de cada pregao ficam de fora, sem futuro intra-dia).
+
+TRES REGIMES DE SAIDA (2026-08-31, pre-voo do stop continuo): o modulo
+compara explicitamente "sem stop" x "stop no CLOSE" (o que o EA faz hoje)
+x "stop CONTINUO" (o proposto), com o preco REAL de cada um -- mais a
+contagem no limiar por lado e o conjunto MARGINAL (as operacoes que so' o
+continuo mata). Ate' a versao anterior havia um unico numero hipotetico
+que modelava o stop do close saindo exatamente no limite, ou seja, media
+o regime continuo e o rotulava como o atual; os dois nunca tinham sido
+separados. Ver a secao de errata no relatorio gerado.
 """
 
 from __future__ import annotations
@@ -126,12 +132,60 @@ def analisar_mae(arquivo_features: Path, feature: str, horizonte: int,
 
         pnl_final = (janela["close"].iloc[-1] - entrada) * L
 
+        # TRES REGIMES DE SAIDA (2026-08-31, desenho do stop continuo).
+        # Antes desta versao havia um so' numero hipotetico
+        # ("pnl_medio_com_stop_hipotetico"), que substituia o resultado por
+        # -stop sempre que mae_close cruzava. Isso modelava o stop DO CLOSE
+        # como se ele saisse exatamente no limite -- que e' precisamente o
+        # que ele NAO faz. As tres perdas reais do replay de 25 pregoes
+        # (-615, -590, -565 brutos contra um limite de 500) saem no CLOSE da
+        # barra que cruzou, nao em -500. O numero antigo media o regime
+        # CONTINUO e o rotulava como o atual, entao nunca separou os dois
+        # regimes que esta sessao precisa comparar.
+        #
+        #   sem stop     -> close em h (Rota A pura)
+        #   stop close   -> close da PRIMEIRA barra com excursao_close >= S
+        #                   (o que o GestorDeRisco faz hoje, preco real)
+        #   stop continuo-> ~ -S na impressao que cruza, assim que o
+        #                   high/low da barra atinge o limite
+        S = stop_catastrofico_pontos
+        cruz_close = excursao_close[excursao_close >= S]
+        bateu_close = len(cruz_close) > 0
+        if bateu_close:
+            # sai no close da barra que cruzou: pnl = -excursao daquela barra
+            excursao_no_cruz = float(cruz_close.iloc[0])
+            pnl_stop_close = -excursao_no_cruz
+        else:
+            excursao_no_cruz = float("nan")
+            pnl_stop_close = pnl_final
+        # O stop continuo cruza sempre numa barra <= a do close (a excursao
+        # intrabar de uma barra e' >= a excursao no close dela, por
+        # construcao), entao nao ha caso de o close disparar e o continuo
+        # nao. Saida modelada em exatamente -S: OTIMISTA pela granularidade
+        # do tick (uma impressao pode pular o limite). Limitacao registrada,
+        # nao corrigida aqui -- high/low de barra nao carrega a sequencia de
+        # impressoes necessaria para medir esse pulo.
+        bateu_intrabar = bool(mae_intrabar >= S)
+        pnl_stop_continuo = -S if bateu_intrabar else pnl_final
+
         linhas.append({
             "dia": dia, "lado": L, "entrada": entrada,
             "mae_close": mae_close, "mae_intrabar": mae_intrabar,
             "mfe_close": mfe_close,
             "pnl_final_h": pnl_final,
-            "teria_batido_stop": mae_close >= stop_catastrofico_pontos,
+            "teria_batido_stop": bateu_close,
+            "teria_batido_stop_intrabar": bateu_intrabar,
+            # MARGINAIS: as operacoes que o stop continuo mata e o atual
+            # nao. Sao elas que decidem o veredito -- se a maioria termina
+            # positiva, o stop continuo esta cortando a cauda que paga a
+            # conta, exatamente o modo de falha ja conhecido para alvo fixo.
+            "marginal_so_intrabar": bateu_intrabar and not bateu_close,
+            # Excesso de granularidade: quanto o close passou do limite na
+            # barra que cruzou. E' o numero de CONFORMIDADE -- 615 contra
+            # 500 e' um excesso de 115.
+            "excesso_close": (excursao_no_cruz - S) if bateu_close else float("nan"),
+            "pnl_stop_close": pnl_stop_close,
+            "pnl_stop_continuo": pnl_stop_continuo,
         })
 
     r = pd.DataFrame(linhas)
@@ -141,17 +195,37 @@ def analisar_mae(arquivo_features: Path, feature: str, horizonte: int,
 
     n = len(r)
     n_batido = int(r["teria_batido_stop"].sum())
+    n_batido_intrabar = int(r["teria_batido_stop_intrabar"].sum())
+    marginais = r[r["marginal_so_intrabar"]]
+    n_marginais = len(marginais)
+    n_marginais_pos = int((marginais["pnl_final_h"] > 0).sum())
+    excesso = r["excesso_close"].dropna()
 
     def _stats_lado(sub: pd.DataFrame) -> dict[str, Any]:
         if sub.empty:
             return {"n": 0, "pnl_bruto_medio": float("nan"),
                    "mae_close_mediana": float("nan"),
                    "mfe_close_mediana": float("nan"),
-                   "pct_batido_stop": float("nan")}
+                   "pct_batido_stop": float("nan"),
+                   "n_batido_stop": 0,
+                   "n_batido_stop_intrabar": 0,
+                   "pct_batido_stop_intrabar": float("nan"),
+                   "n_marginais": 0,
+                   "n_marginais_positivas": 0}
+        marginais_lado = sub[sub["marginal_so_intrabar"]]
         return {
             "n": len(sub),
             "pnl_bruto_medio": sub["pnl_final_h"].mean(),
             "mae_close_mediana": sub["mae_close"].median(),
+            # Contagem por lado no limiar (2026-08-31): o EA roda
+            # venda-apenas, entao a frequencia AGREGADA nao e' a que decide
+            # -- a venda ja bate mais no close (6,2% contra 4,0%) e as tres
+            # perdas alem do limite no replay sao todas de venda.
+            "n_batido_stop": int(sub["teria_batido_stop"].sum()),
+            "n_batido_stop_intrabar": int(sub["teria_batido_stop_intrabar"].sum()),
+            "pct_batido_stop_intrabar": sub["teria_batido_stop_intrabar"].mean(),
+            "n_marginais": len(marginais_lado),
+            "n_marginais_positivas": int((marginais_lado["pnl_final_h"] > 0).sum()),
             # 2026-08-27, lacuna real achada rodando o MAE de novo com mais
             # dado: o MFE agregado (compra+venda misturados) nao serve para
             # congelar o par da Rota B, que precisa do MFE ESPECIFICO do
@@ -189,10 +263,29 @@ def analisar_mae(arquivo_features: Path, feature: str, horizonte: int,
         "mfe_close_p90": r["mfe_close"].quantile(0.9),
         "n_teria_batido_stop": n_batido,
         "pct_teria_batido_stop": n_batido / n,
+        "n_teria_batido_stop_intrabar": n_batido_intrabar,
+        "pct_teria_batido_stop_intrabar": n_batido_intrabar / n,
+        # Conformidade: quanto o close passou do limite quando cruzou.
+        "excesso_close_medio": excesso.mean() if len(excesso) else float("nan"),
+        "excesso_close_mediana": excesso.median() if len(excesso) else float("nan"),
+        "excesso_close_max": excesso.max() if len(excesso) else float("nan"),
+        # Os tres regimes (ver comentario no loop). pnl_medio_com_stop_
+        # hipotetico foi REMOVIDO de proposito: modelava o stop do close
+        # saindo em -S, que e' o comportamento do stop CONTINUO -- ler
+        # aquele numero como "o stop de hoje" era o erro que esta versao
+        # existe para consertar.
         "pnl_medio_sem_stop": r["pnl_final_h"].mean(),
-        "pnl_medio_com_stop_hipotetico": np.where(
-            r["teria_batido_stop"], -stop_catastrofico_pontos, r["pnl_final_h"]
-        ).mean(),
+        "pnl_medio_stop_close": r["pnl_stop_close"].mean(),
+        "pnl_medio_stop_continuo": r["pnl_stop_continuo"].mean(),
+        # As marginais: o conjunto que o continuo mata a mais.
+        "n_marginais": n_marginais,
+        "pnl_marginais_medio": (marginais["pnl_final_h"].mean()
+                                if n_marginais else float("nan")),
+        "pnl_marginais_mediana": (marginais["pnl_final_h"].median()
+                                  if n_marginais else float("nan")),
+        "n_marginais_positivas": n_marginais_pos,
+        "pct_marginais_positivas": (n_marginais_pos / n_marginais
+                                    if n_marginais else float("nan")),
         "stats_compra": stats_compra,
         "stats_venda": stats_venda,
     }
@@ -232,39 +325,85 @@ def analisar_mae(arquivo_features: Path, feature: str, horizonte: int,
         f"- mediana: {resumo['mfe_close_mediana']:.1f} pts",
         f"- p10: {resumo['mfe_close_p10']:.1f} pts",
         f"- p90: {resumo['mfe_close_p90']:.1f} pts\n",
-        f"## Quantas operacoes teriam BATIDO o stop catastrofico "
-        f"({stop_catastrofico_pontos:.0f} pts) antes do horizonte natural\n",
-        f"- {n_batido} de {n} ({resumo['pct_teria_batido_stop']:.1%})\n",
-        "## Efeito no P&L medio se o stop realmente tivesse disparado nesses casos\n",
-        f"- pnl medio SEM considerar o stop (so' saida por tempo): "
+        f"## FREQUENCIA: quantas operacoes batem o stop "
+        f"({stop_catastrofico_pontos:.0f} pts) em cada regime\n",
+        f"- stop no CLOSE (o que roda hoje): {n_batido} de {n} "
+        f"({resumo['pct_teria_batido_stop']:.1%})",
+        f"- stop CONTINUO (o proposto): {n_batido_intrabar} de {n} "
+        f"({resumo['pct_teria_batido_stop_intrabar']:.1%})",
+        f"- MARGINAIS (so' o continuo mata): {n_marginais}\n",
+        "Se o continuo dispara muito mais que o close, o guarda de CAUDA "
+        "vira stop TATICO -- outro mecanismo, com outro criterio de "
+        "aceite. E' esta razao, nao o P&L, que decide se a mudanca e' "
+        "conformidade ou desenho novo.\n",
+        "## CONFORMIDADE: quanto o close passa do limite quando cruza\n",
+        f"- excesso medio: {resumo['excesso_close_medio']:.1f} pts",
+        f"- excesso mediana: {resumo['excesso_close_mediana']:.1f} pts",
+        f"- excesso MAXIMO: {resumo['excesso_close_max']:.1f} pts\n",
+        "O stop de hoje sai no close da barra que cruzou, nao no limite: "
+        "este excesso E' a falha de granularidade, medida. Um excesso de "
+        "115 pts significa uma perda de 615 num limite de 500.\n",
+        "## OS TRES REGIMES DE SAIDA (pnl bruto medio por operacao)\n",
+        f"- sem stop (Rota A pura, close em h): "
         f"{resumo['pnl_medio_sem_stop']:+.1f} pts",
-        f"- pnl medio COM o stop hipotetico aplicado: "
-        f"{resumo['pnl_medio_com_stop_hipotetico']:+.1f} pts",
-        "\n## Leitura\n",
-        "- MAE_close alto e frequente == o stop catastrofico ja esta "
-        "mordendo de verdade, nao e' so' seguro de cauda.",
-        "- Comparar pnl_medio COM vs SEM stop: se o stop hipotetico piora "
-        "o pnl medio, ele esta cortando caudas GANHADORAS que se "
-        "recuperariam ate' o horizonte -- tensao real com a Rota A "
-        "(saida por tempo). Se melhora ou nao muda muito, o stop e' "
-        "seguro de cauda de verdade, coerente com o desenho original.",
+        f"- stop no CLOSE (hoje, preco real da barra que cruzou): "
+        f"{resumo['pnl_medio_stop_close']:+.1f} pts",
+        f"- stop CONTINUO (proposto, ~ -{stop_catastrofico_pontos:.0f} "
+        f"na impressao que cruza): {resumo['pnl_medio_stop_continuo']:+.1f} pts\n",
+        "ERRATA (2026-08-31): versoes anteriores deste relatorio tinham UM "
+        "numero, 'pnl medio COM o stop hipotetico', que substituia o "
+        "resultado por -stop sempre que o MAE_close cruzava. Isso modela o "
+        "stop saindo EXATAMENTE no limite -- que e' o comportamento do "
+        "regime CONTINUO, nao do que roda hoje. Aquele numero media o "
+        "regime proposto e o rotulava como o atual; os dois regimes nunca "
+        "tinham sido separados. Removido.\n",
+        "O continuo e' OTIMISTA por uma granularidade de tick: modela "
+        "saida exata em -stop, mas uma impressao pode pular o limite. "
+        "High/low de barra nao carrega a sequencia de impressoes "
+        "necessaria para medir esse pulo -- limitacao registrada.\n",
+        "## O VEREDITO: as operacoes MARGINAIS\n",
+        "As que tocam o limite intrabar mas NAO no close -- as que o stop "
+        "continuo mata e o atual deixa correr. Se a maioria delas termina "
+        "POSITIVA, o continuo esta cortando a cauda que paga a conta "
+        "(mesmo modo de falha ja conhecido do alvo fixo num sinal de ~43% "
+        "de acerto que ganha por magnitude).\n",
+        f"- n marginais: {n_marginais}",
+        f"- pnl final medio delas (se deixadas correr): "
+        f"{resumo['pnl_marginais_medio']:+.1f} pts",
+        f"- pnl final mediana: {resumo['pnl_marginais_mediana']:+.1f} pts",
+        f"- terminaram POSITIVAS: {n_marginais_pos} de {n_marginais} "
+        f"({resumo['pct_marginais_positivas']:.1%})\n",
         "\n## Quebra por lado (compra vs venda)\n",
         "threshold_entrada simetrico para compra e venda pode esconder "
         "uma assimetria real de edge -- um lado pode carregar o sinal "
         "inteiro, o outro pode ser diluidor puro do resultado combinado.\n",
         "| lado | n | pnl bruto medio | MAE_close mediana | "
-        "MFE_close mediana | %% bateria o stop |",
-        "|---|---|---|---|---|---|",
+        "MFE_close mediana | bate no close | bate continuo | "
+        "marginais (positivas) |",
+        "|---|---|---|---|---|---|---|---|",
         f"| compra | {resumo['stats_compra']['n']} | "
         f"{resumo['stats_compra']['pnl_bruto_medio']:+.1f} | "
         f"{resumo['stats_compra']['mae_close_mediana']:.1f} | "
         f"{resumo['stats_compra']['mfe_close_mediana']:.1f} | "
-        f"{resumo['stats_compra']['pct_batido_stop']:.1%} |",
+        f"{resumo['stats_compra']['n_batido_stop']} "
+        f"({resumo['stats_compra']['pct_batido_stop']:.1%}) | "
+        f"{resumo['stats_compra']['n_batido_stop_intrabar']} "
+        f"({resumo['stats_compra']['pct_batido_stop_intrabar']:.1%}) | "
+        f"{resumo['stats_compra']['n_marginais']} "
+        f"({resumo['stats_compra']['n_marginais_positivas']}) |",
         f"| venda | {resumo['stats_venda']['n']} | "
         f"{resumo['stats_venda']['pnl_bruto_medio']:+.1f} | "
         f"{resumo['stats_venda']['mae_close_mediana']:.1f} | "
         f"{resumo['stats_venda']['mfe_close_mediana']:.1f} | "
-        f"{resumo['stats_venda']['pct_batido_stop']:.1%} |",
+        f"{resumo['stats_venda']['n_batido_stop']} "
+        f"({resumo['stats_venda']['pct_batido_stop']:.1%}) | "
+        f"{resumo['stats_venda']['n_batido_stop_intrabar']} "
+        f"({resumo['stats_venda']['pct_batido_stop_intrabar']:.1%}) | "
+        f"{resumo['stats_venda']['n_marginais']} "
+        f"({resumo['stats_venda']['n_marginais_positivas']}) |",
+        "\nO EA roda VENDA-APENAS: a linha que decide o pre-registro e' a "
+        "da venda, nao o agregado. As tres perdas alem do limite no replay "
+        "de 25 pregoes sao todas de venda.",
         "\nSe um lado tem pnl bruto medio abaixo do custo de transacao "
         "(tipicamente ~11pts no WIN) e o outro bem acima, o threshold "
         "simetrico esta operando um lado sem edge real ao lado de um "

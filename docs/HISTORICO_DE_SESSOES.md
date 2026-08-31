@@ -506,3 +506,32 @@ disparou no horário certo, processo crashou com exit code `1`, causa
 exata nunca confirmada, decisão de não perseguir mais fundo e resolver
 via NSSM). Ver a seção "INCIDENTE: agendamento disparou, processo
 crashou, causa exata nunca encontrada" em `OPERACAO.md`.
+
+---
+
+## Sessão 2026-08-31 (tarde) — desenho do stop contínuo, instrumento do pré-voo
+
+Sessão de DESENHO, continuação direta do encerramento do drawdown da
+manhã. Nenhuma mudança de comportamento do EA.
+
+- **Premissa confirmada** no `operacoes_replay.parquet`: as três perdas
+  além do limite (−626, −601, −576 líquidos) são todas `STOP
+  CATASTROFICO`, todas de VENDA, com excursões de 615/590/565 contra um
+  limite de 500. Diferente do drawdown, esta premissa se sustenta.
+- **Descoberta de percurso**: o caminho por trade já existe no `service.py`
+  (`_on_trade` enfileira todo negócio, o loop já chama
+  `processar_trade_bruto` para cada um). Não precisa de callback, thread
+  nem mudança de latência — a implementação é cirúrgica.
+- **Errata real achada no `mae.py`**: `pnl_medio_com_stop_hipotetico`
+  modelava o stop do CLOSE saindo exatamente no limite, que é o
+  comportamento do regime CONTÍNUO. Media o regime proposto e o rotulava
+  como o atual; os dois nunca tinham sido separados. Removido.
+- **Instrumento entregue** (`entregue-v1.48`): três regimes de saída,
+  contagem no limiar por lado, excesso de conformidade, e o conjunto
+  MARGINAL (com quantas terminam positivas) — o número que decide se a
+  mudança é conformidade ou mecanismo novo.
+- Conferido à mão antes dos testes (regra 4): 11 valores calculados no
+  papel, todos batendo. 381 testes, ruff limpo, mypy strict limpo.
+
+**Pendente**: rodar `features` + `mae-analise` e escrever o pré-registro
+com o teto de frequência comprometido ANTES de ver o efeito no P&L.

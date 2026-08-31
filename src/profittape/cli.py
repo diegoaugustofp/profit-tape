@@ -1393,20 +1393,35 @@ def mae_analise(
     typer.echo(f"  MFE_close (p/ Rota B) media={r['mfe_close_media']:.1f}  "
                f"mediana={r['mfe_close_mediana']:.1f}  p10={r['mfe_close_p10']:.1f}  "
                f"p90={r['mfe_close_p90']:.1f}")
-    typer.echo(f"  teria batido o stop: {r['n_teria_batido_stop']}/{r['n_triggers']} "
-               f"({r['pct_teria_batido_stop']:.1%})")
-    typer.echo(f"  pnl medio SEM stop : {r['pnl_medio_sem_stop']:+.1f} pts")
-    typer.echo(f"  pnl medio COM stop hipotetico: "
-               f"{r['pnl_medio_com_stop_hipotetico']:+.1f} pts")
-    typer.echo("\n  por lado:")
-    typer.echo(f"    compra: n={r['stats_compra']['n']}  "
-               f"pnl_bruto_medio={r['stats_compra']['pnl_bruto_medio']:+.1f}  "
-               f"mae_mediana={r['stats_compra']['mae_close_mediana']:.1f}  "
-               f"mfe_mediana={r['stats_compra']['mfe_close_mediana']:.1f}")
-    typer.echo(f"    venda : n={r['stats_venda']['n']}  "
-               f"pnl_bruto_medio={r['stats_venda']['pnl_bruto_medio']:+.1f}  "
-               f"mae_mediana={r['stats_venda']['mae_close_mediana']:.1f}  "
-               f"mfe_mediana={r['stats_venda']['mfe_close_mediana']:.1f}")
+    typer.echo(f"\n  FREQUENCIA no limiar de {stop_catastrofico_pontos:.0f} pts:")
+    typer.echo(f"    stop no CLOSE (hoje) : {r['n_teria_batido_stop']}"
+               f"/{r['n_triggers']} ({r['pct_teria_batido_stop']:.1%})")
+    typer.echo(f"    stop CONTINUO (novo) : {r['n_teria_batido_stop_intrabar']}"
+               f"/{r['n_triggers']} ({r['pct_teria_batido_stop_intrabar']:.1%})")
+    typer.echo(f"  CONFORMIDADE — excesso do close alem do limite: "
+               f"media={r['excesso_close_medio']:.1f}  "
+               f"mediana={r['excesso_close_mediana']:.1f}  "
+               f"max={r['excesso_close_max']:.1f} pts")
+    typer.echo("\n  TRES REGIMES (pnl bruto medio/operacao):")
+    typer.echo(f"    sem stop      : {r['pnl_medio_sem_stop']:+.1f} pts")
+    typer.echo(f"    stop no CLOSE : {r['pnl_medio_stop_close']:+.1f} pts")
+    typer.echo(f"    stop CONTINUO : {r['pnl_medio_stop_continuo']:+.1f} pts")
+    typer.echo(f"\n  MARGINAIS (so' o continuo mata): n={r['n_marginais']}  "
+               f"pnl medio se deixadas correr={r['pnl_marginais_medio']:+.1f}  "
+               f"positivas={r['n_marginais_positivas']}"
+               f"/{r['n_marginais']} ({r['pct_marginais_positivas']:.1%})")
+    typer.echo("\n  por lado (o EA roda VENDA-APENAS — a linha que decide "
+               "e' a da venda):")
+    for nome, s in (("compra", r["stats_compra"]), ("venda ", r["stats_venda"])):
+        typer.echo(f"    {nome}: n={s['n']}  "
+                   f"pnl_bruto_medio={s['pnl_bruto_medio']:+.1f}  "
+                   f"mae_mediana={s['mae_close_mediana']:.1f}  "
+                   f"mfe_mediana={s['mfe_close_mediana']:.1f}  "
+                   f"close={s['n_batido_stop']} ({s['pct_batido_stop']:.1%})  "
+                   f"continuo={s['n_batido_stop_intrabar']} "
+                   f"({s['pct_batido_stop_intrabar']:.1%})  "
+                   f"marginais={s['n_marginais']} "
+                   f"(positivas: {s['n_marginais_positivas']})")
     typer.echo(f"\nrelatorio: {r['relatorio']}")
 
 
