@@ -45,7 +45,7 @@ CAMPOS = [
     "vol_total", "vol_so_agressores",
     "agr_compra", "agr_venda",
     "imbalance", "desloc_norm", "absorcao_dir",
-    "media", "desvio", "z",
+    "media", "desvio", "z", "z_imbalance",
 ]
 PREFIXO = "ABSDIR|"
 COMPARAVEIS = ["open", "high", "low", "close", "imbalance",

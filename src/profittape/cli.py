@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import pandas as pd
 
+import pandas as pd
 import structlog
 import typer
 
@@ -608,6 +609,52 @@ def rota_b_remanescente(
                             "sig"]].round(3).to_string(index=False))
     typer.echo(f"\n  VEREDITO: {r['veredito']}")
     typer.echo(f"  {r['motivo']}")
+
+
+@app.command()
+def absorcao_diagnostico(
+    symbol: str = typer.Argument("WINFUT"),
+    features: Path = typer.Option(Path("data/features_tempo"), "--features"),
+    tf: str = typer.Option("5m", "--tf"),
+    tick: float = typer.Option(5.0, "--tick"),
+    limiar: float = typer.Option(1.75, "--limiar"),
+    limiar_imb: float = typer.Option(1.0, "--limiar-imb"),
+    log_level: str = typer.Option("INFO", "--log-level"),
+) -> None:
+    """
+    Distribuicao do ESFORCO (vol_agr/tick) e separacao A/B da absorcao.
+
+    Categoria `features`: descreve o dado, NAO testa hipotese, NAO
+    consome trial. Nada aqui autoriza conclusao sobre retorno.
+
+    A vira A quando a agressao empurrou para um lado e o preco foi para
+    o outro (esforco que falhou). B e' preco andando SEM agressao
+    dominante — livro fino, que e' quase o oposto de absorcao.
+    """
+    configurar(log_level)
+    from .research.absorcao_diagnostico import rodar
+
+    arquivo = (features / f"sym={symbol.upper()}" / f"tf={tf}"
+               / "features.parquet")
+    if not arquivo.exists():
+        raise SystemExit(
+            f"nao achei {arquivo} — rode `profit-tape features-tempo`")
+
+    r = rodar(arquivo, tick=tick, limiar=limiar, limiar_imb=limiar_imb)
+    typer.echo("=" * 70)
+    typer.echo(f"DIAGNOSTICO DE ABSORCAO — {symbol.upper()} {tf}")
+    typer.echo("=" * 70)
+    typer.echo(f"  barras: {r['barras']}  |  amplitude zero (esforco "
+               f"indefinido): {r['amplitude_zero']}")
+    typer.echo("\n--- ESFORCO = vol_agr / amplitude_em_ticks ---")
+    for k, v in r["esforco_geral"].items():
+        typer.echo(f"  {k:>4}: {v:>12,.1f} contratos por tick")
+    typer.echo("\n--- POR LEITURA (limiar "
+               f"{limiar} / limiar_imb {limiar_imb}) ---")
+    tabela = pd.DataFrame(r["por_leitura"])
+    typer.echo(tabela.to_string(index=False))
+    typer.echo("\n  A_* = agressao empurrou e o preco foi para o outro lado")
+    typer.echo("  B_* = preco andou SEM agressao dominante (livro fino)")
 
 
 @app.command()

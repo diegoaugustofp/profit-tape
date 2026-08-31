@@ -621,3 +621,77 @@ Mas a limitacao que importa nao e' essa: o backtest do Profit nao tem
 validacao cruzada purgada, limiar deflacionado, portao de honestidade
 nem contador de trials. Ver `RESEARCH_PLANO.md`, secao "POLITICA DO
 HISTORICO DO GRAFICO".
+
+
+## AS QUATRO CORES: a subtracao escondia duas leituras opostas (2026-08-31)
+
+### O caso que revelou
+
+Barra real de 31/08, 09:03-09:05, reconstruida do tape (169.920
+negocios):
+
+    imbalance    +0,0486   agressao praticamente empatada
+                           (185.742 compra x 168.510 venda)
+    desloc_norm  +0,9509   quase marubozu de ALTA, +326 ticks
+    absorcao_dir -0,9023   -> pintava AQUA
+
+A leitura do operador foi a oposta da que a cor sugeria: "os compradores
+agrediram e levaram o preco embora". **Os numeros deram razao a ele.**
+Nao houve vendedor agredindo nada — o preco subiu porque o livro estava
+fino.
+
+### O defeito conceitual
+
+`absorcao_dir = imbalance - desloc_norm` e' uma SUBTRACAO, e um valor
+extremo pode vir de dois lugares OPOSTOS:
+
+| caso | o que acontece | leitura |
+|---|---|---|
+| **A** | agressao forte num sentido, preco no outro | esforco que FALHOU — absorcao |
+| **B** | preco anda muito SEM agressao dominante | AUSENCIA de resistencia — livro fino |
+
+Os dois pintavam a mesma cor.
+
+E ha' um agravante de escala: `imbalance` raramente sai de +-0,3
+enquanto `desloc_norm` vai ate +-1. **Quem domina a subtracao quase
+sempre e' o `desloc_norm`** — ou seja, boa parte do que o indicador
+pintava era deslocamento normalizado com o sinal trocado, e nao
+absorcao. Coerente com o CONTRA nas 12 celulas.
+
+### A separacao
+
+    clRed     A - comprador agrediu e NAO levou     (vendedor passivo)
+    clAqua    A - vendedor agrediu e NAO levou      (comprador passivo)
+    clFucsia  B - preco CAIU sem esforco vendedor   (livro fino)
+    clYellow  B - preco SUBIU sem esforco comprador (livro fino)
+
+O discriminante e' `z_imbalance` na MESMA janela, com o MESMO
+anti-lookahead. Tem que ser o z e nao o valor cru, senao a diferenca de
+escala classificaria quase tudo como B.
+
+`LimiarImb` (default 1,00) **NAO E' VALIDADO**, igual ao `Limiar`. Serve
+para separar duas leituras, nao para gerar sinal.
+
+O log ganhou o campo `z_imbalance` ao final — ordem CONGELADA, o parser
+mudou junto.
+
+### O termo que falta, e agora esta medido
+
+Absorcao, na leitura de tape, e' ESFORCO GRANDE com RESULTADO PEQUENO. O
+esforco precisa de um termo ILIMITADO, porque `imbalance` nunca passa
+de 1:
+
+    esforco = vol_agr / amplitude_em_ticks
+
+Na barra de 31/08: 354.252 contratos em 326 ticks = **1.087 contratos
+por tick**. Barra que anda muito com volume normal tem esforco BAIXO;
+barra que anda pouco com volume enorme tem esforco ALTO.
+
+Comando novo, categoria `features` (zero trial):
+
+    profit-tape absorcao-diagnostico WINFUT --tf 5m
+
+Ele mede a distribuicao do esforco e a separacao A/B sobre os pregoes
+capturados. **Nao testa predicao** — e' o insumo empirico para um
+pre-registro futuro, que continua exigindo ser escrito e congelado
+antes.

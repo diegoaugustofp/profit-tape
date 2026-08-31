@@ -42,6 +42,8 @@
 
 input
   Limiar(1.75);             // |z| para colorir. NAO VALIDADO.
+  LimiarImb(1.00);          // |z| de imbalance que separa A de B.
+                            // NAO VALIDADO. Ver bloco "AS QUATRO CORES".
                             // 1,75 = 6,3% das barras (~7/pregao no 5m),
                             // escolhido pela FREQUENCIA de inspecao, nunca
                             // por resultado. Ver RESEARCH_PLANO 2026-08-30b.
@@ -55,6 +57,7 @@ input
 
 var
   sAgrCompra, sAgrVenda, sVolAgr, sImbalance : Float;
+  sMediaImb, sDpImb, sZImb                   : Float;
   sVolTotal, sVolSoAgr                       : Float;
   sAmplitude, sDeslocNorm, sAbsorcaoDir      : Float;
   sSoma, sSomaQuad, sMedia, sDesvio, sZ, sD  : Float;
@@ -126,16 +129,87 @@ begin
 
   Plot(sZ);
 
-  // z positivo = compradores agrediram e o preco fechou contra eles.
+  // z positivo NAO significa por si so' "compradores agrediram e nao
+  // levaram": pode ser isso (caso A) ou "o preco caiu sem vendedor
+  // agredir" (caso B). O sZImb abaixo e' o que separa os dois.
+  //-------------------------------------------------------------------
+  // z do IMBALANCE, mesma janela e mesmo anti-lookahead do principal.
+  //
+  // Precisa ser o z, e nao o valor cru: `imbalance` raramente sai de
+  // +-0,3 enquanto `desloc_norm` vai ate +-1, entao comparar as
+  // magnitudes CRUAS classificaria quase tudo como B.
+  //
+  // Fica DENTRO do mesmo `if CurrentBar > Janela`: antes do aquecimento
+  // sZ e' 0 e nenhuma barra pinta, entao classificar ali seria calcular
+  // um numero que nao vai ser usado — e que, se algum dia fosse, viria
+  // de uma amostra curta demais.
+  //-------------------------------------------------------------------
+  sZImb := 0;
+  if CurrentBar > Janela then
+  begin
+    sSoma := 0;
+    for nIndex := 1 to Janela do
+      sSoma := sSoma + sImbalance[nIndex];
+    sMediaImb := sSoma / Janela;
+
+    sSomaQuad := 0;
+    for nIndex := 1 to Janela do
+    begin
+      sD := sImbalance[nIndex] - sMediaImb;
+      sSomaQuad := sSomaQuad + sD * sD;
+    end;
+    sDpImb := Sqrt(sSomaQuad / (Janela - 1));
+
+    if sDpImb > 0 then
+      sZImb := (sImbalance - sMediaImb) / sDpImb;
+  end;
+
+  //---------------------------------------------------------------------
+  // AS QUATRO CORES
+  //
+  // `absorcao_dir = imbalance - desloc_norm` e' uma SUBTRACAO, e um valor
+  // extremo pode vir de dois lugares OPOSTOS. Descoberto com uma barra
+  // real (2026-08-31, 09:03-09:05): imbalance +0,049 (agressao quase
+  // empatada) e desloc_norm +0,951 (quase marubozu de alta) davam
+  // absorcao_dir -0,902 -> aqua. Mas nao houve vendedor agredindo coisa
+  // nenhuma: o preco subiu 326 ticks porque o livro estava FINO.
+  //
+  //   CASO A  (absorcao de verdade): a agressao empurrou para um lado e
+  //           o preco foi para o outro. Ha' esforco, e ele FALHOU.
+  //           -> exige |z_imbalance| >= LimiarImb no sentido contrario
+  //              ao deslocamento.
+  //
+  //   CASO B  (livro fino): o preco andou muito SEM agressao dominante.
+  //           Nao e' resistencia escondida; e' AUSENCIA de resistencia.
+  //           -> z_imbalance perto de zero.
+  //
+  // Os dois pintavam a MESMA cor. Agora nao pintam mais.
+  //
+  //   clRed     A - comprador agrediu e NAO levou   (vendedor passivo)
+  //   clAqua    A - vendedor agrediu e NAO levou    (comprador passivo)
+  //   clFucsia  B - preco CAIU sem esforco vendedor (livro fino)
+  //   clYellow  B - preco SUBIU sem esforco comprador (livro fino)
+  //
+  // LimiarImb NAO E' VALIDADO, igual ao Limiar. Serve para separar duas
+  // leituras, nao para gerar sinal.
+  //---------------------------------------------------------------------
   bPintou := False;
   if sZ >= Limiar then
   begin
-    PaintBar(clRed);
+    // familia vermelha: absorcao_dir alto
+    if sZImb >= LimiarImb then
+      PaintBar(clRed)        // A: comprador agrediu e nao levou
+    else
+      PaintBar(clFucsia);    // B: preco caiu sem esforco vendedor
     bPintou := True;
   end
   else if (MostrarLadoOposto = 1) and (sZ <= -Limiar) then
   begin
-    PaintBar(clAqua);
+    // familia aqua: absorcao_dir baixo
+    if sZImb <= -LimiarImb then
+      PaintBar(clAqua)       // A: vendedor agrediu e nao levou
+    else
+      PaintBar(clYellow);    // B: preco subiu sem esforco comprador
     bPintou := True;
   end;
 

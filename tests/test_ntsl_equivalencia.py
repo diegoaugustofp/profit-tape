@@ -21,7 +21,7 @@ def _linha(data: int, hora: int, z: float = 2.5, imb: float = 0.4,
     # data|hora|hora_bolsa|O|H|L|C|vol_tot|vol_agr|agrC|agrV|imb|desloc|
     # absdir|media|desvio|z
     return (f"ABSDIR|{data}|{hora}|{hora}|100|110|95|97|1200|1000|700|300|"
-            f"{imb}|{desloc}|{imb - desloc}|0.1|0.2|{z}")
+            f"{imb}|{desloc}|{imb - desloc}|0.1|0.2|{z}|0.0")
 
 
 def test_data_easylanguage() -> None:
@@ -148,7 +148,7 @@ def test_numero_no_formato_do_profit(tmp_path) -> None:  # type: ignore[no-untyp
         "ABSDIR|1250716|1410|1410|157.722,86300000|158.116,51890000|"
         "157.699,70680000|157.908,11280000|250.000,00|198.891,00|"
         "116.514,00|82.377,00|0,17163673|0,44444444|-0,27280772|"
-        "0,00|0,00|0,00\n",
+        "0,00|0,00|0,00|0,00\n",
         encoding="utf-8")
     df, diag = carregar_log(arq)
     assert diag["barras"] == 1
@@ -279,7 +279,7 @@ def test_atribuicao_decompoe_numerador_e_denominador(tmp_path) -> None:  # type:
         desloc = (close - 100.0) / (high - 100.0)
         linhas.append(
             f"ABSDIR|1260824|{hhmm}|{hhmm}|100|{high}|100|{close}"
-            f"|1000|720|700|300|0.4|{desloc}|{0.4 - desloc}|0.1|0.2|1.0")
+            f"|1000|720|700|300|0.4|{desloc}|{0.4 - desloc}|0.1|0.2|1.0|0.0")
     arq_log = tmp_path / "console.txt"
     arq_log.write_text("\n".join(linhas), encoding="utf-8")
 
@@ -322,7 +322,7 @@ def test_separa_open_de_close_no_numerador(tmp_path) -> None:  # type: ignore[no
         desloc = (cl - op) / 55.0
         linhas.append(
             f"ABSDIR|1260824|{hhmm}|{hhmm}|{op}|155|100|{cl}"
-            f"|1000|720|700|300|0.4|{desloc}|{0.4 - desloc}|0.1|0.2|1.0")
+            f"|1000|720|700|300|0.4|{desloc}|{0.4 - desloc}|0.1|0.2|1.0|0.0")
     arq_log = tmp_path / "console.txt"
     arq_log.write_text("\n".join(linhas), encoding="utf-8")
 
@@ -364,7 +364,7 @@ def test_k_por_pregao_lida_com_rolagem(tmp_path) -> None:  # type: ignore[no-unt
             linhas.append(
                 f"ABSDIR|{dia}|{hhmm}|{hhmm}|{o * k}|{h * k}|{low * k}|{c * k}"
                 f"|1000|720|700|300|0.4|{(c - o) / (h - low)}"
-                f"|{0.4 - (c - o) / (h - low)}|0.1|0.2|1.0")
+                f"|{0.4 - (c - o) / (h - low)}|0.1|0.2|1.0|0.0")
 
     arq_py = tmp_path / "features.parquet"
     pd.DataFrame(registros).to_parquet(arq_py, index=False)
