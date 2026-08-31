@@ -134,10 +134,11 @@ def _diagnostico_de_razao(numerador: pd.Series | None,
     r = float(np.corrcoef(d.iloc[:, 0], d.iloc[:, 1])[0, 1])
     return {
         "correlacao_numerador_denominador": round(r, 4),
-        "risco_de_cancelamento": bool(abs(r) >= 0.7),
-        "nota": ("numerador e denominador andam juntos: a razao tende a "
-                 "ser quase constante" if abs(r) >= 0.7 else
-                 "partes suficientemente independentes"),
+        "atenua_a_variacao": bool(abs(r) >= 0.7),
+        "nota": ("numerador e denominador andam juntos: a razao tem MENOS "
+                 "variacao que as partes. Isto ATENUA, nao anula — "
+                 "confira a cauda antes de descartar"
+                 if abs(r) >= 0.7 else "partes suficientemente independentes"),
     }
 
 
@@ -166,11 +167,25 @@ def triar(candidata: pd.Series, existentes: pd.DataFrame,
             f"de 2,5 desvios, contra {cauda['pct_esperado_sob_normal']}% de "
             f"uma normal ({cauda['razao_com_a_normal']}x). Hipotese sobre "
             "eventos extremos nao tem o que medir")
-    if razao.get("risco_de_cancelamento"):
-        motivos.append(
-            "RAZAO ENTRE PARTES CORRELACIONADAS (corr "
-            f"{razao['correlacao_numerador_denominador']:+.3f}): tende a "
-            "ser quase constante por construcao")
+    # A CORRELACAO ENTRE AS PARTES NAO REPROVA. E' DIAGNOSTICO.
+    #
+    # Eu criei este criterio afirmando que razao entre quantidades
+    # correlacionadas fica "quase constante por construcao", e reprovei
+    # `esforco` por corr(vol, amplitude) = +0,888. Duas medicoes
+    # derrubaram isso:
+    #
+    #   1. Sobre 2.723 barras, `esforco` tem 1,33x a cauda de uma normal
+    #      e vai de 290 a 5.198 contratos/tick — 18x entre extremos.
+    #      Atenuar nao e' anular.
+    #   2. Uma razao construida quase CONSTANTE de proposito (ruido de
+    #      0,2%) tambem passa no teste de cauda, porque o z-score e'
+    #      INVARIANTE A ESCALA: padronizar apaga justamente a informacao
+    #      de "quao pequena e' a variacao".
+    #
+    # O criterio nao estava mal calibrado — media a coisa errada, e
+    # nenhum limiar conserta isso. Fica como diagnostico reportado, sem
+    # peso de veredito. Remover e' melhor que remendar: criterio que
+    # reprova por motivo errado gasta a confianca de todos os outros.
 
     return {
         "veredito": "REPROVA" if motivos else "PASSA",

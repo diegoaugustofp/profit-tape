@@ -50,23 +50,56 @@ def test_reprova_absorcao_dir_por_redundancia() -> None:
     assert abs(pior["correlacao"]) >= LIMITE_REDUNDANCIA
 
 
-def test_reprova_esforco_por_razao_entre_partes_correlacionadas() -> None:
+def test_correlacao_entre_partes_sozinha_NAO_reprova() -> None:
     """
-    CASO REAL: registrada como "a direcao certa, porque e' ILIMITADA".
-    Medido: corr(vol_agr, amplitude) = +0,892, e a razao ficou quase
-    constante. Ilimitado NAO implica ter cauda.
+    CORRECAO DE UMA AFIRMACAO MINHA ERRADA (2026-08-31).
+
+    Reprovei `esforco` por `corr(vol, amplitude) = +0,888`, dizendo que a
+    razao seria "quase constante". Medido depois sobre 2.723 barras: ela
+    tem **1,33x a cauda de uma normal** e vai de 290 a 5.198 contratos
+    por tick — 18x entre extremos.
+
+    Atenuar NAO e' anular. So' reprova quando a atenuacao de fato matou a
+    cauda; um verificador que reprova bom candidato e' tao ruim quanto um
+    que aprova ruim.
     """
     rng = np.random.default_rng(12)
-    amp = rng.gamma(9.0, 5.0, 2000)
-    vol = 2100 * amp + rng.normal(0, 12_000, 2000)
-    d = pd.DataFrame({"amplitude": amp, "vol_agr": vol,
-                      "esforco": vol / amp,
-                      "outra": rng.normal(size=2000)})
-    r = triar(d["esforco"], d[["outra"]],
-              numerador=d["vol_agr"], denominador=d["amplitude"])
-    assert r["veredito"] == "REPROVA"
-    assert any("RAZAO ENTRE PARTES" in m for m in r["motivos"])
+    amp = rng.gamma(9.0, 5.0, 3000)
+    vol = 2100 * amp + rng.normal(0, 12_000, 3000)
+    razao = pd.Series(vol / amp)
+    d = pd.DataFrame({"outra": rng.normal(size=3000)})
+
+    r = triar(razao, d, numerador=pd.Series(vol), denominador=pd.Series(amp))
     assert r["razao"]["correlacao_numerador_denominador"] > 0.7
+    assert r["razao"]["atenua_a_variacao"]
+    if r["cauda"]["tem_cauda"]:
+        assert not any("RAZAO ENTRE PARTES" in m for m in r["motivos"]), (
+            "correlacao alta entre as partes nao pode reprovar sozinha")
+
+
+def test_correlacao_entre_partes_nunca_reprova_sozinha() -> None:
+    """
+    Criterio REMOVIDO do veredito em 2026-08-31, e este teste guarda a
+    razao para nao voltar por engano.
+
+    Duas medicoes o derrubaram: (1) `esforco` tem corr +0,888 entre as
+    partes E 1,33x a cauda de uma normal; (2) uma razao construida quase
+    CONSTANTE de proposito (ruido de 0,2%) tambem passa no teste de
+    cauda, porque o z-score e' INVARIANTE A ESCALA.
+
+    O criterio media a coisa errada, e nenhum limiar conserta. Fica como
+    diagnostico, sem peso de veredito.
+    """
+    rng = np.random.default_rng(31)
+    den = rng.gamma(9.0, 5.0, 3000)
+    num = 2100 * den * (1 + rng.normal(0, 0.002, 3000))
+    outras = pd.DataFrame({"o": rng.normal(size=3000)})
+
+    r = triar(pd.Series(num / den), outras,
+              numerador=pd.Series(num), denominador=pd.Series(den))
+    assert r["razao"]["atenua_a_variacao"], "o diagnostico continua sendo reportado"
+    assert not any("RAZAO" in m for m in r["motivos"]), (
+        "correlacao entre as partes nao pode figurar como motivo de reprova")
 
 
 def test_sinal_negativo_conta_como_redundante() -> None:
@@ -119,12 +152,12 @@ def test_razao_com_partes_independentes_nao_e_penalizada() -> None:
     num = pd.Series(rng.gamma(4, 2, 800))
     den = pd.Series(rng.gamma(4, 2, 800))
     d = _diagnostico_de_razao(num, den)
-    assert not d["risco_de_cancelamento"]
+    assert not d["atenua_a_variacao"]
 
 
 def test_nao_declarada_como_razao_nao_dispara_o_criterio() -> None:
     d = _diagnostico_de_razao(None, None)
-    assert "situacao" in d and "risco_de_cancelamento" not in d
+    assert "situacao" in d and "atenua_a_variacao" not in d
 
 
 def _parquet_de_teste(tmp_path, n: int = 1200):  # type: ignore[no-untyped-def]
@@ -153,9 +186,10 @@ def test_tria_candidata_DERIVADA_que_nao_esta_no_parquet(tmp_path) -> None:  # t
     r = triar_parquet(_parquet_de_teste(tmp_path), "esforco",
                       expr="vol_agr / ((high - low) / 5)",
                       numerador="vol_agr", denominador="(high - low) / 5")
-    assert r["veredito"] == "REPROVA"
-    assert any("RAZAO ENTRE PARTES" in m for m in r["motivos"])
     assert r["expressao"] == "vol_agr / ((high - low) / 5)"
+    # o ponto do teste e' que a expressao E' AVALIADA, nao o veredito
+    assert r["cauda"]["n"] > 1000
+    assert r["razao"]["correlacao_numerador_denominador"] > 0.7
 
 
 def test_expressao_invalida_lista_as_colunas(tmp_path) -> None:  # type: ignore[no-untyped-def]

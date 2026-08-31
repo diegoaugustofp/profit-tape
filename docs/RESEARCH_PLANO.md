@@ -3967,6 +3967,50 @@ candidata NOVA, por definicao ainda nao gravada.
 Usa `DataFrame.eval`, cujo parser e' restrito a operacoes sobre colunas:
 nao aceita import, chamada arbitraria nem acesso a atributo.
 
+### `esforco` JA' EXISTIA NO PIPELINE: correlacao +1,0000 com `absorcao`
+
+A rodada de `esforco` no parquet real devolveu:
+
+    !! REDUNDANTE com `absorcao` (correlacao +1,0000)
+
+`flow.py`, linha 126, desde antes desta sessao:
+
+    barras["absorcao"] = barras["vol_agr"] / np.maximum(range_ticks, 1.0)
+
+E' **exatamente** a formula que eu propus como "o termo que falta", com
+o comentario "muito volume andando pouco preco = absorcao alta" logo
+acima. Eu li o `flow.py` varias vezes hoje — a definicao estava a poucas
+linhas do `absorcao_dir` que eu vinha editando. Nao vi.
+
+**A triagem pegou um erro que ela nao foi projetada para pegar.** Eu a
+construi pensando em redundancia entre feature NOVA e existentes; ela
+achou uma feature "nova" que E' uma existente.
+
+### DUAS AFIRMACOES MINHAS SOBRE O `esforco`, AS DUAS ERRADAS
+
+**"Nao tem cauda"** — baseada em `p99/p50 = 1,70x` sobre 653 barras, com
+a metrica que eu mesmo depois identifiquei como errada. Com a metrica
+certa e 2.723 barras: **1,33x a cauda de uma normal**, faixa de 290 a
+5.198 contratos/tick, 18x entre extremos.
+
+**"Razao entre partes correlacionadas fica quase constante"** — falso
+como criterio. Duas medicoes derrubaram:
+
+1. `esforco` tem corr +0,888 entre as partes E cauda mais gorda que a
+   normal. Atenuar nao e' anular.
+2. Uma razao construida quase CONSTANTE de proposito (ruido de 0,2%)
+   TAMBEM passa no teste de cauda — porque o z-score e' **invariante a
+   escala**, e padronizar apaga justamente a informacao de "quao pequena
+   e' a variacao".
+
+O criterio nao estava mal calibrado: **media a coisa errada**, e nenhum
+limiar conserta. **Removido do veredito**, mantido como diagnostico.
+Criterio que reprova por motivo errado gasta a confianca de todos os
+outros.
+
+Sobra a REDUNDANCIA como unico criterio bloqueante — e' o que pegou os
+dois casos reais (`absorcao_dir` com -0,9863, `esforco` com +1,0000).
+
 ### O que a triagem NAO faz
 
 Nao diz se a feature PREDIZ alguma coisa. **PASSA nao autoriza nada** —
