@@ -960,7 +960,14 @@ def ea_replay(
 @app.command()
 def ea_replay_lote(
     config: Path = typer.Option(Path("config/ea.yaml"), "-c", "--config"),
-    raiz_raw: Path = typer.Option(Path("data/raw"), "--raiz-raw"),
+    raiz_raw: Path = typer.Option(
+        Path("data/curated"), "--raiz-raw",
+        help="Arvore trade/dt=/sym= a percorrer. Default data/curated "
+             "(2026-08-31, decisao do operador): e' a unica arvore que e' ao "
+             "mesmo tempo COMPLETA e LIMPA no fluxo real -- data/raw local so' "
+             "tem o ultimo dia, e o backup bruto tem backfills entregues duas "
+             "vezes (12 de 25 dias com ~2x os negocios; replay sobre ele deu "
+             "+3883 contra +6356 no curated, com os 13 dias limpos identicos)."),
     saida_operacoes: Path = typer.Option(
         Path("data/research/operacoes_replay.parquet"), "--saida-operacoes",
         help="Onde persistir TODAS as operacoes do lote, uma linha por "

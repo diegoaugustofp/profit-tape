@@ -55,6 +55,10 @@ arquivo cresceu demais para navegar so' por titulo cronologico).
 
 **Risco (drawdown, VaR/ES, circuit breaker)**
 - [DRAWDOWN: desenho da pergunta + pré-voo implementado (2026-08-30k)](#drawdown-desenho-da-pergunta--pré-voo-implementado-2026-08-30k)
+- [DECOMPOSIÇÃO RODOU — e a premissa do drawdown caiu (2026-08-31)](#decomposição-rodou--e-a-premissa-do-drawdown-caiu-2026-08-31)
+  — ENCERRADO: a premissa (Calmar 0,23) era dado contaminado; sobre
+  curated Calmar 4,08. Achado real: stop catastrófico checado só no
+  close, três perdas além de 500.
 - [Curva de patrimonio / drawdown maximo (2026-08-27)](#curva-de-patrimonio--drawdown-maximo-2026-08-27)
 - [Risco realizado (VaR/ES) — primeiro passo aplicado do RQ (2026-08-27)](#risco-realizado-vares--primeiro-passo-aplicado-do-rq-2026-08-27)
 - [Resultado real do risco-realizado + correcao de bug de exibicao (2026-08-27)](#resultado-real-do-risco-realizado--correcao-de-bug-de-exibicao-2026-08-27)
@@ -599,6 +603,13 @@ o resultado que o funil existe para produzir.
 
 ## Resultado real do MAE + achado de assimetria compra/venda (2026-08-27)
 
+> ⚠ **Parcialmente contaminado (descoberto 2026-08-31).** `mae-analise`
+> lia `data/raw`; 12 dos 25 pregões tinham backfill em dobro. As
+> conclusões QUALITATIVAS (assimetria compra/venda, MAE p99 > stop)
+> foram depois confirmadas sobre curated pela Rota B na fita; os NÚMEROS
+> (336 gatilhos, 4,5% batem o stop, medianas 95/120) precisam ser
+> refeitos sobre curated antes de qualquer uso.
+
 Rodado sobre 336 triggers reais de z_agf_3 h=3 (threshold=1.4):
 
   MAE_close: media=114.9  mediana=105.0  p90=395  p99=742  max=815
@@ -1102,6 +1113,14 @@ paralela a saida por tempo) continua PENDENTE -- proxima sessao,
 codigo real de mudanca de comportamento de risco.
 
 ## Acompanhamento continuo: efeito do circuit breaker com 25 dias (2026-08-28)
+
+> ⚠ **NÚMEROS CONTAMINADOS (descoberto 2026-08-31).** Esta rodada leu
+> `data/raw`, onde 12 dos 25 pregões tinham o backfill entregue DUAS
+> vezes (cada negócio em dobro; barras de 120k fechando com metade do
+> tempo de mercado). Os +418, Calmar 0,23, 157 operações e o efeito do
+> circuit breaker −328 em 7 disparos **não descrevem o sinal**. Rodada
+> válida (curated): 99 ops, +6356, Calmar 4,08, 4 disparos. Ver
+> "DECOMPOSIÇÃO RODOU" de 2026-08-31.
 
 Rodada com ea_venda_apenas.yaml (25 dias, 2026-07-24 a 2026-08-27, 157
 operacoes): taxa de acerto 51,0% (primeira vez cruzando 50%), razao
@@ -2434,9 +2453,10 @@ E' a unica alavanca que baixa a barra sem gastar trial: 25 pregoes dao
 pregoes/mes, sao ~3 meses ate 100. **Continua sendo a via principal**,
 acima de qualquer ideia nova.
 
-**2. Stop como CONTROLE DE DRAWDOWN — custo: pre-registro + rodada.**
-→ desenho e pré-voo em 2026-08-30k; decisões pendentes do operador
-  (regra de aceite, grade de L) antes do pré-registro.
+**2. Stop como CONTROLE DE DRAWDOWN — ENCERRADO 2026-08-31.**
+→ premissa (Calmar 0,23) era dado contaminado; sobre curated 4,08.
+  O que sobrou é correção do stop catastrófico existente (checagem
+  contínua na fita) — sessão de desenho, não research.
 E' o que o CONTRA de hoje deixou explicitamente em aberto. Nao e'
 hipotese sobre o mercado: e' um trade-off mensuravel — quanto de
 expectativa se paga por quanto de reducao de drawdown. Motivacao viva:
@@ -3198,7 +3218,7 @@ mecanismo diferente:
 | um ou dois dias ruins | limite de perda diária |
 
 O que já está medido aponta em direções conflitantes: o stop de 500 já
-morde (4,5%) e MELHORA a média — a cauda catastrófica está coberta; o
+morde (4,5%, número de dado contaminado — ver 31/08) e MELHORA a média; o
 circuit breaker deu −328 em 7 disparos; +629 num único dia de 25 diz
 que a série é dominada por eventos raros.
 
@@ -3297,3 +3317,90 @@ Conferido à mão (série de 8 operações: drawdowns 260 e 40; parcelas
 
 Rodar: `ea-replay-lote -c config/ea_venda_apenas.yaml` (persiste), depois
 `decomposicao-drawdown`.
+
+## DECOMPOSIÇÃO RODOU — e a premissa do drawdown caiu (2026-08-31)
+
+### Antes do resultado: três rodadas, uma válida
+
+| rodada | árvore | ops | P&L | Calmar | status |
+|---|---|---|---|---|---|
+| 28/08 | `data/raw` local (mistura desconhecida) | 157 | +418 | 0,23 | **contaminada** |
+| 31/08 a | `D:\backup_raw` (12 dias com backfill em dobro) | 147 | +3883 | 2,85 | **contaminada** |
+| 31/08 b | `data/curated` | 99 | **+6356** | **4,08** | **válida** |
+
+Prova do mecanismo: `duplicatas` em 07-24 → 100% do dia entregue duas
+vezes, campos idênticos, reentrega benigna. Curated deduplica certo.
+Validação interna do replay: **os 13 dias limpos batem operação por
+operação** entre a rodada a e a b (07-29 +111, 08-04 +767, 08-11 +1284,
+…, 08-27 +655). Replay determinístico confirmado; a diferença inteira
+vem dos 12 dias dobrados (−363 → +2110).
+
+O conflito de documentação se resolve: a errata de 21/08 ("histórico
+sem duplicata") olhou um backfill limpo; o "volume real é metade" de
+22/08 olhou uma árvore com backfill repetido. E os 5 dias de realtime
+batem com curated a menos de 250 linhas: **o stream ao vivo é limpo, o
+EA em produção vê o equivalente ao curated.** O relógio do EA ao vivo
+NÃO está fora do relógio do research.
+
+Decisão do operador: default de `ea-replay-lote --raiz-raw` passa a
+`data/curated` — única árvore completa E limpa no fluxo real
+(`data/raw` local = só o último dia; backup = histórico com dobras).
+
+### A decomposição sobre dado válido
+
+- 99 ops, 25 pregões, +6356. Drawdown máximo **1556 pts = R$311 (6,2%)**.
+- Jackknife por pregão: [1056 ; 1788]. Bootstrap IC95: **[757 ; 2898]**.
+  Estatística de um evento, como previsto.
+
+| # | prof. | ops | dias | 3 piores | parc. OPS | DIA | SEQ | rótulo |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 1556 | 16 | 6 (07-24→07-31) | −371, −336, −296 | 0,64 | 0,47 | 0,66 | sequência |
+| 2 | 1056 | 6 | 2 | −601, −256, −166 | 0,97 | 0,76 | 0,97 | operações |
+| 3 | 969 | 9 | 2 | −626, −576, −421 | 1,67 | 0,65 | 0,88 | operações |
+
+**Trecho 1** é a primeira semana inteira, sem fonte dominante: o rótulo
+"sequência" ganhou de "operações" por 0,02 — margem sem informação.
+Limitação da regra fixada antes, registrada e não alterada: "difuso" só
+dispara se NENHUMA parcela passa de 0,50, e aqui as três passaram.
+Numa regra futura, difuso deveria ser "nenhuma domina as outras", não
+"todas abaixo de 0,50".
+
+**Trechos 2 e 3** são dominados por operações isoladas: −601, −626,
+−576, −421.
+
+### A premissa caiu
+
+"Calmar 0,23, drawdown grande relativo ao retorno" — a motivação da
+pergunta inteira — era artefato de dado dobrado. Sobre dado válido:
+Calmar 4,08, R$311 de drawdown em R$5.000 ao longo de 25 dias.
+**"Stop como controle de drawdown" está ENCERRADO como pergunta de
+pesquisa** — não por ter sido respondida, mas porque a premissa era
+falsa. Adicionar mecanismo para melhorar Calmar 4 é otimizar o que não
+está quebrado, pagando ±50 pts/op de incerteza em expectativa.
+
+### O achado real: o stop catastrófico não faz o que diz
+
+Stop catastrófico = 500 pts (2% de R$5.000). Na rodada válida, três
+perdas brutas de **−590, −615 e −565** — todas além do limite.
+`risco.py::motivo_de_saida` checa `excursao_contra` só no CLOSE da
+barra: se a barra fecha 615 contra, sai em 615. É a falha de
+granularidade da Rota B, no mecanismo que já está vivo protegendo
+capital.
+
+Stop contínuo na fita teria capado os três em ~−511 líquidos: **270 pts
+a menos**, trecho 2 de 1056 para ~966, trecho 3 de 969 para ~789. Não é
+mecanismo novo; é fazer o existente cumprir a própria especificação.
+
+É **sessão de desenho**, não patch: o EA decide na barra fechada; checar
+por negócio muda o caminho de execução (callback de trade, latência,
+thread). Já estava adiado como "Rota B redesign — checagem contínua".
+Agora tem motivo concreto e três números. Pendência: conferir no
+`operacoes_replay.parquet` o `motivo` dessas três operações.
+
+### Para entender depois, não agora
+
+EA rende +64/op sobre curated; o research mediu +18/op para o mesmo
+sinal no mesmo dado. Compatível com ruído (EP ~32), mas a direção pede
+olhar: o EA executa 99 de ~178 gatilhos por "uma posição de cada vez".
+Se isso seleciona sistematicamente o primeiro gatilho de cada
+aglomerado, é um filtro que ninguém pré-registrou.

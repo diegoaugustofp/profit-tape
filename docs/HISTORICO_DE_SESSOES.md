@@ -29,7 +29,7 @@ documentos de assunto — só resuma e aponte.
 
 ---
 
-## 2026-08-30/31 — drawdown: desenho + pré-voo (v1.45–v1.46)
+## 2026-08-30/31 — drawdown: desenho, pré-voo e encerramento (v1.45–v1.47)
 
 Continuação da sessão de 29/08, depois de atualizar o clone para
 v1.44. Três perguntas já estavam fechadas na sessão do dia; esta abre a
@@ -98,7 +98,41 @@ v1.44. Três perguntas já estavam fechadas na sessão do dia; esta abre a
   memória sem imprimir. Corrigido (contagem por metadados em segundos,
   guarda de tamanho, `--dia`, progresso). 7 testes, 374 no total.
 
+### 31/08 — resolvido: três rodadas, uma válida (v1.47)
+- `duplicatas` em 07-24: 100% do dia entregue duas vezes, campos
+  idênticos. Curated deduplica certo. 12 de 25 dias com backfill em
+  dobro no raw; os 5 dias de realtime batem com curated (< 250 linhas):
+  **o stream ao vivo é limpo**, o EA em produção vê o equivalente ao
+  curated. Conflito de docs 21/08 vs 22/08 resolvido — os dois certos,
+  sobre árvores diferentes.
+- Replay sobre curated: **99 ops, +6356, Calmar 4,08**. Validação
+  interna: os 13 dias limpos batem operação por operação com a rodada
+  do backup. Determinismo confirmado.
+- **A pergunta de drawdown está ENCERRADA**: Calmar 0,23 era artefato.
+  Sobre dado válido não há problema de drawdown a resolver.
+- Achado real da decomposição: trechos 2 e 3 dominados por −601, −626,
+  −576 — **três perdas além do stop catastrófico de 500**, porque
+  `motivo_de_saida` checa só no close da barra. O mecanismo vivo de
+  proteção de capital não cumpre a própria spec. Correção = checagem
+  contínua na fita; sessão de desenho (muda caminho de execução).
+- Default de `ea-replay-lote --raiz-raw` → `data/curated` (decisão do
+  operador, dado o fluxo real: raw local = só o último dia).
+- Números anteriores marcados como contaminados no RESEARCH_PLANO
+  (28/08 circuit breaker/Calmar; 27/08 MAE 4,5%).
+
 ### Pendências
+- Sessão de desenho: stop catastrófico contínuo na fita (o EABridge já
+  vê cada negócio; falta o gestor de risco reagir por negócio).
+- Conferir `motivo` das três operações além do stop no
+  `operacoes_replay.parquet`.
+- Entender +64/op (EA) vs +18/op (research) no mesmo dado — o filtro
+  "uma posição de cada vez" seleciona 99 de ~178 gatilhos.
+- Refazer `mae-analise` e o acompanhamento do circuit breaker sobre
+  curated (zero custo, só para os documentos pararem de citar números
+  contaminados).
+- Depois: WDO (caminho 2) e recontagem de trials (caminho 1).
+
+### Pendências antigas (superadas)
 - Operador: `inspect <backup> --contagem` e `inspect data\curated
   --contagem`; qual `--raiz-raw` usou na 2a rodada; `duplicatas` sobre
   um dia presente nas duas árvores.
