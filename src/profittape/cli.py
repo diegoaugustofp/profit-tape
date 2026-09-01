@@ -772,6 +772,47 @@ def absorcao_barra(
 
 
 @app.command()
+def absorcao_grafico(
+    log: Path = typer.Argument(..., help="Dump do console com linhas ABSBARRA|"),
+    saida: Path = typer.Option(Path("data/research"), "--saida"),
+    dias_ruido: int = typer.Option(900, "--dias-ruido"),
+    log_level: str = typer.Option("INFO", "--log-level"),
+) -> None:
+    """
+    Roda o pre-registro da absorcao sobre dados do GRAFICO.
+
+    Amostra INDEPENDENTE, um tiro, consome trial. Recusa dump que se
+    sobreponha a 24/07-27/08 (ja' no parquet): a independencia e' a
+    unica razao de usar esta fonte.
+    """
+    configurar(log_level)
+    from .research.absorcao_grafico import rodar
+
+    r = rodar(log, saida, n_dias_ruido=dias_ruido)
+    typer.echo("=" * 72)
+    typer.echo("ABSORCAO DE BARRA — amostra do GRAFICO (independente)")
+    typer.echo("=" * 72)
+    d = r["log"]
+    typer.echo(f"  {d['barras']} barras | {d['pregoes']} pregoes | "
+               f"{d['inicio']} a {d['fim']}")
+    typer.echo(f"  portao sobre ruido: {r['portao']}")
+    typer.echo(f"  eventos: {r['eventos']}\n")
+    typer.echo("--- CONFERENCIA Python vs .ntsl (divergencia = os dois nao")
+    typer.echo("    sao a mesma coisa) ---")
+    for campo, v in r["conferencia_ntsl"].items():
+        if v.get("comparaveis"):
+            typer.echo(f"  {campo:16} n={v['comparaveis']:5d} "
+                       f"dif_mediana={v['dif_mediana']} "
+                       f"dif_max={v['dif_max']}")
+    typer.echo("")
+    typer.echo(r["tabela"][["grupo", "n", "n_suficiente", "media", "t",
+                            "ic95_baixo", "ic95_alto", "sig"]]
+               .round(3).to_string(index=False))
+    typer.echo(f"\n  VEREDITO: {r['veredito']}")
+    typer.echo(f"  {r['motivo']}")
+
+
+@app.command()
 def agents(
     dados: Path = typer.Option(
         Path("data/curated"), "--dados",

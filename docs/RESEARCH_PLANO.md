@@ -4240,6 +4240,43 @@ mudar parametro DEPOIS de ver o resultado, e invalidaria a rodada.
 Isto reforca a prioridade ja' registrada: **acumular pregoes e' a via
 principal**, e agora com um consumidor concreto esperando.
 
+### AMOSTRA DO GRAFICO como conjunto INDEPENDENTE (decisao 2026-08-31)
+
+Decisao do operador diante do INCONCLUSIVO: em vez de esperar ~12
+pregoes, usar o historico do grafico como **amostra independente**,
+consumindo trial.
+
+**Por que e' viavel aqui e nao era antes**: o evento precisa so' de OHLC
++ volume TOTAL de agressao. `QuantityVol(False, True)` entrega isso em
+historico profundo. `AgressionVolBuy/Sell` — retido por UMA SEMANA — nao
+e' necessario, porque o evento mede ESFORCO, nao desequilibrio.
+
+**Independente, nao continuacao do pool.** Duas amostras separadas que
+concordem valem mais que uma maior. Se o efeito aparecer nas duas, e'
+forte; se aparecer so' numa, aprendeu-se sobre estabilidade.
+
+**Sobreposicao com 24/07-27/08 e' RECUSADA no codigo.** A independencia
+e' a unica razao de usar esta fonte: sobrepor transformaria "duas
+amostras que concordam" em "a mesma amostra contada duas vezes", e o
+segundo resultado pareceria confirmacao.
+
+**Risco tecnico medido**: o OHLC do grafico diverge do tape em 1 tick em
+~47% das barras (causa: RLP como primeiro/ultimo negocio). Simulado o
+efeito sobre o evento — **~4% dos eventos mudariam de classificacao**.
+Ruido de medicao aceitavel, e muito menor do que seria se o evento
+dependesse de `imbalance`.
+
+`research/absorcao_grafico.py` + `profit-tape absorcao-grafico`. Os
+campos calculados sao RECALCULADOS em Python e os logados pelo `.ntsl`
+servem de CONFERENCIA — mesmo desenho da equivalencia: usar o numero
+logado seria confiar que os lados concordam; recalcular MEDE se
+concordam.
+
+**Quanto dumpar**: o lado ALTA precisa de 30 eventos a ~0,8/pregao, entao
+~38 pregoes. Buffer de ~2.000 linhas = ~18 pregoes por dump, com
+`MostrarSoEvento(0)` (os controles precisam das barras que NAO
+dispararam). Dois a tres dumps, em periodo anterior a 24/07.
+
 ### Fora deste pre-registro
 
 - **Exaustao**: e' processo de SEQUENCIA, nao evento de barra — objeto
