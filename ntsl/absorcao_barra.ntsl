@@ -1,0 +1,186 @@
+//=====================================================================
+// ABSORCAO DE BARRA -- INSPECAO VISUAL
+//
+// Implementa o EVENTO do pre-registro congelado em 2026-08-31, o mesmo
+// que `research/absorcao_barra.py` executa. As constantes abaixo sao
+// CONGELADAS: mudar qualquer uma exige pre-registro NOVO, e ha' teste
+// no repositorio que compara os dois lados.
+//
+// PARA QUE SERVE, E PARA QUE NAO SERVE
+// ------------------------------------
+// SERVE para olhar as barras que o codigo marcou e responder: "isto e'
+// o que eu chamo de absorcao quando leio o grafico?". Essa conferencia
+// e' o que pegou, em 2026-08-31, que a formula anterior (`absorcao_dir`)
+// pintava MARUBOZUS enquanto o conceito era DOJI com pavio -- os
+// opostos na mesma escala.
+//
+// NAO SERVE como evidencia estatistica, e NAO autoriza ajustar
+// parametro. Se a inspecao mostrar que os eventos nao correspondem a'
+// leitura, isso e' informacao sobre a FORMALIZACAO e exige pre-registro
+// novo -- nunca ajuste do que ja' esta congelado.
+//
+// VANTAGEM SOBRE O absorcao_dir.ntsl
+// ----------------------------------
+// Aquele dependia de AgressionVolBuy/Sell, que o Profit retem por UMA
+// SEMANA (medido: zero em 2.001 barras fora da janela, sem erro
+// nenhum). Este usa so' `QuantityVol(False, True)` -- volume total de
+// agressao --, que tem historico profundo. Da' para inspecionar anos.
+//
+// AS CORES
+//   clAqua     absorcao apos ALTA   -> vies de BAIXA
+//   clFucsia   absorcao apos BAIXA  -> vies de ALTA
+//   (a direcao e' CONTRARIA ao movimento que veio antes)
+//=====================================================================
+
+input
+  //--- CONGELADOS (pre-registro 2026-08-31). Nao ajustar. ---
+  MaxDeslocNorm(0.25);      // |close-open| / (high-low)
+  MinZAmplitude(0.50);      // amplitude vs as 50 barras anteriores
+  MinZVolAgr(0.50);         // volume de agressao vs as 50 anteriores
+  JanelaZ(50);              // barras da referencia movel
+  JanelaContexto(6);        // ~30 min no 5m, do relato do operador
+  KContexto(3.0);           // multiplo do range medio (reduzido de 5
+                            // por RESTRICAO DE AMOSTRA, nao por
+                            // resultado)
+  //--- somente apresentacao ---
+  MostrarSoEvento(0);       // 1 = so' loga barras marcadas
+  LogAtivo(1);
+  LogDataInicio(0);         // formato EasyLanguage 1AnoMesDia
+  LogDataFim(0);
+
+var
+  sAmplitude, sDeslocNorm                    : Float;
+  sVolAgr                                    : Float;
+  sMediaAmp, sDpAmp, sZAmp                   : Float;
+  sMediaVol, sDpVol, sZVol                   : Float;
+  sRangeMedio, sMovContexto                  : Float;
+  sSoma, sSomaQuad, sD                       : Float;
+  nIndex, nLado                              : Integer;
+  bEvento, bContexto, bNaJanela              : Boolean;
+
+begin
+  //-------------------------------------------------------------------
+  // Volume de agressao da barra.
+  //
+  // QuantityVol(False, True) = sem leilao, SO' agressores. Funciona em
+  // historico profundo, ao contrario de AgressionVolBuy/Sell.
+  //
+  // Se o Plugin Tape Reading estiver inativo, o segundo parametro e'
+  // ignorado em SILENCIO e isto vira volume total. O log inclui os DOIS
+  // para a diferenca ficar visivel: iguais nas duas colunas = plugin
+  // desligado.
+  //-------------------------------------------------------------------
+  sVolAgr := QuantityVol(False, True);
+
+  sAmplitude := High - Low;
+  if sAmplitude > 0 then
+    sDeslocNorm := (Close - Open) / sAmplitude
+  else
+    sDeslocNorm := 0;
+
+  bEvento   := False;
+  bContexto := False;
+  nLado     := 0;
+  sZAmp     := 0;
+  sZVol     := 0;
+
+  // CurrentBar > JanelaZ + JanelaContexto: precisa das 50 barras da
+  // referencia MAIS as 6 do contexto. Antes disso nada e' calculavel, e
+  // marcar barra no aquecimento produziria evento a partir de janela
+  // incompleta -- que pareceria evento normal no grafico.
+  if CurrentBar > JanelaZ + JanelaContexto + 1 then
+  begin
+    //--- z da AMPLITUDE ---
+    sSoma := 0;
+    for nIndex := 1 to JanelaZ do
+      sSoma := sSoma + (High[nIndex] - Low[nIndex]);
+    sMediaAmp := sSoma / JanelaZ;
+
+    sSomaQuad := 0;
+    for nIndex := 1 to JanelaZ do
+    begin
+      sD := (High[nIndex] - Low[nIndex]) - sMediaAmp;
+      sSomaQuad := sSomaQuad + sD * sD;
+    end;
+    sDpAmp := Sqrt(sSomaQuad / (JanelaZ - 1));
+    if sDpAmp > 0 then
+      sZAmp := (sAmplitude - sMediaAmp) / sDpAmp;
+
+    //--- z do VOLUME DE AGRESSAO ---
+    sSoma := 0;
+    for nIndex := 1 to JanelaZ do
+      sSoma := sSoma + QuantityVol(False, True)[nIndex];
+    sMediaVol := sSoma / JanelaZ;
+
+    sSomaQuad := 0;
+    for nIndex := 1 to JanelaZ do
+    begin
+      sD := QuantityVol(False, True)[nIndex] - sMediaVol;
+      sSomaQuad := sSomaQuad + sD * sD;
+    end;
+    sDpVol := Sqrt(sSomaQuad / (JanelaZ - 1));
+    if sDpVol > 0 then
+      sZVol := (sVolAgr - sMediaVol) / sDpVol;
+
+    //--- CONTEXTO: range medio SEM a barra atual ---
+    // A amplitude da propria barra nao pode entrar na referencia que a
+    // julga. `sMediaAmp` ja' e' das 50 ANTERIORES por construcao (o laco
+    // comeca em 1), entao serve.
+    sRangeMedio := sMediaAmp;
+    if sRangeMedio > 0 then
+      sMovContexto := (Close[1] - Close[1 + JanelaContexto]) / sRangeMedio
+    else
+      sMovContexto := 0;
+
+    //--- O EVENTO: CONJUNCAO das tres condicoes ---
+    // Conjuncao de proposito. Combinar num numero unico repetiria o erro
+    // do absorcao_dir, onde a subtracao escondia dois casos OPOSTOS.
+    bEvento := (Abs(sDeslocNorm) <= MaxDeslocNorm)
+           and (sZAmp >= MinZAmplitude)
+           and (sZVol >= MinZVolAgr);
+
+    bContexto := Abs(sMovContexto) >= KContexto;
+
+    // Direcao CONTRARIA ao movimento: subiu muito e travou -> BAIXA.
+    if sMovContexto > 0 then
+      nLado := -1
+    else if sMovContexto < 0 then
+      nLado := 1;
+
+    if bEvento and bContexto then
+    begin
+      if nLado < 0 then
+        PaintBar(clAqua)        // absorcao apos ALTA -> vies de BAIXA
+      else if nLado > 0 then
+        PaintBar(clFucsia);     // absorcao apos BAIXA -> vies de ALTA
+    end;
+  end;
+
+  Plot(sMovContexto);
+  Plot2(KContexto);
+  Plot3(-KContexto);
+
+  //-------------------------------------------------------------------
+  // LOG
+  //
+  // Ordem CONGELADA, igual a' do absorcao_dir: qualquer mudanca precisa
+  // sair nos dois lados (indicador e parser) na mesma entrega. Em
+  // 2026-08-31 uma edicao do log falhou em silencio porque a ancora
+  // procurada nao existia, e o parser passou a exigir um campo que o
+  // indicador nunca emitiu.
+  //
+  // CurrentBar <= BarCount - 3 evita logar as barras ainda em formacao.
+  //-------------------------------------------------------------------
+  bNaJanela := ((LogDataInicio = 0) or (Date >= LogDataInicio))
+           and ((LogDataFim = 0) or (Date <= LogDataFim));
+
+  if (LogAtivo = 1) and bNaJanela and (CurrentBar <= BarCount - 3) then
+  begin
+    if (MostrarSoEvento = 0) or (bEvento and bContexto) then
+      ConsoleLog("ABSBARRA|" + Date + "|" + Time + "|" + TimeExchange
+        + "|" + Open + "|" + High + "|" + Low + "|" + Close
+        + "|" + QuantityVol(False, False) + "|" + sVolAgr
+        + "|" + sDeslocNorm + "|" + sZAmp + "|" + sZVol
+        + "|" + sMovContexto + "|" + nLado);
+  end;
+end;

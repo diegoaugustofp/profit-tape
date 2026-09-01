@@ -153,3 +153,67 @@ def test_ruido_tem_amplitude_e_volume_CORRELACIONADOS() -> None:
         subset=["amplitude_pts", "vol_agr"])
     r = float(np.corrcoef(d["amplitude_pts"], d["vol_agr"])[0, 1])
     assert r > 0.4, f"amplitude e volume precisam andar juntos, deu {r:.3f}"
+
+
+def _ntsl() -> str:
+    from pathlib import Path as _P
+    return (_P(__file__).resolve().parents[1] / "ntsl"
+            / "absorcao_barra.ntsl").read_text(encoding="utf-8")
+
+
+def test_o_ntsl_usa_as_MESMAS_constantes_congeladas() -> None:
+    """
+    O `.ntsl` e o Python sao dois lados da MESMA definicao congelada, e
+    ate 2026-08-31 nada amarrava os dois lados de nada neste projeto --
+    foi assim que o parser passou a exigir um campo que o indicador nunca
+    emitiu, com a suite inteira verde.
+
+    Se alguem ajustar um corte no grafico "so' para ver", este teste
+    falha e diz que os dois lados divergiram.
+    """
+    t = _ntsl()
+    esperado = {
+        "MaxDeslocNorm": ab.MAX_DESLOC_NORM,
+        "MinZAmplitude": ab.MIN_Z_AMPLITUDE,
+        "MinZVolAgr": ab.MIN_Z_VOL_AGR,
+        "JanelaZ": ab.JANELA_Z,
+        "JanelaContexto": ab.JANELA_CONTEXTO,
+        "KContexto": ab.K_CONTEXTO,
+    }
+    for nome, valor in esperado.items():
+        import re
+        m = re.search(rf"{nome}\(([^)]+)\)", t)
+        assert m, f"`{nome}` nao aparece como input do .ntsl"
+        assert float(m.group(1)) == float(valor), (
+            f"{nome}: .ntsl tem {m.group(1)}, Python tem {valor}. "
+            "A definicao e' CONGELADA -- mude nos DOIS lados, com "
+            "pre-registro novo."
+        )
+
+
+def test_o_ntsl_nao_depende_de_AgressionVol() -> None:
+    """
+    `AgressionVolBuy/Sell` e' retido por UMA SEMANA (medido: zero em
+    2.001 barras fora da janela, sem erro nenhum). O evento novo precisa
+    so' do volume TOTAL de agressao, que tem historico profundo -- e e'
+    por isso que da' para inspecionar anos de grafico.
+    """
+    t = _ntsl()
+    # So' o CODIGO conta: o cabecalho CITA a funcao ao explicar por que
+    # nao a usa, e proibir a mencao apagaria a explicacao. Foi o proprio
+    # teste que falhou primeiro, por essa razao.
+    codigo = "\n".join(linha for linha in t.splitlines()
+                       if not linha.lstrip().startswith("//"))
+    assert "AgressionVolBuy" not in codigo
+    assert "AgressionVolSell" not in codigo
+    assert "QuantityVol(False, True)" in codigo
+
+
+def test_o_ntsl_espera_o_aquecimento_das_DUAS_janelas() -> None:
+    """
+    Precisa das 50 barras da referencia MAIS as 6 do contexto. Marcar
+    barra no aquecimento produziria evento a partir de janela
+    incompleta, e no grafico ele pareceria um evento normal.
+    """
+    t = _ntsl()
+    assert "CurrentBar > JanelaZ + JanelaContexto" in t

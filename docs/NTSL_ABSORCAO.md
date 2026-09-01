@@ -836,3 +836,47 @@ Verificado que ele PEGA a regressao: com o `.ntsl` antigo, falha com
 O `.ntsl` e o parser sao dois lados da mesma ordem congelada, e ate
 agora nada os amarrava — a ordem so' existia como comentario nos dois
 arquivos.
+
+
+## `absorcao_barra.ntsl` — inspecao visual do evento (2026-08-31)
+
+Implementa o EVENTO do pre-registro congelado, o mesmo que
+`research/absorcao_barra.py` executa.
+
+    clAqua     absorcao apos ALTA   -> vies de BAIXA
+    clFucsia   absorcao apos BAIXA  -> vies de ALTA
+
+### Funciona em historico PROFUNDO, ao contrario do anterior
+
+`absorcao_dir.ntsl` dependia de `AgressionVolBuy/Sell`, retido por UMA
+SEMANA (medido: zero em 2.001 barras fora da janela, sem erro nenhum).
+
+Este usa so' `QuantityVol(False, True)` — volume TOTAL de agressao —, que
+tem historico profundo. O evento nao precisa de `imbalance`; precisa de
+esforco, e esforco e' volume total. **Da' para inspecionar anos de
+grafico**, muito alem dos 25 pregoes capturados.
+
+### Verificado contra o Python
+
+Replicada a logica do `.ntsl` de forma independente sobre os mesmos
+dados: **15 eventos dos dois lados, ZERO discordancias**.
+
+E ha' teste que compara as CONSTANTES dos dois arquivos. Se alguem
+ajustar um corte no grafico "so' para ver", a suite falha e diz que os
+dois lados divergiram — a lacuna que, em 2026-08-31, deixou o parser
+exigir um campo que o indicador nunca emitiu, com a suite inteira verde.
+
+### PARA QUE SERVE, E PARA QUE NAO SERVE
+
+**Serve** para olhar as barras marcadas e responder: "isto e' o que eu
+chamo de absorcao quando leio o grafico?". Foi essa conferencia que
+pegou que o `absorcao_dir` pintava MARUBOZUS enquanto o conceito era
+DOJI com pavio.
+
+**Nao serve** como evidencia estatistica, e **nao autoriza ajustar
+parametro**. Se a inspecao mostrar que os eventos nao correspondem a'
+leitura, isso e' informacao sobre a FORMALIZACAO e exige pre-registro
+NOVO — nunca ajuste do que ja' esta congelado.
+
+O `MostrarSoEvento(1)` reduz o log as barras marcadas, util enquanto os
+~12 pregoes que faltam sao acumulados.
