@@ -4272,6 +4272,36 @@ servem de CONFERENCIA — mesmo desenho da equivalencia: usar o numero
 logado seria confiar que os lados concordam; recalcular MEDE se
 concordam.
 
+### O PERIODO TEM QUE SER DECLARADO ANTES (lacuna fechada, 2026-08-31)
+
+Levantado pelo operador: recusar sobreposicao com o capturado **nao
+basta**. Nada impediria dumpar maio, ver o resultado, e depois dumpar
+marco. Cada dump seria "um tiro", mas o CONJUNTO seria uma busca — e o
+ultimo resultado pareceria confirmacao.
+
+Essa lacuna existia e nao estava protegida em lugar nenhum.
+
+**Fechada em CODIGO, nao so' em texto**: `docs/PERIODOS_DECLARADOS.json`
+tem que conter o periodo, com `motivo`, e estar COMMITADO antes do dump.
+`profit-tape absorcao-grafico` recusa qualquer periodo fora do
+declarado, e recusa tambem dump que EXTRAPOLE o declarado (declarar maio
+e dumpar maio+junho seria ampliar depois do fato).
+
+O git carimba a ordem: a declaracao precede o dado, e isso e'
+verificavel por terceiro. Nao depende de ninguem lembrar.
+
+**Regra que acompanha:**
+
+1. Escolher por criterio EXTERNO ao resultado — calendario,
+   disponibilidade, tamanho de amostra. Nunca por desempenho.
+2. **Cada periodo declarado consome trial, tenha sido rodado ou nao.**
+   Declarar cinco e rodar um ainda e' escolher entre cinco.
+3. Nao editar nem remover entrada depois de rodada. O historico de
+   tentativas e' parte do resultado.
+
+O `motivo` e' cobravel: **se nao puder ser dito antes de ver o dado, nao
+e' criterio.**
+
 **Quanto dumpar**: o lado ALTA precisa de 30 eventos a ~0,8/pregao, entao
 ~38 pregoes. Buffer de ~2.000 linhas = ~18 pregoes por dump, com
 `MostrarSoEvento(0)` (os controles precisam das barras que NAO

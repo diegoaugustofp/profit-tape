@@ -158,6 +158,63 @@ def checar_sobreposicao(df: pd.DataFrame) -> None:
         )
 
 
+ARQUIVO_PERIODOS = Path("docs/PERIODOS_DECLARADOS.json")
+
+
+def checar_periodo_declarado(df: pd.DataFrame,
+                             arquivo: Path = ARQUIVO_PERIODOS) -> dict[str, Any]:
+    """
+    Recusa dump de periodo que nao foi DECLARADO antes.
+
+    Recusar sobreposicao com o capturado nao basta. Nada impediria
+    dumpar maio, ver o resultado, e depois dumpar marco: cada dump seria
+    "um tiro", mas o CONJUNTO seria uma busca, e o ultimo resultado
+    pareceria confirmacao.
+
+    A protecao e' declarar o periodo ANTES de extrair o dado, com o
+    arquivo commitado. O git carimba a ordem — a declaracao precede o
+    dado, e isso e' verificavel por terceiro.
+
+    Cada periodo declarado consome trial, tenha sido rodado ou nao:
+    declarar cinco e rodar um ainda e' escolher entre cinco.
+    """
+    import json
+
+    if not arquivo.exists():
+        raise SystemExit(
+            f"nao achei {arquivo}. O periodo tem que ser DECLARADO e "
+            "commitado ANTES do dump."
+        )
+    dados = json.loads(arquivo.read_text(encoding="utf-8"))
+    declarados = dados.get("periodos", [])
+    if not declarados:
+        raise SystemExit(
+            f"nenhum periodo declarado em {arquivo}.\n"
+            "  Acrescente a entrada com `inicio`, `fim` e `motivo`, e "
+            "COMMITE antes de gerar o dump.\n"
+            "  O motivo e' cobravel: se nao puder ser dito antes de ver o "
+            "dado, nao e' criterio."
+        )
+
+    ini = pd.Timestamp(str(df["dia"].min())).date()
+    fim = pd.Timestamp(str(df["dia"].max())).date()
+    for p in declarados:
+        d_ini = pd.Timestamp(p["inicio"]).date()
+        d_fim = pd.Timestamp(p["fim"]).date()
+        if ini >= d_ini and fim <= d_fim:
+            return dict(p)
+
+    faixas = ", ".join(f"{p['inicio']}..{p['fim']}" for p in declarados)
+    raise SystemExit(
+        f"o dump cobre {ini} a {fim}, que NAO esta declarado em {arquivo}.\n"
+        f"  declarados: {faixas}\n"
+        "  Declarar depois de extrair o dado anula a protecao: seria "
+        "escolher o periodo\n"
+        "  sabendo o que ha' nele. Se o periodo e' legitimo, declare, "
+        "commite e redumpe."
+    )
+
+
 def para_barras(df: pd.DataFrame) -> pd.DataFrame:
     """Formato que `absorcao_barra.preparar` espera."""
     return df[["dia", "open", "high", "low", "close", "vol_agr"]].copy()
@@ -209,7 +266,9 @@ def rodar(caminho_log: Path, saida_dir: Path,
 
     df, diag = carregar_log(caminho_log)
     checar_sobreposicao(df)
-    log.info("absorcao_grafico.log", **diag)
+    declarado = checar_periodo_declarado(df)
+    log.info("absorcao_grafico.log", **diag,
+             periodo_declarado=declarado.get("motivo", ""))
 
     limiar_z = limiar_deflacionado(2)
     portao = portao_de_honestidade(limiar_z, n_dias=n_dias_ruido,
@@ -228,6 +287,7 @@ def rodar(caminho_log: Path, saida_dir: Path,
     tabela.to_csv(saida_dir / "absorcao_grafico.csv", index=False)
     return {
         "log": diag,
+        "periodo_declarado": declarado,
         "portao": portao["veredito"],
         "conferencia_ntsl": conferencia,
         "eventos": int((d["evento"] & d["contexto_ok"]).sum()),

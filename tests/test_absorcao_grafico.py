@@ -150,3 +150,74 @@ def test_ordem_dos_campos_bate_com_o_ntsl() -> None:
         f"o .ntsl emite {chamada.count('|') } campos e o parser espera "
         f"{len(CAMPOS)}"
     )
+
+
+def _declara(tmp_path, periodos):  # type: ignore[no-untyped-def]
+    import json
+    arq = tmp_path / "PERIODOS.json"
+    arq.write_text(json.dumps({"periodos": periodos}), encoding="utf-8")
+    return arq
+
+
+def _df_dias(inicio: str, fim: str) -> pd.DataFrame:
+    return pd.DataFrame({"dia": [pd.Timestamp(inicio).date(),
+                                 pd.Timestamp(fim).date()]})
+
+
+def test_periodo_declarado_antes_e_aceito(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    from profittape.research.absorcao_grafico import checar_periodo_declarado
+
+    arq = _declara(tmp_path, [{"inicio": "2026-05-01", "fim": "2026-05-31",
+                               "motivo": "mes completo anterior ao curated"}])
+    p = checar_periodo_declarado(_df_dias("2026-05-04", "2026-05-29"), arq)
+    assert "mes completo" in p["motivo"]
+
+
+def test_periodo_NAO_declarado_e_recusado(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """
+    A protecao central. Recusar sobreposicao com o capturado nao basta:
+    nada impediria dumpar maio, ver o resultado, e depois dumpar marco.
+    Cada dump seria "um tiro", mas o CONJUNTO seria uma busca -- e o
+    ultimo resultado pareceria confirmacao.
+    """
+    from profittape.research.absorcao_grafico import checar_periodo_declarado
+
+    arq = _declara(tmp_path, [{"inicio": "2026-05-01", "fim": "2026-05-31",
+                               "motivo": "x"}])
+    with pytest.raises(SystemExit, match="NAO esta declarado"):
+        checar_periodo_declarado(_df_dias("2026-03-02", "2026-03-20"), arq)
+
+
+def test_dump_que_EXTRAPOLA_o_declarado_e_recusado(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """
+    Declarar maio e dumpar maio+junho seria ampliar depois do fato.
+    """
+    from profittape.research.absorcao_grafico import checar_periodo_declarado
+
+    arq = _declara(tmp_path, [{"inicio": "2026-05-01", "fim": "2026-05-31",
+                               "motivo": "x"}])
+    with pytest.raises(SystemExit, match="NAO esta declarado"):
+        checar_periodo_declarado(_df_dias("2026-05-04", "2026-06-15"), arq)
+
+
+def test_lista_vazia_exige_declaracao_com_motivo(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """O motivo e' cobravel: se nao puder ser dito ANTES de ver o dado,
+    nao e' criterio."""
+    from profittape.research.absorcao_grafico import checar_periodo_declarado
+
+    arq = _declara(tmp_path, [])
+    with pytest.raises(SystemExit, match="motivo"):
+        checar_periodo_declarado(_df_dias("2026-05-04", "2026-05-29"), arq)
+
+
+def test_arquivo_de_periodos_do_repositorio_e_valido() -> None:
+    """O arquivo commitado tem que ser JSON legivel e ter a chave certa."""
+    import json
+    from pathlib import Path as _P
+
+    arq = _P(__file__).resolve().parents[1] / "docs" / "PERIODOS_DECLARADOS.json"
+    dados = json.loads(arq.read_text(encoding="utf-8"))
+    assert "periodos" in dados and isinstance(dados["periodos"], list)
+    for p in dados["periodos"]:
+        assert {"inicio", "fim", "motivo"} <= set(p), (
+            "todo periodo precisa de inicio, fim e MOTIVO")

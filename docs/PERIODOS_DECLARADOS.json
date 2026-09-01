@@ -1,0 +1,29 @@
+{
+  "_leia_isto": [
+    "PERIODOS DECLARADOS ANTES DE QUALQUER DUMP.",
+    "",
+    "POR QUE ESTE ARQUIVO EXISTE",
+    "Recusar sobreposicao com o periodo ja capturado nao basta. Nada",
+    "impediria dumpar maio, ver o resultado, e depois dumpar marco. Cada",
+    "dump seria 'um tiro', mas o CONJUNTO seria uma busca -- e o ultimo",
+    "resultado pareceria confirmacao.",
+    "",
+    "A protecao e declarar o periodo ANTES de extrair o dado, com o",
+    "arquivo commitado. `profit-tape absorcao-grafico` recusa qualquer",
+    "periodo que nao esteja aqui.",
+    "",
+    "REGRA",
+    "1. Escolher o periodo por criterio EXTERNO ao resultado (calendario,",
+    "   disponibilidade, tamanho de amostra) -- nunca por desempenho.",
+    "2. Acrescentar a entrada e COMMITAR antes de gerar o dump.",
+    "3. Cada periodo declarado consome trial, tenha sido rodado ou nao.",
+    "   Declarar cinco e rodar um ainda e' escolher entre cinco.",
+    "4. Nao editar nem remover entrada depois de rodada. O historico de",
+    "   tentativas e' parte do resultado.",
+    "",
+    "O criterio de escolha vai em `motivo`, e ele e' cobravel: se o",
+    "motivo nao puder ser dito antes de ver o dado, nao e' criterio."
+  ],
+  "hipotese": "absorcao de barra (pre-registro congelado 2026-08-31)",
+  "periodos": []
+}
