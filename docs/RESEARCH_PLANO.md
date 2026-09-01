@@ -113,6 +113,8 @@ arquivo cresceu demais para navegar so' por titulo cronologico).
 
 - [TRIAGEM DE FEATURE: a etapa que faltava entre formalizar e pre-registrar (2026-08-31)](#triagem-de-feature-a-etapa-que-faltava-entre-formalizar-e-pre-registrar-2026-08-31)
 
+- [PRE-REGISTRO: ABSORCAO DE BARRA (CONGELADO 2026-08-31)](#pre-registro-absorcao-de-barra-congelado-2026-08-31)
+
 **Disciplina/processo do proprio research**
 - [Decisoes aprovadas](#decisoes-aprovadas)
 - [Pre-requisitos antes de escrever research/](#pre-requisitos-antes-de-escrever-research)
@@ -4016,3 +4018,145 @@ dois casos reais (`absorcao_dir` com -0,9863, `esforco` com +1,0000).
 Nao diz se a feature PREDIZ alguma coisa. **PASSA nao autoriza nada** —
 so' significa que nao da' para descartar olhando a forma. **REPROVA e'
 bloqueante** para pre-registro.
+
+## PRE-REGISTRO: ABSORCAO DE BARRA (CONGELADO 2026-08-31)
+
+> **CONGELADO pelo operador**, antes de qualquer contato com retorno.
+> Toda a fase de desenho olhou SO' a forma das variaveis (categoria
+> `features`): frequencia, distribuicao e redundancia. **Nenhum retorno
+> foi consultado.**
+
+### De onde a hipotese veio, e por que isso importa
+
+Nao veio de mim procurando formula com propriedade bonita — as duas que
+tentei assim morreram no mesmo dia (`absorcao_dir` gastou 12 trials;
+`esforco` ja' existia como `absorcao`). Veio da leitura de tela do
+operador, confrontada com material proprio dele sobre absorcao x
+exaustao.
+
+**A formula antiga media o OPOSTO do conceito.** `absorcao_dir` tem
+extremos quando `|desloc_norm|` e' GRANDE (marubozu, mediana 0,807 nas
+barras pintadas); absorcao e' `|desloc_norm|` PEQUENO (doji com pavio).
+Medido: correlacao do evento novo com `z_absorcao_dir` = **-0,03**. Sao
+coisas ortogonais, e o CONTRA das 12 celulas nao diz nada sobre esta.
+
+### Hipotese
+
+> Uma barra em que o preco ANDOU e VOLTOU, com esforco grande, apos um
+> movimento local relevante, indica reversao desse movimento.
+
+Absorcao = **esforco grande, alcance grande, resultado nulo**. Os tres
+sao necessarios; o terceiro sozinho e' indistinguivel de barra parada.
+
+### Definicao do evento — CONJUNCAO, nao formula unica
+
+    |desloc_norm|  <=  0,25      resultado nulo
+    z_amplitude    >=  0,50      alcance (vs 50 barras)
+    z_vol_agr      >=  0,50      esforco  (vs 50 barras)
+
+**Conjuncao de proposito.** Combinar os tres num numero unico repetiria
+o erro do `absorcao_dir`, em que a subtracao escondia dois casos
+opostos.
+
+Cortes escolhidos por FREQUENCIA de inspecao (~4,2/pregao), mesmo
+precedente do limiar 1,75 — nunca por resultado.
+
+### Contexto (habilitador de direcao)
+
+    mov6 = (close[t-1] - close[t-7]) / range_medio_50
+    habilitador: |mov6| >= 3
+    direcao: CONTRARIA ao movimento (mov6 > 0 -> viés de BAIXA)
+
+**Por que o contexto e' obrigatorio**: o `imbalance` NAO serve para dar
+direcao aqui. Medido nos eventos: mediana 0,014 contra 0,085 no geral —
+seis vezes menor, e nenhum evento passa de 0,05. Faz sentido
+mecanicamente: **absorcao equilibra o fluxo por definicao**, entao
+neutraliza justamente o campo que mediria o lado.
+
+**Tres definicoes de contexto foram testadas e NAO separaram** (todas
+descritivas, sem retorno):
+
+    contagem de candles consecutivos : eventos 21,4% vs base 22,5% (0,95x)
+    rompimento de topo/fundo de 20b  : so' 7 de 28 eventos tem lado
+    referencias do dia anterior      : razao 0,75-0,90x, ou seja, MENOS
+                                        que a base
+
+**A que separou** foi movimento em multiplos do range, janela curta:
+mediana 3,42 nos eventos contra 0,88 na base. Janela de **6 barras**
+(~30 min) derivada da descricao do operador sobre o tamanho da perna,
+nao da varredura.
+
+**K = 3, nao 5.** O operador propos 5; com 5 o lado de alta projeta 17
+eventos, abaixo do minimo de 30. Reduzido para 3 por RESTRICAO DE
+AMOSTRA, com nenhum retorno consultado.
+
+### Estimador
+
+Retorno de **2 barras** apos o evento, no sentido do viés, BRUTO.
+Horizonte fixado pelo operador.
+
+    retorno = (close[t+2] - close[t]) * lado,  lado = -sign(mov6)
+
+Uma amostra contra zero, POR LADO SEPARADO. Purga estrutural de dia
+inteiro (janela nunca atravessa o pregao).
+
+### Metodologia, fixada ANTES
+
+- Barra de TEMPO 5m, `features_tempo/sym=WINFUT/tf=5m`.
+- `so_agressao=True` — RLP imprime dentro do spread e nunca faz extremo
+  (medido duas vezes), entao infla volume no nivel sem ser absorcao.
+- Os DOIS lados reportados sempre, mesmo o que nao der nada.
+- n < 30 no lado: REPORTADO, nunca interpretado.
+- Significancia exige as DUAS evidencias: |t| >= limiar deflacionado
+  para 2 comparacoes E IC95 de bootstrap por pregao excluindo zero.
+- **Controles pre-registrados** (diagnostico, nao criterio): o mesmo
+  retorno em (a) barras com o contexto mas SEM o evento, e (b) eventos
+  SEM o habilitador de contexto. Se (a) ou (b) der o mesmo que a
+  conjuncao, o evento nao acrescenta nada.
+
+### PORTAO DE HONESTIDADE (bloqueante)
+
+O mesmo estimador sobre passeio aleatorio, com a mesma geometria de
+barra. Exigencia: veredito CONTRA. Qualquer outro reprova.
+
+Aqui o portao NAO e' confirmacao de teorema (diferente da Rota B): o
+estimador seleciona por condicoes sobre a propria barra, e selecao
+sempre merece suspeita de vies. Se reprovar, o desenho esta errado.
+
+### Criterio de decisao, definido ANTES
+
+- **FAVORAVEL**: pelo menos um lado com retorno medio POSITIVO e
+  significativo, n >= 30.
+- **CONTRA**: nenhum lado distinguivel de zero.
+- **INVERTIDO**: retorno significativamente NEGATIVO — a leitura de
+  absorcao esta ao contrario. Achado genuino, registrar.
+- **INCONCLUSIVO**: n < 30 nos dois lados.
+
+### Regra de parada
+
+Proibido re-rodar com cortes, K, janela ou horizonte diferentes depois
+de ver o resultado. INCONCLUSIVO so' permite acumular pregoes e rodar de
+novo com os MESMOS parametros.
+
+### Contabilidade
+
+2 comparacoes (um teste por lado), deflacao local, como a convencao ja'
+estabelecida na Rota B. **Toda a fase de desenho foi `features`** —
+frequencia, distribuicao, redundancia — e nao entra no contador.
+
+Ficou registrado que QUATRO definicoes de contexto foram examinadas.
+Nenhuma olhou retorno, mas a multiplicidade existe: se esta rodada sair
+INCONCLUSIVO e outra definicao de contexto for tentada depois de ver o
+resultado, a contagem tera' que incluir as tentativas.
+
+### Fora deste pre-registro
+
+- **Exaustao**: e' processo de SEQUENCIA, nao evento de barra — objeto
+  de escala diferente. Material do operador da' base de 2 a 5 candles,
+  acima de 20 vira indecisao. Desenho proprio, pre-registro proprio.
+- Nivel de PRECO (footprint). O tape permite reconstruir volume por
+  preco com lado agressor (demonstrado: 327 niveis numa barra), mas todo
+  o pipeline e' de barra, e o operador le' o grafico, nao o Times &
+  Trades. Refinamento posterior.
+- Qualquer implementacao no EA.
+- Alvo e stop.
