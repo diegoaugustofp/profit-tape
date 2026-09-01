@@ -731,6 +731,47 @@ def triagem(
 
 
 @app.command()
+def absorcao_barra(
+    features: Path = typer.Option(
+        Path("data/features_tempo/sym=WINFUT/tf=5m/features.parquet"),
+        "--features"),
+    saida: Path = typer.Option(Path("data/research"), "--saida"),
+    dias_ruido: int = typer.Option(900, "--dias-ruido"),
+    log_level: str = typer.Option("INFO", "--log-level"),
+) -> None:
+    """
+    ABSORCAO DE BARRA — pre-registro congelado em 2026-08-31.
+
+    Ordem: portao sobre ruido (BLOQUEANTE), depois dado real. Se o
+    portao nao devolver CONTRA, o comando aborta antes de olhar qualquer
+    numero real.
+    """
+    configurar(log_level)
+    from .research.absorcao_barra import rodar
+
+    if not features.exists():
+        raise SystemExit(
+            f"nao achei {features} — rode `profit-tape features-tempo`")
+    r = rodar(features, saida, n_dias_ruido=dias_ruido)
+
+    typer.echo("=" * 72)
+    typer.echo("ABSORCAO DE BARRA (pre-registro 2026-08-31)")
+    typer.echo("=" * 72)
+    typer.echo(f"  portao sobre ruido: {r['portao']['veredito']} "
+               f"(passou: {r['portao']['passou']})")
+    typer.echo(f"  barras: {r['barras']}  |  eventos: {r['eventos']}")
+    typer.echo(f"  limiar deflacionado (2 comparacoes): "
+               f"{r['limiar_deflacionado']}\n")
+    typer.echo(r["tabela"][["grupo", "n", "n_suficiente", "media", "t",
+                            "ic95_baixo", "ic95_alto", "sig"]]
+               .round(3).to_string(index=False))
+    typer.echo(f"\n  VEREDITO: {r['veredito']}")
+    typer.echo(f"  {r['motivo']}")
+    typer.echo("\n  CONTROLE = diagnostico, nao criterio: responde se a "
+               "conjuncao acrescenta algo.")
+
+
+@app.command()
 def agents(
     dados: Path = typer.Option(
         Path("data/curated"), "--dados",

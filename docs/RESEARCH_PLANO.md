@@ -4149,6 +4149,53 @@ Nenhuma olhou retorno, mas a multiplicidade existe: se esta rodada sair
 INCONCLUSIVO e outra definicao de contexto for tentada depois de ver o
 resultado, a contagem tera' que incluir as tentativas.
 
+### IMPLEMENTADO e PORTAO PASSOU (2026-08-31)
+
+`research/absorcao_barra.py` + `profit-tape absorcao-barra`. Ordem
+bloqueante no codigo: portao sobre ruido, depois dado real.
+
+    PORTAO sobre 97.200 barras de ruido puro:
+
+                           grupo    n   media      t   sig
+           evento+contexto BAIXA   72   7,986  0,707  False
+            evento+contexto ALTA   50  23,500  1,748  False
+    CONTROLE contexto sem evento 6543  -1,224 -0,994  False
+    CONTROLE evento sem contexto 1870  -0,663 -0,290  False
+
+    VEREDITO SOBRE RUIDO: CONTRA -> PASSOU
+
+Os controles tambem em zero confirmam que nao ha' vies de selecao no
+desenho — que era a suspeita legitima, ja' que o estimador seleciona
+barras por condicoes sobre elas mesmas.
+
+### DEFEITO NO GERADOR DE RUIDO, e o que ele revelou
+
+Primeira versao sorteava o volume da barra INDEPENDENTE do caminho do
+preco. Medido: `corr(amplitude, volume)` = **+0,012 no ruido contra
++0,892 no real**. Como o evento exige amplitude E volume altos ao mesmo
+tempo, no ruido isso virava produto de probabilidades independentes — 3
+eventos em 60 dias contra ~2,5 por pregao no real.
+
+Nao era so' falta de amostra: **ruido com geometria errada testa outro
+estimador**. Corrigido sorteando o numero de NEGOCIOS por barra, que
+determina ao mesmo tempo a amplitude (quantos passos o preco da') e o
+volume.
+
+**E sobrou uma diferenca que NAO e' defeito do gerador:**
+
+    |desloc_norm| mediano nas barras de amplitude alta
+      ruido (passeio aleatorio) : 0,654
+      WINFUT real               : 0,495
+
+O mercado produz muito mais barras que ANDAM E VOLTAM do que um passeio
+aleatorio produziria — o evento e' 2,4x mais frequente no real (4,6%
+contra 1,9%). Isso e' reversao a media intrabarra, e e' precisamente o
+fenomeno que a hipotese afirma existir.
+
+Consequencia para o portao: ele NAO precisa reproduzir a frequencia do
+real. Precisa responder se, quando esses eventos ocorrem POR ACASO, o
+retorno seguinte e' zero. Menos eventos so' exige mais dias — 900.
+
 ### Fora deste pre-registro
 
 - **Exaustao**: e' processo de SEQUENCIA, nao evento de barra — objeto
