@@ -880,3 +880,39 @@ NOVO — nunca ajuste do que ja' esta congelado.
 
 O `MostrarSoEvento(1)` reduz o log as barras marcadas, util enquanto os
 ~12 pregoes que faltam sao acumulados.
+
+
+## Por que o `absorcao_barra.ntsl` nao logava nada (2026-08-31)
+
+Tres defeitos meus, os tres por escrever NTSL assumindo em vez de
+conferir contra o arquivo que ja' funcionava.
+
+**1. Indexacao de chamada de funcao.** Escrevi
+`QuantityVol(False, True)[nIndex]` para percorrer a janela. No NTSL,
+quem guarda historico e' a VARIAVEL declarada, nao a funcao — o
+`absorcao_dir.ntsl` sempre indexa `sAbsorcaoDir[nIndex]`,
+`sImbalance[nIndex]`. Corrigido guardando em `sVolAgr` e `sAmplitude`
+(atribuidas no topo, em toda barra, entao o historico existe) e
+indexando as variaveis.
+
+**2. `Abs()` sem verificar.** O arquivo que funciona nao usa a funcao
+**nenhuma vez**, e eu assumi que ela existe. Trocado por comparacao
+explicita nos dois lados: `(x <= K) and (x >= -K)`.
+
+**3. `nLado` como Integer no `ConsoleLog`.** O arquivo que funciona so'
+concatena `Float` no log. Trocado para `sLado : Float`.
+
+### E um diagnostico para a proxima vez
+
+`LogDiagnostico(1)` loga UMA linha por barra, **sem condicao alguma**,
+com prefixo `ABSDIAG|`. Serve para separar duas causas que produzem o
+mesmo sintoma (console vazio):
+
+    ABSDIAG aparece  -> compilou e rodou; o problema esta na LOGICA
+                        (aquecimento, janela de data, filtro de evento)
+    ABSDIAG nao aparece -> nao compilou, ou o indicador nao esta
+                        aplicado no grafico
+
+Sem essa separacao, "nao salva nada" e' indistinguivel entre erro de
+sintaxe e condicao que nunca fica verdadeira — e as duas pedem
+investigacao oposta.
