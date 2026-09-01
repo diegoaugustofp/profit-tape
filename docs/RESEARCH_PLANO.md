@@ -4196,6 +4196,50 @@ Consequencia para o portao: ele NAO precisa reproduzir a frequencia do
 real. Precisa responder se, quando esses eventos ocorrem POR ACASO, o
 retorno seguinte e' zero. Menos eventos so' exige mais dias — 900.
 
+### RESULTADO: INCONCLUSIVO por amostra (2026-08-31)
+
+Rodado sobre os 25 pregoes (24/07 a 27/08), 2.723 barras. Portao passou
+antes.
+
+                           grupo    n  n_sufic     media      t   sig
+           evento+contexto BAIXA   28    False   -59,821 -0,710  False
+            evento+contexto ALTA   20    False  -113,500 -1,527  False
+    CONTROLE contexto sem evento  247     True   -10,789 -0,567  False
+    CONTROLE evento sem contexto   54     True   -46,852 -1,231  False
+
+    VEREDITO: INCONCLUSIVO -- n < 30 nos dois lados
+
+**Nao interpretado**, por regra congelada. Os quatro grupos deram media
+negativa, INCLUSIVE os dois controles — e controles negativos junto
+sugerem deriva da amostra, nao efeito do evento. Nada disso e'
+significativo e nada disso autoriza leitura.
+
+### ERRO DE DIMENSIONAMENTO MEU
+
+Projetei 62 eventos (38 BAIXA + 25 ALTA); sairam 48 (28 + 20).
+**Superestimei em 29%.**
+
+Causa: extrapolei do dump de 24-31/08 — seis pregoes de volatilidade
+acima da media da amostra — para os 25 pregoes, assumindo regime
+constante. Nao verifiquei essa suposicao.
+
+Licao para o proximo dimensionamento: taxa de evento depende de regime,
+e janela curta e recente nao representa a amostra inteira.
+
+### O QUE A REGRA DE PARADA AUTORIZA
+
+    PERMITIDO: acumular pregoes e rodar de novo com os MESMOS parametros
+    PROIBIDO : mexer em K, cortes, janela ou horizonte
+
+Baixar `K` de 3 para 2 traria mais eventos e e' a tentacao obvia. Seria
+mudar parametro DEPOIS de ver o resultado, e invalidaria a rodada.
+
+**Faltam ~12 pregoes** pela taxa observada (nao projetada): BAIXA chega a
+30 em 27 pregoes, ALTA em 38. Duas a tres semanas de captura.
+
+Isto reforca a prioridade ja' registrada: **acumular pregoes e' a via
+principal**, e agora com um consumidor concreto esperando.
+
 ### Fora deste pre-registro
 
 - **Exaustao**: e' processo de SEQUENCIA, nao evento de barra — objeto
