@@ -275,3 +275,35 @@ def test_periodo_sem_motivo_e_recusado(tmp_path) -> None:  # type: ignore[no-unt
     arq = _declara(tmp_path, [{"inicio": "2026-05-01", "fim": "2026-05-31"}])
     with pytest.raises(SystemExit, match="motivo"):
         checar_periodo_declarado(_df_dias("2026-05-04", "2026-05-29"), arq)
+
+
+@pytest.mark.parametrize(("conteudo", "esperado"), [
+    ("ABSVIDA|x\nABSDIAG|1|100|1260504|900|1|1|0.1|1|1|2\n", "LogDiagnostico"),
+    ("ABSDIR|1260504|900|900|1|2|3|4\n", "absorcao_dir"),
+    ("ABSVIDA|barras=100|primeira_data=1260504\n", "janela de data"),
+    ("qualquer coisa\n", "nao compilou"),
+])
+def test_log_sem_ABSBARRA_aponta_a_causa_CERTA(tmp_path, conteudo, esperado) -> None:  # type: ignore[no-untyped-def]
+    """
+    Quatro causas produzem o mesmo sintoma (nenhuma linha ABSBARRA), e
+    cada uma pede acao diferente. A mensagem antiga sugeria SEMPRE
+    "confira o indicador" -- enganoso quando a causa era o
+    `LogDiagnostico` ligado, modo em que o indicador (corretamente) nao
+    emite ABSBARRA.
+    """
+    arq = tmp_path / "log.txt"
+    arq.write_text(conteudo, encoding="utf-8")
+    with pytest.raises(SystemExit, match=esperado):
+        carregar_log(arq)
+
+
+def test_linhas_ABSDIAG_e_ABSVIDA_nao_atrapalham_o_parse(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """Os tres formatos convivem: o parser filtra pelo prefixo."""
+    arq = tmp_path / "log.txt"
+    linhas = ["ABSVIDA|barras=3|primeira_data=1260504"]
+    for i in range(3):
+        linhas.append(f"ABSDIAG|{i}|3|1260504|{900 + i}|1000|50|0.1|1|1|2")
+        linhas.append(_linha(hora=900 + i))
+    arq.write_text("\n".join(linhas), encoding="utf-8")
+    _, diag = carregar_log(arq)
+    assert diag["barras"] == 3

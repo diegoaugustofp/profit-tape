@@ -237,19 +237,35 @@ begin
   //
   // CurrentBar <= BarCount - 3 evita logar as barras ainda em formacao.
   //-------------------------------------------------------------------
-  // DIAGNOSTICO: primeiro de tudo, sem condicao alguma. Se nem isto
-  // aparecer no console, o problema e' de COMPILACAO ou de o indicador
-  // nao estar aplicado -- nao da logica abaixo.
-  if LogDiagnostico = 1 then
+  bNaJanela := ((LogDataInicio = 0) or (Date >= LogDataInicio))
+           and ((LogDataFim = 0) or (Date <= LogDataFim));
+
+  //-------------------------------------------------------------------
+  // SINAL DE VIDA: UMA linha, na primeira barra, SEM condicao de janela.
+  //
+  // O diagnostico abaixo respeita `bNaJanela` para nao inundar o buffer
+  // de 2.000 linhas -- ajuste do operador, e esta certo. Mas isso o faz
+  // perder a funcao original: separar "nao compilou" de "a logica nao
+  // disparou". Com filtro de data errado, ele tambem some, e foi
+  // exatamente essa a confusao de 2026-09-01.
+  //
+  // Esta linha resolve os dois: e' incondicional (aparece se o codigo
+  // roda) e e' UMA so' (nao gasta buffer). Se ela nao aparecer, o
+  // problema e' de COMPILACAO ou o indicador nao esta aplicado.
+  //-------------------------------------------------------------------
+  if CurrentBar = 1 then
+    ConsoleLog("ABSVIDA|barras=" + BarCount + "|primeira_data=" + Date
+      + "|barras_por_dia=" + RS_BarsPerDay
+      + "|LogDataInicio=" + LogDataInicio + "|LogDataFim=" + LogDataFim);
+
+  if (LogDiagnostico = 1) and bNaJanela then
     ConsoleLog("ABSDIAG|" + CurrentBar + "|" + BarCount + "|" + Date
       + "|" + Time + "|" + sVolAgr + "|" + sAmplitude
       + "|" + sDeslocNorm + "|" + sZAmp + "|" + sZVol
       + "|" + sMovContexto);
 
-  bNaJanela := ((LogDataInicio = 0) or (Date >= LogDataInicio))
-           and ((LogDataFim = 0) or (Date <= LogDataFim));
-
-  if (LogAtivo = 1) and bNaJanela and (CurrentBar <= BarCount - 3) then
+  if (LogAtivo = 1) and bNaJanela and (CurrentBar <= BarCount - 3)
+     and (LogDiagnostico = 0) then
   begin
     if (MostrarSoEvento = 0) or (bEvento and bContexto) then
       ConsoleLog("ABSBARRA|" + Date + "|" + Time + "|" + TimeExchange

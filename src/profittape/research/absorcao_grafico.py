@@ -86,11 +86,32 @@ def carregar_log(caminho: Path) -> tuple[pd.DataFrame, dict[str, Any]]:
     linhas = [x.strip().replace("\r", "") for x in bruto.splitlines()
               if PREFIXO in x]
     if not linhas:
+        pistas = []
+        if "ABSDIAG|" in bruto:
+            pistas.append(
+                "  Ha' linhas ABSDIAG: o `LogDiagnostico` ficou em 1, e "
+                "nesse modo\n"
+                "  o indicador NAO emite ABSBARRA. Ponha LogDiagnostico(0) "
+                "e redumpe.")
+        if "ABSDIR|" in bruto:
+            pistas.append(
+                "  Ha' linhas ABSDIR: o grafico esta com o "
+                "`absorcao_dir.ntsl`,\n"
+                "  que implementa a formula ANTIGA. Cole o "
+                "`absorcao_barra.ntsl`.")
+        if "ABSVIDA|" in bruto and not pistas:
+            pistas.append(
+                "  Ha' ABSVIDA (o indicador rodou), mas nenhuma barra "
+                "passou na\n"
+                "  janela de data. Confira LogDataInicio/LogDataFim no "
+                "formato 1AnoMesDia.")
+        if not pistas:
+            pistas.append(
+                "  Nem ABSVIDA aparece: o indicador nao compilou ou nao "
+                "esta aplicado\n"
+                "  no grafico.")
         raise SystemExit(
-            f"nenhuma linha '{PREFIXO}' em {caminho}.\n"
-            "  Confira se o indicador colado no grafico e' o "
-            "`absorcao_barra.ntsl` (o `absorcao_dir.ntsl` loga 'ABSDIR|')."
-        )
+            f"nenhuma linha '{PREFIXO}' em {caminho}.\n" + "\n".join(pistas))
 
     registros, larguras = [], set()
     for linha in linhas:

@@ -987,3 +987,44 @@ indicador loga:
 
 Nao bloqueia (o NTSL nao tem como abortar), mas a linha aparece no
 console antes de qualquer dado.
+
+
+## Os tres formatos de log (2026-09-02)
+
+Ajuste do operador ao gerar o dump, validado e incorporado.
+
+    ABSVIDA|   UMA linha, na primeira barra, SEM condicao nenhuma
+    ABSDIAG|   uma por barra, respeita a janela de data
+    ABSBARRA|  o dado, so' quando LogDiagnostico = 0
+
+**O que o operador mudou, e por que estava certo:**
+
+1. `bNaJanela` calculado ANTES do diagnostico — era usado antes de
+   existir.
+2. `ABSBARRA` suprimido quando `LogDiagnostico = 1` — os dois formatos
+   disputavam o buffer de 2.000 linhas.
+3. Diagnostico respeitando `bNaJanela` — sem isso ele inunda o buffer.
+
+**O custo do item 3, e a solucao:** o diagnostico existia para separar
+"nao compilou" de "a logica nao disparou". Sujeito a' janela de data, ele
+some tambem quando a data esta errada — que foi exatamente a confusao de
+2026-09-01 ("estava mudando o campo errado de data e achando que ele nao
+respeitava").
+
+Resolvido com o `ABSVIDA|`: **incondicional** (aparece se o codigo roda)
+e **uma linha so'** (nao gasta buffer). Leva `BarCount`, a primeira data,
+`RS_BarsPerDay` e os limites configurados — o suficiente para conferir
+periodicidade e janela de uma vez.
+
+### O parser passa a apontar a causa CERTA
+
+Quatro causas produzem o mesmo sintoma (nenhuma linha `ABSBARRA`) e cada
+uma pede acao diferente:
+
+    ha' ABSDIAG   -> LogDiagnostico ficou em 1; nesse modo nao ha ABSBARRA
+    ha' ABSDIR    -> grafico com o indicador ANTIGO
+    ha' ABSVIDA   -> rodou, mas nenhuma barra passou na janela de data
+    nada disso    -> nao compilou ou nao esta aplicado
+
+A mensagem antiga dizia SEMPRE "confira o indicador" — enganoso nos
+outros tres casos.
