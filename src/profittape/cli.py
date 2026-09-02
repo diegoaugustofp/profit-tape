@@ -813,6 +813,51 @@ def absorcao_grafico(
 
 
 @app.command()
+def absorcao_inspecionar(
+    dia: str = typer.Argument(..., help="Data no formato 2026-08-27"),
+    origem: Path = typer.Option(
+        Path("data/features_tempo/sym=WINFUT/tf=5m/features.parquet"),
+        "--origem", help="Parquet de features OU dump ABSBARRA| do grafico"),
+    so_falhas: bool = typer.Option(
+        False, "--so-falhas", help="Esconde as barras que marcaram"),
+    log_level: str = typer.Option("WARNING", "--log-level"),
+) -> None:
+    """
+    Por que ESTA barra marcou (ou nao marcou)?
+
+    Mostra o valor de cada condicao e a FOLGA ate o corte. Categoria
+    `features`: nao toca em retorno, nao consome trial.
+
+    LIMITE: nao ajuste corte a partir daqui. Se a formalizacao nao
+    captura a leitura, o caminho e' pre-registro NOVO. E inspecione so'
+    periodo JA' QUEIMADO — olhar o que ainda vai ser testado destroi a
+    cegueira que e' a unica razao de ele valer.
+    """
+    configurar(log_level)
+    from .research.absorcao_inspecao import rodar
+
+    if not origem.exists():
+        raise SystemExit(f"nao achei {origem}")
+    r = rodar(origem, dia)
+
+    typer.echo("=" * 78)
+    typer.echo(f"INSPECAO DE {dia}")
+    typer.echo("=" * 78)
+    typer.echo("  cortes: " + " | ".join(f"{k} {v}"
+                                          for k, v in r["cortes"].items()))
+    s = r["resumo"]
+    typer.echo(f"  {s['barras']} barras, {s['marcaram']} marcaram")
+    typer.echo(f"  reprovaram por: resultado {s['falhou_resultado']} | "
+               f"alcance {s['falhou_alcance']} | esforco {s['falhou_esforco']} "
+               f"| contexto {s['falhou_contexto']}")
+    typer.echo("")
+    tab = r["tabela"]
+    if so_falhas:
+        tab = tab[~tab["MARCOU"]]
+    typer.echo(tab.to_string(index=False))
+
+
+@app.command()
 def agents(
     dados: Path = typer.Option(
         Path("data/curated"), "--dados",

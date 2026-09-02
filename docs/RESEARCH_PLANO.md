@@ -4354,6 +4354,44 @@ contagem tera' que incluir as tentativas.
 Portao refeito com o estimador corrigido: **CONTRA**, |t| 0,86 e 1,44,
 controles em zero. Passa.
 
+### INSPECAO POR BARRA: investigar nao e' overfit, ajustar e' (2026-09-02)
+
+`profit-tape absorcao-inspecionar 2026-08-27`. Categoria `features`:
+mostra o valor de cada condicao e a FOLGA ate o corte. Nao toca em
+retorno, nao consome trial.
+
+**Investigar por que uma barra ficou de fora e' legitimo.** Foi assim que
+se descobriu que a formula antiga pintava MARUBOZUS enquanto o conceito
+era DOJI com pavio. Sem olhar barras concretas, aquele erro continuaria
+de pe'.
+
+**Vira overfit em dois pontos:**
+
+1. **Ajustar o corte para a barra entrar.** Baixar `MAX_DESLOC_NORM` de
+   0,25 para 0,28 porque uma barra especifica ficou de fora e' calibrar
+   ao julgamento sobre AQUELES dados — mesmo sem olhar retorno.
+2. **Inspecionar o periodo que ainda vai ser testado.** A cegueira se
+   perde, nao porque se viu retorno, mas porque as decisoes posteriores
+   passam a carregar aquele olhar.
+
+**Periodos JA' QUEIMADOS** (livres para inspecao): parquet 24/07-27/08 e
+o maio do grafico, os dois ja' com veredito.
+**Periodo CEGO**: o que estiver declarado e ainda nao rodado.
+
+A FOLGA e' o que torna a inspecao util: falhar por 0,01 sugere corte
+apertado; falhar por 0,60 sugere que a barra nao e' o que se procura.
+Sem o numero as duas parecem iguais.
+
+O resumo conta falhas por condicao. **Se uma condicao sozinha reprova
+quase tudo, ela define o evento na pratica e as outras estao
+decorativas** — exatamente o defeito do `absorcao_dir`, onde o
+`desloc_norm` dominava a subtracao. Vale checar se voltou por outro
+caminho.
+
+Se a inspecao mostrar que a formalizacao nao captura a leitura, o
+caminho e' **pre-registro NOVO**, testado em dado que ele nao viu — nunca
+ajuste do que esta congelado.
+
 ### Fora deste pre-registro
 
 - **Exaustao**: e' processo de SEQUENCIA, nao evento de barra — objeto
