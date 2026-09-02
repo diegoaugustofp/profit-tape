@@ -121,17 +121,44 @@ def test_conferencia_acusa_divergencia_entre_python_e_ntsl() -> None:
     assert r["z_amplitude"]["dif_max"] == 0.0
 
 
-def test_para_barras_entrega_o_que_preparar_espera() -> None:
-    from profittape.research.absorcao_barra import preparar
+def test_para_barras_DERIVA_o_desloc_norm() -> None:
+    """
+    Bug real (2026-09-01): `preparar` assume `desloc_norm` pronto — no
+    parquet ele vem do `pipeline_tempo`, mas o dump do grafico so' traz
+    OHLC, e a rodada morria com KeyError.
+
+    Meu teste anterior nao pegou porque a fixture passava a coluna. Aqui
+    ela NAO e' passada, que e' o caso real.
+    """
+    from profittape.research.absorcao_barra import marcar_eventos, preparar
 
     df = pd.DataFrame({
         "dia": [pd.Timestamp("2026-06-01").date()] * 60,
         "open": 140000.0, "high": 140200.0, "low": 139900.0,
         "close": 140050.0, "vol_agr": 180000.0,
-        "desloc_norm_ntsl": 0.5,
     })
-    d = preparar(para_barras(df))
-    assert {"z_amplitude", "z_vol_agr", "mov_contexto"} <= set(d.columns)
+    b = para_barras(df)
+    assert "desloc_norm" in b.columns
+    # (140050-140000)/(140200-139900) = 50/300
+    assert b["desloc_norm"].iloc[0] == pytest.approx(50 / 300)
+    d = marcar_eventos(preparar(b))
+    assert {"z_amplitude", "z_vol_agr", "mov_contexto", "evento"} <= set(d.columns)
+
+
+def test_desloc_norm_e_DERIVADO_e_nao_copiado_do_log() -> None:
+    """
+    Copiar o valor logado seria confiar que os dois lados concordam;
+    derivar do OHLC e comparar MEDE se concordam. Se o `.ntsl` estiver
+    errado, copiar esconderia o erro.
+    """
+    df = pd.DataFrame({
+        "dia": [pd.Timestamp("2026-06-01").date()],
+        "open": [100.0], "high": [110.0], "low": [90.0], "close": [105.0],
+        "vol_agr": [1000.0],
+        "desloc_norm_ntsl": [0.999],        # valor ABSURDO de proposito
+    })
+    b = para_barras(df)
+    assert b["desloc_norm"].iloc[0] == pytest.approx(0.25)
 
 
 def test_ordem_dos_campos_bate_com_o_ntsl() -> None:
@@ -221,3 +248,30 @@ def test_arquivo_de_periodos_do_repositorio_e_valido() -> None:
     for p in dados["periodos"]:
         assert {"inicio", "fim", "motivo"} <= set(p), (
             "todo periodo precisa de inicio, fim e MOTIVO")
+
+
+def test_json_malformado_explica_o_erro_real(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """
+    Caso real (2026-09-01): a entrada foi acrescentada DEPOIS do `}`
+    final e o arquivo virou dois objetos JSON colados.
+
+    Falha de desenho minha antes de ser erro de digitacao: o arquivo
+    tinha 30 linhas de instrucao ANTES da lista, o que empurrava
+    `periodos` para o fim e tornava facil errar o lugar. A mensagem crua
+    de JSONDecodeError nao diria nada sobre isso.
+    """
+    from profittape.research.absorcao_grafico import checar_periodo_declarado
+
+    arq = tmp_path / "P.json"
+    arq.write_text('{"periodos": []}\n{"inicio": "2026-05-01"}\n',
+                   encoding="utf-8")
+    with pytest.raises(SystemExit, match="DENTRO da lista"):
+        checar_periodo_declarado(_df_dias("2026-05-04", "2026-05-29"), arq)
+
+
+def test_periodo_sem_motivo_e_recusado(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    from profittape.research.absorcao_grafico import checar_periodo_declarado
+
+    arq = _declara(tmp_path, [{"inicio": "2026-05-01", "fim": "2026-05-31"}])
+    with pytest.raises(SystemExit, match="motivo"):
+        checar_periodo_declarado(_df_dias("2026-05-04", "2026-05-29"), arq)

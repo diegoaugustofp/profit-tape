@@ -639,3 +639,38 @@ NTSL). Se vier, a serie de barras permitiria `imbalance` em quatro meses
 
 **Quando reconsiderar**: se aparecer formalizacao que dependa so' de
 OHLC e volume. Ai' ele vira a forma mais barata de amostra grande.
+
+
+## `git push origin HEAD:main` ORFANOU um commit (2026-09-02)
+
+O que aconteceu, em ordem:
+
+1. Operador declarou o periodo editando `PERIODOS_DECLARADOS.json` **pela
+   interface web do GitHub** -> commit `bae34e3`, so' no remoto.
+2. Aplicou a v1.68 localmente e fez `git push origin HEAD:main`.
+3. O branch local (`develop-import`) **nao continha** `bae34e3`, entao o
+   push sobrescreveu a main: `+ bae34e3...e61073f (forced update)`.
+4. `bae34e3` ficou orfao. O commit da DECLARACAO DO PERIODO sumiu da
+   main.
+5. `git pull origin main` respondia "Already up to date" (a main ja' era
+   a v1.68) enquanto o bundle falhava com "lacks these prerequisite
+   commits" — os dois sintomas do mesmo fato, e nenhum deles nomeando a
+   causa.
+
+### Por que isso importa alem do inconveniente
+
+A declaracao do periodo vale porque o **git carimba a ordem**: a
+declaracao precede o dado, verificavel por terceiro. Um commit orfao nao
+carimba nada — some do historico da branch.
+
+### Como evitar
+
+`git push origin HEAD:main` de um branch que nao rastreia a main sobrescreve
+o que estiver la'. Antes de empurrar, trazer o remoto:
+
+    git fetch origin
+    git merge origin/main        # ou rebase
+    git push origin HEAD:main --tags
+
+E preferir editar arquivo do repositorio **localmente**, nao pela web:
+commit web nasce so' no remoto e o proximo push local pode apaga-lo.

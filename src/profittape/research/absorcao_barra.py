@@ -74,8 +74,23 @@ def preparar(barras: pd.DataFrame) -> pd.DataFrame:
         d["vol_agr"] = d["vol_buy"] + d["vol_sell"]
 
     for col, origem in (("z_amplitude", "amplitude_pts"), ("z_vol_agr", "vol_agr")):
-        media = d[origem].rolling(JANELA_Z).mean()
-        desvio = d[origem].rolling(JANELA_Z).std()
+        # `.shift(1)`: a referencia sao as 50 barras ANTERIORES, e a barra
+        # atual NAO entra nela.
+        #
+        # ERRATA de 2026-09-01. O pre-registro dizia "vs 50 barras", sem
+        # especificar se a propria barra entrava, e as duas
+        # implementacoes resolveram para lados opostos: o `.ntsl` percorre
+        # `for nIndex := 1 to JanelaZ` (so' anteriores) e aqui o
+        # `rolling()` incluia a atual. Divergencia medida em dado real:
+        # ate 19,9 no z da amplitude.
+        #
+        # A definicao do `.ntsl` e' a correta, e por mecanismo:
+        # "atipica em relacao ao normal recente" compara contra a
+        # HISTORIA, e incluir a propria barra na referencia atenua
+        # justamente o que se quer detectar -- a barra grande infla a
+        # propria media e o proprio desvio.
+        media = d[origem].rolling(JANELA_Z).mean().shift(1)
+        desvio = d[origem].rolling(JANELA_Z).std().shift(1)
         d[col] = (d[origem] - media) / desvio.where(desvio > 0)
 
     # range medio com shift(1): o range da propria barra nao pode entrar

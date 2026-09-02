@@ -217,3 +217,50 @@ def test_o_ntsl_espera_o_aquecimento_das_DUAS_janelas() -> None:
     """
     t = _ntsl()
     assert "CurrentBar > JanelaZ + JanelaContexto" in t
+
+
+def test_z_compara_contra_as_barras_ANTERIORES_e_nao_inclui_a_atual() -> None:
+    """
+    ERRATA de 2026-09-01, achada pela conferencia contra o `.ntsl`.
+
+    O pre-registro dizia "vs 50 barras" sem especificar se a propria
+    barra entrava, e as duas implementacoes resolveram para lados
+    OPOSTOS: o `.ntsl` percorre so' as anteriores, o `rolling()` incluia
+    a atual. Divergencia em dado real: ate 19,9 no z da amplitude.
+
+    A do `.ntsl` e' a correta por MECANISMO: "atipica em relacao ao
+    normal recente" compara contra a HISTORIA, e incluir a propria barra
+    atenua o que se quer detectar -- a barra grande infla a propria
+    media e o proprio desvio.
+    """
+    d = ab.preparar(_barras(n=120))
+    i = 100
+    anteriores = d["amplitude_pts"].iloc[i - ab.JANELA_Z:i]
+    esperado = ((d["amplitude_pts"].iloc[i] - anteriores.mean())
+                / anteriores.std())
+    assert d["z_amplitude"].iloc[i] == pytest.approx(esperado)
+
+    ant_vol = d["vol_agr"].iloc[i - ab.JANELA_Z:i]
+    esperado_vol = (d["vol_agr"].iloc[i] - ant_vol.mean()) / ant_vol.std()
+    assert d["z_vol_agr"].iloc[i] == pytest.approx(esperado_vol)
+
+
+def test_barra_extrema_tem_z_MAIOR_com_a_definicao_certa() -> None:
+    """
+    Consequencia direta, e o motivo de a diferenca importar: uma barra
+    muito atipica, incluida na propria referencia, infla media e desvio e
+    sai com z MENOR. Excluindo-a, o z reflete o quanto ela destoa.
+    """
+    b = _barras(n=120, semente=9)
+    b.loc[100, "high"] = b.loc[100, "low"] + 100_000     # barra absurda
+    a = b["high"] - b["low"]
+    b["desloc_norm"] = ((b["close"] - b["open"]) / a).where(a > 0, 0.0)
+    d = ab.preparar(b)
+
+    anteriores = d["amplitude_pts"].iloc[50:100]
+    z_certo = (d["amplitude_pts"].iloc[100] - anteriores.mean()) / anteriores.std()
+    com_atual = d["amplitude_pts"].iloc[51:101]
+    z_errado = (d["amplitude_pts"].iloc[100] - com_atual.mean()) / com_atual.std()
+
+    assert d["z_amplitude"].iloc[100] == pytest.approx(z_certo)
+    assert z_certo > z_errado, "excluir a barra atual tem que dar z maior"

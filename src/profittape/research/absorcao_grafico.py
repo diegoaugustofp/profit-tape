@@ -185,8 +185,27 @@ def checar_periodo_declarado(df: pd.DataFrame,
             f"nao achei {arquivo}. O periodo tem que ser DECLARADO e "
             "commitado ANTES do dump."
         )
-    dados = json.loads(arquivo.read_text(encoding="utf-8"))
+    try:
+        dados = json.loads(arquivo.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as erro:
+        raise SystemExit(
+            f"{arquivo} nao e' JSON valido: {erro}\n"
+            "  Caso real (2026-09-01): a entrada foi acrescentada DEPOIS\n"
+            "  do `}` final, e o arquivo virou dois objetos colados.\n"
+            "  A entrada vai DENTRO da lista `periodos`, no topo do "
+            "arquivo."
+        ) from erro
     declarados = dados.get("periodos", [])
+
+    faltando = [p for p in declarados
+                if not {"inicio", "fim", "motivo"} <= set(p)]
+    if faltando:
+        raise SystemExit(
+            f"{len(faltando)} periodo(s) em {arquivo} sem `inicio`, `fim` "
+            "ou `motivo`.\n"
+            "  O motivo e' obrigatorio: se nao puder ser dito ANTES de ver "
+            "o dado, nao e' criterio."
+        )
     if not declarados:
         raise SystemExit(
             f"nenhum periodo declarado em {arquivo}.\n"
@@ -216,8 +235,23 @@ def checar_periodo_declarado(df: pd.DataFrame,
 
 
 def para_barras(df: pd.DataFrame) -> pd.DataFrame:
-    """Formato que `absorcao_barra.preparar` espera."""
-    return df[["dia", "open", "high", "low", "close", "vol_agr"]].copy()
+    """
+    Formato que `absorcao_barra.preparar` espera.
+
+    `desloc_norm` precisa ser DERIVADO aqui: no parquet ele ja' vem
+    pronto do `pipeline_tempo`, mas o dump do grafico so' traz OHLC.
+    `preparar` assume a coluna existente e falharia com KeyError.
+
+    Calculado a partir do OHLC de proposito, e NAO copiado do
+    `desloc_norm_ntsl` logado — este ultimo serve de CONFERENCIA. Copiar
+    seria confiar que os dois lados concordam; derivar e comparar MEDE se
+    concordam.
+    """
+    b = df[["dia", "open", "high", "low", "close", "vol_agr"]].copy()
+    amplitude = b["high"] - b["low"]
+    b["desloc_norm"] = ((b["close"] - b["open"]) / amplitude).where(
+        amplitude > 0, 0.0)
+    return b
 
 
 def conferir_contra_o_ntsl(d: pd.DataFrame, df: pd.DataFrame) -> dict[str, Any]:

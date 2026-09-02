@@ -4307,6 +4307,53 @@ e' criterio.**
 `MostrarSoEvento(0)` (os controles precisam das barras que NAO
 dispararam). Dois a tres dumps, em periodo anterior a 24/07.
 
+### ERRATA 2026-09-01: o `z` estava AMBIGUO no texto congelado
+
+Achada pela conferencia entre o `.ntsl` e o Python, sobre 2.260 barras
+de maio/2026:
+
+    desloc_norm    dif maxima 2,5e-06   -> exato
+    mov_contexto   dif maxima 6,8e-07   -> exato
+    z_amplitude    dif maxima 19,86     -> FORMULA DIFERENTE
+    z_vol_agr      dif maxima  7,51     -> FORMULA DIFERENTE
+
+**O texto congelado dizia "vs 50 barras"**, sem especificar se a propria
+barra entrava. As duas implementacoes resolveram para lados OPOSTOS: o
+`.ntsl` percorre `for nIndex := 1 to JanelaZ` (so' anteriores), o Python
+usava `rolling()` incluindo a atual.
+
+Consequencia: **o indicador que se OLHA e o estimador que DECIDE
+marcavam conjuntos de barras diferentes.**
+
+**Desambiguado pela definicao do `.ntsl`**, decidida pelo operador por
+MECANISMO: "atipica em relacao ao normal recente" compara contra a
+HISTORIA, e incluir a propria barra na referencia atenua justamente o
+que se quer detectar — a barra grande infla a propria media e o proprio
+desvio.
+
+### Por que isto e' ERRATA e nao mudanca oportunista
+
+1. **As duas rodadas deram INCONCLUSIVO POR n < 30** (28/20 no parquet,
+   8/16 em maio). Nenhum retorno foi interpretado — nao houve selecao
+   sobre resultado.
+2. A desambiguacao veio da **comparacao NTSL x Python**, um argumento de
+   mecanismo, nao de qual versao produz numero melhor.
+3. O texto congelado era genuinamente ambiguo; nao houve troca de
+   criterio, houve especificacao do que faltava.
+
+**Consequencia conhecida, registrada DEPOIS da decisao**: excluir a
+barra atual aumenta o `z` das barras extremas, logo tende a produzir
+MAIS eventos. Isso ajuda o problema de amostra — e por isso mesmo fica
+escrito que a decisao foi tomada pelo conceito, antes de a consequencia
+ser calculada.
+
+**Multiplicidade**: se esta especificacao tambem sair INCONCLUSIVO e uma
+TERCEIRA for tentada depois de ver o resultado, ai' havera selecao e a
+contagem tera' que incluir as tentativas.
+
+Portao refeito com o estimador corrigido: **CONTRA**, |t| 0,86 e 1,44,
+controles em zero. Passa.
+
 ### Fora deste pre-registro
 
 - **Exaustao**: e' processo de SEQUENCIA, nao evento de barra — objeto
