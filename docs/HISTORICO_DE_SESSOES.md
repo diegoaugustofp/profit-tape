@@ -141,6 +141,83 @@ v1.44. Três perguntas já estavam fechadas na sessão do dia; esta abre a
 - Com a fonte dominante em mãos + regra de aceite + grade de L:
   pré-registro do trade-off.
 
+## 2026-09-01/02 — a hipótese do operador, do zero ao teste (v1.51 a v1.74)
+
+Entregas v1.51 a v1.74. **Um trial declarado** (2026), nenhum consumido
+ainda — todas as rodadas foram depuração.
+
+### O que aconteceu
+
+A sessão anterior fechou com `absorcao_dir` levando CONTRA. Esta começou
+com o operador trazendo **material próprio** sobre absorção x exaustão e
+a percepção de que estava misturando dois conceitos.
+
+**A formalização antiga media o OPOSTO do conceito.** `absorcao_dir` tem
+extremos quando `|desloc_norm|` é GRANDE — marubozu, mediana 0,807 nas
+barras pintadas. Absorção é `|desloc_norm|` PEQUENO: doji com pavio.
+Correlação do evento novo com `z_absorcao_dir`: **−0,03**. Ortogonais.
+
+**A hipótese nova saiu da leitura de tela dele**, não de mim procurando
+fórmula bonita — as duas que tentei assim morreram: `absorcao_dir`
+gastou 12 trials, e `esforco` já existia no `flow.py` como `absorcao`
+(correlação +1,0000).
+
+### O que ficou construído
+
+    triagem            redundância/cauda/construção antes de pré-registrar
+    absorcao_barra     estimador do pré-registro congelado
+    absorcao_grafico   mesma coisa sobre dump do gráfico (amostra independente)
+    absorcao_inspecao  por que ESTA barra marcou (ou não)
+    absorcao_barra.ntsl  indicador, verificado contra o Python
+
+### Estado do teste
+
+Pré-registro **congelado**, portão passa, e as duas rodadas deram
+`INCONCLUSIVO` por `n < 30`. Ambas foram **depuração**: cada uma revelou
+um defeito de implementação contra o que o pré-registro já dizia.
+
+**Trial de 2026 declarado** (02/01–30/04 e 01/06–23/07), aguardando dump.
+2025 reservado.
+
+### Três defeitos achados pela INSPEÇÃO VISUAL, nenhum por olhar retorno
+
+1. **O contexto media o GAP NOTURNO.** `mov_contexto` atravessava a
+   virada do pregão: mediana 3,58 nas 6 primeiras barras contra 0,80 no
+   resto, com o habilitador em 3,0. **42% dos eventos caíam em 5% do
+   pregão.** Achado na barra de 14/05 — "uma barra forte que INICIA o
+   movimento", o oposto de absorção.
+2. **A fórmula pintava marubozus.** Achado na barra de 31/08.
+3. **O `z` divergia entre `.ntsl` e Python** em até 19,86. O texto
+   congelado dizia "vs 50 barras" sem especificar se a barra atual
+   entrava, e as duas implementações resolveram para lados opostos.
+
+### A estrutura que o operador propôs
+
+**Amostra de DEPURAÇÃO x amostra de TESTE.** A visual acha bug e defeito
+de spec; a estatística responde a pergunta. Com o limite escrito: pode
+questionar a FÓRMULA, não pode questionar a CALIBRAÇÃO.
+
+### Erros meus, e o padrão que os une
+
+`.ntsl` que não logava nada (indexei chamada de função, usei `Abs()`
+inexistente, `Integer` no log). Guarda com acesso posicional dentro de
+condição — "comportamento indefinido", e guarda que talvez não funcione
+é pior que nenhuma. Purga corrigida no Python e **não** no `.ntsl`.
+Módulo `recuperacao.py` construído sem ver que o `backfill` já fazia
+aquilo. Dimensionamento errado em 29% por extrapolar janela curta.
+Commit com suíte vermelha, **duas vezes**, por encadear `pytest | tail
+&& git commit`.
+
+O padrão: **nos três casos de divergência entre `.ntsl` e Python havia
+teste, e nos três ele passou** — dois comparavam números, um comparava
+contagem de campos. Nenhum comparava o que o código FAZ.
+
+### Git
+
+`git push origin HEAD:main` **orfanou** o commit da declaração de
+período, feito pela web. E o refspec `nome:nome` dos bundles acumulou
+**47 branches espúrios**, até o merge falhar com "refname is ambiguous".
+
 ## 2026-08-30/31 — sessão completa: CONTRA na absorção, equivalência fechada, Rota B respondida (v1.12 a v1.42)
 
 **31 entregas. Zero trial gasto além dos 12 pré-registrados.** O
