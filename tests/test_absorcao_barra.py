@@ -307,3 +307,22 @@ def test_purga_vale_SO_no_contexto_e_nao_nos_z() -> None:
     assert depois_da_virada["z_amplitude"].notna().any(), (
         "os z nao devem ser purgados na virada: amplitude e volume sao "
         "intrabarra")
+
+
+def test_o_ntsl_TAMBEM_purga_o_contexto_na_virada() -> None:
+    """
+    Pego ao responder "o que fazer agora": eu corrigi a purga no Python
+    (v1.72) e NAO no `.ntsl`. O indicador continuaria pintando as barras
+    de gap enquanto o estimador as ignora — recriando exatamente a
+    divergencia que a errata do `z` tinha acabado de eliminar.
+
+    O teste que compara os dois lados so' olhava CONSTANTES, nao
+    comportamento. Este olha a guarda.
+    """
+    t = _ntsl()
+    codigo = "\n".join(linha for linha in t.splitlines()
+                       if not linha.lstrip().startswith("//"))
+    assert "Date[1 + JanelaContexto] = Date" in codigo, (
+        "o .ntsl precisa recusar contexto que comece em outro pregao, "
+        "como o Python faz com groupby('dia')"
+    )

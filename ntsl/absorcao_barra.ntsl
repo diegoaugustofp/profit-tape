@@ -133,10 +133,22 @@ begin
     // julga. `sMediaAmp` ja' e' das 50 ANTERIORES por construcao (o laco
     // comeca em 1), entao serve.
     sRangeMedio := sMediaAmp;
-    if sRangeMedio > 0 then
-      sMovContexto := (Close[1] - Close[1 + JanelaContexto]) / sRangeMedio
-    else
-      sMovContexto := 0;
+
+    //--- PURGA ESTRUTURAL NO CONTEXTO (errata de 2026-09-02) ---
+    // `sMovContexto` e' uma DIFERENCA DE PRECO. Sem esta guarda, nas
+    // primeiras barras do pregao ela mede o GAP NOTURNO em vez da perna
+    // intradiaria.
+    //
+    // Medido no dump de maio: |mov| tinha mediana 3,58 nas 6 primeiras
+    // barras contra 0,80 no resto, e `KContexto` e' 3,0 -- disparava
+    // quase automaticamente na abertura. 42% dos eventos caiam em 5% do
+    // pregao.
+    //
+    // `Date[1 + JanelaContexto] <> Date` detecta que a janela comeca em
+    // outro pregao. Sem contexto, `sLado` fica 0 e a barra nao pinta.
+    sMovContexto := 0;
+    if (sRangeMedio > 0) and (Date[1 + JanelaContexto] = Date) then
+      sMovContexto := (Close[1] - Close[1 + JanelaContexto]) / sRangeMedio;
 
     //--- O EVENTO: CONJUNCAO das tres condicoes ---
     // Conjuncao de proposito. Combinar num numero unico repetiria o erro
