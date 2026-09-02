@@ -115,6 +115,8 @@ arquivo cresceu demais para navegar so' por titulo cronologico).
 
 - [PRE-REGISTRO: ABSORCAO DE BARRA (CONGELADO 2026-08-31)](#pre-registro-absorcao-de-barra-congelado-2026-08-31)
 
+- [AMOSTRA DE DEPURACAO x AMOSTRA DE TESTE (2026-09-02)](#amostra-de-depuracao-x-amostra-de-teste-2026-09-02)
+
 **Disciplina/processo do proprio research**
 - [Decisoes aprovadas](#decisoes-aprovadas)
 - [Pre-requisitos antes de escrever research/](#pre-requisitos-antes-de-escrever-research)
@@ -4403,3 +4405,121 @@ ajuste do que esta congelado.
   Trades. Refinamento posterior.
 - Qualquer implementacao no EA.
 - Alvo e stop.
+
+## AMOSTRA DE DEPURACAO x AMOSTRA DE TESTE (2026-09-02)
+
+Estrutura proposta pelo operador, e ela nomeia o que ja' vinha
+acontecendo de fato.
+
+### A observacao que a motivou
+
+**O que vem pegando erro neste projeto e' a analise VISUAL do grafico,
+sem olhar numero.** Nenhum dos defeitos de hoje veio de olhar retorno:
+
+    contexto medindo o GAP NOTURNO      achado na barra de 14/05
+    formula pintando MARUBOZU           achado na barra de 31/08
+    z divergindo entre .ntsl e Python   achado na conferencia
+
+Os tres questionavam a FORMULA, nunca a calibracao.
+
+### O limite, que precisa ficar escrito
+
+**PODE** — questiona a formula:
+  - "o contexto esta medindo o gap noturno" -> BUG
+  - "isso pinta marubozu, o conceito era doji" -> DEFEITO DE SPEC
+
+**NAO PODE** — questiona a calibracao:
+  - "se eu baixar K para 2,5 fica melhor" -> ajuste a' amostra
+  - "esta variante marca barras mais bonitas" -> escolha entre variantes
+    NO DADO
+
+A diferenca: o criterio e' o **CONCEITO descrito ANTES**, nao "qual
+versao parece melhor NESTAS barras". Olhar cem barras e escolher a
+variante que mais agrada e' fitting, mesmo sem ver retorno nenhum.
+
+### A separacao
+
+| amostra | quais | serve para | resultado |
+|---|---|---|---|
+| **DEPURACAO** | parquet 24/07-27/08, maio do grafico | achar bug e defeito de spec, inspecao visual | **NAO interpretavel** |
+| **TESTE** | periodo declarado, cego | responder a pergunta | um tiro |
+
+**Os vereditos ja' obtidos no parquet e em maio nao contam como
+resultado.** Foram rodadas de depuracao, e cada uma revelou um defeito
+de implementacao contra o que o pre-registro ja' dizia. Isso e' debug,
+nao busca — mas so' enquanto as correcoes vierem de DEFEITO, nunca de
+resultado.
+
+**O limite dessa licenca**: "corrigir ate funcionar" vira busca ainda
+que cada passo seja defensavel. Por isso o resultado interpretavel tem
+que vir de dado NAO usado na depuracao.
+
+### TRIAL 2026 declarado
+
+    parte 1: 02/01 a 30/04/2026   (~82 pregoes)
+    parte 2: 01/06 a 23/07/2026   (~37 pregoes)
+
+Excluem 04-29/05 (dump de maio) e 24/07-27/08 (parquet), que sao
+depuracao. **As duas partes sao UM trial**: uma decisao de onde olhar,
+executada em varios dumps por limite de buffer.
+
+A ~0,5 evento/pregao (taxa medida apos a purga), ~60 eventos, ~30 por
+lado — no limite do minimo.
+
+**2025 fica RESERVADO** para o trial seguinte. Nao dumpar antes de 2026
+ter veredito.
+
+### ERRATA 2026-09-02: a purga nao valia para o CONTEXTO
+
+`mov_contexto` e' uma DIFERENCA DE PRECO e atravessava a virada do
+pregao — medindo o **gap noturno** em vez da perna intradiaria.
+
+    |mov_contexto| mediana, barras 1-6 do dia : 3,58
+    |mov_contexto| mediana, demais barras     : 0,80
+    habilitador exige                          : 3,00
+
+Disparava quase automaticamente na abertura: **10 dos 24 eventos (42%)
+nas 6 primeiras barras**, que sao 5% do pregao. Taxa de 20% ali contra
+0,7% no resto.
+
+Achado pelo operador na inspecao visual de 14/05: "uma barra forte que
+INICIA o movimento depois de uma sequencia de barras fracas" — o oposto
+de absorcao.
+
+**A purga vale SO' no contexto.** `z_amplitude`, `z_vol_agr` e
+`range_medio` sao grandezas INTRABARRA, que o gap nao corrompe. Purgar
+as tres custaria as 50 primeiras barras de cada pregao (46% da amostra)
+sem corrigir defeito nenhum.
+
+Efeito: eventos em maio caem de 24 para 10, **zero** nas primeiras
+barras.
+
+### EXPECTATIVA ESTRUTURAL do operador, registrada ANTES de qualquer resultado (2026-09-02)
+
+Dita antes de ver numero, e por isso vale como hipotese datada:
+
+> Poucos sinais por dia. Dia direcional: poucos eventos, talvez 2, num
+> pullback importante com bastante volume. Dias laterais: mais eventos,
+> movimentos menores. Alguns pegam movimento LONGO, outros pequenos.
+
+Taxa medida apos a purga: **0,5 evento/pregao** — compativel com "poucos
+sinais".
+
+**TENSAO COM O PRE-REGISTRO ATUAL, registrada e NAO resolvida agora:**
+
+1. "Alguns pegam movimentos longos" **nao e' mensuravel em 2 barras**. O
+   horizonte teta o resultado: movimento de meia hora aparece como
+   numero pequeno, indistinguivel de sinal fraco.
+2. "Uns grandes, outros pequenos" e' sobre a **DISTRIBUICAO**; o
+   estimador testa a **MEDIA**. Sinal com poucos acertos grandes e
+   muitos empates pode ter media positiva, `t` baixo, e sair CONTRA
+   sendo exatamente o esperado.
+
+**Nao mexer no pre-registro atual por causa disso.** Ele testa uma
+pergunta legitima e restrita — o preco reverte em 10 minutos. Trocar o
+horizonte depois de duas rodadas inconclusivas seria escolher parametro
+sabendo o resultado.
+
+Isto e' material para o PROXIMO pre-registro: horizonte maior, ou saida
+por evento em vez de numero fixo de barras, e criterio sobre a forma da
+distribuicao em vez da media.

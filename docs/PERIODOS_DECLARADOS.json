@@ -8,6 +8,24 @@
       "motivo": "mes completo anterior ao periodo capturado, escolhido por calendario e disponibilidade no grafico. Nenhum resultado consultado.",
       "declarado_em": "2026-09-01",
       "commit_declaracao": "bae34e3"
+    },
+    {
+      "inicio": "2026-01-02",
+      "fim": "2026-04-30",
+      "motivo": "TRIAL 2026 (parte 1 de 2). Periodo escolhido por calendario: primeiro quadrimestre de 2026, anterior a qualquer amostra ja usada. Exclui 04-29/05 (dump de maio) e 24/07-27/08 (parquet), que sao amostra de DEPURACAO. Nenhum resultado consultado.",
+      "declarado_em": "2026-09-02",
+      "trial": "2026 (parte 1 e 2 contam como UM trial: uma decisao de onde olhar, executada em varios dumps por limite de buffer)"
+    },
+    {
+      "inicio": "2026-06-01",
+      "fim": "2026-07-23",
+      "motivo": "TRIAL 2026 (parte 2 de 2). Retoma apos o dump de maio e para antes de 24/07, onde comeca o parquet. Mesmas razoes da parte 1.",
+      "declarado_em": "2026-09-02",
+      "trial": "2026 (mesmo trial da parte 1)"
     }
-  ]
+  ],
+  "reservado_para_trial_futuro": {
+    "periodo": "2025 inteiro",
+    "nota": "NAO dumpar antes de o trial de 2026 ter veredito. Declarar quando for usar, com motivo proprio."
+  }
 }

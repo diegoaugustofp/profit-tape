@@ -264,3 +264,46 @@ def test_barra_extrema_tem_z_MAIOR_com_a_definicao_certa() -> None:
 
     assert d["z_amplitude"].iloc[100] == pytest.approx(z_certo)
     assert z_certo > z_errado, "excluir a barra atual tem que dar z maior"
+
+
+def test_contexto_NAO_atravessa_a_virada_do_pregao() -> None:
+    """
+    ERRATA de 2026-09-02, achada pelo operador na inspecao visual de
+    14/05: "uma barra forte que INICIA o movimento depois de uma
+    sequencia de barras fracas" -- o oposto de absorcao.
+
+    `mov_contexto` e' uma DIFERENCA DE PRECO e atravessava a virada,
+    medindo o GAP NOTURNO. Medido no dump de maio: |mov_contexto| tinha
+    mediana 3,58 nas 6 primeiras barras contra 0,80 no resto, com o
+    habilitador em 3,0 -- 42% dos eventos caiam em 5% do pregao.
+    """
+    n = 60
+    dias = ([pd.Timestamp("2026-08-24").date()] * (n // 2)
+            + [pd.Timestamp("2026-08-25").date()] * (n // 2))
+    # gap ENORME entre os dois dias
+    preco = [100_000.0] * (n // 2) + [200_000.0] * (n // 2)
+    b = pd.DataFrame({"dia": dias, "open": preco, "close": preco,
+                      "high": [p + 100 for p in preco],
+                      "low": [p - 100 for p in preco],
+                      "vol_agr": 50_000.0, "desloc_norm": 0.0})
+    d = ab.preparar(b)
+    primeiras = d[d["dia"] == pd.Timestamp("2026-08-25").date()].head(
+        ab.JANELA_CONTEXTO)
+    assert primeiras["mov_contexto"].isna().all(), (
+        "as primeiras barras do dia nao podem ter contexto: ele viria do "
+        "pregao anterior, medindo o gap")
+
+
+def test_purga_vale_SO_no_contexto_e_nao_nos_z() -> None:
+    """
+    `z_amplitude` e `z_vol_agr` sao grandezas INTRABARRA -- o gap nao as
+    corrompe. Purgar as tres custaria as 50 primeiras barras de cada
+    pregao (46% da amostra) sem corrigir defeito nenhum.
+    """
+    b = _barras(n=200)
+    b.loc[100:, "dia"] = pd.Timestamp("2026-08-28").date()
+    d = ab.preparar(b)
+    depois_da_virada = d.iloc[100:160]
+    assert depois_da_virada["z_amplitude"].notna().any(), (
+        "os z nao devem ser purgados na virada: amplitude e volume sao "
+        "intrabarra")

@@ -96,8 +96,29 @@ def preparar(barras: pd.DataFrame) -> pd.DataFrame:
     # range medio com shift(1): o range da propria barra nao pode entrar
     # na referencia que a julga.
     d["range_medio"] = d["amplitude_pts"].rolling(JANELA_Z).mean().shift(1)
+    # PURGA ESTRUTURAL NO CONTEXTO (errata de 2026-09-02).
+    #
+    # `mov_contexto` e' uma DIFERENCA DE PRECO, e sem `groupby("dia")` ela
+    # atravessava a virada do pregao — medindo o GAP NOTURNO em vez da
+    # perna intradiaria.
+    #
+    # Medido no dump de maio: |mov_contexto| tinha mediana 3,58 nas seis
+    # primeiras barras contra 0,80 no resto, e o habilitador exige 3,0.
+    # Ele disparava quase automaticamente na abertura: 10 dos 24 eventos
+    # (42%) caiam nas 6 primeiras barras, que sao 5% do pregao. Taxa de
+    # 20% ali contra 0,7% no restante.
+    #
+    # Achado pelo operador, na inspecao visual de 14/05: "uma barra forte
+    # que INICIA o movimento depois de uma sequencia de barras fracas" —
+    # justamente o oposto de absorcao.
+    #
+    # A purga vale SO' aqui: `z_amplitude`, `z_vol_agr` e `range_medio`
+    # sao grandezas INTRABARRA (amplitude e volume), que o gap nao
+    # corrompe. Purgar as tres custaria as 50 primeiras barras de cada
+    # pregao — 46% da amostra — sem corrigir defeito nenhum.
+    por_dia = d.groupby("dia")["close"]
     d["mov_contexto"] = (
-        (d["close"].shift(1) - d["close"].shift(1 + JANELA_CONTEXTO))
+        (por_dia.shift(1) - por_dia.shift(1 + JANELA_CONTEXTO))
         / d["range_medio"])
     return d
 
