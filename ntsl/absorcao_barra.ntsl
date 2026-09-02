@@ -45,6 +45,10 @@ input
   //--- somente apresentacao ---
   MostrarSoEvento(0);       // 1 = so' loga barras marcadas
   LogAtivo(1);
+  BarsPorDiaEsperado(288);  // 1440 / 5 = periodicidade de 5 MINUTOS.
+                            // O pre-registro congelou barra de 5m; no 1M
+                            // as janelas medem outra coisa (6 barras =
+                            // 6 min em vez de 30). Ver a guarda abaixo.
   LogDiagnostico(0);        // 1 = loga UMA linha por barra, sem nenhuma
                             // condicao. Serve para separar "nao
                             // compilou" de "a condicao nunca foi
@@ -92,6 +96,27 @@ begin
   // Lidos incondicionalmente, os tres valem para o resto da barra. Antes
   // do aquecimento eles nao sao usados.
   //-------------------------------------------------------------------
+  //-------------------------------------------------------------------
+  // GUARDA DE PERIODICIDADE
+  //
+  // Erro real (2026-09-02): o grafico estava em 1M com os parametros de
+  // 5M. O indicador calcula tudo normalmente e devolve numeros
+  // PLAUSIVEIS para o timeframe errado -- falha silenciosa.
+  //
+  // O que NAO transfere entre timeframes:
+  //   JanelaContexto = 6   -> 30 min no 5M, 6 min no 1M
+  //   JanelaZ        = 50  -> ~4 h no 5M, ~50 min no 1M
+  // O que transfere (razoes e z-scores):
+  //   |desloc_norm|, z_amplitude, z_vol_agr
+  //
+  // RS_BarsPerDay() = 1440 / periodicidade_em_minutos.
+  // 5M -> 288.  1M -> 1440.
+  //-------------------------------------------------------------------
+  if (CurrentBar = 1) and (RS_BarsPerDay <> BarsPorDiaEsperado) then
+    ConsoleLog("ABSAVISO|PERIODICIDADE ERRADA|esperado=" + BarsPorDiaEsperado
+      + "|no grafico=" + RS_BarsPerDay
+      + "|o pre-registro congelou 5 MINUTOS (288)");
+
   sDataContexto := Date[1 + JanelaContexto];
   sCloseAnt     := Close[1];
   sCloseCtx     := Close[1 + JanelaContexto];

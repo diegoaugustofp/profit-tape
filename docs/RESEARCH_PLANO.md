@@ -4394,6 +4394,68 @@ Se a inspecao mostrar que a formalizacao nao captura a leitura, o
 caminho e' **pre-registro NOVO**, testado em dado que ele nao viu — nunca
 ajuste do que esta congelado.
 
+### DECISAO DE MANTER a janela de 6 barras (2026-09-02)
+
+Levantado pelo operador: `mov_contexto` e' uma diferenca por JANELA
+MOVEL, entao ela **cai enquanto o preco continua subindo**, se a alta
+desacelera. Demonstrado: preco subindo o tempo todo e `mov6` despencando
+de 6,56 para 1,23 — com `K=3`, o habilitador DESLIGA na barra 10.
+
+Isso e' tensao real com o conceito: o habilitador exige movimento ainda
+RAPIDO nas ultimas 6 barras, enquanto "apos uma sequencia de alta"
+inclui alta que ja' perdeu folego. E' justamente quando absorcao e
+exaustao teriam mais chance.
+
+**DECISAO DO OPERADOR: manter.** O argumento e' dele e e' forte —
+trocar a janela fixa por topos e fundos parece mais fiel, mas introduz
+**mais parametros livres**: como definir um fundo, qual escolher, quanto
+precisa durar. Cada um e' uma decisao a mais passivel de ser tomada
+olhando dados. A janela de 6 barras e' grosseira, mas e' **UM** numero,
+fixado antes. Trocar precisao conceitual por tres parametros novos
+costuma piorar.
+
+"30 minutos no tf=5m e' suficiente para determinar o lado da agressao e
+tomar a decisao por ela. E os proprios numeros medidos irao nos dizer o
+caminho."
+
+### OBSERVACAO VISUAL do operador, com a ressalva que ele mesmo deu
+
+No parquet (amostra de DEPURACAO):
+
+> A barra **fucsia** fez sentido na marcacao. Pegou um fundo, foi a
+> minima do dia, e o movimento posterior foi longo — barras grandes logo
+> apos, depois barras pequenas sem muito deslocamento.
+>
+> As **aqua** apareceram no meio do movimento.
+
+**Ressalva registrada pelo proprio operador, e ela e' o que separa
+observacao de evidencia:**
+
+> "Isso e' uma analise POS-FATO. Facil de ver no grafico e assumir que
+> foi o melhor ponto." E sobre o aqua: "pode ser so' o movimento que
+> falhou; em outros dias teria dado certo."
+
+**E ele evitou navegar pelo grafico em varios dias, de proposito**, para
+nao criar vies e comecar a decidir pelo resultado. Isso protege a
+amostra cega sem ninguem ter pedido.
+
+**O que o teste ja' responde**: os dois lados sao reportados SEPARADOS,
+nunca somados. Se o fucsia funciona e o aqua nao, a assimetria aparece
+sem mudar nada. **Descartar o lado aqua por causa desta observacao seria
+escolher o lado depois de ver o desfecho** — os dois continuam sendo
+reportados, inclusive o que nao der nada.
+
+Precedente: o `z_agf_3` so' teve edge na venda. Assimetria entre lados
+nao seria novidade neste instrumento, e ha' mecanismo plausivel —
+absorcao num fundo e' acumulacao, num topo e' distribuicao, e as duas
+nao precisam ter a mesma dinamica.
+
+**Nota sobre a tensao do horizonte**: o operador disse estar "menos
+preocupado se capturamos o movimento todo ou se acertamos os times".
+Isso ATENUA (nao dissolve) a tensao registrada antes sobre 2 barras nao
+medirem movimento longo — um sinal que pega um fundo tambem produz
+retorno positivo em 2 barras.
+
 ### Fora deste pre-registro
 
 - **Exaustao**: e' processo de SEQUENCIA, nao evento de barra — objeto

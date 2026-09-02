@@ -958,3 +958,32 @@ avisa o contrario.
 `absorcao-grafico` compara `z_amplitude` e `z_vol_agr` do `.ntsl` com o
 Python. Se os lacos estiverem de fato indefinidos, aparece ali. Foi
 assim que a divergencia do `z` foi pega em 2026-09-01.
+
+
+## Guarda de PERIODICIDADE (2026-09-02)
+
+Erro real: o grafico estava em **1M** com os parametros calibrados para
+5M. O indicador calcula tudo normalmente e devolve numeros PLAUSIVEIS
+para o timeframe errado — falha silenciosa, da mesma familia da agressao
+zerada.
+
+**O que NAO transfere entre timeframes:**
+
+    JanelaContexto = 6   ->  30 min no 5M,  6 min no 1M
+    JanelaZ        = 50  ->  ~4 h no 5M,   ~50 min no 1M
+    range_medio          ->  amplitude media muda de escala
+
+**O que transfere** (sao razoes ou z-scores, adimensionais):
+
+    |desloc_norm| <= 0,25    razao dentro da propria barra
+    z_amplitude   >= 0,50    z contra a propria janela
+    z_vol_agr     >= 0,50    idem
+
+**A guarda**: `RS_BarsPerDay()` devolve `1440 / periodicidade_em_minutos`
+— 288 no 5M, 1440 no 1M. Na primeira barra, se divergir do esperado, o
+indicador loga:
+
+    ABSAVISO|PERIODICIDADE ERRADA|esperado=288|no grafico=1440|...
+
+Nao bloqueia (o NTSL nao tem como abortar), mas a linha aparece no
+console antes de qualquer dado.

@@ -333,3 +333,21 @@ def test_o_ntsl_TAMBEM_purga_o_contexto_na_virada() -> None:
         "como o Python faz com groupby('dia')")
     assert "if (sRangeMedio > 0) and (Date[" not in codigo, (
         "acesso posicional NAO pode voltar para dentro da condicao")
+
+
+def test_o_ntsl_avisa_se_a_periodicidade_estiver_errada() -> None:
+    """
+    Erro real (2026-09-02): o grafico estava em 1M com os parametros de
+    5M. O indicador calcula tudo normalmente e devolve numeros
+    PLAUSIVEIS para o timeframe errado -- falha silenciosa.
+
+    `JanelaContexto = 6` vira 6 minutos em vez de 30; `JanelaZ = 50` vira
+    50 minutos em vez de 4 horas. As razoes (`|desloc_norm|`) e os
+    z-scores transferem; as JANELAS nao.
+    """
+    codigo = "\n".join(linha for linha in _ntsl().splitlines()
+                       if not linha.lstrip().startswith("//"))
+    assert "RS_BarsPerDay" in codigo, (
+        "o .ntsl precisa checar a periodicidade do grafico")
+    assert "BarsPorDiaEsperado(288)" in codigo, (
+        "288 = 1440/5, a periodicidade que o pre-registro congelou")
