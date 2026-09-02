@@ -916,3 +916,45 @@ mesmo sintoma (console vazio):
 Sem essa separacao, "nao salva nada" e' indistinguivel entre erro de
 sintaxe e condicao que nunca fica verdadeira — e as duas pedem
 investigacao oposta.
+
+
+## Aviso do compilador: acesso posicional em escopo condicional (2026-09-02)
+
+    Parser[150,35]: Acessos a contextos posicionais dentro de escopos
+    condicionais e de lacos possuem comportamento indefinido!
+
+A linha era a guarda da purga que eu tinha acabado de acrescentar:
+
+    if (sRangeMedio > 0) and (Date[1 + JanelaContexto] = Date) then
+
+`Date[...]` **dentro da condicao de um `if`**, que pode curto-circuitar.
+"Comportamento indefinido" significa que a guarda **podia simplesmente
+nao funcionar** — e guarda que talvez nao funcione e' pior que nenhuma,
+porque parece protecao. O codigo compilou e rodou, o que torna o defeito
+silencioso.
+
+**Corrigido lendo os acessos posicionais no TOPO, em atribuicao
+simples:**
+
+    sDataContexto := Date[1 + JanelaContexto];
+    sCloseAnt     := Close[1];
+    sCloseCtx     := Close[1 + JanelaContexto];
+
+e usando as variaveis na condicao. E' o padrao do `absorcao_dir.ntsl`,
+que le' valores posicionais em atribuicao e nunca em condicao.
+
+### O que fica em aberto
+
+O aviso apareceu DUAS vezes e eu so' identifiquei uma ocorrencia. Restam
+quatro acessos posicionais dentro de LACOS (`sAmplitude[nIndex]`,
+`sVolAgr[nIndex]`), que o aviso tambem menciona.
+
+Esses seguem o padrao do `absorcao_dir.ntsl`, verificado contra o Python
+com erro de 2,4e-8 em 2.001 barras — empiricamente funcionam. Mas
+"empiricamente funciona" nao e' "esta garantido", e o proprio compilador
+avisa o contrario.
+
+**Verificacao obrigatoria no proximo dump**: a conferencia
+`absorcao-grafico` compara `z_amplitude` e `z_vol_agr` do `.ntsl` com o
+Python. Se os lacos estiverem de fato indefinidos, aparece ali. Foi
+assim que a divergencia do `z` foi pega em 2026-09-01.

@@ -322,7 +322,14 @@ def test_o_ntsl_TAMBEM_purga_o_contexto_na_virada() -> None:
     t = _ntsl()
     codigo = "\n".join(linha for linha in t.splitlines()
                        if not linha.lstrip().startswith("//"))
-    assert "Date[1 + JanelaContexto] = Date" in codigo, (
+    # O acesso posicional e' LIDO NO TOPO, em atribuicao simples, e a
+    # condicao usa a variavel. Ler `Date[...]` dentro do `if` disparava
+    # "acessos a contextos posicionais dentro de escopos condicionais
+    # possuem comportamento indefinido" -- a guarda podia nao funcionar.
+    assert "sDataContexto := Date[1 + JanelaContexto]" in codigo, (
+        "o acesso posicional tem que ser lido no topo, em atribuicao")
+    assert "sDataContexto = Date" in codigo, (
         "o .ntsl precisa recusar contexto que comece em outro pregao, "
-        "como o Python faz com groupby('dia')"
-    )
+        "como o Python faz com groupby('dia')")
+    assert "if (sRangeMedio > 0) and (Date[" not in codigo, (
+        "acesso posicional NAO pode voltar para dentro da condicao")

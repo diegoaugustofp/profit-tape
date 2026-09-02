@@ -59,6 +59,7 @@ var
   sMediaAmp, sDpAmp, sZAmp                   : Float;
   sMediaVol, sDpVol, sZVol                   : Float;
   sRangeMedio, sMovContexto                  : Float;
+  sDataContexto, sCloseAnt, sCloseCtx        : Float;
   sSoma, sSomaQuad, sD                       : Float;
   sLado                                      : Float;
   nIndex                                     : Integer;
@@ -77,6 +78,23 @@ begin
   // desligado.
   //-------------------------------------------------------------------
   sVolAgr := QuantityVol(False, True);
+
+  //-------------------------------------------------------------------
+  // ACESSOS POSICIONAIS LIDOS AQUI, no topo e em ATRIBUICAO SIMPLES.
+  //
+  // O compilador avisa: "Acessos a contextos posicionais dentro de
+  // escopos condicionais e de lacos possuem comportamento indefinido".
+  // A versao anterior lia `Date[1 + JanelaContexto]` DENTRO da condicao
+  // de um `if` -- que pode curto-circuitar --, e a guarda da purga podia
+  // simplesmente nao funcionar. Guarda que talvez nao funcione e' pior
+  // que nenhuma: parece protecao.
+  //
+  // Lidos incondicionalmente, os tres valem para o resto da barra. Antes
+  // do aquecimento eles nao sao usados.
+  //-------------------------------------------------------------------
+  sDataContexto := Date[1 + JanelaContexto];
+  sCloseAnt     := Close[1];
+  sCloseCtx     := Close[1 + JanelaContexto];
 
   sAmplitude := High - Low;
   if sAmplitude > 0 then
@@ -147,8 +165,8 @@ begin
     // `Date[1 + JanelaContexto] <> Date` detecta que a janela comeca em
     // outro pregao. Sem contexto, `sLado` fica 0 e a barra nao pinta.
     sMovContexto := 0;
-    if (sRangeMedio > 0) and (Date[1 + JanelaContexto] = Date) then
-      sMovContexto := (Close[1] - Close[1 + JanelaContexto]) / sRangeMedio;
+    if (sRangeMedio > 0) and (sDataContexto = Date) then
+      sMovContexto := (sCloseAnt - sCloseCtx) / sRangeMedio;
 
     //--- O EVENTO: CONJUNCAO das tres condicoes ---
     // Conjuncao de proposito. Combinar num numero unico repetiria o erro
