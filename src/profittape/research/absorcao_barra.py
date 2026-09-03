@@ -69,6 +69,29 @@ def preparar(barras: pd.DataFrame) -> pd.DataFrame:
     d = barras.copy()
     if "dia" not in d.columns:
         d["dia"] = pd.to_datetime(d["ts_close"], unit="ns", utc=True).dt.date
+    # BLOCO CONTIGUO: janela movel nao atravessa BURACO na amostra.
+    #
+    # Achado em 2026-09-03 ao rodar o combinado das duas partes de 2026.
+    # O dump concatena 02/01-30/04 com 01/06-23/07, e MAIO nao esta la'.
+    # O `.ntsl` calculou sobre o grafico CONTINUO (abril -> maio ->
+    # junho); o Python le' o arquivo (abril -> junho). Nas primeiras 50
+    # barras de junho, a janela do Python pegava ABRIL enquanto a do NTSL
+    # pegou MAIO.
+    #
+    # Divergencia medida: `z_amplitude` saltou de 4,89e-06 (parte 1
+    # sozinha) para 6,20 no combinado.
+    #
+    # E' o mesmo principio da purga de dia: referencia movel nao pode
+    # cruzar descontinuidade. Aqui a descontinuidade e' de AMOSTRA, nao
+    # de pregao.
+    dias_unicos = pd.to_datetime(pd.Series(sorted({str(x) for x in d["dia"]})))
+    dia_serie = pd.to_datetime(d["dia"].astype(str))
+    salto = dia_serie.diff().dt.days.fillna(0)
+    # Fim de semana longo/feriado chega a ~5 dias; acima disso e' buraco
+    # de amostra, nao calendario.
+    d["_bloco"] = (salto > 10).cumsum()
+    del dias_unicos
+
     d["amplitude_pts"] = d["high"] - d["low"]
     if "vol_agr" not in d.columns:
         d["vol_agr"] = d["vol_buy"] + d["vol_sell"]
@@ -89,13 +112,18 @@ def preparar(barras: pd.DataFrame) -> pd.DataFrame:
         # HISTORIA, e incluir a propria barra na referencia atenua
         # justamente o que se quer detectar -- a barra grande infla a
         # propria media e o proprio desvio.
-        media = d[origem].rolling(JANELA_Z).mean().shift(1)
-        desvio = d[origem].rolling(JANELA_Z).std().shift(1)
+        por_bloco = d.groupby("_bloco")[origem]
+        media = por_bloco.rolling(JANELA_Z).mean().reset_index(0, drop=True)
+        desvio = por_bloco.rolling(JANELA_Z).std().reset_index(0, drop=True)
+        media = media.groupby(d["_bloco"]).shift(1)
+        desvio = desvio.groupby(d["_bloco"]).shift(1)
         d[col] = (d[origem] - media) / desvio.where(desvio > 0)
 
     # range medio com shift(1): o range da propria barra nao pode entrar
     # na referencia que a julga.
-    d["range_medio"] = d["amplitude_pts"].rolling(JANELA_Z).mean().shift(1)
+    d["range_medio"] = (
+        d.groupby("_bloco")["amplitude_pts"].rolling(JANELA_Z).mean()
+        .reset_index(0, drop=True).groupby(d["_bloco"]).shift(1))
     # PURGA ESTRUTURAL NO CONTEXTO (errata de 2026-09-02).
     #
     # `mov_contexto` e' uma DIFERENCA DE PRECO, e sem `groupby("dia")` ela

@@ -372,3 +372,23 @@ def test_linhas_ABSDIAG_e_ABSVIDA_nao_atrapalham_o_parse(tmp_path) -> None:  # t
     arq.write_text("\n".join(linhas), encoding="utf-8")
     _, diag = carregar_log(arq)
     assert diag["barras"] == 3
+
+
+def test_conferencia_grave_INTERROMPE_a_rodada() -> None:
+    """
+    Em 2026-09-03 a conferencia do combinado mostrou `z_amplitude`
+    divergindo ate 6,20 e o comando SEGUIU ATE O VEREDITO. Divergencia
+    ali significa que o indicador que se OLHA e o estimador que DECIDE
+    nao sao a mesma coisa -- o veredito sai de um estimador que ninguem
+    inspecionou.
+
+    Relatar nao basta: quem le' um veredito tende a ler o veredito.
+    """
+    import inspect
+
+    from profittape.research import absorcao_grafico as ag
+
+    fonte = inspect.getsource(ag.rodar)
+    assert "CONFERENCIA REPROVOU" in fonte, (
+        "divergencia grave tem que interromper, nao so' aparecer no "
+        "relatorio")

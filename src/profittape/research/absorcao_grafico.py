@@ -366,6 +366,36 @@ def rodar(caminho_log: Path, saida_dir: Path,
 
     d = marcar_eventos(preparar(para_barras(df)))
     conferencia = conferir_contra_o_ntsl(d, df)
+
+    # DIVERGENCIA INTERROMPE, nao so' aparece no relatorio.
+    #
+    # Em 2026-09-03 a conferencia do combinado mostrou `z_amplitude`
+    # divergindo ate 6,20 (contra 4,89e-06 na parte 1 sozinha) e o
+    # comando SEGUIU ATE O VEREDITO. Divergencia ali significa que o
+    # indicador que se OLHA e o estimador que DECIDE nao sao a mesma
+    # coisa — e o veredito sai de um estimador que ninguem inspecionou.
+    #
+    # A tolerancia e' folgada (1e-03) porque o `.ntsl` loga com precisao
+    # limitada; o que se quer pegar e' divergencia ESTRUTURAL, da ordem
+    # de 0,1 ou mais.
+    graves = {c: v for c, v in conferencia.items()
+              if v.get("dif_max", 0) > 1e-3}
+    if graves:
+        detalhe = "\n".join(
+            f"    {c}: dif_max {v['dif_max']}" for c, v in graves.items())
+        raise SystemExit(
+            "CONFERENCIA REPROVOU: o `.ntsl` e o Python calcularam coisas "
+            "diferentes.\n" + detalhe + "\n"
+            "  O veredito sairia de um estimador que nao e' o que voce ve' "
+            "no grafico.\n"
+            "  Causa mais provavel num dump CONCATENADO: as partes tem um "
+            "buraco entre\n"
+            "  elas, e o .ntsl calculou sobre o grafico CONTINUO enquanto o "
+            "Python le'\n"
+            "  so' o arquivo. Atualize para a versao que trata bloco "
+            "contiguo e redumpe\n"
+            "  se necessario."
+        )
     pontos = avaliar_tudo(d, limiar_z, semente=semente)
     veredito, motivo = decidir(pontos)
 

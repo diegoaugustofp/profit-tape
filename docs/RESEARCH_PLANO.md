@@ -4513,6 +4513,42 @@ Consequencia aceita: **2026 provavelmente fecha INCONCLUSIVO no lado
 ALTA**, e esta' tudo bem. Um veredito parcial honesto vale mais que um
 pool montado para alcancar significancia.
 
+### VEREDITO DE 2026 ANULADO ANTES DE SER LIDO (2026-09-03)
+
+A rodada do combinado (119 pregoes, 64 eventos) devolveu **CONTRA** com
+n=34 e n=30 — os dois acima do minimo pela primeira vez.
+
+**O veredito NAO vale**, e a razao esta na propria saida:
+
+    conferencia          parte 1 sozinha    combinado
+      z_amplitude           4,89e-06          6,20
+      z_vol_agr                  0,0          0,78
+      mov_contexto          1,77e-06          0,70
+
+**Causa: a CONCATENACAO cria um buraco.** O dump junta 02/01-30/04 com
+01/06-23/07, e maio nao esta la'. O `.ntsl` calculou sobre o grafico
+CONTINUO (abril -> maio -> junho); o Python le' o arquivo (abril ->
+junho). Nas primeiras 50 barras de junho, a janela movel do Python pegava
+ABRIL enquanto a do NTSL pegou MAIO.
+
+**Por que isso muda o veredito e nao e' detalhe**: o lado ALTA tem n=30,
+exatamente o minimo. Descartar as barras contaminadas remove eventos — um
+so' ja' leva a 29, e o CONTRA vira INCONCLUSIVO.
+
+### Duas correcoes
+
+**1. Janela movel nao atravessa buraco na amostra.** Mesmo principio da
+purga de dia: referencia movel nao cruza descontinuidade. Aqui a
+descontinuidade e' de AMOSTRA, nao de pregao. Blocos contiguos separados
+por salto de mais de 10 dias (fim de semana longo e feriado nao contam).
+
+**2. Divergencia na conferencia INTERROMPE a rodada.** Ela ja' estava
+sendo calculada e reportada — e o comando seguiu ate o veredito assim
+mesmo. Relatar nao basta: **quem le' um veredito tende a ler o
+veredito**. Divergencia acima de 1e-03 aborta com a causa provavel.
+
+Portao refeito com a correcao: CONTRA, |t| 0,81 e 1,56.
+
 ### Fora deste pre-registro
 
 - **Exaustao**: e' processo de SEQUENCIA, nao evento de barra — objeto

@@ -351,3 +351,54 @@ def test_o_ntsl_avisa_se_a_periodicidade_estiver_errada() -> None:
         "o .ntsl precisa checar a periodicidade do grafico")
     assert "BarsPorDiaEsperado(288)" in codigo, (
         "288 = 1440/5, a periodicidade que o pre-registro congelou")
+
+
+def test_janela_movel_NAO_atravessa_buraco_na_amostra() -> None:
+    """
+    Achado em 2026-09-03 ao rodar o combinado das duas partes de 2026. O
+    dump concatena 02/01-30/04 com 01/06-23/07, e MAIO nao esta la'.
+
+    O `.ntsl` calculou sobre o grafico CONTINUO (abril -> maio -> junho);
+    o Python le' o arquivo (abril -> junho). Nas primeiras 50 barras de
+    junho a janela do Python pegava ABRIL enquanto a do NTSL pegou MAIO.
+    `z_amplitude` divergiu ate **6,20**, contra 4,89e-06 na parte 1
+    sozinha.
+
+    Mesmo principio da purga de dia: referencia movel nao cruza
+    descontinuidade. Aqui a descontinuidade e' de AMOSTRA.
+    """
+    linhas = []
+    for bloco, (ini, n) in enumerate((("2026-01-02", 120), ("2026-06-01", 120))):
+        for i in range(n):
+            dia = (pd.Timestamp(ini) + pd.Timedelta(days=i // 60)).date()
+            linhas.append({
+                "dia": dia, "open": 100.0,
+                # amplitude MUITO diferente entre os blocos: se a janela
+                # atravessasse, o z do bloco 2 sairia gigante
+                "high": 110.0 + bloco * 50, "low": 90.0, "close": 105.0,
+                "vol_agr": 1000.0 + bloco * 500, "desloc_norm": 0.3,
+            })
+    d = ab.preparar(pd.DataFrame(linhas))
+
+    assert d["_bloco"].nunique() == 2, "o buraco de 30 dias tem que criar bloco"
+    bloco2 = d[d["_bloco"] == 1]
+    assert bloco2["z_amplitude"].head(ab.JANELA_Z).isna().all(), (
+        "as primeiras barras do bloco novo nao podem ter z: a janela "
+        "usaria dados do bloco anterior")
+
+
+def test_fim_de_semana_e_feriado_NAO_criam_bloco() -> None:
+    """
+    Se um fim de semana longo virasse buraco, cada semana perderia 50
+    barras e a amostra sumiria. O corte e' 10 dias.
+    """
+    linhas = []
+    for salto in (0, 3, 4, 8):        # sabado/domingo, feriado, semana curta
+        base = pd.Timestamp("2026-03-02") + pd.Timedelta(days=salto)
+        for _ in range(5):
+            linhas.append({"dia": base.date(), "open": 100.0, "high": 110.0,
+                           "low": 90.0, "close": 105.0, "vol_agr": 1000.0,
+                           "desloc_norm": 0.3})
+    d = ab.preparar(pd.DataFrame(linhas))
+    assert d["_bloco"].nunique() == 1, (
+        "saltos de calendario normais nao podem fragmentar a amostra")
