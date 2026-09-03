@@ -4456,6 +4456,63 @@ Isso ATENUA (nao dissolve) a tensao registrada antes sobre 2 barras nao
 medirem movimento longo — um sinal que pega um fundo tambem produz
 retorno positivo em 2 barras.
 
+### TRIAL 2026, parte 1: rodado (2026-09-03)
+
+    9.105 barras | 81 pregoes | 02/01 a 30/04/2026
+    40 eventos -> 24 BAIXA, 16 ALTA
+    VEREDITO: INCONCLUSIVO (n < 30 nos dois lados)
+
+**Nao interpretado**, por regra congelada. Os sinais variam entre as
+tres amostras ja' rodadas, o que e' esperado com `n` pequeno e nao
+sustenta leitura nenhuma.
+
+**O que E' interpretavel: a implementacao.** A conferencia ficou limpa
+nos QUATRO campos, inclusive `mov_contexto` (dif maxima 1,77e-06) — o
+`.ntsl` e o Python sao a mesma coisa. Era o defeito de fundo desde
+2026-08-31.
+
+E a purga esta comprovadamente ativa: `mov_contexto` tem 560 barras a
+menos que os z, e 560/81 = **6,9 por pregao**, contra `JanelaContexto+1
+= 7`. Bate exato.
+
+**Taxa de evento consistente entre amostras independentes:** 0,50/pregao
+em maio (20 pregoes) e 0,49 em jan-abr (81). O dimensionamento agora tem
+base.
+
+### TRIAL 2025 DECLARADO, e a decisao tomada ANTES do combinado
+
+Projecao com a taxa observada: 2026 inteiro fora das amostras queimadas
+da' ~118 pregoes -> **BAIXA ~35, ALTA ~23**. O lado ALTA nao alcanca o
+minimo nem somando a parte 2.
+
+Diante disso, duas saidas legitimas, e a escolha foi feita **antes de
+rodar o combinado** — nao depois de ver que ele nao bastava:
+
+    A) aceitar INCONCLUSIVO no lado ALTA e reportar so' a BAIXA
+    B) declarar 2025 como trial adicional          <- ESCOLHIDA
+
+**2025 declarado**: 02/01 a 30/12/2025, ~250 pregoes -> BAIXA ~75, ALTA
+~50. Passa nos dois lados.
+
+### 2025 e 2026 sao amostras INDEPENDENTES, nao um pool
+
+Decidido junto com a declaracao, e a escolha muda o que o resultado
+significa.
+
+**Nao juntar** os dois numa amostra so'. Juntar daria ~370 pregoes e
+folga confortavel, mas transformaria dois trials declarados num numero
+so' e perderia a informacao mais valiosa: **se o efeito e' estavel entre
+anos**.
+
+Mesmo argumento que ja' foi usado para tratar o grafico como
+independente do parquet. Se o efeito aparecer nos dois, e' forte. Se
+aparecer so' num, aprendeu-se sobre estabilidade — e isso e' resposta,
+nao ruido.
+
+Consequencia aceita: **2026 provavelmente fecha INCONCLUSIVO no lado
+ALTA**, e esta' tudo bem. Um veredito parcial honesto vale mais que um
+pool montado para alcancar significancia.
+
 ### Fora deste pre-registro
 
 - **Exaustao**: e' processo de SEQUENCIA, nao evento de barra — objeto
