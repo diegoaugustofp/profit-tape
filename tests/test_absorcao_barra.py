@@ -402,3 +402,38 @@ def test_fim_de_semana_e_feriado_NAO_criam_bloco() -> None:
     d = ab.preparar(pd.DataFrame(linhas))
     assert d["_bloco"].nunique() == 1, (
         "saltos de calendario normais nao podem fragmentar a amostra")
+
+
+def test_veredito_por_lado_expoe_o_caso_MISTO() -> None:
+    """
+    Caso real de 2026-09-03: BAIXA com n=34 e ALTA com n=28. O criterio
+    congelado manda INCONCLUSIVO so' quando `n < 30` nos DOIS lados,
+    entao o misto cai em CONTRA por eliminacao -- e o texto realmente diz
+    isso.
+
+    Mas "CONTRA" afirma que a absorcao nao antecipa reversao em NENHUM
+    lado, e com n=28 de um deles isso NAO esta medido. O global fica como
+    congelado; o por-lado torna o excesso visivel.
+    """
+    pontos = [
+        {"grupo": "evento+contexto BAIXA", "n": 34, "n_suficiente": True,
+         "media": 38.3, "t": 0.70, "sig": False},
+        {"grupo": "evento+contexto ALTA", "n": 28, "n_suficiente": False,
+         "media": -43.6, "t": -0.64, "sig": False},
+    ]
+    assert ab.decidir(pontos)[0] == "CONTRA", "o global segue congelado"
+
+    por_lado = ab.veredito_por_lado(pontos)
+    assert por_lado[0]["veredito"] == "CONTRA"
+    assert por_lado[1]["veredito"] == "INCONCLUSIVO", (
+        "lado com n insuficiente nao pode ser reportado como CONTRA")
+
+
+def test_por_lado_ignora_os_controles() -> None:
+    pontos = [
+        {"grupo": "evento+contexto BAIXA", "n": 40, "n_suficiente": True,
+         "media": 1.0, "t": 0.1, "sig": False},
+        {"grupo": "CONTROLE contexto sem evento", "n": 600,
+         "n_suficiente": True, "media": 9.0, "t": 3.0, "sig": True},
+    ]
+    assert len(ab.veredito_por_lado(pontos)) == 1

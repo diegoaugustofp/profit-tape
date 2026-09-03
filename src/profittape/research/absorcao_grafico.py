@@ -348,6 +348,7 @@ def rodar(caminho_log: Path, saida_dir: Path,
         marcar_eventos,
         portao_de_honestidade,
         preparar,
+        veredito_por_lado,
     )
     from .trials import limiar_deflacionado
 
@@ -410,5 +411,6 @@ def rodar(caminho_log: Path, saida_dir: Path,
         "eventos": int((d["evento"] & d["contexto_ok"]).sum()),
         "veredito": veredito,
         "motivo": motivo,
+        "por_lado": veredito_por_lado(pontos),
         "tabela": tabela,
     }

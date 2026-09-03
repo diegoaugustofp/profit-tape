@@ -4549,6 +4549,54 @@ veredito**. Divergencia acima de 1e-03 aborta com a causa provavel.
 
 Portao refeito com a correcao: CONTRA, |t| 0,81 e 1,56.
 
+### RESULTADO DO TRIAL 2026 (2026-09-03)
+
+Conferencia LIMPA nos quatro campos (pior: 5,88e-06) — o `.ntsl` e o
+Python sao a mesma coisa, e o veredito vem do estimador correto.
+
+    13.399 barras | 119 pregoes | 02/01 a 23/07/2026
+    62 eventos
+
+                           grupo   n  n_sufic   media      t   sig
+           evento+contexto BAIXA  34    True   +38,307  0,700  False
+            evento+contexto ALTA  28   False   -43,604 -0,637  False
+    CONTROLE contexto sem evento 632    True   +11,509  0,848  False
+    CONTROLE evento sem contexto 264    True   -14,107 -0,605  False
+
+    VEREDITO GLOBAL (criterio congelado): CONTRA
+
+### O GLOBAL AFIRMA MAIS DO QUE UM LADO SUSTENTA
+
+    BAIXA  n=34  ->  CONTRA        (medido, nao distinguivel de zero)
+    ALTA   n=28  ->  INCONCLUSIVO  (n < 30, NAO interpretado)
+
+O criterio congelado manda INCONCLUSIVO so' quando `n < 30` nos DOIS
+lados, entao o caso MISTO cai em CONTRA por eliminacao — e o texto
+realmente diz isso. Mas "CONTRA" afirma que a absorcao nao antecipa
+reversao em NENHUM lado, e com `n = 28` de um deles isso **nao esta
+medido**.
+
+Mesma classe de ambiguidade do `z`: o texto congelado nao cobriu o caso,
+e a implementacao resolveu por eliminacao.
+
+**O global fica como congelado** — muda-lo depois de ver o resultado
+seria o que a disciplina proibe. A saida passa a reportar o veredito
+POR LADO, para o excesso ficar visivel em vez de escondido no rotulo.
+
+### Leitura honesta deste trial
+
+**O lado BAIXA (aqua) tem resposta: CONTRA.** Com n=34, media +38,3 pts e
+t=0,70, a absorcao apos alta nao antecipa queda neste sinal e neste
+horizonte.
+
+**O lado ALTA (fucsia) segue sem resposta**, e e' justamente o lado que a
+observacao visual do operador apontava como o que fazia sentido. **2025
+ja' esta declarado** e projeta ~50 eventos ali.
+
+Nota: o `n` caiu de 30 para 28 apos a correcao de bloco contiguo — as
+barras logo apos a emenda perderam o `z`, como devem. A projecao de que
+2026 nao alcancaria o minimo na ALTA (~23) estava certa em direcao.
+
 ### Fora deste pre-registro
 
 - **Exaustao**: e' processo de SEQUENCIA, nao evento de barra — objeto

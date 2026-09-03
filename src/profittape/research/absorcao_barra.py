@@ -239,6 +239,35 @@ def avaliar_tudo(d: pd.DataFrame, limiar_z: float,
     return fora
 
 
+def veredito_por_lado(pontos: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """
+    Veredito de CADA lado, separado do global.
+
+    O criterio congelado manda INCONCLUSIVO so' quando `n < 30` nos DOIS
+    lados, entao o caso MISTO — um lado com amostra e o outro sem — cai
+    em CONTRA por eliminacao. E o texto realmente diz isso.
+
+    Mas "CONTRA" afirma que a absorcao nao antecipa reversao em NENHUM
+    lado, e com `n = 28` de um deles isso NAO esta medido. O veredito
+    global fica como congelado (muda-lo depois de ver o resultado seria
+    o que a disciplina proibe); esta funcao so' torna o excesso VISIVEL
+    em vez de escondido no rotulo.
+    """
+    fora = []
+    for p in pontos:
+        if not p["grupo"].startswith("evento+contexto"):
+            continue
+        if not p["n_suficiente"]:
+            v, nota = "INCONCLUSIVO", f"n={p['n']} < {N_MINIMO}: nao interpretado"
+        elif p["sig"]:
+            v = "FAVORAVEL" if p["media"] > 0 else "INVERTIDO"
+            nota = f"media {p['media']:+.1f} pts, t={p['t']:+.2f}"
+        else:
+            v, nota = "CONTRA", f"n={p['n']}, nao distinguivel de zero"
+        fora.append({"lado": p["grupo"], "veredito": v, "nota": nota})
+    return fora
+
+
 def decidir(pontos: list[dict[str, Any]]) -> tuple[str, str]:
     """Criterio congelado. Controles NAO entram no veredito."""
     lados = [p for p in pontos if p["grupo"].startswith("evento+contexto")]
