@@ -7,29 +7,31 @@
       "fim": "2026-05-31",
       "motivo": "mes completo anterior ao periodo capturado, escolhido por calendario e disponibilidade no grafico. Nenhum resultado consultado.",
       "declarado_em": "2026-09-01",
-      "commit_declaracao": "bae34e3"
+      "commit_declaracao": "bae34e3",
+      "trial": "maio-2026"
     },
     {
       "inicio": "2026-01-02",
       "fim": "2026-04-30",
       "motivo": "TRIAL 2026 (parte 1 de 2). Periodo escolhido por calendario: primeiro quadrimestre de 2026, anterior a qualquer amostra ja usada. Exclui 04-29/05 (dump de maio) e 24/07-27/08 (parquet), que sao amostra de DEPURACAO. Nenhum resultado consultado.",
       "declarado_em": "2026-09-02",
-      "trial": "2026 (parte 1 e 2 contam como UM trial: uma decisao de onde olhar, executada em varios dumps por limite de buffer)"
+      "trial": "2026"
     },
     {
       "inicio": "2026-06-01",
       "fim": "2026-07-23",
       "motivo": "TRIAL 2026 (parte 2 de 2). Retoma apos o dump de maio e para antes de 24/07, onde comeca o parquet. Mesmas razoes da parte 1.",
       "declarado_em": "2026-09-02",
-      "trial": "2026 (mesmo trial da parte 1)"
+      "trial": "2026"
     },
     {
       "inicio": "2025-01-02",
       "fim": "2025-12-30",
       "motivo": "TRIAL 2025. Declarado ANTES de ver o combinado de 2026, porque a projecao mostrou que 2026 inteiro nao alcanca n=30 no lado ALTA (~23 em 118 pregoes). Ano-calendario inteiro, anterior a qualquer amostra usada. Escolhido por disponibilidade e tamanho, nao por desempenho. Nenhum resultado de 2025 consultado.",
       "declarado_em": "2026-09-03",
-      "trial": "2025 (segundo trial da hipotese de absorcao de barra)",
+      "trial": "2025",
       "decidido_antes_de": "rodar o combinado das duas partes de 2026"
     }
-  ]
+  ],
+  "_sobre_o_campo_trial": "Identificador CURTO e ESTAVEL. Periodos com o MESMO valor sao partes do mesmo trial e podem ser dumpados juntos; valores diferentes NAO podem ser misturados num dump. A explicacao vai no `motivo`, nunca aqui -- texto livre no identificador ja' quebrou a checagem uma vez."
 }

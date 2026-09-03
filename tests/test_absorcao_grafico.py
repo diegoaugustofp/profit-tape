@@ -200,6 +200,71 @@ def test_periodo_declarado_antes_e_aceito(tmp_path) -> None:  # type: ignore[no-
     assert "mes completo" in p["motivo"]
 
 
+def test_dump_pode_ATRAVESSAR_periodos_do_MESMO_trial(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """
+    Bug real (2026-09-03): a checagem comparava [min, max] do dump contra
+    UM periodo, e recusava o combinado das duas partes de 2026 (02/01 a
+    23/07) -- que e' exatamente o uso previsto na declaracao: "parte 1 e
+    2 contam como UM trial, executado em varios dumps por limite de
+    buffer".
+
+    A semantica certa e' por PREGAO: cada dia tem que estar declarado, e
+    o buraco entre as partes (maio) e' esperado.
+    """
+    from profittape.research.absorcao_grafico import checar_periodo_declarado
+
+    arq = _declara(tmp_path, [
+        {"inicio": "2026-01-02", "fim": "2026-04-30", "motivo": "p1",
+         "trial": "2026"},
+        {"inicio": "2026-06-01", "fim": "2026-07-23", "motivo": "p2",
+         "trial": "2026"},
+    ])
+    r = checar_periodo_declarado(
+        _df_dias("2026-01-02", "2026-07-23"), arq)
+    assert r["trial"] == "2026"
+    assert len(r["periodos"]) == 2
+
+
+def test_dump_NAO_pode_misturar_trials(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """
+    O furo que a correcao ingenua criaria. Maio TAMBEM esta declarado,
+    num trial proprio e ja' queimado -- checar so' dia a dia deixaria
+    passar um dump com maio no meio, misturando amostras declaradas
+    separadamente. Um dump e' UMA rodada de UM trial.
+    """
+    from profittape.research.absorcao_grafico import checar_periodo_declarado
+
+    arq = _declara(tmp_path, [
+        {"inicio": "2026-01-02", "fim": "2026-04-30", "motivo": "p1",
+         "trial": "2026"},
+        {"inicio": "2026-05-01", "fim": "2026-05-31", "motivo": "maio",
+         "trial": "maio-2026"},
+    ])
+    with pytest.raises(SystemExit, match="mistura 2 TRIALS"):
+        checar_periodo_declarado(_df_dias("2026-01-02", "2026-05-15"), arq)
+
+
+def test_identificador_de_trial_do_repositorio_e_CURTO_e_consistente() -> None:
+    """
+    Defeito de dados (2026-09-03): escrevi textos DIFERENTES no campo
+    `trial` das duas partes de 2026, quando sao o mesmo trial. O codigo
+    estava certo e os dados e' que discordavam.
+
+    Identificar trial por texto livre e' fragil. O campo tem que ser um
+    rotulo curto; a explicacao vai no `motivo`.
+    """
+    import json
+    from pathlib import Path as _P
+
+    arq = _P(__file__).resolve().parents[1] / "docs" / "PERIODOS_DECLARADOS.json"
+    dados = json.loads(arq.read_text(encoding="utf-8"))
+    for p in dados["periodos"]:
+        rotulo = p.get("trial", "")
+        assert rotulo and len(rotulo) <= 20, (
+            f"`trial` deve ser rotulo curto, veio {rotulo!r}. A explicacao "
+            "vai no `motivo`.")
+
+
 def test_periodo_NAO_declarado_e_recusado(tmp_path) -> None:  # type: ignore[no-untyped-def]
     """
     A protecao central. Recusar sobreposicao com o capturado nao basta:
@@ -211,7 +276,7 @@ def test_periodo_NAO_declarado_e_recusado(tmp_path) -> None:  # type: ignore[no-
 
     arq = _declara(tmp_path, [{"inicio": "2026-05-01", "fim": "2026-05-31",
                                "motivo": "x"}])
-    with pytest.raises(SystemExit, match="NAO esta declarado"):
+    with pytest.raises(SystemExit, match="NAO estao declarados"):
         checar_periodo_declarado(_df_dias("2026-03-02", "2026-03-20"), arq)
 
 
@@ -223,7 +288,7 @@ def test_dump_que_EXTRAPOLA_o_declarado_e_recusado(tmp_path) -> None:  # type: i
 
     arq = _declara(tmp_path, [{"inicio": "2026-05-01", "fim": "2026-05-31",
                                "motivo": "x"}])
-    with pytest.raises(SystemExit, match="NAO esta declarado"):
+    with pytest.raises(SystemExit, match="NAO estao declarados"):
         checar_periodo_declarado(_df_dias("2026-05-04", "2026-06-15"), arq)
 
 

@@ -236,23 +236,55 @@ def checar_periodo_declarado(df: pd.DataFrame,
             "dado, nao e' criterio."
         )
 
-    ini = pd.Timestamp(str(df["dia"].min())).date()
-    fim = pd.Timestamp(str(df["dia"].max())).date()
-    for p in declarados:
-        d_ini = pd.Timestamp(p["inicio"]).date()
-        d_fim = pd.Timestamp(p["fim"]).date()
-        if ini >= d_ini and fim <= d_fim:
-            return dict(p)
+    # CADA PREGAO tem que estar declarado, e TODOS no MESMO trial.
+    #
+    # A primeira versao comparava [min, max] do dump contra UM periodo, e
+    # recusava o combinado das duas partes de 2026 (02/01 a 23/07) — que
+    # e' exatamente o uso previsto na declaracao: "parte 1 e 2 contam
+    # como UM trial, executado em varios dumps por limite de buffer".
+    #
+    # E checar so' dia a dia criaria outro furo: MAIO tambem esta
+    # declarado, num trial proprio e ja' queimado. Um dump com maio no
+    # meio passaria, misturando amostras de trials diferentes. Um dump e'
+    # UMA rodada de UM trial.
+    def _trial(periodo: dict[str, Any]) -> str:
+        return str(periodo.get("trial") or f"{periodo['inicio']}..{periodo['fim']}")
 
-    faixas = ", ".join(f"{p['inicio']}..{p['fim']}" for p in declarados)
-    raise SystemExit(
-        f"o dump cobre {ini} a {fim}, que NAO esta declarado em {arquivo}.\n"
-        f"  declarados: {faixas}\n"
-        "  Declarar depois de extrair o dado anula a protecao: seria "
-        "escolher o periodo\n"
-        "  sabendo o que ha' nele. Se o periodo e' legitimo, declare, "
-        "commite e redumpe."
-    )
+    dias = sorted({pd.Timestamp(str(x)).date() for x in df["dia"]})
+    cobertura: dict[Any, str] = {}
+    for dia in dias:
+        for periodo in declarados:
+            if (pd.Timestamp(periodo["inicio"]).date() <= dia
+                    <= pd.Timestamp(periodo["fim"]).date()):
+                cobertura[dia] = _trial(periodo)
+                break
+
+    fora = [d for d in dias if d not in cobertura]
+    if fora:
+        faixas = ", ".join(f"{p['inicio']}..{p['fim']}" for p in declarados)
+        raise SystemExit(
+            f"{len(fora)} pregoes do dump NAO estao declarados em {arquivo} "
+            f"(de {fora[0]} a {fora[-1]}).\n"
+            f"  declarados: {faixas}\n"
+            "  Declarar depois de extrair o dado anula a protecao: seria "
+            "escolher o periodo\n  sabendo o que ha' nele."
+        )
+
+    trials = sorted(set(cobertura.values()))
+    if len(trials) > 1:
+        raise SystemExit(
+            f"o dump mistura {len(trials)} TRIALS diferentes: {trials}.\n"
+            "  Um dump e' UMA rodada de UM trial. Misturar junta amostras "
+            "que foram\n"
+            "  declaradas separadamente — e uma delas pode ja' ter sido "
+            "queimada.\n"
+            "  Separe os dumps por trial."
+        )
+
+    usados = [p for p in declarados if _trial(p) == trials[0]]
+    return {"trial": trials[0], "pregoes": len(dias),
+            "periodos": [f"{p['inicio']}..{p['fim']}" for p in usados],
+            "motivo": usados[0]["motivo"]}
 
 
 def para_barras(df: pd.DataFrame) -> pd.DataFrame:
