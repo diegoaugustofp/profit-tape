@@ -5144,3 +5144,67 @@ amostra folgada.
 Qualquer teste adicional exige dado novo — capturado adiante pelo
 `record`, ou 2024 e anteriores do grafico, que passariam a ser uma nova
 declaracao com a multiplicidade acumulada contada.
+
+## FASE DE ENTENDIMENTO (nomeada pelo operador, 2026-09-04)
+
+> "Precisamos explorar os achados com mais dados. Nossos proximos passos
+> e' identificar isso para explicar mais, e nao so' aprova/reprova."
+
+**Ela nao existia.** Todo o pipeline respondia aprova ou reprova; nada
+respondia **onde e quando**.
+
+### O que a media esconde
+
+Uma media de -4,55 sobre 10.305 barras pode ser duas coisas opostas:
+
+    (a) -4,5 em quase toda barra   -> difuso, nao operavel, morre no custo
+    (b) -40 nos dias que andam,
+        0 nos dias parados         -> CONCENTRADO, e talvez operavel
+
+A media nao distingue, e o pre-registro nao foi feito para explicar.
+
+### A regra da fase
+
+**Diagnostico em amostra QUEIMADA e' ilimitado.** Decompor por lado, tipo
+de dia, hora, regime — quantas vezes quiser, sem gastar trial.
+
+**Mas ele NAO valida.** Qualquer numero achado assim e' HIPOTESE. Testar
+exige declaracao propria e amostra que nao seja aquela.
+
+### A armadilha que o modulo admite sozinho
+
+Decompor em muitas celulas **garante** que alguma pareca significativa.
+Com 12 celulas sob H0, a chance de ao menos uma passar de |t| 1,96 e'
+**46%**. `resumir()` reporta celulas olhadas contra esperadas por acaso —
+sem isso, destacar a mais forte de doze parece achado e e' aritmetica.
+
+### `profit-tape decompor-efeito`
+
+Decompoe por LADO e por TIPO DE DIA:
+
+    forma do dia    |close - open| / range   -> oscilou / misto / andou
+    tamanho do dia  range                    -> parado / medio / amplo
+
+**Duas limitacoes que o comando declara na saida:** a forma do dia usa o
+dia INTEIRO, entao nao serve para decidir em tempo real — serve para
+EXPLICAR. E os tercis sao do proprio periodo, nao limiares
+transferiveis.
+
+### Primeiro uso, em maio (DEPURACAO, 817 observacoes de controle)
+
+    dia que ANDOU     AQUA +48,0 (t 2,20)   FUCSIA -44,9 (t -2,16)
+    dia que OSCILOU   AQUA +17,5 (t 0,88)   FUCSIA +24,4 (t 1,06)
+
+Nos dias que andaram, os dois lados sao fortes e em **sentidos
+opostos**; nos que oscilaram, os dois sao fracos. Coerente com a
+intuicao do operador: **o efeito se concentra nos dias que andam**.
+
+5 celulas extremas de 12, contra 0,6 esperadas — mais que acaso, e ainda
+assim **nao e' evidencia**: maio ja' foi usado varias vezes, a forma do
+dia so' e' conhecida no fim, e os tercis sao locais.
+
+### O que isto abre, e o que ainda falta
+
+Se o efeito for mesmo concentrado, a pergunta seguinte **nao e'** se ele
+existe — e' se da' para **identificar o tipo de dia ANTES**, e isso e'
+outra hipotese, com pre-registro proprio.

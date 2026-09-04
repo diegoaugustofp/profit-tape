@@ -964,6 +964,69 @@ def curva_poder(
 
 
 @app.command()
+def decompor_efeito(
+    log: Path = typer.Argument(..., help="Dump ABSBARRA| de amostra QUEIMADA"),
+    grupo: str = typer.Option(
+        "controle", "--grupo",
+        help="controle (contexto sem evento) | evento (evento+contexto)"),
+    log_level: str = typer.Option("WARNING", "--log-level"),
+) -> None:
+    """
+    FASE DE ENTENDIMENTO: onde o efeito esta', nao se ele existe.
+
+    Decompoe o retorno por LADO e por TIPO DE DIA. Diagnostico puro —
+    nao produz veredito e nao gasta trial.
+
+    SO' EM AMOSTRA QUEIMADA (parquet, maio, 2026, 2025). Qualquer numero
+    daqui e' HIPOTESE, nunca evidencia: testa-lo exige declaracao propria
+    e amostra que nao seja esta.
+    """
+    configurar(log_level)
+    from .research.absorcao_barra import marcar_eventos, preparar, retornos
+    from .research.absorcao_grafico import carregar_log, para_barras
+    from .research.decomposicao import classificar_dias, decompor, resumir
+
+    df, diag = carregar_log(log)
+    b = para_barras(df)
+    d = marcar_eventos(preparar(b))
+    dias = classificar_dias(b)
+
+    if grupo == "controle":
+        mascara = d["contexto_ok"] & ~d["evento"]
+        titulo = "CONTROLE — contexto sem evento"
+    else:
+        mascara = d["evento"] & d["contexto_ok"]
+        titulo = "EVENTO — evento + contexto"
+    r = retornos(d, mascara)
+
+    typer.echo("=" * 72)
+    typer.echo(f"DECOMPOSICAO — {titulo}")
+    typer.echo("=" * 72)
+    typer.echo(f"  {diag['pregoes']} pregoes | {len(r)} observacoes\n")
+
+    tabelas = {}
+    for por, rotulo in (("tipo", "FORMA DO DIA (deslocamento / range)"),
+                        ("tamanho", "TAMANHO DO DIA (range)")):
+        tabelas[por] = decompor(r, dias, por)
+        typer.echo(f"--- {rotulo} ---")
+        typer.echo(tabelas[por].to_string(index=False))
+        typer.echo("")
+
+    s = resumir(tabelas)
+    typer.echo(f"  {s['celulas']} celulas olhadas | "
+               f"{s['celulas_extremas']} com |t| >= 1,96 | "
+               f"{s['esperadas_por_acaso']} esperadas por acaso")
+    typer.echo(f"  chance de ao menos uma extrema sob H0: "
+               f"{s['chance_de_ao_menos_uma']}")
+    typer.echo(f"  -> {s['leitura']}")
+    typer.echo("\n  Os tercis sao do PROPRIO periodo: nao sao limiares")
+    typer.echo("  transferiveis. E a forma do dia usa o dia INTEIRO, entao")
+    typer.echo("  nao serve para decidir em tempo real -- serve para")
+    typer.echo("  EXPLICAR. Se o efeito se concentrar num tipo, a pergunta")
+    typer.echo("  seguinte e' se da' para identificar o tipo ANTES.")
+
+
+@app.command()
 def agents(
     dados: Path = typer.Option(
         Path("data/curated"), "--dados",
