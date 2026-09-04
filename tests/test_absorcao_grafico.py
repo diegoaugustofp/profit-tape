@@ -28,10 +28,11 @@ def _linha(dia: str = "1260601", hora: int = 900, o: float = 140000.0,
 def test_carrega_e_converte_a_data_do_easylanguage(tmp_path) -> None:  # type: ignore[no-untyped-def]
     """`Date` vem em 1AnoMesDia, com o ano deslocado de 1900."""
     arq = tmp_path / "log.txt"
-    arq.write_text("\n".join(_linha(hora=900 + i) for i in range(5)),
+    # 40 barras: acima do minimo da guarda de dump filtrado
+    arq.write_text("\n".join(_linha(hora=900 + i) for i in range(40)),
                    encoding="utf-8")
     df, diag = carregar_log(arq)
-    assert diag["barras"] == 5
+    assert diag["barras"] == 40
     assert df["dia"].iloc[0] == pd.Timestamp("2026-06-01").date()
 
 
@@ -94,12 +95,10 @@ def test_numero_no_formato_pt_BR(tmp_path) -> None:  # type: ignore[no-untyped-d
     pior que falhar: o campo sumiria das estatisticas em vez de acusar.
     """
     arq = tmp_path / "log.txt"
-    arq.write_text(
-        "ABSBARRA|1260601|900|900|140.000,00|140.200,00|139.900,00"
-        "|140.050,00|250.000,00|180.000,00|0,50|1,00|1,00|3,50|-1\n"
-        "ABSBARRA|1260601|905|905|140.000,00|140.200,00|139.900,00"
-        "|140.050,00|250.000,00|180.000,00|0,50|1,00|1,00|3,50|-1\n",
-        encoding="utf-8")
+    arq.write_text("\n".join(
+        f"ABSBARRA|1260601|{900 + i}|{900 + i}|140.000,00|140.200,00"
+        "|139.900,00|140.050,00|250.000,00|180.000,00|0,50|1,00|1,00"
+        "|3,50|-1" for i in range(40)), encoding="utf-8")
     df, _ = carregar_log(arq)
     assert df["open"].iloc[0] == 140000.0
     assert df["desloc_norm_ntsl"].iloc[0] == 0.5
@@ -365,13 +364,13 @@ def test_log_sem_ABSBARRA_aponta_a_causa_CERTA(tmp_path, conteudo, esperado) -> 
 def test_linhas_ABSDIAG_e_ABSVIDA_nao_atrapalham_o_parse(tmp_path) -> None:  # type: ignore[no-untyped-def]
     """Os tres formatos convivem: o parser filtra pelo prefixo."""
     arq = tmp_path / "log.txt"
-    linhas = ["ABSVIDA|barras=3|primeira_data=1260504"]
-    for i in range(3):
-        linhas.append(f"ABSDIAG|{i}|3|1260504|{900 + i}|1000|50|0.1|1|1|2")
+    linhas = ["ABSVIDA|barras=40|primeira_data=1260504"]
+    for i in range(40):
+        linhas.append(f"ABSDIAG|{i}|40|1260504|{900 + i}|1000|50|0.1|1|1|2")
         linhas.append(_linha(hora=900 + i))
     arq.write_text("\n".join(linhas), encoding="utf-8")
     _, diag = carregar_log(arq)
-    assert diag["barras"] == 3
+    assert diag["barras"] == 40
 
 
 def test_conferencia_grave_INTERROMPE_a_rodada() -> None:
@@ -392,3 +391,29 @@ def test_conferencia_grave_INTERROMPE_a_rodada() -> None:
     assert "CONFERENCIA REPROVOU" in fonte, (
         "divergencia grave tem que interromper, nao so' aparecer no "
         "relatorio")
+
+
+def test_dump_FILTRADO_e_recusado(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """
+    `MostrarSoEvento(1)` loga so' as barras pintadas. O formato continua
+    certo, as datas continuam certas, nao ha' duplicata -- e o parser
+    aceitaria. O `n` sairia errado e os CONTROLES pre-registrados (as
+    barras que NAO dispararam) simplesmente nao existiriam.
+
+    Falha silenciosa da mesma familia da agressao zerada e do campo
+    ausente: tudo parece certo e o numero sai errado.
+    """
+    arq = tmp_path / "log.txt"
+    # 3 barras num pregao -- um pregao de 5m tem ~113
+    arq.write_text("\n".join(_linha(hora=900 + i) for i in range(3)),
+                   encoding="utf-8")
+    with pytest.raises(SystemExit, match="MostrarSoEvento"):
+        carregar_log(arq)
+
+
+def test_dump_completo_passa(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    arq = tmp_path / "log.txt"
+    arq.write_text("\n".join(_linha(hora=900 + i) for i in range(40)),
+                   encoding="utf-8")
+    _, diag = carregar_log(arq)
+    assert diag["barras_por_pregao"] == 40.0

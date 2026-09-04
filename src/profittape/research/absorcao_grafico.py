@@ -154,7 +154,29 @@ def carregar_log(caminho: Path) -> tuple[pd.DataFrame, dict[str, Any]]:
             "  Dumps sobrepostos duplicam barras e inflam o n sem "
             "acrescentar informacao."
         )
+    # DUMP FILTRADO e' falha SILENCIOSA: com `MostrarSoEvento(1)` so' as
+    # barras pintadas entram, o formato continua certo, as datas
+    # continuam certas, nao ha' duplicata -- e o parser aceitaria. O `n`
+    # sairia errado e os CONTROLES pre-registrados (barras que NAO
+    # dispararam) simplesmente nao existiriam.
+    #
+    # Um pregao de 5m tem ~113 barras. Abaixo de 30 por pregao, o dump
+    # nao pode ser completo.
+    por_pregao = len(df) / max(df["dia"].nunique(), 1)
+    if por_pregao < 30:
+        raise SystemExit(
+            f"o dump tem {por_pregao:.1f} barras por pregao — um pregao de "
+            f"5m tem ~113.\n"
+            "  Isso indica `MostrarSoEvento(1)`, que loga SO' as barras "
+            "pintadas.\n"
+            "  Os controles pre-registrados precisam das barras que NAO "
+            "dispararam,\n"
+            "  e o `n` sairia errado sem nada acusar. Redumpe com "
+            "`MostrarSoEvento(0)`."
+        )
+
     return df, {"linhas": len(linhas), "barras": len(df),
+                "barras_por_pregao": round(por_pregao, 1),
                 "pregoes": int(df["dia"].nunique()),
                 "inicio": str(df["dia"].min()), "fim": str(df["dia"].max())}
 
