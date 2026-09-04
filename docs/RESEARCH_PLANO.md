@@ -5055,3 +5055,92 @@ reprovaria; se 0,30, `K = 0,5` passaria.
 **0,25 unidades = 61 pontos liquidos em 10 minutos.** A pergunta que
 decide nao e' estatistica: e' se um sinal de absorcao pode mover isso em
 media. Julgamento sobre o mercado, e do operador.
+
+## TRIAL 2025 — VEREDITO DO DESENHO 3: INVERTIDO (2026-09-04)
+
+    28.176 barras | 250 pregoes | 02/01 a 30/12/2025 | 469 eventos
+
+    conferencia Python x .ntsl: LIMPA (pior campo 8,13e-06)
+
+                           grupo      n   media       t   sig
+           evento+contexto BAIXA    251  + 6,614   0,361  False
+            evento+contexto ALTA    216  -36,250  -1,996  TRUE
+    CONTROLE contexto sem evento  10305  - 4,553  -2,296  False
+    CONTROLE evento sem contexto    260  -15,041  -0,738  False
+
+    VEREDITO pelo criterio congelado: INVERTIDO
+
+**Pela primeira vez a amostra foi suficiente com folga** (251 e 216
+contra o minimo de 30) e a conferencia entre os dois lados ficou limpa.
+
+### TRES RESSALVAS, e todas pesam contra a leitura otimista
+
+**1. O resultado e' MARGINAL ao extremo.**
+
+    |t| = 1,996  contra limiar 1,960   -> folga de 0,036
+    IC95 = [-75,918 ; -0,177]          -> o topo esta a 0,177 de zero,
+                                          num intervalo de 76 (0,2% da largura)
+
+Passa pelos dois criterios pela margem minima possivel.
+
+**2. O CONTROLE tem |t| MAIOR que o evento.**
+
+    evento+contexto ALTA          n=  216  media -36,25  t -1,996
+    CONTROLE contexto sem evento  n=10305  media - 4,55  t -2,296
+
+O controle sao barras com `|mov6| >= 1` e **sem absorcao**. Elas tambem
+rendem retorno negativo na direcao contraria ao movimento — ou seja, o
+preco tende a **CONTINUAR** no sentido do movimento. Isso e' MOMENTUM, e
+aparece em 10.305 barras que nao tem absorcao nenhuma.
+
+**A pergunta que o controle levanta e' se o -36,25 e' absorcao ou e' o
+mesmo momentum, apenas mais forte por acaso numa amostra de 216.** O
+pre-registro diz que controle e' diagnostico e nao criterio — entao o
+veredito nao muda —, mas a duvida fica registrada.
+
+**3. A multiplicidade real e' 4, nao 2.**
+
+Duas variantes da mesma hipotese foram testadas: desenho 1 (K=3) em 2026
+e desenho 3 (K=1) em 2025, dois lados cada.
+
+O `limiar_deflacionado` devolve 1,96 para 2 e para 4 comparacoes, porque
+para `n` pequeno o `E[max Z]` fica ABAIXO do piso e o piso vence. Isso e'
+deliberado e correto (deflacao so' pode SUBIR a barra). Mas a
+consequencia e' que **a multiplicidade das duas variantes nao foi
+penalizada**:
+
+    1 comparacao  -> 5,0% de chance de passar por acaso
+    2 comparacoes -> 9,8%
+    4 comparacoes -> 18,5%
+
+Com 4 comparacoes e folga de 0,036, a chance de isto ser acaso e'
+substancial.
+
+### O QUE O RESULTADO CONTRADIZ
+
+**A leitura visual do operador.** Ele observou que o fucsia "pegou um
+fundo, foi a minima do dia, e o movimento posterior foi longo". O lado
+fucsia (ALTA) e' justamente o que deu retorno NEGATIVO: depois da
+absorcao apos queda, o preco tendeu a **cair mais**.
+
+Ele mesmo tinha marcado a ressalva: "e' uma analise POS-FATO, facil de
+ver no grafico e assumir que foi o melhor ponto". A ressalva estava
+certa.
+
+### LEITURA HONESTA
+
+Isto **nao e'** evidencia de que absorcao funciona invertida. E':
+
+- um efeito marginal (folga 0,036),
+- num lado so',
+- com um controle sem absorcao mostrando a mesma direcao com |t| maior,
+- e sem penalizacao pela multiplicidade de 4 comparacoes.
+
+O que ha' de solido: **o lado BAIXA tem resposta clara** — media +6,6,
+`t` 0,361 com n=251. A absorcao apos alta nao antecipa queda, e agora com
+amostra folgada.
+
+**NAO ha' quarta variante disponivel.** 2025 era o ultimo periodo cego.
+Qualquer teste adicional exige dado novo — capturado adiante pelo
+`record`, ou 2024 e anteriores do grafico, que passariam a ser uma nova
+declaracao com a multiplicidade acumulada contada.
