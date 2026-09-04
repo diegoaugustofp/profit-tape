@@ -4941,3 +4941,66 @@ para 2025, o unico periodo cego que resta.
 **O que NAO vale**: olhar isto e depois dizer que o desenho novo saiu "do
 mecanismo". Se saiu daqui, saiu do dado, e a multiplicidade tem que ser
 contada.
+
+### O GARGALO TEM NOME: o contexto, nao a hipotese (2026-09-04)
+
+Decomposto o trial 2026 (13.399 barras, 119 pregoes):
+
+    ABSORCAO (as 3 condicoes)  326 barras = 2,4%  = 2,7 por pregao
+    CONTEXTO (|mov6| >= 3)     694 barras = 5,2%  = 5,8 por pregao
+    OS DOIS JUNTOS              62 barras          = 0,52 por pregao
+
+**Absorcao NAO e' rara.** Acontece 2,7 vezes por pregao. O que e' raro e'
+absorcao APOS MOVIMENTO FORTE — a conjuncao derruba de 326 para 62, e e'
+essa escassez que torna o desenho incapaz de responder.
+
+E as duas condicoes **andam juntas**: se fossem independentes dariam 17
+eventos, deram 62 — 3,7x acima do acaso. O contexto seleciona algo real,
+nao filtra por filtrar.
+
+### Rodar 2025 no desenho 2: NAO recomendado
+
+    EMD que 2025 produziria, com os desvios ja medidos:
+      BAIXA  n~40  ->  0,48 unidades
+      ALTA   n~45  ->  0,50 unidades
+      (alvo de plausibilidade: 0,25)
+
+O resultado seria quase certamente "nao distinguivel de zero" **de novo
+por falta de poder**, e 2025 e' o ULTIMO periodo cego. Gasto nisso, um
+desenho futuro nasce sem amostra de teste virgem.
+
+### CURVA DE PODER: `profit-tape curva-poder`
+
+Mede o EMD em funcao de `K`, usando **variancia e n** — a media do
+retorno nao entra em nenhuma linha.
+
+Baixar `K` **nao elimina a direcao**: `sign(mov6)` existe em toda barra.
+Some so' a exigencia de que o movimento seja GRANDE.
+
+**Mas ENFRAQUECE a hipotese**: "absorcao apos movimento FORTE" vira
+"absorcao apos movimento". E' afirmacao diferente e mais fraca, e essa e'
+a troca — nao apenas ganhar amostra.
+
+**A curva NAO autoriza rodar varios K no teste e ficar com o melhor.** Um
+K, um pre-registro, declarado antes com a hipotese que ele implica.
+
+Reporta o **pior lado**, porque o veredito precisa dos dois: a media dos
+dois esconderia um lado sem amostra atras do outro.
+
+### O balanco honesto
+
+**Eliminado e nao volta**: `absorcao_dir` media o oposto do conceito;
+`esforco` ja' existia como `absorcao`; contexto por contagem de candles,
+por rompimento e por referencias do dia anterior nao separam; stop como
+detector de reversao levou CONTRA por teorema.
+
+**Descoberto sobre o problema**: absorcao e' comum e anda junto com
+movimento forte; o alvo de 1.000 esta alem do p90 da excursao favoravel;
+media de retorno em pontos exige 210+ pregoes de EVENTOS.
+
+**Nao se moveu**: nenhum sinal validado.
+
+**O risco real, dito por escrito**: pode ser que medir por MEDIA DE
+RETORNO nunca funcione com a amostra disponivel. Se a curva mostrar que
+nem `K = 0` alcanca o plausivel, a resposta nao e' outro desenho — e'
+mudar o TIPO de pergunta.

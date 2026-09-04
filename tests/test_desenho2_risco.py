@@ -171,3 +171,53 @@ def test_lado_sem_operacao_nao_estoura() -> None:
     })
     t = d2.diagnostico_por_lado(ops)
     assert int(t[t["lado"] == "ALTA (fucsia)"]["n"].iloc[0]) == 0
+
+
+def test_curva_de_poder_usa_variancia_e_nao_a_media() -> None:
+    """
+    O que separa "escolher K por poder" de "escolher K por resultado":
+    deslocar TODOS os retornos por uma constante muda a media e NAO pode
+    mudar o EMD.
+    """
+    import numpy as np
+
+    from profittape.research.triagem_poder import curva_de_poder
+
+    rng = np.random.default_rng(3)
+    n = 400
+    d = pd.DataFrame({
+        "dia": [DIA] * n,
+        "close": 140_000.0 + rng.normal(0, 200, n).cumsum(),
+        "evento": True,
+        "mov_contexto": rng.normal(0, 2.0, n),
+    })
+    d["lado"] = -np.sign(d["mov_contexto"]).astype(int)
+    c1 = curva_de_poder(d, (0.0, 1.0))
+    deslocado = d.copy()
+    deslocado["close"] = deslocado["close"] + 5000.0   # constante
+    c2 = curva_de_poder(deslocado, (0.0, 1.0))
+    assert list(c1["emd_pior_lado_em_unidades"]) == list(
+        c2["emd_pior_lado_em_unidades"])
+
+
+def test_curva_reporta_o_PIOR_lado() -> None:
+    """
+    O veredito precisa dos DOIS lados. Reportar a media dos dois
+    esconderia um lado sem amostra atras do outro.
+    """
+    import numpy as np
+
+    from profittape.research.triagem_poder import curva_de_poder
+
+    rng = np.random.default_rng(5)
+    n = 300
+    mov = np.concatenate([np.full(280, 2.0), np.full(20, -2.0)])
+    d = pd.DataFrame({
+        "dia": [DIA] * n,
+        "close": 140_000.0 + rng.normal(0, 150, n).cumsum(),
+        "evento": True, "mov_contexto": mov,
+    })
+    d["lado"] = -np.sign(d["mov_contexto"]).astype(int)
+    c = curva_de_poder(d, (0.0,))
+    # o lado com 20 eventos e' o gargalo, e e' ele que tem que aparecer
+    assert int(c["n_menor_lado"].iloc[0]) < 30

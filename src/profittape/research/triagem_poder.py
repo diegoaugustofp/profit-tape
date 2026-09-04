@@ -113,3 +113,59 @@ def comparar(candidatos: dict[str, pd.Series], unidade: float,
                                                          float("inf"))),
         "algum_viavel": any(x["viavel"] for x in linhas),
     }
+
+
+def curva_de_poder(d: pd.DataFrame, ks: tuple[float, ...],
+                   unidade: float = 244.0) -> pd.DataFrame:
+    """
+    EMD em funcao do limiar de contexto `K`.
+
+    POR QUE ISTO NAO E' CALIBRAR OLHANDO RESULTADO
+    ----------------------------------------------
+    Cada linha usa **desvio e n** — a media do retorno nao entra em
+    nenhuma delas. A curva responde "com que K este desenho consegue
+    detectar algo", nunca "com que K o resultado fica bom".
+
+    O DIAGNOSTICO QUE ELA RESOLVE
+    -----------------------------
+    No trial 2026, as tres condicoes de absorcao marcaram **326 barras**
+    (2,7 por pregao). A conjuncao com `|mov6| >= 3` derrubou para 62.
+    **O contexto e' responsavel por quase toda a escassez de amostra**, e
+    e' a escassez que torna o desenho incapaz de responder.
+
+    Baixar `K` NAO elimina a direcao: `sign(mov6)` existe em toda barra.
+    Some so' a exigencia de que o movimento seja GRANDE — o que enfraquece
+    a hipotese ("absorcao apos movimento forte" vira "absorcao apos
+    movimento"), e essa e' a troca a decidir.
+
+    O QUE ESTA CURVA NAO AUTORIZA
+    -----------------------------
+    Rodar varios `K` no dado de teste e ficar com o melhor. **Um K, um
+    pre-registro.** A curva serve para escolher ANTES, por poder, e a
+    escolha tem que ser declarada com a hipotese que ela implica.
+    """
+    from .absorcao_barra import retornos
+
+    linhas = []
+    for k in ks:
+        mascara = (d["evento"] & (d["mov_contexto"].abs() >= k)
+                   & (d["lado"] != 0))
+        r = retornos(d, mascara)
+        if len(r) < 4:
+            linhas.append({"K": k, "n": len(r), "situacao": "poucos eventos"})
+            continue
+        por_lado = []
+        for lado in (-1, 1):
+            s = r.loc[r["lado"] == lado, "retorno"]
+            if len(s) >= 2:
+                por_lado.append(avaliar_desenho(s, unidade, f"lado {lado}"))
+        pior = max((x["emd_em_unidades"] for x in por_lado), default=float("nan"))
+        linhas.append({
+            "K": k,
+            "n": len(r),
+            "n_menor_lado": int(min((x["n"] for x in por_lado), default=0)),
+            "desvio": round(float(r["retorno"].std(ddof=1)), 1),
+            # o que vale e' o PIOR lado: o veredito precisa dos dois
+            "emd_pior_lado_em_unidades": round(pior, 2),
+        })
+    return pd.DataFrame(linhas)

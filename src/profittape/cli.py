@@ -925,6 +925,45 @@ def desenho2_emd(
 
 
 @app.command()
+def curva_poder(
+    log: Path = typer.Argument(..., help="Dump ABSBARRA| da amostra de DEPURACAO"),
+    unidade: float = typer.Option(244.0, "--unidade"),
+    log_level: str = typer.Option("WARNING", "--log-level"),
+) -> None:
+    """
+    EMD em funcao do limiar de contexto K. Categoria `features`.
+
+    Usa VARIANCIA e n; a media do retorno nao entra. Responde "com que K
+    o desenho consegue detectar algo", nunca "com que K o resultado fica
+    bom".
+
+    NAO autoriza rodar varios K no teste e ficar com o melhor: um K, um
+    pre-registro.
+    """
+    configurar(log_level)
+    from .research.absorcao_barra import marcar_eventos, preparar
+    from .research.absorcao_grafico import carregar_log, para_barras
+    from .research.triagem_poder import curva_de_poder
+
+    df, diag = carregar_log(log)
+    d = marcar_eventos(preparar(para_barras(df)))
+    n_ev = int(d["evento"].sum())
+    typer.echo("=" * 72)
+    typer.echo("CURVA DE PODER — EMD por limiar de contexto")
+    typer.echo("=" * 72)
+    typer.echo(f"  {diag['pregoes']} pregoes | {len(d)} barras")
+    typer.echo(f"  absorcao (as 3 condicoes): {n_ev} barras = "
+               f"{n_ev / diag['pregoes']:.1f} por pregao")
+    typer.echo("")
+    typer.echo(curva_de_poder(d, (0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0),
+                              unidade).to_string(index=False))
+    typer.echo("\n  O que vale e' o PIOR lado: o veredito precisa dos dois.")
+    typer.echo("  Baixar K NAO tira a direcao (sign(mov6) existe sempre),")
+    typer.echo("  mas ENFRAQUECE a hipotese: 'apos movimento forte' vira")
+    typer.echo("  'apos movimento'. Essa e' a troca a decidir.")
+
+
+@app.command()
 def agents(
     dados: Path = typer.Option(
         Path("data/curated"), "--dados",
