@@ -4859,3 +4859,60 @@ esses numeros seria calibrar depois de ver o dado.
 `profit-tape desenho2-emd <dump>` roda na amostra de DEPURACAO. Se o
 desvio cair com mais operacoes, a conclusao muda — e essa e' a unica
 coisa que reabre o desenho.
+
+### EMD do DESENHO 2 com amostra adequada (2026-09-04)
+
+Rodado sobre os 119 pregoes de 2026 (60 eventos, 49 operadas). A
+estimativa de 8 operacoes dava desvio 452; com 49 caiu para **396,6** —
+mas continua ACIMA dos 319 do desenho 1.
+
+    n necessario para EMD = 0,25 unidades (61 pts):
+
+      DESENHO 1  desvio 319,0  ->  105 eventos operados
+      DESENHO 2  desvio 396,6  ->  162 operados
+                                +  18% descartados (stop > 500)
+                                =  199 eventos brutos
+
+    DESENHO 2 precisa de 1,89x mais eventos.
+
+**Confirmado com amostra adequada: o desenho 2 e' pior.** A variancia
+maior e os descartes se somam.
+
+### E a conta que vale para os DOIS
+
+    a 0,5 evento/pregao:
+      DESENHO 1 -> 210 pregoes
+      DESENHO 2 -> 398 pregoes
+
+**2025 tem ~250 pregoes. Nenhum dos dois chega.**
+
+O problema nao e' o desenho 2 ser ruim. E' que **a razao sinal/ruido
+deste sinal, medida em pontos de retorno, exige mais dados do que existe
+ao alcance** — em qualquer das duas formulacoes.
+
+### O que isto NAO significa
+
+Nao significa que a absorcao nao funciona. Significa que **medir o efeito
+pela MEDIA do retorno em pontos** e' um instrumento fraco demais para o
+tamanho de amostra disponivel.
+
+### A geometria, que e' o dado mais informativo do dia
+
+    saidas: 43 stop | 5 alvo | 1 tempo   -> alvo bate em 10% das vezes
+    MFE mediana: 0,86 do risco
+    MFE p90:     3,10 do risco
+    custo do alvo fixo: -102 pts por operacao
+
+O preco tipicamente anda **menos de 1x o risco** a favor. Um alvo de
+1.000 com stop mediano de 255 exige 3,9x — e isso acontece em 10% dos
+casos.
+
+**Nao proponho desenho 3.** Escolher alvo ou stop olhando esses numeros
+seria calibrar depois de ver o dado, e essa e' a linha que a sessao
+inteira respeitou.
+
+### Custo desta descoberta: ZERO trials
+
+A regra 4 do criterio de abandono — medir o EMD do desenho novo ANTES de
+congelar — fez exatamente o que devia. O desenho 2 foi reprovado sem
+gastar 2025, que continua intocado.
