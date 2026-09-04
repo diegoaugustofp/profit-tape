@@ -5004,3 +5004,54 @@ media de retorno em pontos exige 210+ pregoes de EVENTOS.
 RETORNO nunca funcione com a amostra disponivel. Se a curva mostrar que
 nem `K = 0` alcanca o plausivel, a resposta nao e' outro desenho — e'
 mudar o TIPO de pergunta.
+
+### K = 1 CONFIRMADO pelo operador (2026-09-04)
+
+**A justificativa nao veio da tabela de EMD**, e e' por isso que ela
+vale:
+
+> "K=1 e' quase metade do meu stop maximo. Sem medir nada, acho razoavel
+> entrar numa posicao a partir de um sinal que ja' andou a metade do meu
+> stop."
+
+    K = 1  ->  244 pontos liquidos nos 30 min anteriores
+    stop mediano medido no desenho 2:  255 pontos
+
+A regra vira: **"so' entro se o preco ja' andou, antes, o equivalente ao
+risco que vou assumir".** Movimento previo e risco na mesma escala.
+
+Custo em poder, declarado ANTES:
+
+    K = 3  ->  62 eventos, menor lado 28, EMD 0,55  (o congelado)
+    K = 1  -> 216 eventos, menor lado 96, EMD 0,34  (escolhido)
+    K = 0  -> 326 eventos, menor lado 152, EMD 0,25
+
+**K = 0 foi recusado por MECANISMO, nao por numero**: com `|mov6|` perto
+de zero o preco praticamente nao andou, e `sign(mov6)` vira sorteio —
+direcao tirada de ruido ADICIONA variancia em vez de informar. Sao 56 dos
+326 eventos (17%) com menos de 122 pontos de deslocamento previo.
+
+**O operador optou por NAO olhar o grafico antes de decidir**, e a razao
+esta certa: a justificativa do stop nao depende de quais barras ele
+viu, e olhar so' poderia contamina-la.
+
+### O DESVIO E' CONSTANTE EM TODO O K — achado inesperado
+
+    K=0,0  371,0    K=1,0  369,9    K=2,0  375,1    K=3,0  339,0
+
+**Todo o ganho de EMD vem de `n`, nada de reducao de variancia.** O
+contexto nao seleciona eventos menos ruidosos; so' seleciona menos
+eventos.
+
+Isso NAO significa que o contexto e' inutil: ele pode selecionar eventos
+de EFEITO maior, e isso e' imensuravel sem olhar a media.
+
+### O LIMIAR DE 0,25 UNIDADES E' MEU, NAO MEDIDO
+
+Registrado porque `K = 0` bateu exatamente nele. O 0,25 saiu de um
+julgamento que escrevi em `triagem_poder.py` — se fosse 0,20, `K = 0`
+reprovaria; se 0,30, `K = 0,5` passaria.
+
+**0,25 unidades = 61 pontos liquidos em 10 minutos.** A pergunta que
+decide nao e' estatistica: e' se um sinal de absorcao pode mover isso em
+media. Julgamento sobre o mercado, e do operador.
