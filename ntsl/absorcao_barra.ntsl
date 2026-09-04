@@ -39,9 +39,13 @@ input
   MinZVolAgr(0.50);         // volume de agressao vs as 50 anteriores
   JanelaZ(50);              // barras da referencia movel
   JanelaContexto(6);        // ~30 min no 5m, do relato do operador
-  KContexto(3.0);           // multiplo do range medio (reduzido de 5
-                            // por RESTRICAO DE AMOSTRA, nao por
-                            // resultado)
+  KContexto(1.0);           // DESENHO 3, congelado 2026-09-04.
+                            // Era 3,0 no desenho 1. K=1 exige 244 pts de
+                            // movimento previo (30 min), contra o stop
+                            // mediano medido de 255 -- "so entro se o
+                            // preco ja andou o equivalente ao risco".
+                            // A hipotese fica MAIS FRACA: "apos movimento
+                            // FORTE" vira "apos movimento".
   //--- somente apresentacao ---
   MostrarSoEvento(0);       // 1 = so' loga barras marcadas
   LogAtivo(1);

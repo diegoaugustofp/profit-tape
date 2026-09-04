@@ -51,7 +51,28 @@ MIN_Z_AMPLITUDE = 0.50
 MIN_Z_VOL_AGR = 0.50
 JANELA_Z = 50            # barras, para amplitude/volume/range medio
 JANELA_CONTEXTO = 6      # ~30 min no 5m, do relato do operador
-K_CONTEXTO = 3.0         # reduzido de 5 por RESTRICAO DE AMOSTRA
+K_CONTEXTO = 1.0         # DESENHO 3, congelado 2026-09-04.
+#
+# Era 3.0 no desenho 1 (congelado 2026-08-31), que foi testado em 2026 e
+# fechou CONTRA na baixa / INCONCLUSIVO na alta. O motivo real nao era o
+# resultado: com K=3 sobravam 62 eventos e o EMD era 0,55 unidades -- o
+# desenho nao conseguia detectar efeito plausivel.
+#
+# K=1 exige 244 pts de movimento previo nos 30 min anteriores, contra o
+# stop mediano medido de 255. A regra vira "so entro se o preco ja andou,
+# antes, o equivalente ao risco que vou assumir" -- justificativa do
+# operador, anterior a qualquer numero de EMD.
+#
+# CUSTO: a hipotese fica MAIS FRACA. "Absorcao apos movimento FORTE" vira
+# "absorcao apos movimento", e resultado favoravel aqui NAO valida a
+# versao forte.
+#
+# EMD declarado ANTES de rodar: 0,34 unidades = 83 pts liquidos em 10 min,
+# com 96 eventos no menor lado.
+#
+# Historico do parametro (o desenho 1 fica reproduzivel na tag
+# entregue-v1.63): 5 proposto pelo operador -> 3 por restricao de amostra
+# -> 1 por falta de poder
 HORIZONTE = 2            # barras
 N_MINIMO = 30
 # ----------------------------------------------------------

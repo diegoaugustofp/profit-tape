@@ -1,8 +1,20 @@
 # DESENHO 3 — absorção com hipótese menos restritiva (K = 1)
 
-**RASCUNHO PARA VALIDAÇÃO. Não congelado.** Nenhum retorno de 2025 foi
-consultado. Tudo abaixo saiu de variância e contagem, nas amostras de
-depuração (parquet, maio, 2026).
+> **CONGELADO em 2026-09-04 pelo operador**, antes de qualquer contato
+> com 2025. Ficam fixados: `K = 1`, o evento, o estimador, o horizonte,
+> o critério, a regra de parada e a amostra de teste. Alteração de
+> qualquer um exige pré-registro NOVO — e **não há amostra cega
+> restante** para ele.
+>
+> As duas decisões que o operador confirmou explicitamente:
+>
+>   - **83 pontos líquidos em 10 minutos é plausível para absorção.**
+>     Sem isso, o EMD de 0,34 tornaria o desenho incapaz de responder.
+>   - **Vale gastar 2025**, mesmo o desenho 3 afirmando menos que o
+>     desenho 1.
+
+Nenhum retorno de 2025 foi consultado. Tudo abaixo saiu de variância e
+contagem, nas amostras de depuração (parquet, maio, 2026).
 
 ---
 
@@ -154,9 +166,29 @@ que qualquer resultado.
 
 ---
 
-## PARA VOCÊ DECIDIR ANTES DE CONGELAR
+## 11. Estado
 
-1. **83 pontos líquidos em 10 minutos é plausível para absorção?** Se
-   não, este desenho também não responde, e é melhor saber agora.
-2. **Vale gastar 2025 nisto?** É o último período cego, e o desenho 3
-   afirma menos que o desenho 1.
+**CONGELADO.** Portão refeito com `K = 1` e aprovado:
+
+    evento+contexto BAIXA   n=502   t -0,391
+    evento+contexto ALTA    n=505   t +1,022
+    CONTROLE contexto       n=47261 t -0,718
+    CONTROLE evento         n=875   t -0,465
+    VEREDITO SOBRE RUÍDO: CONTRA
+
+`K_CONTEXTO` mudou para 1,0 no Python **e** no `.ntsl`, na mesma
+entrega, com teste comparando os dois lados.
+
+Histórico do parâmetro, para auditoria: **5** proposto pelo operador →
+**3** por restrição de amostra → **1** por falta de poder. O desenho 1
+continua reproduzível na tag `entregue-v1.63`.
+
+## 12. O que falta
+
+Dumpar 2025 (02/01 a 30/12, ~250 pregões, uns 14 dumps de 18 pregões),
+concatenar e rodar:
+
+    profit-tape absorcao-grafico C:\...\trial_2025.txt
+
+A conferência Python × `.ntsl` precisa passar antes do veredito — ela
+interrompe a rodada se divergir.

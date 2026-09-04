@@ -44,7 +44,12 @@ def test_parametros_congelados_nao_mudam_sem_pre_registro() -> None:
     assert ab.MIN_Z_AMPLITUDE == 0.50
     assert ab.MIN_Z_VOL_AGR == 0.50
     assert ab.JANELA_CONTEXTO == 6      # ~30 min, do relato do operador
-    assert ab.K_CONTEXTO == 3.0         # reduzido de 5 por amostra
+    # DESENHO 3 (congelado 2026-09-04). Era 3,0 no desenho 1, que foi
+    # testado em 2026 e nao tinha poder (EMD 0,55). O historico do
+    # parametro: 5 proposto -> 3 por amostra -> 1 por falta de poder.
+    # Mudar de novo exige pre-registro NOVO, e 2025 e o ultimo periodo
+    # cego -- nao ha quarta variante disponivel.
+    assert ab.K_CONTEXTO == 1.0
     assert ab.HORIZONTE == 2
     assert ab.N_MINIMO == 30
 
