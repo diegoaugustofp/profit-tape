@@ -878,7 +878,12 @@ def desenho2_emd(
     configurar(log_level)
     from .research.absorcao_barra import marcar_eventos, preparar
     from .research.absorcao_grafico import carregar_log, para_barras
-    from .research.desenho2_risco import diagnostico, medir_emd, simular
+    from .research.desenho2_risco import (
+        diagnostico,
+        diagnostico_por_lado,
+        medir_emd,
+        simular,
+    )
 
     df, diag = carregar_log(log)
     b = para_barras(df)
@@ -906,8 +911,17 @@ def desenho2_emd(
     typer.echo("\n--- DIAGNOSTICO (nunca criterio) ---")
     for k, v in diagnostico(ops).items():
         typer.echo(f"  {k}: {v}")
-    typer.echo("\n  A media NAO e' reportada de proposito: esta e' a "
-               "amostra de depuracao.")
+    typer.echo("\n--- DIAGNOSTICO POR LADO ---")
+    typer.echo(diagnostico_por_lado(ops).to_string(index=False))
+    typer.echo("\n  GEOMETRIA (longe do resultado): risco_p50, risco_p90,")
+    typer.echo("  descartados.")
+    typer.echo("  PERTO DO RESULTADO: stop/alvo/tempo, mfe, custo_do_alvo —")
+    typer.echo("  quebrados por lado, respondem 'qual lado funciona melhor'.")
+    typer.echo("  Permitido aqui porque 2026 virou DEPURACAO para o desenho 2.")
+    typer.echo("  Mas descartar um lado POR CAUSA disto e' SELECAO: precisa")
+    typer.echo("  ser declarada, e o teste vai para 2025 — o unico periodo")
+    typer.echo("  cego que resta.")
+    typer.echo("\n  A media do resultado NAO e' reportada de proposito.")
 
 
 @app.command()

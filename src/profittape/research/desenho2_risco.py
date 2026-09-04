@@ -176,6 +176,61 @@ def medir_emd(ops: pd.DataFrame, unidade: float = 244.0) -> dict[str, Any]:
     }
 
 
+def diagnostico_por_lado(ops: pd.DataFrame) -> pd.DataFrame:
+    """
+    O mesmo diagnostico, separado por lado.
+
+    ATENCAO AO QUE ISTO E'. Nem toda metrica esta' na mesma distancia do
+    resultado:
+
+      GEOMETRIA (longe do resultado):
+        distancia do stop, descartados por passar de 500
+
+      PERTO DO RESULTADO:
+        por_saida  -> taxa de acerto por lado
+        MFE        -> o quanto o preco foi A FAVOR
+        custo do alvo -> usa o retorno
+
+    Quebrar os tres ultimos por lado responde, na pratica, "qual lado
+    funciona melhor". Isso e' permitido na amostra de DEPURACAO — e 2026
+    passou a ser depuracao para o desenho 2 quando foi usado para
+    dimensiona-lo.
+
+    Mas tem custo: **se um desenho futuro descartar um lado PORQUE ele
+    foi pior aqui, isso e' SELECAO.** Legitima num fluxo
+    depuracao/teste, e precisa ser DECLARADA — o teste vai para 2025,
+    que e' o unico periodo cego que resta.
+
+    O que NAO vale e' olhar isto e depois dizer que o desenho novo saiu
+    "do mecanismo". Se saiu daqui, saiu do dado.
+    """
+    linhas = []
+    for lado, rotulo in ((-1, "BAIXA (aqua)"), (1, "ALTA (fucsia)")):
+        do_lado = ops[ops["lado"] == lado]
+        op = do_lado[do_lado["saida"] != "nao_operou"]
+        if op.empty:
+            linhas.append({"lado": rotulo, "n": 0})
+            continue
+        saidas = op["saida"].value_counts()
+        linhas.append({
+            "lado": rotulo,
+            "n": len(op),
+            "descartados": int((do_lado["saida"] == "nao_operou").sum()),
+            # --- geometria ---
+            "risco_p50": round(float(op["risco"].median()), 0),
+            "risco_p90": round(float(op["risco"].quantile(0.9)), 0),
+            # --- perto do resultado ---
+            "stop": int(saidas.get("stop", 0)),
+            "alvo": int(saidas.get("alvo", 0)),
+            "tempo": int(saidas.get("tempo", 0)),
+            "mfe_p50": round(float(op["mfe_em_risco"].median()), 2),
+            "mfe_p90": round(float(op["mfe_em_risco"].quantile(0.9)), 2),
+            "custo_do_alvo": round(
+                float((op["sem_alvo"] - op["resultado"]).mean()), 1),
+        })
+    return pd.DataFrame(linhas)
+
+
 def diagnostico(ops: pd.DataFrame) -> dict[str, Any]:
     """Metricas obrigatorias do desenho. DIAGNOSTICO, nunca criterio."""
     op = ops[ops["saida"] != "nao_operou"]

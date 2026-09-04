@@ -4916,3 +4916,28 @@ inteira respeitou.
 A regra 4 do criterio de abandono — medir o EMD do desenho novo ANTES de
 congelar — fez exatamente o que devia. O desenho 2 foi reprovado sem
 gastar 2025, que continua intocado.
+
+### Diagnostico POR LADO, e o que ele custa (2026-09-04)
+
+`profit-tape desenho2-emd` passa a reportar tudo separado por lado.
+
+**Nem toda metrica esta' na mesma distancia do resultado:**
+
+    GEOMETRIA (longe)      risco p50/p90, descartados por passar de 500
+    PERTO DO RESULTADO     stop/alvo/tempo, MFE, custo do alvo
+
+Quebrar os tres ultimos por lado responde, na pratica, **"qual lado
+funciona melhor"**.
+
+**Permitido**, porque 2026 virou DEPURACAO para o desenho 2 quando foi
+usado para dimensiona-lo. Era exatamente para isso que a separacao
+depuracao/teste existia.
+
+**O custo, que precisa ficar declarado antes:** se um desenho futuro
+descartar um lado PORQUE ele foi pior aqui, isso e' **selecao**.
+Legitima num fluxo depuracao/teste, mas exige declaracao — e o teste vai
+para 2025, o unico periodo cego que resta.
+
+**O que NAO vale**: olhar isto e depois dizer que o desenho novo saiu "do
+mecanismo". Se saiu daqui, saiu do dado, e a multiplicidade tem que ser
+contada.

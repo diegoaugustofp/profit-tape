@@ -123,3 +123,51 @@ def test_diagnostico_reporta_o_custo_do_alvo_e_a_MFE() -> None:
     dg = d2.diagnostico(r)
     assert "custo_do_alvo_medio" in dg
     assert "mfe_em_risco_p50" in dg
+
+
+def test_diagnostico_por_lado_separa_os_dois() -> None:
+    ops = pd.DataFrame({
+        "dia": [DIA] * 6,
+        "lado": [-1, -1, -1, 1, 1, 1],
+        "saida": ["stop", "alvo", "nao_operou", "stop", "stop", "tempo"],
+        "risco": [200.0, 250.0, 700.0, 300.0, 350.0, 400.0],
+        "resultado": [-200.0, 1000.0, float("nan"), -300.0, -350.0, 120.0],
+        "mfe_em_risco": [0.5, 4.0, float("nan"), 0.3, 0.8, 1.2],
+        "sem_alvo": [-200.0, 1400.0, float("nan"), -300.0, -350.0, 120.0],
+    })
+    t = d2.diagnostico_por_lado(ops)
+    assert list(t["lado"]) == ["BAIXA (aqua)", "ALTA (fucsia)"]
+    baixa = t[t["lado"] == "BAIXA (aqua)"].iloc[0]
+    assert baixa["n"] == 2, "a descartada nao entra na contagem de operadas"
+    assert baixa["descartados"] == 1
+    assert baixa["alvo"] == 1
+
+
+def test_por_lado_ignora_as_descartadas_nas_metricas() -> None:
+    """
+    `nao_operou` tem `resultado` NaN. Se entrasse nas metricas, o risco
+    p50 incluiria stops que nunca foram tomados -- justamente os grandes,
+    que foram descartados por passar de 500.
+    """
+    ops = pd.DataFrame({
+        "dia": [DIA] * 3, "lado": [-1, -1, -1],
+        "saida": ["stop", "nao_operou", "nao_operou"],
+        "risco": [200.0, 900.0, 800.0],
+        "resultado": [-200.0, float("nan"), float("nan")],
+        "mfe_em_risco": [0.5, float("nan"), float("nan")],
+        "sem_alvo": [-200.0, float("nan"), float("nan")],
+    })
+    t = d2.diagnostico_por_lado(ops)
+    linha = t.iloc[0]
+    assert linha["n"] == 1
+    assert linha["risco_p50"] == pytest.approx(200.0), (
+        "o risco das descartadas nao pode entrar")
+
+
+def test_lado_sem_operacao_nao_estoura() -> None:
+    ops = pd.DataFrame({
+        "dia": [DIA], "lado": [-1], "saida": ["stop"], "risco": [200.0],
+        "resultado": [-200.0], "mfe_em_risco": [0.5], "sem_alvo": [-200.0],
+    })
+    t = d2.diagnostico_por_lado(ops)
+    assert int(t[t["lado"] == "ALTA (fucsia)"]["n"].iloc[0]) == 0
