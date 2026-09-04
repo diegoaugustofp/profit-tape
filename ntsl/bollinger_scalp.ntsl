@@ -1,0 +1,125 @@
+//=====================================================================
+// SCALP DE BOLLINGER MODIFICADA -- DUMP DO GRAFICO DE 15 SEGUNDOS
+//
+// O que este indicador FAZ: loga, barra a barra, o OHLC e os valores
+// que o PROPRIO Profit calcula para os indicadores da hipotese
+// (Bollinger 0,38/21, estocastico lento 8/3, ATR 21). O Python
+// (`research/bollinger_scalp.py`) recalcula tudo a partir do mesmo
+// OHLC e MEDE a diferenca. E' a mesma tecnica do `absorcao_barra.ntsl`
+// (erro de 2,4e-08 em 2.001 barras contra o `absorcao_dir`).
+//
+// O que ele NAO faz: nao marca sinal, nao decide nada. A regra de
+// entrada vive so' no Python, de proposito -- aqui o Profit e' a
+// REFERENCIA dos indicadores, e a referencia nao pode conter a coisa
+// que esta sendo conferida.
+//
+// PARA QUE SERVE O DUMP (duas coisas, com o mesmo arquivo)
+//   1. Equivalencia: o numero do Profit e' o que o operador ve no
+//      grafico. Resolve, medindo, o que o manual nao diz: se o desvio
+//      da Bollinger e' populacional ou amostral; se SlowStochastic()
+//      devolve a linha do periodo (%K lento) ou a media (%D); se
+//      AvgTrueRange aritmetica e' SMA do TrueRange.
+//   2. Historico: barras de 15s que o grafico tiver, para contar
+//      quantos gatilhos cada clausula da hipotese deixa passar (7.4)
+//      ANTES de congelar qualquer coisa.
+//
+// O BUFFER DO CONSOLE RETEM ~2.000 LINHAS, E UM PREGAO DE 15s TEM ~2.260
+// -----------------------------------------------------------------------
+// Medido em 2026-08-30 no 5m (docs/NTSL_ABSORCAO.md). Aqui a conta nao
+// fecha nem para um dia: 565 min de pregao x 4 barras/min = 2.260.
+// Por isso ha' janela de HORA alem da de data. Um dump = um pregao em
+// duas metades (ex.: 90000-133000 e 133000-183000), ou menos.
+//
+// `LogHoraInicio/Fim` usam o MESMO formato que `Time` devolve neste
+// grafico (o parser descobre se e' HHMM ou HHMMSS pelo tamanho). Zero
+// desliga o filtro.
+//
+// NTSL: sem Abs(), sem indexar chamada de funcao, sem Integer em
+// ConsoleLog (declare Float), acesso posicional no topo. Ver skill
+// `profit-tape-engenharia`, 3.1.
+//=====================================================================
+
+input
+  //--- PARAMETROS DA HIPOTESE (do operador, 2026-09-04). Nao sao
+  //--- calibrados: sao o que ele opera. Mudar = hipotese nova. ---
+  BbDesvio(0.38);
+  BbPeriodo(21);
+  EstPeriodo(8);
+  EstMedia(3);
+  AtrPeriodo(21);
+  //--- somente apresentacao / janela do log ---
+  LogAtivo(1);
+  LogDataInicio(0);         // formato EasyLanguage 1AnoMesDia; 0 = sem filtro
+  LogDataFim(0);
+  LogHoraInicio(0);         // mesmo formato de Time; 0 = sem filtro
+  LogHoraFim(0);
+  BarsPorDiaEsperado(5760); // 1440 / 0,25. So' AVISA: nao se sabe o que
+                            // RS_BarsPerDay devolve em periodicidade
+                            // fracionaria -- por isso o valor vai no
+                            // ABSVIDA e o Python confere.
+
+var
+  sBbSup, sBbInf, sEst, sAtr, sTr : Float;
+  sVol, sBar, sBarsDia           : Float;
+  bNaJanela                       : Boolean;
+
+begin
+  //-------------------------------------------------------------------
+  // Funcoes do Profit, guardadas em variavel (padrao do arquivo que
+  // funciona). Tipo de media 0 = aritmetica em todas.
+  //   BollingerBands(desvio, periodo, tipo)|0| = superior, |1| = inferior
+  //   SlowStochastic(periodo, periodoMedia, tipo) -- UMA linha; qual das
+  //     duas do grafico ela e', o Python decide comparando.
+  //   AvgTrueRange(periodo, tipo)
+  //   TrueRange() = TrueHigh - TrueLow, por barra
+  //-------------------------------------------------------------------
+  sBbSup := BollingerBands(BbDesvio, BbPeriodo, 0)|0|;
+  sBbInf := BollingerBands(BbDesvio, BbPeriodo, 0)|1|;
+  sEst   := SlowStochastic(EstPeriodo, EstMedia, 0);
+  sAtr   := AvgTrueRange(AtrPeriodo, 0);
+  sTr    := TrueRange;
+  sVol   := QuantityVol(False, False);
+  sBar   := CurrentBar;
+  sBarsDia := RS_BarsPerDay;
+
+  Plot(sBbSup);
+  Plot2(sBbInf);
+
+  //-------------------------------------------------------------------
+  // SINAL DE VIDA: uma linha, incondicional. Se nao aparecer, o
+  // indicador nao compilou ou nao esta aplicado.
+  //-------------------------------------------------------------------
+  if CurrentBar = 1 then
+    ConsoleLog("BBSVIDA|barras=" + BarCount + "|primeira_data=" + Date
+      + "|barras_por_dia=" + sBarsDia
+      + "|LogDataInicio=" + LogDataInicio + "|LogDataFim=" + LogDataFim
+      + "|LogHoraInicio=" + LogHoraInicio + "|LogHoraFim=" + LogHoraFim);
+
+  if (CurrentBar = 1) and (sBarsDia <> BarsPorDiaEsperado) then
+    ConsoleLog("BBSAVISO|barras_por_dia=" + sBarsDia
+      + "|esperado=" + BarsPorDiaEsperado
+      + "|confira que o grafico esta em 15 SEGUNDOS");
+
+  bNaJanela := ((LogDataInicio = 0) or (Date >= LogDataInicio))
+           and ((LogDataFim = 0) or (Date <= LogDataFim))
+           and ((LogHoraInicio = 0) or (Time >= LogHoraInicio))
+           and ((LogHoraFim = 0) or (Time <= LogHoraFim));
+
+  //-------------------------------------------------------------------
+  // LOG -- ordem CONGELADA, espelhada em `CAMPOS` do
+  // research/bollinger_scalp.py. Mudanca sai nos DOIS lados na mesma
+  // entrega (skill engenharia, 3.2).
+  //
+  // CurrentBar vai no log porque 4 barras de 15s podem compartilhar o
+  // mesmo `Time` (se ele vier em HHMM): (data, hora) nao identifica a
+  // barra, (data, hora, currentbar) identifica dentro de um dump.
+  //
+  // CurrentBar <= BarCount - 3 evita as barras ainda em formacao.
+  //-------------------------------------------------------------------
+  if (LogAtivo = 1) and bNaJanela and (CurrentBar <= BarCount - 3) then
+    ConsoleLog("BBSBARRA|" + Date + "|" + Time + "|" + TimeExchange
+      + "|" + sBar
+      + "|" + Open + "|" + High + "|" + Low + "|" + Close
+      + "|" + sVol
+      + "|" + sBbSup + "|" + sBbInf + "|" + sEst + "|" + sAtr + "|" + sTr);
+end;

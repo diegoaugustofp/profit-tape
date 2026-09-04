@@ -813,6 +813,58 @@ def absorcao_grafico(
 
 
 @app.command()
+def bollinger_scalp(
+    log: Path = typer.Argument(..., help="Dump do console com linhas BBSBARRA| (grafico de 15s)"),
+    saida: Path = typer.Option(Path("data/research/bollinger_scalp"), "--saida"),
+    tolerancia: float = typer.Option(
+        0.5, "--tolerancia",
+        help="Diferenca maxima Python x Profit para considerar a variante equivalente"),
+    log_level: str = typer.Option("INFO", "--log-level"),
+) -> None:
+    """
+    Scalp de Bollinger (15s): equivalencia Python x Profit + funil da regra.
+
+    Categoria `features`, nao consome trial: nao olha retorno. Responde
+    duas perguntas, medindo: (1) qual variante de cada indicador o Profit
+    calcula (ddof, %K ou %D, ATR aritmetica ou Wilder); (2) quantos
+    gatilhos cada clausula da regra deixa passar, por pregao.
+    """
+    configurar(log_level)
+    from .research.bollinger_scalp import equivalencia, rodar
+
+    r = rodar(log, saida)
+    if tolerancia != 0.5:
+        r["equivalencia"] = equivalencia(r["barras"], tolerancia)
+    m = r["meta"]
+    typer.echo("=" * 72)
+    typer.echo("SCALP DE BOLLINGER — dump do grafico de 15s")
+    typer.echo("=" * 72)
+    typer.echo(f"  {m['barras']} barras | {m['pregoes']} pregoes | {m['blocos']} bloco(s) "
+               f"contiguo(s) | {m['inicio']} a {m['fim']} | Time com segundos: "
+               f"{m['time_com_segundos']}")
+    typer.echo("\n--- EQUIVALENCIA Python x Profit (a variante que bate e' a que o")
+    typer.echo("    operador ve no grafico; a que nao bate e' formula diferente) ---")
+    for campo, v in r["equivalencia"].items():
+        marca = "BATE" if v["bate"] else "NAO BATE"
+        typer.echo(f"  {campo:12} melhor={v['melhor']!s:12} {marca}")
+        for var, det in v["detalhe"].items():
+            if det.get("comparaveis"):
+                typer.echo(f"      {var:12} n={det['comparaveis']:5d} "
+                           f"dif_max={det['dif_max']} dif_mediana={det['dif_mediana']}")
+    if r["largura_banda"]:
+        lb = r["largura_banda"]
+        typer.echo(f"\n  Meia-largura da banda 0,38: p10={lb['meia_largura_p10_pts']} "
+                   f"p50={lb['meia_largura_p50_pts']} p90={lb['meia_largura_p90_pts']} pts "
+                   f"(p50 = {lb['meia_largura_p50_ticks']} ticks)")
+    if r["atr"]:
+        typer.echo(f"  ATR21: p50={r['atr']['atr21_p50_pts']} p90={r['atr']['atr21_p90_pts']} "
+                   f"pts (stop da hipotese = 40 pts)")
+    typer.echo("\n--- FUNIL DA REGRA (7.4: quantos gatilhos cada clausula deixa passar) ---")
+    typer.echo(r["funil"].to_string(index=False))
+    typer.echo(f"\n  saida: {saida}")
+
+
+@app.command()
 def absorcao_inspecionar(
     dia: str = typer.Argument(..., help="Data no formato 2026-08-27"),
     origem: Path = typer.Option(

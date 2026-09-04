@@ -663,3 +663,43 @@ com o teto de frequência comprometido ANTES de ver o efeito no P&L.
 - 390 testes, coverage 78%, ruff limpo, mypy strict limpo. **Passei a
   rodar `pytest --cov` como a CI faz** — as entregas v1.46 a v1.49 foram
   verificadas sem ele.
+
+## Sessão 2026-09-04 (noite) — scalp de Bollinger 15s: formalização e dump
+
+Hipótese NOVA trazida pelo operador (spec `Scalping com bandas de
+Bollinger.md`). Sessão de DESENHO primeiro; código só do que não depende
+das dúvidas abertas. Documento vivo: `docs/BOLLINGER_SCALP.md`.
+
+### Desenho
+- Spec convertida em pontos (tick = 5): stop 40, alvos 40/65/100,
+  trailing 25→10, passo 5. Com custo 11, a perna RP1 sozinha exige ~64%
+  de acerto para empatar. MM70 de 6m = 7h de pregão (~"acima de ontem").
+- Operador **descartou o 6 minutos** e espelhou os critérios: entrada
+  vira **limitada no extremo da barra de correção** (t−2), válida só na
+  barra t. Estocástico lento 8/3, linha %K. Execução parcial → pernas na
+  ordem RP1→RP2→final.
+- Equivalências provadas em dado sintético: Bollinger = limiar de z com a
+  barra atual (o `zscore_rolante` NÃO serve: shift(1)/ddof=1), %K =
+  100+%R, TR = (H−L)+gap, "MM70 sobe" = C_t > C_{t−70}.
+- 16 dúvidas listadas; 10 fechadas; 6 abertas (TR, trailing, horário,
+  barra vazia, custo, sinal com posição).
+
+### Código (`entregue-v1.93`)
+- `ntsl/bollinger_scalp.ntsl`: dump do 15s com os indicadores do PROFIT
+  (não marca sinal — a referência não contém o que está sendo conferido).
+  Janela de HORA além da de data: um pregão de 15s (~2.260 barras) não
+  cabe no buffer de ~2.000. `CurrentBar` no log porque `Time` em HHMM
+  repete 4 vezes.
+- `research/bollinger_scalp.py` + comando `bollinger-scalp`: parser,
+  todas as variantes que o manual deixa em aberto (ddof 0/1, %K/%D,
+  ATR aritmética/Wilder), `equivalencia()` que mede qual bate, regra de
+  entrada espelhada com `preco_limite` e tipo de execução
+  (abertura/recuo), funil por cláusula (7.4), largura da banda e ATR em
+  pontos (7.5).
+- Conferido à mão antes dos testes (Bollinger nas duas variantes,
+  estocástico, TR com e sem gap, regra em sequência construída). 18
+  testes, incluindo o verificador que REPROVA (%K deslocado, H−L sem
+  gap). 508 testes, ruff limpo, mypy strict limpo, `--cov` rodado.
+
+**Pendente**: respostas às 6 dúvidas; dump de 15s do operador (duas
+metades por pregão); rodar `bollinger-scalp`; ficha de seis linhas.
