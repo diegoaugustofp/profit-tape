@@ -117,6 +117,8 @@ arquivo cresceu demais para navegar so' por titulo cronologico).
 
 - [AMOSTRA DE DEPURACAO x AMOSTRA DE TESTE (2026-09-02)](#amostra-de-depuracao-x-amostra-de-teste-2026-09-02)
 
+- [QUANDO ABANDONAR UM DESENHO SEM ISSO SER P-HACKING (2026-09-03)](#quando-abandonar-um-desenho-sem-isso-ser-p-hacking-2026-09-03)
+
 **Disciplina/processo do proprio research**
 - [Decisoes aprovadas](#decisoes-aprovadas)
 - [Pre-requisitos antes de escrever research/](#pre-requisitos-antes-de-escrever-research)
@@ -4726,3 +4728,134 @@ sabendo o resultado.
 Isto e' material para o PROXIMO pre-registro: horizonte maior, ou saida
 por evento em vez de numero fixo de barras, e criterio sobre a forma da
 distribuicao em vez da media.
+
+## QUANDO ABANDONAR UM DESENHO SEM ISSO SER P-HACKING (2026-09-03)
+
+Levantado pelo operador, e a distincao e' dele:
+
+> "A disciplina nao pode nos impedir de mudar de direcao ao
+> identificarmos uma decisao errada. E nao errada porque vi o dado e
+> quero enquadra-lo, mas porque ela fica impossivel de ser executada."
+
+### O criterio que separa os dois casos
+
+Um desenho pode ser abandonado quando a impossibilidade e' demonstravel
+por **quantidade que nao depende da direcao do resultado**.
+
+A quantidade e' o **EFEITO MINIMO DETECTAVEL**:
+
+    EMD = 1,96 x desvio / raiz(n)
+
+O desvio e' propriedade da distribuicao de retornos daqueles eventos. Ele
+seria o mesmo se a media tivesse dado positiva, negativa ou zero. **A
+media observada nao entra na conta.**
+
+Se o EMD exige um efeito implausivel para o fenomeno, o desenho nunca
+teve como responder — e isso e' fato sobre o DESENHO, nao sobre o
+resultado.
+
+### Aplicado ao pre-registro de absorcao
+
+    desvio dos eventos individuais:  319 pts (BAIXA), 362 pts (ALTA)
+    EMD:                             107 pts (BAIXA), 134 pts (ALTA)
+    amplitude MEDIA de uma barra 5m: 244 pts
+
+**O desenho so' enxerga efeito de 107 pontos LIQUIDOS em 10 minutos** —
+0,44 da amplitude de uma barra inteira, de deslocamento medio sustentado
+em duas barras. Nenhum sinal razoavel produz isso sistematicamente.
+
+Para detectar a media observada seriam ~267 eventos por lado: a 0,5
+evento/pregao, **mais de mil pregoes, quatro anos**.
+
+**O `CONTRA` do trial 2026 nao diz "nao ha efeito". Diz "nao ha efeito
+grande o bastante para este desenho ver".**
+
+### O que o operador ja' tinha previsto
+
+A expectativa registrada em 2026-09-02, ANTES de qualquer resultado:
+
+> "Alguns pegam movimento LONGO, outros pequenos."
+
+Variancia alta e' exatamente isso — e variancia alta e' o que mata um
+teste de MEDIA. A tensao registrada na epoca ("movimento longo nao e'
+mensuravel em 2 barras") nao era teorica: **e' a razao pela qual nao ha'
+como concluir.**
+
+### A regra, para nao virar escapatoria
+
+Abandonar desenho por falta de poder exige, TODAS:
+
+1. O EMD calculado **so' da variancia e do n** — jamais da media
+   observada.
+2. Argumento de por que o EMD e' implausivel, **em unidade do
+   instrumento** (aqui: fracao da amplitude de uma barra), nao "achei
+   alto".
+3. O desenho novo tem que atacar a **razao sinal/ruido**, nao so'
+   aumentar `n`. Se a saida proposta e' "mais dados", o desenho antigo
+   estava certo e a resposta e' esperar.
+4. Registrar o EMD do desenho NOVO **antes** de rodar. Se ele tambem for
+   implausivel, nao vale a pena.
+
+**O que NAO autoriza abandono**: resultado ter dado na direcao errada,
+`n` ter faltado pouco, ou o veredito ser desagradavel.
+
+## DESENHO 2 medido antes de congelar: REPROVADO pela regra 4 (2026-09-03)
+
+Rascunho em `docs/DESENHO_2_absorcao_com_risco.md`. **Nao congelado, e
+provavelmente nao sera'.**
+
+### O que ele propunha
+
+Mesma entrada do desenho 1; muda so' a gestao. Stop no extremo da janela
+`[t-6, t]` afastado 20 pts, piso 150 (opera com o piso), teto 500 (NAO
+opera), alvo fixo de 1.000, saida as 17:30 e ultima entrada as 17:00.
+
+### O motivo de propor, e por que estava errado
+
+O argumento era: o stop TRUNCA a cauda de perda, e a cauda produz o
+desvio de 319 do desenho 1.
+
+    DESENHO 1 (2 barras, bruto)      desvio 319 pts
+    DESENHO 2 (stop ~220, alvo 1000) desvio 452 pts
+
+**A variancia PIOROU.** O stop trunca a PERDA em ~220, mas o alvo abre o
+GANHO ate 1.000 — a distribuicao vira bimodal, muitos -220 e alguns
++1.000. Isso e' mais dispersao que retornos continuos de duas barras.
+
+Eu estava certo sobre a perda e errado no LIQUIDO: nao considerei que o
+alvo alarga o outro lado na mesma medida.
+
+### O EMD reprova
+
+    n= 30 -> EMD 0,66 unidades
+    n= 45 -> EMD ~0,54          <- 2025 projeta ~40 e ~45 por lado
+    n=211 -> EMD 0,25
+
+Contra 0,44 do desenho 1. **O desenho novo e' PIOR.** A regra 4 do
+criterio de abandono — registrar o EMD do desenho novo antes de rodar —
+reprova.
+
+**Ressalva**: sao 8 operacoes na depuracao, e o desvio pode estar mal
+estimado. Mas o mecanismo (perda truncada, ganho aberto) e' aritmetica da
+distribuicao e nao depende de amostra. Alvo de 4-5x o stop TEM que dar
+dispersao maior que retorno curto.
+
+### O que o diagnostico mostrou sobre a GEOMETRIA
+
+    saidas: 7 stop, 1 alvo
+    MFE mediana: 0,65 do risco
+    MFE p90:     4,52 do risco
+
+Na maioria das operacoes o preco nem se aproxima do alvo. Um alvo de
+1.000 com stop de 220 exige o preco andar 4x o risco, e a MFE diz que ele
+geralmente anda menos de 1x.
+
+Isso nao e' resultado sobre a hipotese — e' sobre a geometria do
+desenho. **Nao proponho desenho 3 aqui**: escolher alvo ou stop olhando
+esses numeros seria calibrar depois de ver o dado.
+
+### Codigo entregue para o operador refazer com amostra maior
+
+`profit-tape desenho2-emd <dump>` roda na amostra de DEPURACAO. Se o
+desvio cair com mais operacoes, a conclusao muda — e essa e' a unica
+coisa que reabre o desenho.

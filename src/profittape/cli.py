@@ -858,6 +858,59 @@ def absorcao_inspecionar(
 
 
 @app.command()
+def desenho2_emd(
+    log: Path = typer.Argument(..., help="Dump ABSBARRA| da amostra de DEPURACAO"),
+    unidade: float = typer.Option(
+        244.0, "--unidade",
+        help="Amplitude media da barra, para o EMD ficar interpretavel."),
+    log_level: str = typer.Option("WARNING", "--log-level"),
+) -> None:
+    """
+    Simula a gestao do DESENHO 2 e mede o EMD, antes de congelar.
+
+    Categoria `features`: usa VARIANCIA, nunca a media. O resultado NAO
+    e' evidencia sobre a hipotese -- responde so' se o desenho consegue
+    detectar um efeito plausivel.
+
+    Rode SO' na amostra de depuracao (parquet, maio). Rodar no periodo de
+    teste queimaria a cegueira.
+    """
+    configurar(log_level)
+    from .research.absorcao_barra import marcar_eventos, preparar
+    from .research.absorcao_grafico import carregar_log, para_barras
+    from .research.desenho2_risco import diagnostico, medir_emd, simular
+
+    df, diag = carregar_log(log)
+    b = para_barras(df)
+    b["hora"] = df["hora"].astype(int)
+    ops = simular(marcar_eventos(preparar(b)))
+    if ops.empty:
+        raise SystemExit("nenhum evento no dump")
+
+    e = medir_emd(ops, unidade)
+    typer.echo("=" * 72)
+    typer.echo("DESENHO 2 — EMD sobre a amostra de DEPURACAO")
+    typer.echo("=" * 72)
+    typer.echo(f"  {diag['pregoes']} pregoes | {len(ops)} eventos | "
+               f"{e['operacoes']} operadas | {e['nao_operou']} descartadas "
+               f"(stop > 500)")
+    typer.echo("\n--- EMD (so variancia e n; a media NAO entra) ---")
+    typer.echo(pd.DataFrame(e["por_lado"]).to_string(index=False))
+    op = ops[ops["saida"] != "nao_operou"]
+    if len(op) >= 2:
+        from .research.triagem_poder import avaliar_desenho
+        junto = avaliar_desenho(op["resultado"], unidade, "AMBOS OS LADOS")
+        typer.echo(pd.DataFrame([junto]).to_string(index=False))
+    typer.echo("\n  referencia: DESENHO 1 no trial 2026 -> desvio 319, "
+               "EMD 107 pts, 0,44 unidades")
+    typer.echo("\n--- DIAGNOSTICO (nunca criterio) ---")
+    for k, v in diagnostico(ops).items():
+        typer.echo(f"  {k}: {v}")
+    typer.echo("\n  A media NAO e' reportada de proposito: esta e' a "
+               "amostra de depuracao.")
+
+
+@app.command()
 def agents(
     dados: Path = typer.Option(
         Path("data/curated"), "--dados",
