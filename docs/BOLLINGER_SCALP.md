@@ -25,15 +25,28 @@ Venda: banda inferior, `Est(t−1) > 80`, limitada em `low(t−2)`.
 
 - Doji (`close = open`) não é vermelho nem branco: não forma sequência.
 - Sem cooldown: qualquer nova sequência é sinal novo. Com posição
-  aberta, sinal ignorado (comportamento atual do EA — a confirmar).
+  aberta, sinal ignorado (confirmado 2026-09-05).
 - As três barras no mesmo pregão.
 - Execução parcial de n contratos → as n primeiras pernas na ordem
-  RP1 → RP2 → final (a confirmar: "só RP1" com 1 contrato foi dito; com
-  2, RP1+RP2 é a leitura).
+  RP1 → RP2 → final (confirmado 2026-09-05).
 
 Saída: 3 pernas de 1 contrato. Stop 8 ticks em todas. Alvos 8 / 13 /
 20 ticks. Trailing só nas pernas 2 e 3: ativa a 5 ticks a favor, puxa
-o stop para 2 ticks, arrasta a cada 1 tick.
+o stop para 2 ticks atrás da máxima favorável, arrasta a cada 1 tick.
+**A perna RP1 não se move**: fica em −8 ticks até bater +8 ou o stop
+(confirmado 2026-09-05).
+
+Horário (2026-09-05): **entradas até 13:00**, porque a estratégia
+precisa de volume. Encerramento forçado às 17:30 como seguro (redundante
+na prática; o EA já tem hora de encerrar). O corte de 13h é o
+provisório: `profit-tape perfil-volume-horario` mede o perfil de
+agressão por faixa de 30 min (mediana entre pregões), e a regra por
+volume — se houver — é declarada pelo operador em cima desses números,
+**antes** de qualquer replay que olhe resultado.
+
+True Range: **fora do v1** (2026-09-05). Fica só medido (ATR21 em
+pontos no `bollinger-scalp`) para decisão futura. Circuit breaker de 3
+perdas: mantido (não foi revogado).
 
 ## 2. Em pontos do WIN (tick = 5 pts) — regra 7.5
 
@@ -93,18 +106,34 @@ O buffer do console retém ~2.000 linhas e **um pregão de 15s tem
 ~2.260**: use `LogHoraInicio/Fim` e dumpe em duas metades. Identidade
 da barra é (data, `CurrentBar`), porque `Time` em HHMM repete 4 vezes.
 
-## 6. Dúvidas abertas (bloqueiam a ficha)
+## 6. Dúvidas — fechadas em 2026-09-05, exceto as que o dump responde
 
-1. True Range: fora do v1 (sugestão), ou `ATR21` / `SMA21(ATR21)` com
-   qual limiar em pontos?
-2. Trailing: 2 ticks atrás da **máxima favorável**? A perna RP1 mantém
-   −40 quando as outras vão para +15?
-3. Horário de operação, máximo de operações/dia, circuit breaker de 3
-   perdas mantido? Margem de 3 contratos com R$ 5.000?
-4. Barra de 15s sem negócio: o Profit desenha ou pula? (o dump
-   responde: buraco em `Time` com `CurrentBar` contíguo = pulou)
-5. `custo_pontos_estimado = 11` é por contrato, ida e volta?
-6. Sinal com posição aberta é ignorado?
+Fechadas: TR fora do v1; trailing atrás da máxima favorável, RP1
+parada; entradas até 13h, zeragem 17:30; custo 11 por contrato ida e
+volta; sinal com posição aberta ignorado; parcial → pernas em ordem.
+
+Ainda em aberto, e respondidas pelo próprio dump/medição:
+1. Barra de 15s sem negócio: o Profit desenha ou pula? (buraco em
+   `Time` com `CurrentBar` contíguo = pulou)
+2. Margem de 3 contratos com R$ 5.000 (conferir na corretora).
+3. Máximo de operações por dia: não declarado — sem limite no v1 além
+   do circuit breaker.
+
+## 6.1 Tick a tick: onde a estratégia pode e não pode ser validada
+
+Observação do operador (2026-09-05), a partir do que o `absorcao_barra`
+ensinou: dentro do Profit, tick a tick vale **1 semana** para
+backtest/automação. Numa barra de 15s com stop e alvo a 40 pts, o
+high/low não diz quem bateu primeiro — sem tick a tick o backtest do
+Profit é opinião. Logo: **esta estratégia não se valida dentro do
+Profit**, a mesma conclusão que fundou o projeto em ProfitDLL/Python.
+
+Divisão de fontes, então:
+- **dump do gráfico de 15s** → TAXA de gatilhos (funil) e equivalência
+  dos indicadores. Só barras.
+- **tape do recorder** (24/07 em diante, +1 pregão/dia) → EFEITO: qual
+  perna bate primeiro, a limitada executou ou não, ordenação intrabarra.
+  Sem o limite de 1 semana.
 
 ## 7. O que ainda não existe no código (e a ordem)
 

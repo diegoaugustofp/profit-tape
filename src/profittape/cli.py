@@ -865,6 +865,44 @@ def bollinger_scalp(
 
 
 @app.command()
+def perfil_volume_horario(
+    symbol: str = typer.Argument("WINFUT"),
+    curated: Path = typer.Option(Path("data/curated"), "--curated"),
+    minutos: int = typer.Option(30, "--minutos", help="Largura da faixa; divide 60"),
+    saida: Path = typer.Option(Path("data/research/perfil_volume_horario"), "--saida"),
+    log_level: str = typer.Option("WARNING", "--log-level"),
+) -> None:
+    """
+    Perfil de volume de AGRESSAO por faixa horaria (mediana entre pregoes).
+
+    Para a regra de horario do scalp de Bollinger (docs/BOLLINGER_SCALP.md).
+    MEDE; nao escolhe o corte -- a regra e' declarada pelo operador em
+    cima destes numeros, antes de qualquer replay. Categoria `features`.
+    """
+    configurar(log_level)
+    from .research.perfil_volume_horario import perfil
+
+    r = perfil(curated, symbol.strip().upper(), minutos)
+    saida.mkdir(parents=True, exist_ok=True)
+    r["por_dia"].to_parquet(saida / "por_dia.parquet", index=False)
+    r["mediana"].to_csv(saida / "mediana.csv", index=False)
+    typer.echo("=" * 72)
+    typer.echo(f"PERFIL DE VOLUME POR FAIXA DE {minutos} MIN — {r['symbol']} — "
+               f"mediana de {r['pregoes']} pregoes")
+    typer.echo("=" * 72)
+    m = r["mediana"].copy()
+    m["pct_do_dia"] = (100 * m["pct_do_dia"]).round(1)
+    m["pct_da_abertura"] = (100 * m["pct_da_abertura"]).round(0)
+    m["por_barra_15s"] = m["por_barra_15s"].round(1)
+    m["contratos"] = m["contratos"].round(0)
+    m["negocios"] = m["negocios"].round(0)
+    typer.echo(m.to_string(index=False))
+    typer.echo("\n  por_barra_15s = negocios de agressao por barra de 15s (mediana)")
+    typer.echo("  pct_da_abertura = contratos da faixa / primeira faixa completa")
+    typer.echo(f"  saida: {saida}")
+
+
+@app.command()
 def absorcao_inspecionar(
     dia: str = typer.Argument(..., help="Data no formato 2026-08-27"),
     origem: Path = typer.Option(

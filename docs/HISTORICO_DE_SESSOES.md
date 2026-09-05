@@ -703,3 +703,25 @@ das dúvidas abertas. Documento vivo: `docs/BOLLINGER_SCALP.md`.
 
 **Pendente**: respostas às 6 dúvidas; dump de 15s do operador (duas
 metades por pregão); rodar `bollinger-scalp`; ficha de seis linhas.
+
+### Continuação (2026-09-05) — decisões fechadas, perfil de volume por horário
+
+- Operador fechou as dúvidas: **TR fora do v1**; trailing atrás da
+  máxima favorável e **RP1 parada** (fica em −40 até +40 ou stop);
+  **entradas até 13h** (precisa de volume), zeragem 17:30 como seguro;
+  custo 11 por contrato ida e volta; sinal com posição aberta ignorado;
+  execução parcial → pernas na ordem RP1→RP2→final.
+- Observação do operador sobre tick a tick (1 semana no Profit): a
+  estratégia **não se valida dentro do Profit**. Dump do gráfico = TAXA;
+  tape do recorder = EFEITO. Registrado em `docs/BOLLINGER_SCALP.md` 6.1.
+- `research/perfil_volume_horario.py` + comando `perfil-volume-horario`
+  (`entregue-v1.94`): volume de AGRESSÃO por faixa de 30 min, mediana
+  entre pregões; `por_barra_15s` (negócios por barra) e
+  `pct_da_abertura` (vs. primeira faixa completa) para o operador
+  declarar a regra de horário em cima do número — mede, não escolhe.
+  Conferido à mão (inclusive abertura parcial). 5 testes. 513 passando,
+  ruff e mypy strict limpos.
+
+**Pendente**: dump de 15s (duas metades por pregão) → `bollinger-scalp`;
+`perfil-volume-horario` no curated → operador declara regra de horário;
+ficha de seis linhas.
