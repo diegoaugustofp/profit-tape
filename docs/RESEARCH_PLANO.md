@@ -14,6 +14,7 @@ arquivo cresceu demais para navegar so' por titulo cronologico).
   pregoes de book integro. Hiperparametros congelados, sem grade.
 - [IMPLEMENTADO: `inventario-deepscalper` — as quatro contagens da Fase 0 (2026-09-08)](#implementado-inventario-deepscalper--as-quatro-contagens-da-fase-0-2026-09-08)
 - [IMPLEMENTADO: Fase 1 — simulador de replay e `simulador-conferir` (2026-09-08)](#implementado-fase-1--simulador-de-replay-e-simulador-conferir-2026-09-08)
+- [FICHA FORWARD: Fase 2 — classificador supervisionado (rascunho v0, 2026-09-08)](#ficha-forward-fase-2--classificador-supervisionado-rascunho-v0-2026-09-08)
 
 **Perfil de agente / classificacao**
 - [REVISAO DA HIPOTESE DE PERFIL (2026-08-22, operador)](#revisao-da-hipotese-de-perfil-2026-08-22-operador)
@@ -5515,3 +5516,110 @@ Comando:
 
 `--z-continuo` mostra o tamanho da diferenca entre as duas convencoes de
 z (esperado: mais operacoes no simulador, no inicio dos dias).
+
+## FICHA FORWARD: Fase 2 — classificador supervisionado (rascunho v0, 2026-09-08)
+
+Formato da disciplina-forward §1. **Rascunho**: tres campos dependem de
+MEDICAO em dado queimado (gratis, §4) e so' entao a ficha congela e o
+forward liga. O que esta' entre colchetes e' o que falta medir; o resto
+esta' decidido agora, antes de qualquer codigo de treino.
+
+Como o forward roda: NAO e' no EA. E' um `score` diario em Python sobre o
+curated do pregao (depois das 18:30), com o modelo CONGELADO. Zero
+mudanca em `ea.yaml`, `decidir()` ou NTSL. Cada observacao gravada
+carrega: tag `entregue-vX.YY`, hash do modelo (.pkl), hash desta ficha.
+
+    HIPOTESE   Nas features de fluxo Tier 1 ja' calculadas (imbalance,
+               tick_imbalance, absorcao, rlp_frac, agf_{top-N},
+               fluxo_nacional -- todas em z por dia, mesma convencao do
+               EA) ha' informacao sobre qual barreira (alta/baixa,
+               k·sigma) o preco toca primeiro nas proximas 3 barras que
+               uma regra de limiar em z_agf_3 sozinha nao captura.
+
+    EVENTO     Barra fechada em que o classificador CONGELADO emite,
+               para um lado, probabilidade p >= p*, onde p* e' o
+               percentil 90 da confianca medido no dado queimado e
+               congelado como NUMERO (ex.: 0,61) -- nao "decil"
+               recalculado no forward. Mais: z valido (fora do
+               aquecimento de 25 barras do dia); h=3 barras cabem antes
+               da ultima barra do dia; sem evento aberto (proximo so'
+               apos o anterior resolver). Resultado = 1 se a barreira do
+               lado previsto bate primeiro; 0 se a oposta bate ou o
+               vertical (h=3) vence. Empate intrabarra resolvido pelo
+               TAPE (ordem dos negocios na barra), nao por regra
+               pessimista (§1.1: senao a nula deixa de ser a nula).
+
+    TAXA       [MEDIR] Estimativa: 100 barras/pregao x 10% = 10
+               candidatos, ~8/pregao apos nao-sobreposicao com h=3. Se
+               a medicao der < 4/pregao, a ficha volta a mesa: o
+               horizonte estoura.
+
+    EFEITO     +8 pp de acerto sobre a NULA. Nula = [MEDIR] fracao de
+               eventos em que ALGUMA barreira bate antes do vertical,
+               dividida por 2 -- nao 50% (com k·sigma e h=3, o vertical
+               vence muitas vezes). E economicamente: >= +15 pts/op
+               liquido (custo 11, spread dentro), a referencia do
+               z_agf_3 venda que o EA ja' opera. Acertar mais e render
+               menos nao justifica a complexidade.
+
+    HORIZONTE  n = 150 eventos (binario, p(1-p) <= 0,25; 8 pp ~ 2
+               desvios). A ~8/pregao ≈ 19 pregoes. Teto: 60 pregoes
+               (~3 meses). Se em 60 pregoes n < 150, a TAXA estava
+               errada: PARA, inconclusivo por taxa.
+
+    CRITERIO   Em n = 150: FAVORAVEL se acerto >= nula + 8 pp E pts/op
+               liquido >= +15. CONTRA se acerto <= nula OU pts/op <= 0.
+               Qualquer outra combinacao: INCONCLUSIVO -- e inconclusivo
+               NAO vira "mais 150 com o mesmo modelo"; vira volta a
+               mesa. So' com FAVORAVEL a Fase 3 (RL) fica autorizada, e
+               ainda sujeita ao portao de 160 pregoes de book.
+
+    PARADA     Olho o placar em n = 50 (sanidade: bug, integridade,
+               taxa observada vs medida) e em n = 150 (veredito). NAO
+               autoriza parar antes: semana ruim, drawdown, "o modelo
+               esta' obviamente errado". Autoriza: falha de integridade
+               do dado (curate/quarentena) ou bug que faz o codigo NAO
+               fazer o que esta ficha diz -- correcao desses NAO
+               reinicia a contagem. Retreinar, mudar p*, k, h, a lista
+               de features ou o split de treino REINICIA (§2).
+
+### Decisoes de desenho ja' tomadas (nao sao [MEDIR])
+
+- **h = 3 barras**, o horizonte do sinal validado. A comparacao "+15
+  pts/op" so' faz sentido no mesmo horizonte. O h=21 do DeepScalper e'
+  do hindsight bonus (Fase 3), nao deste alvo.
+- **k**: escolhido em dado queimado pelo criterio de variancia (§4,
+  gratis), entre valores em PONTOS plausiveis contra o stop de 500 e o
+  custo de 11 -- e congelado ANTES de ligar. O k=2,0/h=10 default do
+  `features` NAO serve (k=1 ja' e' ~244 pts; k=2 encosta no stop
+  catastrofico e o vertical venceria quase sempre). Recalcular label
+  com k/h novos e' `labels.triple_barrier` sobre o parquet, custo zero.
+- **Modelo**: gradient boosting em arvores, UMA configuracao, sem
+  busca: `HistGradientBoostingClassifier` do scikit-learn (evita
+  dependencia nova pesada; LightGBM e' equivalente para este tamanho).
+  Profundidade e n_estimators fixados no pre-registro do treino, nao
+  ajustados olhando validacao do forward.
+- **Treino**: curated 2026-07-24 ate' o pregao anterior a ligar, com
+  split temporal 80/20 SO' para medir p*, nula e TAXA (o 20% final).
+  Depois, retreina no total e congela. Tudo dado queimado.
+- **Triagem de redundancia (7.2) ANTES do treino**: matriz de
+  correlacao entre as z-features Tier 1 no queimado. Par com |rho| >
+  0,9 entra so' um. Registrar a matriz; features que morreram por isso
+  nao voltam.
+- **Amostra cega de 2025: nao toca.** Esta ficha e' 100% forward.
+
+### Antes de ligar (checklist §"antes de ligar", adaptado)
+
+- [ ] `fase2-preparar` (comando a escrever): triagem de redundancia,
+      escolha de k, treino com split, medicao de p*, nula e TAXA,
+      gravacao de `ficha_fase2.json` com os numeros e os hashes.
+- [ ] Preencher os tres [MEDIR] acima com os numeros medidos e
+      registrar a data de congelamento. HORIZONTE recalculado com a
+      TAXA real; se > 60 pregoes, nao liga.
+- [ ] Um pregao rodado; as barras-evento olhadas uma a uma (lado
+      previsto, barreiras em pontos, qual bateu, e por que o tape
+      desempatou, quando desempatou).
+- [ ] Verificador de look-ahead da Fase 1 rodado com a politica do
+      classificador (fabrica que carrega o .pkl).
+- [ ] `score` diario agendado depois do `curate` (18:30+), gravando
+      uma linha por evento com carimbo.

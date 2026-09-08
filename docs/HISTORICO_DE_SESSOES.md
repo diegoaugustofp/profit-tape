@@ -825,3 +825,17 @@ composição do `custo_pontos_estimado`.
   padrão "só sim = compras, só EA = vendas" → o replay era do
   `ea_venda_apenas.yaml`. Segunda rodada com esse yaml: **99/99, Δ=0,0,
   +6356 nos dois. BATE.** Fase 1 FECHADA (tag `entregue-v2.00`, docs).
+
+## Sessão 2026-09-08 (noite, 2) — ficha forward da Fase 2 (rascunho v0)
+
+Tag `entregue-v2.01`, só docs. Ficha de 7 linhas escrita no
+RESEARCH_PLANO com três campos [MEDIR] (TAXA, nula, p*) que saem de
+dado queimado via um `fase2-preparar` ainda não escrito. Decisões já
+tomadas: h=3 (horizonte do sinal validado), k por variância no queimado,
+HistGradientBoosting sem busca, triagem de redundância antes do treino,
+forward = score diário em Python sobre o curated, não no EA, amostra
+cega de 2025 intocada. Critério: n=150 eventos binários, +8 pp sobre a
+nula E +15 pts/op; teto 60 pregões.
+
+**Pendente**: `fase2-preparar` (mede e congela), depois preencher os
+[MEDIR] e ligar.
