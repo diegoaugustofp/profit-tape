@@ -36,7 +36,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -77,30 +77,93 @@ def barras_de_um_dia(trades: pd.DataFrame, volume_barra: int) -> dict[str, float
             "tick": tick}
 
 
+class SpreadAcumulador:
+    """
+    Spread em ticks acumulado em STREAMING: recebe lotes de tiny_book em
+    ordem de chegada, guarda so' o ultimo bid/ask e um histograma
+    {ticks: contagem}. Memoria constante -- um dia de tiny_book do WIN
+    tem centenas de MB em parquet (~1e8 linhas); carregar inteiro em
+    pandas e ordenar paginava a maquina (2026-09-08).
+
+    Assume os lotes em ordem temporal (ordem de escrita do writer). Nao
+    reordena: conta `desordem` = passos em que ts_recv_ns diminuiu, como
+    diagnostico. Se for alto, o dia merece olhar.
+    """
+
+    def __init__(self, tick: float) -> None:
+        self.tick = tick
+        self.bid = float("nan")
+        self.ask = float("nan")
+        self.ultimo_ts = -1
+        self.hist: dict[float, int] = {}
+        self.invalidos = 0
+        self.desordem = 0
+
+    def adicionar(self, lote: pd.DataFrame) -> None:
+        if lote.empty or not np.isfinite(self.tick) or self.tick <= 0:
+            return
+        ts = lote["ts_recv_ns"].to_numpy()
+        if len(ts):
+            self.desordem += int((np.diff(ts) < 0).sum())
+            if self.ultimo_ts >= 0 and int(ts[0]) < self.ultimo_ts:
+                self.desordem += 1
+            self.ultimo_ts = int(ts[-1])
+        # price == 0 e' "lado vazio": o update VALE (apaga a cotacao
+        # anterior), entao o ffill vem antes de descartar o zero -- se
+        # descartasse antes, a cotacao velha seria arrastada por cima.
+        eh_bid = lote["side"].to_numpy() == _BID
+        preco = lote["price"].to_numpy(dtype=float)
+        bid = pd.Series(np.where(eh_bid, preco, np.nan)).ffill().to_numpy()
+        ask = pd.Series(np.where(~eh_bid, preco, np.nan)).ffill().to_numpy()
+        # estado do lote anterior preenche o inicio deste
+        bid = np.where(np.isnan(bid), self.bid, bid)
+        ask = np.where(np.isnan(ask), self.ask, ask)
+        self.bid, self.ask = float(bid[-1]), float(ask[-1])
+        bid = np.where(bid > 0, bid, np.nan)
+        ask = np.where(ask > 0, ask, np.nan)
+        spread = ask - bid
+        ok = ~np.isnan(spread)
+        self.invalidos += int((spread[ok] <= 0).sum())
+        validos = spread[ok & (spread > 0)] / self.tick
+        chaves, contagens = np.unique(np.round(validos, 2), return_counts=True)
+        for k, c in zip(chaves.tolist(), contagens.tolist(), strict=True):
+            self.hist[k] = self.hist.get(k, 0) + int(c)
+
+    def resultado(self) -> dict[str, float]:
+        vazio = {"spread_mediana_ticks": float("nan"), "spread_p90_ticks": float("nan"),
+                 "spread_frac_1tick": float("nan"), "spread_n": 0.0,
+                 "spread_invalidos": float(self.invalidos),
+                 "spread_desordem": float(self.desordem)}
+        n = sum(self.hist.values())
+        if n == 0:
+            return vazio
+        chaves = sorted(self.hist)
+        acum = np.cumsum([self.hist[k] for k in chaves])
+
+        def quantil(q: float) -> float:
+            # mesmo criterio do pandas (interpolacao linear) para a mediana
+            # em n par cair no meio; para p90 e' o valor no rank q*(n-1).
+            pos = q * (n - 1)
+            lo, hi = int(np.floor(pos)), int(np.ceil(pos))
+            v_lo = chaves[int(np.searchsorted(acum, lo + 1))]
+            v_hi = chaves[int(np.searchsorted(acum, hi + 1))]
+            return float(v_lo + (v_hi - v_lo) * (pos - lo))
+
+        em_1tick = sum(c for k, c in self.hist.items() if k <= 1.0 + 1e-9)
+        return {"spread_mediana_ticks": quantil(0.5), "spread_p90_ticks": quantil(0.9),
+                "spread_frac_1tick": em_1tick / n, "spread_n": float(n),
+                "spread_invalidos": float(self.invalidos),
+                "spread_desordem": float(self.desordem)}
+
+
 def spread_de_um_dia(tiny: pd.DataFrame, tick: float) -> dict[str, float]:
-    """`tiny` = updates de tiny_book de UM pregao (ts_recv_ns, side, price)."""
-    vazio = {"spread_mediana_ticks": float("nan"), "spread_p90_ticks": float("nan"),
-             "spread_frac_1tick": float("nan"), "spread_n": 0.0,
-             "spread_invalidos": 0.0}
-    if tiny.empty or not np.isfinite(tick) or tick <= 0:
-        return vazio
-    t = tiny.sort_values("ts_recv_ns", kind="stable")
-    # price == 0 e' "lado vazio": o update VALE (apaga a cotacao anterior),
-    # entao o ffill vem antes de descartar o zero -- se descartasse antes,
-    # a cotacao velha seria arrastada por cima do vazio.
-    bid = t["price"].where(t["side"] == _BID).ffill()
-    ask = t["price"].where(t["side"] == _ASK).ffill()
-    bid = bid.where(bid > 0)
-    ask = ask.where(ask > 0)
-    spread = (ask - bid).dropna()
-    validos = spread[spread > 0] / tick
-    invalidos = float((spread <= 0).sum())
-    if validos.empty:
-        return {**vazio, "spread_invalidos": invalidos}
-    return {"spread_mediana_ticks": float(validos.median()),
-            "spread_p90_ticks": float(validos.quantile(0.9)),
-            "spread_frac_1tick": float((validos <= 1.0 + 1e-9).mean()),
-            "spread_n": float(len(validos)), "spread_invalidos": invalidos}
+    """`tiny` = updates de tiny_book de UM pregao (ts_recv_ns, side, price),
+    pequeno o bastante para caber em memoria. Ordena; para o dado real use
+    o streaming em `inventario`."""
+    acc = SpreadAcumulador(tick)
+    if not tiny.empty:
+        acc.adicionar(tiny.sort_values("ts_recv_ns", kind="stable").reset_index(drop=True))
+    return acc.resultado()
 
 
 def _pasta_stream(raw: Path, stream: str, dia: str, symbol: str) -> Path:
@@ -126,13 +189,20 @@ def book_de_um_dia(raw: Path, symbol: str, dia: str,
             "book_integro": bool(integro)}
 
 
-def _carregar_tiny(raw: Path, symbol: str, dia: str) -> pd.DataFrame:
+def _spread_streaming(raw: Path, symbol: str, dia: str, tick: float,
+                      lote: int = 1_000_000) -> dict[str, float]:
+    acc = SpreadAcumulador(tick)
     pasta = _pasta_stream(raw, "tiny_book", dia, symbol)
-    if not pasta.exists():
-        return pd.DataFrame(columns=["ts_recv_ns", "side", "price"])
-    tabela = ds.dataset(pasta, format="parquet", exclude_invalid_files=True)
-    return cast(pd.DataFrame,
-                tabela.to_table(columns=["ts_recv_ns", "side", "price"]).to_pandas())
+    if pasta.exists() and np.isfinite(tick) and tick > 0:
+        dataset = ds.dataset(sorted(pasta.glob("*.parquet")), format="parquet")
+        # readahead=1: sem isso o pyarrow enfileira ~16 lotes na frente e o
+        # pico de memoria volta a ser de GB, anulando o streaming.
+        scanner = dataset.scanner(columns=["ts_recv_ns", "side", "price"],
+                                  batch_size=lote, batch_readahead=1,
+                                  fragment_readahead=1)
+        for batch in scanner.to_batches():
+            acc.adicionar(batch.to_pandas())
+    return acc.resultado()
 
 
 def inventario(curated: Path, raw: Path, symbol: str, volume_barra: int,
@@ -147,7 +217,7 @@ def inventario(curated: Path, raw: Path, symbol: str, volume_barra: int,
         log.info("inventario_deepscalper.pregao", i=i, n=len(dias), dia=dia)
         trades = _carregar_dia(pasta, symbol)
         b = barras_de_um_dia(trades, volume_barra)
-        s = spread_de_um_dia(_carregar_tiny(raw, symbol, dia), b["tick"])
+        s = _spread_streaming(raw, symbol, dia, b["tick"])
         k = book_de_um_dia(raw, symbol, dia, data_book_confiavel)
         linhas.append({"dia": dia, **b, **s, **k})
     por_dia = pd.DataFrame(linhas)

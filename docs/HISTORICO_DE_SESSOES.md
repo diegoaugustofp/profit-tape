@@ -781,3 +781,20 @@ Tag `entregue-v1.96`.
 
 **Pendente**: rodar `inventario-deepscalper` no dado real e transcrever
 o `resumo.json` para o `RESEARCH_PLANO.md`.
+
+## Sessão 2026-09-08 (tarde) — inventário: spread em streaming (v1.97)
+
+- Rodada real da v1.96 no dev: 28 pregões, TAXA = 100 barras/pregão,
+  **h = 21 barras** (120 min). Book zerado no local → os streams de book
+  estão só no backup (armadilha já registrada em OPERACAO.md).
+- Na rodada com `--raw D:\backup_raw\data\raw` o dia 24/08 (623 MB de
+  tiny_book) paginou: a v1.96 carregava o dia inteiro em pandas. Erro de
+  desenho meu — o projeto já processa por partição justamente por isso.
+- v1.97: `SpreadAcumulador` em streaming, memória constante, readahead
+  do pyarrow limitado. 1e8 linhas: 12 s, 0,9 GB de pico. Coluna nova
+  `spread_desordem`. 3 testes novos (525 total), ruff e mypy limpos.
+- Venv do dev tinha um `~rofit-tape` (uninstall abortado pelo record
+  segurando arquivo) que sombreava o editável; resolvido recriando o venv.
+
+**Pendente**: rodar a v1.97 no backup e transcrever spread + pregões
+com book íntegro.

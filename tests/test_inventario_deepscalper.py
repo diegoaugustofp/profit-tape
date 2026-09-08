@@ -162,3 +162,61 @@ def test_sem_pregao_falha_alto(tmp_path) -> None:  # type: ignore[no-untyped-def
     (tmp_path / "curated" / "trade").mkdir(parents=True)
     with pytest.raises(SystemExit, match="nenhum pregao"):
         inventario(tmp_path / "curated", tmp_path / "raw", "WINFUT", 100)
+
+
+def test_streaming_em_lotes_da_o_mesmo_que_inteiro() -> None:
+    """Estado (ultimo bid/ask) atravessa a fronteira do lote: cortar a
+    sequencia em qualquer ponto nao muda o resultado."""
+    from profittape.research.inventario_deepscalper import SpreadAcumulador
+
+    t = _tiny()
+    inteiro = spread_de_um_dia(t, 5.0)
+    for corte in range(1, len(t)):
+        acc = SpreadAcumulador(5.0)
+        acc.adicionar(t.iloc[:corte].reset_index(drop=True))
+        acc.adicionar(t.iloc[corte:].reset_index(drop=True))
+        r = acc.resultado()
+        assert r["spread_mediana_ticks"] == inteiro["spread_mediana_ticks"], corte
+        assert r["spread_n"] == inteiro["spread_n"] and r["spread_invalidos"] == 1.0
+
+
+def test_quantis_do_histograma_batem_com_pandas() -> None:
+    """Mediana e p90 calculados do histograma = pandas sobre a mesma serie."""
+    from profittape.research.inventario_deepscalper import SpreadAcumulador
+
+    rng = np.random.default_rng(7)
+    n = 20_001
+    bids = 100000.0 + 5 * rng.integers(0, 50, n)
+    spreads_ticks = rng.choice([1, 1, 1, 2, 2, 3, 5], n)
+    rows = []
+    for i, (b, s) in enumerate(zip(bids, spreads_ticks, strict=True)):
+        rows.append((2 * i, 0, b))
+        rows.append((2 * i + 1, 1, b + 5 * s))
+    t = pd.DataFrame(rows, columns=["ts_recv_ns", "side", "price"])
+    acc = SpreadAcumulador(5.0)
+    for ini in range(0, len(t), 3_000):
+        acc.adicionar(t.iloc[ini:ini + 3_000].reset_index(drop=True))
+    r = acc.resultado()
+    # cada par (bid, ask) gera: no bid, spread com o ask ANTERIOR; no ask, o
+    # spread do par. Reconstroi a mesma serie com pandas e compara.
+    bid = t["price"].where(t["side"] == 0).ffill()
+    ask = t["price"].where(t["side"] == 1).ffill()
+    esp = ((ask - bid).dropna() / 5.0)
+    esp = esp[esp > 0]
+    assert r["spread_n"] == float(len(esp))
+    assert r["spread_mediana_ticks"] == pytest.approx(float(esp.median()))
+    assert r["spread_p90_ticks"] == pytest.approx(float(esp.quantile(0.9)))
+    assert r["spread_frac_1tick"] == pytest.approx(float((esp <= 1).mean()))
+
+
+def test_desordem_e_contada_nao_corrigida() -> None:
+    from profittape.research.inventario_deepscalper import SpreadAcumulador
+
+    t = _tiny()
+    t.loc[3, "ts_recv_ns"] = 0           # um passo para tras dentro do lote
+    acc = SpreadAcumulador(5.0)
+    acc.adicionar(t.iloc[:4].reset_index(drop=True))
+    u = t.iloc[4:].reset_index(drop=True)
+    u.loc[0, "ts_recv_ns"] = -1          # e o proximo lote comeca antes do fim do anterior
+    acc.adicionar(u)
+    assert acc.resultado()["spread_desordem"] == 2.0

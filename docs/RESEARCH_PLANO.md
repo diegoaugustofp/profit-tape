@@ -5387,6 +5387,22 @@ vazio pegou um defeito real: filtrar `price > 0` ANTES do ffill
 arrastava a cotacao velha por cima do vazio e contava um invalido a
 mais.
 
+**v1.97 — spread em streaming.** A v1.96 carregava o `tiny_book` do dia
+inteiro em pandas: no dado real (24/08: 35 arquivos, 623 MB, ~1e8
+linhas) isso paginava a maquina e parecia travado. Refeito com
+`SpreadAcumulador`: lote a lote, estado = ultimo bid/ask, histograma
+{ticks: contagem}, `batch_readahead=1` (sem isso o pyarrow enfileira 16
+lotes e o pico volta a GB). 1e8 linhas sinteticas: 12 s, pico 0,9 GB.
+Nao reordena o dia — conta `spread_desordem` (passos com ts_recv_ns
+decrescente) como diagnostico; se for alto, o dia merece olhar. Teste
+garante que cortar em qualquer ponto da o mesmo resultado que inteiro e
+que os quantis do histograma batem com o pandas.
+
+**Resultado parcial do dado real (2026-09-08, 28 pregoes, trade local):**
+barras/pregao mediana **100** (TAXA), 9,37 h de pregao, 10,62 barras/h,
+**h = 21 barras**. Spread e book integro dependem da rodada no backup
+(o local nao tinha os streams de book).
+
 **Limitacao declarada**: `book_integro` diz que os streams EXISTEM no
 dia; nao mede completude (o bug de 2026-08-26 e' silencioso por
 construcao, ver INTEGRIDADE_DOS_DADOS.md). Antes da data de corte, e'
