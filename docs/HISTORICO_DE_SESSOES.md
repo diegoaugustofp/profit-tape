@@ -796,5 +796,11 @@ o `resumo.json` para o `RESEARCH_PLANO.md`.
 - Venv do dev tinha um `~rofit-tape` (uninstall abortado pelo record
   segurando arquivo) que sombreava o editável; resolvido recriando o venv.
 
-**Pendente**: rodar a v1.97 no backup e transcrever spread + pregões
-com book íntegro.
+- A rodada da v1.96 no backup TERMINOU (lenta, não travada): 2 pregões
+  com book íntegro, spread mediana 1 tick / p90 1,5 em 4 pregões.
+  Transcrito no RESEARCH_PLANO com a leitura: portão da Fase 3 em
+  ~abril/2027; custo ida-e-volta do simulador ≈ 16 pts/op (conferir se
+  os 11 do EA já embutem spread). Tag `entregue-v1.98` (docs).
+
+**Pendente**: decidir se a Fase 1 (simulador) começa agora; conferir a
+composição do `custo_pontos_estimado`.

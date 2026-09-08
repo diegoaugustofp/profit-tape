@@ -5398,10 +5398,33 @@ decrescente) como diagnostico; se for alto, o dia merece olhar. Teste
 garante que cortar em qualquer ponto da o mesmo resultado que inteiro e
 que os quantis do histograma batem com o pandas.
 
-**Resultado parcial do dado real (2026-09-08, 28 pregoes, trade local):**
-barras/pregao mediana **100** (TAXA), 9,37 h de pregao, 10,62 barras/h,
-**h = 21 barras**. Spread e book integro dependem da rodada no backup
-(o local nao tinha os streams de book).
+### RESULTADO DA FASE 0 — dado real (2026-09-08, v1.96, --raw no backup)
+
+    pregoes com trade curated        : 28   (2026-07-24 a 2026-08-27)
+    pregoes com book INTEGRO         : 2    (>= 2026-08-26)
+    faltam para o portao da Fase 3   : 158
+    barras por pregao (mediana)      : 100  <- TAXA
+    horas por pregao (mediana)       : 9,37
+    barras por hora (mediana)        : 10,62
+    h (barras que cobrem 120 min)    : 21   <- CONGELADO
+    tick (mediana)                   : 5,0
+    spread mediana / p90 (ticks)     : 1,00 / 1,50  em 4 pregoes com tiny_book
+    fracao dos eventos em 1 tick     : 0,89
+
+Leitura, sem interpretar alem do que esta' ai':
+
+- **Portao da Fase 3 fica em ~abril/2027**: 158 pregoes a ~21/mes sao
+  ~7,5 meses de calendario, sem falha de captura. RL nao e' assunto de
+  2026. Fases 1-2 valem por si e sao as unicas onde gastar tempo agora.
+- **h = 21 barras** substitui o "120 min" do pre-registro. Congelado.
+- **Spread 1 tick** (5 pts) sustenta a premissa de execucao do paper no
+  WIN. Custo de ida e volta como agressor no simulador = ~5 pts de
+  spread + 11 de `custo_pontos_estimado` ≈ **16 pts/op**. CONFERIR antes
+  da Fase 1 se os 11 ja' embutem spread; se sim, nao cobrar duas vezes.
+  Base: 4 pregoes de fim de agosto. Spread e' MEDIDA, nao hiperparametro
+  — remedir com mais dado nao e' trial.
+- `spread_desordem` nao existe na v1.96; a v1.97 traz. Rodar de novo
+  so' para isso e' opcional.
 
 **Limitacao declarada**: `book_integro` diz que os streams EXISTEM no
 dia; nao mede completude (o bug de 2026-08-26 e' silencioso por
