@@ -725,3 +725,39 @@ metades por pregão); rodar `bollinger-scalp`; ficha de seis linhas.
 **Pendente**: dump de 15s (duas metades por pregão) → `bollinger-scalp`;
 `perfil-volume-horario` no curated → operador declara regra de horário;
 ficha de seis linhas.
+
+## Sessão 2026-09-07 — curadoria DeepScalper fechada, pré-registro da Fase 0
+
+Sessão só de documentação; nenhum código tocado. Tag `entregue-v1.95`
+(rebaseada sobre a v1.94 do operador, que chegou no meio).
+
+### Curadoria (`docs/CURADORIA_DEEPSCALPER.md`)
+- 15 fontes triadas. Aproveitadas: DeepScalper (paper), DeepLOB, iRDPG,
+  EarnHFT. Referência parcial: TradeMaster. Estacionadas: FinPILOT,
+  FinRL. Descartadas 8, com motivo, para não reabrir.
+- **Achado principal**: o TradeMaster foi clonado e lido. O
+  "DeepScalper" dele é DQN simples de 3 ações sobre dado DIÁRIO — sem
+  branching, sem book, sem auxiliar de vol, custo fora do reward. Não
+  existe implementação pública do paper completo.
+- Duas correções de link no caderno (iRDPG apontava para o FinRL;
+  EarnHFT/FinPILOT sem link específico).
+- Regra de triagem que emergiu: blog de plataforma e site de afiliado
+  não renderam em 6 de 6 casos.
+
+### Pré-registro (`docs/RESEARCH_PLANO.md`, caminho G)
+- Fases 0–5 com portões. O portão decisivo é a **Fase 2**:
+  classificador supervisionado (LightGBM/DeepLOB) sobre features Tier 1
+  + book, alvo Triple-Barrier já existente, testado em **forward** com
+  ficha de 6 linhas (resultado binário → variância limitada). Critério
+  FAVORÁVEL: +15 pts/op líquido no decil de maior confiança, n ≥ 150.
+- RL (Fase 3) só se a Fase 2 der FAVORÁVEL e com ≥ 160 pregões de
+  tape+book íntegros. Hiperparâmetros congelados (w=0,1, eta=1, h =
+  barras que cobrem 120 min medidos), ≥ 10 seeds, sem grade.
+- Tradução para o WIN congelada: passo = barra de 120k contratos, ação
+  Δpos ∈ {−1,0,+1} com 1 contrato, fill como agressor (pior caso) + 11
+  pts/op DENTRO do reward, zeragem no horário do EA.
+- Não usa a amostra cega de 2025. Não toca o EA.
+
+**Pendente (Fase 0, custo zero)**: contar pregões com book íntegro,
+barras/hora (define `h`), distribuição do spread, barras/pregão (TAXA
+da ficha forward).

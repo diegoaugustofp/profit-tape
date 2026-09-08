@@ -7,6 +7,12 @@ arquivo cresceu demais para navegar so' por titulo cronologico).
 
 ## Indice por assunto
 
+**DeepScalper / RL intradiario (caminho G) — curadoria fechada**
+- [PRE-REGISTRO: DeepScalper — Fase 0 (desenho) (2026-09-07)](#pre-registro-deepscalper--fase-0-desenho-2026-09-07)
+  — curadoria em `docs/CURADORIA_DEEPSCALPER.md`. Portao decisivo e' a
+  Fase 2 (supervisionado, forward); RL so' depois e so' com ≥160
+  pregoes de book integro. Hiperparametros congelados, sem grade.
+
 **Perfil de agente / classificacao**
 - [REVISAO DA HIPOTESE DE PERFIL (2026-08-22, operador)](#revisao-da-hipotese-de-perfil-2026-08-22-operador)
 - [Revisao critica da taxonomia de 6 niveis (2026-08-22, operador pesquisou)](#revisao-critica-da-taxonomia-de-6-niveis-2026-08-22-operador-pesquisou)
@@ -5208,3 +5214,147 @@ dia so' e' conhecida no fim, e os tercis sao locais.
 Se o efeito for mesmo concentrado, a pergunta seguinte **nao e'** se ele
 existe — e' se da' para **identificar o tipo de dia ANTES**, e isso e'
 outra hipotese, com pre-registro proprio.
+
+## PRE-REGISTRO: DeepScalper — Fase 0 (desenho) (2026-09-07)
+
+Registrado ANTES de qualquer codigo. Origem: curadoria fechada em
+`docs/CURADORIA_DEEPSCALPER.md` (paper arXiv 2201.09058 + TradeMaster
+inspecionado). Este pre-registro cobre o DESENHO e os PORTOES entre
+fases; cada fase que rodar dado tera' ficha propria (forward) ou
+pre-registro proprio (historico), congelados na hora.
+
+### Motivacao
+
+O DeepScalper propoe um agente que decide a cada barra vendo book +
+fluxo + posicao, com reward que inclui o resultado de segurar `h` barras
+adiante (hindsight bonus). O projeto ja' tem tape, book e as features de
+fluxo (`docs/FEATURES.md`) — a materia-prima que o paper usa. A
+pergunta e' se compor essas features de forma nao-linear, com escolha
+de saida aprendida, rende mais que a regra de limiar que o EA opera hoje
+(`z_agf_3` venda: ~+26 bruto, custo ~11, **~15 pts/op liquido**).
+
+### O QUE NAO E' este pre-registro
+
+NAO e' compromisso de implementar RL. E' compromisso com a ORDEM e com
+os portoes. Se um portao reprovar, o projeto para ali e o registro
+vale como resultado. NAO gasta trial: a Fase 0 nao roda dado.
+
+### A pergunta ingenua (regra 0), respondida antes de codar
+
+*"Em uma frase: por que um agente aprenderia algo que a regra de limiar
+nao ve?"* — Porque a regra usa UMA feature, UM limiar e sai por TEMPO
+fixo; o agente ve varias features + book + posicao e decide a saida.
+Isso e' plausivel **so' se** as features tiverem informacao alem da
+linear. Se nao tiverem, RL nao cria informacao — so' a encontra mais
+caro. Por isso o portao da Fase 2 e' supervisionado, nao RL.
+
+### Hipotese (uma frase, linguagem de mercado)
+
+Nas features de fluxo e book ja' calculadas ha' informacao sobre qual
+barreira (alta/baixa, `k·sigma`) o preco toca primeiro nas proximas `h`
+barras, alem do que `z_agf_3` sozinho da'.
+
+### O que fica CONGELADO agora (traducao do paper para o WIN)
+
+| Item | Paper | Aqui (congelado) |
+|---|---|---|
+| Passo de decisao | 1 min | 1 barra de volume (120.000 contratos, `volume_barra` do EA) |
+| Acao | (preco limitado, qtd ate 50) | Δposicao ∈ {−1, 0, +1}, `|pos| ≤ 1` contrato. **Sem branch de preco na v1** — ordem limitada exige modelo de fila que nao temos como validar; agressao ao melhor preco contrario e' pior para o agente, logo conservadora |
+| Custo | 2,3e-5 proporcional | spread pago no book (agressor) **+ 11 pts por operacao** (`custo_pontos_estimado`), DENTRO do reward — o TradeMaster errou isso e o agente gira de graca |
+| Reward | Δpreco·pos − custo | Δpontos·pos·(R$0,20) − custo, em **pontos** no log |
+| Hindsight | `h` ∈ 30–180 min, `w` = 0,1 | `w = 0,1` fixo. `h` = numero de barras que cobre a mediana de **120 min** (medido na Fase 0, nao chutado) |
+| Auxiliar de vol | `eta` = 1 | `eta` = 1 fixo |
+| Zeragem | fim do dia | horario de zeragem que o EA ja' usa (`docs/EA_ARQUITETURA.md`) |
+| Estado privado | (pos, caixa, tempo) | (pos, barras desde entrada, barras ate zeragem) |
+| Seeds | 5 | **≥ 10** |
+| Busca de hiperparametro | grid no teste | **nenhuma**. Valores acima. Mudar = pre-registro novo |
+| Reward de teste | sem hindsight | sem hindsight (igual ao paper) |
+
+### Fases e portoes
+
+**Fase 0 — Inventario (esta). Custo zero, dado queimado.**
+Medir e registrar, sem interpretar:
+1. Pregoes com tape curated E book integro (o bug de `bHasDate` em
+   `docs/INTEGRIDADE_DOS_DADOS.md` pode ter furado o book em parte
+   deles). Numero, nao estimativa.
+2. Barras por pregao e barras por hora (mediana) → define `h`.
+3. Distribuicao do spread WIN em ticks (para o modelo de fill).
+4. Taxa de eventos: quantas barras/pregao — e' a TAXA da ficha forward.
+Portao: nenhum. E' contagem.
+
+**Fase 1 — Simulador de replay. Custo zero de trial.**
+Ambiente sobre curated: fill como agressor ao melhor preco contrario
+(pior caso), custo fixo por operacao, zeragem forcada, clock de barras.
+Conferencias obrigatorias antes de aceitar (regra 4 e 7.3):
+- P&L de uma sequencia de 5 barras calculado a mao = codigo.
+- Verificador de look-ahead rodado contra um caso que ele DEVE reprovar
+  (feature deslocada de propósito).
+- Replay de uma regra que o EA ja' rodou (`z_agf_3` venda) reproduz o
+  P&L do `ea-replay-lote` no mesmo periodo, a menos do spread explicito.
+Portao: as tres conferencias batem. Se o replay da regra conhecida NAO
+bate, o simulador esta' errado — nao a regra.
+
+**Fase 2 — Baselines supervisionados. E' AQUI que a hipotese e' testada.**
+Classificador (LightGBM; DeepLOB se o book estiver integro) sobre as
+features Tier 1 + book, alvo = label Triple-Barrier que **ja' existe** em
+`features.parquet`. Sem RL. Amostra:
+- DEPURACAO: curated 2026 (queimado). Nao interpretavel.
+- TESTE: **forward**, ficha de 6 linhas, porque o resultado e' binario
+  (barreira certa/errada) e a variancia e' limitada (disciplina-forward
+  1.1). Evita gastar a amostra cega de 2025.
+Criterio (a congelar na ficha, com a TAXA medida na Fase 0):
+- FAVORAVEL: no decil de maior confianca do classificador, P&L liquido
+  ≥ **+15 pts/op** (= a referencia do sinal ja' validado; um sinal
+  novo que rende menos nao justifica a complexidade) com n ≥ 150
+  eventos, E taxa de acerto de barreira acima da nula ajustada por
+  empate.
+- INCONCLUSIVO: entre 0 e +15, ou n insuficiente no horizonte.
+- CONTRA: ≤ 0 pts/op liquido no decil de maior confianca.
+Se CONTRA ou INCONCLUSIVO ao fim do horizonte: **a Fase 3 nao acontece.**
+O classificador vira, no maximo, feature candidata.
+
+**Fase 3 — DeepScalper, por pecas. So' se a Fase 2 der FAVORAVEL.**
+Pre-condicao de dado: o paper treinou em ~8 meses (~165 pregoes) por
+ativo. Nao iniciar com menos de **160 pregoes de tape+book integros**
+(numero da Fase 0 diz quanto falta). Ordem, uma ablacao por vez, cada
+uma contra o baseline vencedor da Fase 2, ≥ 10 seeds, walk-forward com
+validacao separada e teste aberto uma vez:
+  (a) DQN + hindsight; (b) + micro-encoder de book; (c) + branching;
+  (d) + auxiliar de vol.
+Criterio por ablacao: FAVORAVEL se a MEDIANA entre seeds supera o
+baseline em pts/pregao E o pior quartil de seeds ≥ 0; INCONCLUSIVO se a
+mediana supera mas o pior quartil e' negativo; CONTRA caso contrario.
+Peca que nao passa nao entra na seguinte.
+
+**Fase 4 — Julgamento economico.** DSR com o numero REAL de
+configuracoes tentadas (cada ablacao conta), pts/contrato/pregao, MDD
+em pontos contra o stop catastrofico de 500, turnover x custo.
+
+**Fase 5 — Integracao.** Decisao de arquitetura com pre-registro
+proprio em `docs/EA_ARQUITETURA.md`: o agente nao roda em NTSL;
+exigiria servico Python (inferencia) alimentando o EA pela ProfitDLL,
+com circuit breaker e risco continuando no EA. Nao se discute antes da
+Fase 4.
+
+### O que NAO muda com este pre-registro
+
+- O EA em producao. Nada aqui toca `ea.yaml` nem `decidir()`.
+- A conta de trials da amostra cega de 2025: nenhuma fase acima a usa.
+- Os caminhos A–F de `docs/ESTADO_E_CAMINHOS.md`. Isto e' um caminho G,
+  e o mais caro; a Fase 2 e' barata e responde uma pergunta util mesmo
+  que o RL nunca aconteca (as features Tier 1 tem informacao alem do
+  linear?). Fases 3+ so' com o operador decidindo que vale o custo.
+
+### Riscos declarados
+
+1. RL e' faminto por dado e o historico com book e' curto. O portao de
+   160 pregoes existe para nao treinar em ruido.
+2. Grid search de RL e' consumo de trial invisivel. Por isso os
+   hiperparametros estao congelados e nao ha' grade.
+3. O hindsight bonus e' um vies de momentum injetado no reward. O
+   controle sem evento (`ESTADO_E_CAMINHOS.md` §2) mostrou continuacao
+   de −4,55 pts/barra com n = 10.305 — coerente, mas achado olhando
+   dado. Se a Fase 3 "funcionar" so' com (a), suspeitar que e' momentum
+   com nome novo e comparar contra TSM simples antes de comemorar.
+4. O simulador da Fase 1 e' o artefato mais reaproveitavel: serve ao
+   resto do pipeline mesmo se tudo acima morrer na Fase 2.
