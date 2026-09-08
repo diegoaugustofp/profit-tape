@@ -909,6 +909,20 @@ def bollinger_scalp(
                    f"pts (stop da hipotese = 40 pts)")
     typer.echo("\n--- FUNIL DA REGRA (7.4: quantos gatilhos cada clausula deixa passar) ---")
     typer.echo(r["funil"].to_string(index=False))
+    dg = r["diagnostico"]
+    typer.echo("\n--- DIAGNOSTICO (7.6: se uma clausula nunca dispara, e' o desenho) ---")
+    for lado in ("compra", "venda"):
+        v = dg.get(lado, {})
+        if v.get("candidatos"):
+            typer.echo(f"  {lado}: {v['candidatos']} candidatos (banda em t-2 e t-1). "
+                       f"Est(t-1) quantis 5/25/50/75/95 = {v['est_t1_quantis_5_25_50_75_95']}")
+            typer.echo(f"      Est(t-1) <20: {v['est_t1_abaixo_20']}  >80: {v['est_t1_acima_80']}"
+                       f"  <50: {v['est_t1_abaixo_50']}  >50: {v['est_t1_acima_50']}"
+                       f"  | Est(t-2) <20: {v['est_t2_abaixo_20']}  >80: {v['est_t2_acima_80']}")
+    if "tr" in dg:
+        t = dg["tr"]
+        typer.echo(f"  TR da barra de 15s: p50={t['tr_p50_pts']} pts | barras com TR >= stop(40): "
+                   f"{t['pct_barras_tr_ge_stop']}% | TR >= 80: {t['pct_barras_tr_ge_2x_stop']}%")
     typer.echo(f"\n  saida: {saida}")
 
 

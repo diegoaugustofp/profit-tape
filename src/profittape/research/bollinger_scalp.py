@@ -195,7 +195,11 @@ def indicadores(df: pd.DataFrame) -> pd.DataFrame:
     cp = _por_bloco(d, "close", lambda s: s.shift(1))
     d["tr"] = pd.concat([d["high"] - d["low"], (d["high"] - cp).abs(),
                          (d["low"] - cp).abs()], axis=1).max(axis=1)
-    d.loc[cp.isna(), "tr"] = d["high"] - d["low"]
+    # Primeira barra do bloco: o Profit tem o close anterior (do dia
+    # anterior, ou da barra antes do dump); o Python nao. Medido em
+    # 01/09/2026: gap de 625 pts so' nessa barra, e o ATR21 arrastando
+    # ate' a 21a. Fica NaN -- honesto, e tira o artefato da comparacao.
+    d.loc[cp.isna(), "tr"] = np.nan
     a = ATR_PERIODO
     d["atr_sma"] = _por_bloco(d, "tr", lambda s: s.rolling(a).mean())
     d["atr_wilder"] = _por_bloco(
@@ -351,6 +355,41 @@ def contar_clausulas(x: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(linhas)
 
 
+def diagnostico_clausulas(x: pd.DataFrame, stop_pts: float = 40.0) -> dict[str, Any]:
+    """
+    O que o funil nao mostra sozinho: ONDE o estocastico dos candidatos
+    esta' (se a clausula nunca dispara, e' o desenho, nao o azar -- 7.6),
+    e quanto o stop cabe dentro de uma barra (TR >= stop).
+
+    Medido em 01/09/2026: Est(t-1) dos candidatos a compra tem mediana 72
+    e p5 = 41; abaixo de 20, 1 em 164. Um branco fechando acima da banda
+    superior fecha no topo da faixa de 8 barras por construcao.
+    """
+    est1 = x["est_ntsl"].groupby(x["bloco"]).shift(1)
+    est2 = x["est_ntsl"].groupby(x["bloco"]).shift(2)
+    q = [0.05, 0.25, 0.5, 0.75, 0.95]
+    out: dict[str, Any] = {}
+    for lado, pref in (("compra", "c_compra"), ("venda", "c_venda")):
+        cand = x[f"{pref}_t1"] & x[f"{pref}_t2"]
+        e1, e2 = est1[cand].dropna(), est2[cand].dropna()
+        if e1.empty:
+            out[lado] = {"candidatos": 0}
+            continue
+        out[lado] = {
+            "candidatos": int(cand.sum()),
+            "est_t1_quantis_5_25_50_75_95": [round(float(v), 1) for v in e1.quantile(q)],
+            "est_t1_abaixo_20": int((e1 < 20).sum()), "est_t1_acima_80": int((e1 > 80).sum()),
+            "est_t1_abaixo_50": int((e1 < 50).sum()), "est_t1_acima_50": int((e1 > 50).sum()),
+            "est_t2_abaixo_20": int((e2 < 20).sum()), "est_t2_acima_80": int((e2 > 80).sum()),
+        }
+    tr = x["tr_ntsl"].dropna()
+    if not tr.empty:
+        out["tr"] = {"tr_p50_pts": round(float(tr.median()), 1),
+                     "pct_barras_tr_ge_stop": round(100 * float((tr >= stop_pts).mean()), 1),
+                     "pct_barras_tr_ge_2x_stop": round(100 * float((tr >= 2 * stop_pts).mean()), 1)}
+    return out
+
+
 def largura_banda_em_pontos(d: pd.DataFrame, col_sup: str = "bb_sup_ntsl",
                             col_inf: str = "bb_inf_ntsl") -> dict[str, float]:
     """7.5: o 0,38 adimensional esconde o que ele e'. Em pontos e ticks."""
@@ -374,6 +413,7 @@ def rodar(log_path: Path, saida: Path) -> dict[str, Any]:
     x = marcar_sinais(d)
     funil = contar_clausulas(x)
     largura = largura_banda_em_pontos(d)
+    diag = diagnostico_clausulas(x)
     atr = d["atr_ntsl"].dropna()
     atr_pts = ({"atr21_p50_pts": round(float(atr.median()), 1),
                 "atr21_p90_pts": round(float(atr.quantile(0.9)), 1)}
@@ -382,9 +422,11 @@ def rodar(log_path: Path, saida: Path) -> dict[str, Any]:
     saida.mkdir(parents=True, exist_ok=True)
     x.to_parquet(saida / "barras_15s.parquet", index=False)
     resumo = {"dump": meta, "equivalencia": eq, "largura_banda": largura,
-              "atr": atr_pts, "funil": funil.to_dict(orient="records")}
+              "atr": atr_pts, "diagnostico": diag,
+              "funil": funil.to_dict(orient="records")}
     (saida / "resumo.json").write_text(json.dumps(resumo, indent=2, default=str),
                                        encoding="utf-8")
     log.info("bollinger_scalp.rodada", **meta, saida=str(saida))
     return {"meta": meta, "equivalencia": eq, "funil": funil,
-            "largura_banda": largura, "atr": atr_pts, "barras": x}
+            "largura_banda": largura, "atr": atr_pts, "diagnostico": diag,
+            "barras": x}

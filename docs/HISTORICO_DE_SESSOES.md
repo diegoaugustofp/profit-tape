@@ -963,3 +963,22 @@ minutos; o que falta provar é `contas>=1` no heartbeat.
 **Pendente (operador)**: teste B amanhã — `runtime.login_completo: true`
 no yaml de produção antes do agendador subir; olhar 10 min de heartbeat;
 mandar o `profitdll.contas`.
+### Continuação (2026-09-08, sessão do scalp) — perfil de volume e primeiro dump de 15s (v2.09)
+
+- `perfil-volume-horario` em 28 pregões: três regimes — manhã (pico
+  10:00–10:30 a 134–151% da abertura, caindo até 47% às 12:30), platô
+  da tarde 13:00–16:30 (36–41%), fechamento. O 13h é o joelho; regra
+  por percentual cairia em cima do platô. Proposto 09–13h fixo.
+- Dump de 15s (01/09 completo; 01–04/09 09–14h): equivalência FECHADA
+  com dif_max 0,0 nos cinco campos — Bollinger populacional, %K lento,
+  ATR = SMA21(TR). Profit desenha toda barra de 15s.
+- **Achado 7.6**: a cláusula do estocástico (<20 / >80) dispara 0,75 e
+  0 vezes por pregão; estrutural (mediana de Est(t−1) nos candidatos =
+  72 na compra). Sem ela: ~60 / ~51 por pregão. Decisão do operador.
+- **Achado em pontos**: TR mediano da barra de 15s = 49–64 pts > stop
+  de 40. 65% das barras cabem o stop; 23% cabem stop e RP1. Reabre
+  "stop fixo em ticks vs. fração do ATR".
+- `entregue-v2.09`: verificador de TR corrigido (primeira barra do
+  bloco = NaN, era o único "NAO BATE"); `diagnostico_clausulas` no
+  comando (quantis do estocástico nos candidatos, % barras com TR ≥
+  stop). 514 testes, ruff e mypy limpos.

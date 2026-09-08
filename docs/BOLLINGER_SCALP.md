@@ -89,10 +89,21 @@ Em 3.000 barras sintéticas, identidade algébrica, sem dado real:
 | True Range | `(H−L) + gap` contra o close anterior | identidade; difere de H−L em 44% das barras (as com gap) |
 | "MM70 subindo" | `close_t > close_{t−70}` | identidade exata (descartado com o 6m, fica registrado) |
 
-O que o manual do NTSL **não diz**, e o dump mede: se o desvio da
-Bollinger é populacional ou amostral; se `SlowStochastic()` devolve %K
-lento ou %D; se `AvgTrueRange(21, 0)` é SMA do TrueRange. Candidatos
-todos calculados em `indicadores()`; `equivalencia()` diz qual bate.
+O que o manual do NTSL **não diz**, o dump mediu (01–04/09/2026, 2.249 +
+3.160 barras, `dif_max` em pontos):
+
+| campo do Profit | variante que bate | dif_max | a outra variante |
+|---|---|---|---|
+| `BollingerBands(0.38, 21, 0)` | desvio **populacional** (ddof=0) | 0,0 | amostral erra até 3,2 pts |
+| `SlowStochastic(8, 3, 0)` | **%K lento** (SMA3 do %K rápido) | 0,0 | %D erra até 28; %K rápido até 60 |
+| `AvgTrueRange(21, 0)` | **SMA21 do TrueRange** | 0,0 | Wilder erra até 73 pts |
+| `TrueRange` | `(H−L) + gap` vs. close anterior | 0,0 | — |
+
+A primeira barra do dump é a exceção: o Profit tem o close do dia
+anterior (gap de 625 pts em 01/09), o Python não — fica NaN.
+
+O Profit **não pula barra de 15s sem negócio**: 563 minutos de 01/09,
+todos com 4 barras. Dúvida fechada.
 
 ## 5. Ferramentas (entregue-v1.93)
 
@@ -106,18 +117,60 @@ O buffer do console retém ~2.000 linhas e **um pregão de 15s tem
 ~2.260**: use `LogHoraInicio/Fim` e dumpe em duas metades. Identidade
 da barra é (data, `CurrentBar`), porque `Time` em HHMM repete 4 vezes.
 
+## 5.1 O que o dump de 01–04/09 mostrou (2026-09-08) — em pontos
+
+**Banda**: meia-largura de 0,38σ = 19 pts no dia inteiro, 26 pts nas
+manhãs (4–5 ticks). "Acima da banda" é `close > SMA21 + ~4 ticks`.
+
+**Funil (09–14h, 4 pregões; compra / venda por pregão)**:
+
+| cláusula | compra | venda |
+|---|---|---|
+| t−1 fora da banda com cor de sinal | 204 | 193 |
+| + t−2 correção fora da banda | 60 | 51 |
+| + estocástico(t−1) extremo (<20 / >80) | **0,75** | **0** |
+
+**O estocástico seca a hipótese, e é estrutural (7.6)**: entre os
+candidatos a compra, `Est(t−1)` tem mediana 72 e p5 = 41; abaixo de 20,
+1 em 164 no dia, 3 em 238 nas manhãs. Venda acima de 80: zero. Um
+branco fechando acima da banda superior fecha, por construção, no topo
+da faixa de 8 barras; o %K lento (média de três %K rápidos) não
+consegue estar no fundo dela ao mesmo tempo. Nem em t−2 (a correção):
+0 abaixo de 20. Abandonar a cláusula antes do replay não é p-hacking —
+ela nunca dispara. A leitura alternativa do próprio texto do operador
+("acima de 50 = perna de alta") manteria ~90% dos candidatos (148/164).
+**Decisão pendente do operador.**
+
+**O stop é menor que a barra**: TR mediano de 15s = 49 pts (dia) / 64
+(manhãs). **65% das barras têm TR ≥ 40** (o stop cabe em uma barra);
+**23% têm TR ≥ 80** (stop e RP1 na mesma barra). A spec pede 8 ticks num
+mercado onde a barra de 15s anda 10–13 ticks. A própria spec previu
+("TR amplo vs. stop de 8 → aguardar") — no WIN a 180 mil, "aguardar" é
+o estado normal. Reabre a decisão "TR fora do v1" como pergunta de
+desenho: stop em ticks fixos ou em fração do ATR? **Pendente.**
+
+Estranhezas do dump a esclarecer: barras começam às 09:02:45 nos dois
+dias completos (11 barras de abertura ausentes); 03 e 04/09 só têm
+12:24–14:00 no dump de 4 dias, com recorte idêntico.
+
 ## 6. Dúvidas — fechadas em 2026-09-05, exceto as que o dump responde
 
 Fechadas: TR fora do v1; trailing atrás da máxima favorável, RP1
 parada; entradas até 13h, zeragem 17:30; custo 11 por contrato ida e
 volta; sinal com posição aberta ignorado; parcial → pernas em ordem.
 
-Ainda em aberto, e respondidas pelo próprio dump/medição:
-1. Barra de 15s sem negócio: o Profit desenha ou pula? (buraco em
-   `Time` com `CurrentBar` contíguo = pulou)
-2. Margem de 3 contratos com R$ 5.000 (conferir na corretora).
-3. Máximo de operações por dia: não declarado — sem limite no v1 além
+Fechada pelo dump (2026-09-08): o Profit desenha toda barra de 15s.
+
+Ainda em aberto:
+1. Margem de 3 contratos com R$ 5.000 (conferir na corretora).
+2. Máximo de operações por dia: não declarado — sem limite no v1 além
    do circuit breaker.
+3. **Estocástico** (5.1): manter como está (taxa ~0), trocar pela
+   leitura de tendência (>50 / <50), ou retirar.
+4. **Stop vs. barra** (5.1): 8 ticks fixos ou fração do ATR21.
+5. Horário: 09:00–13:00 fixo, joelho da curva de volume medida em 28
+   pregões (12:30 = 47% da abertura; 13:00–16:30 = platô de 36–41%).
+   Proposto em 2026-09-08, aguardando confirmação.
 
 ## 6.1 Tick a tick: onde a estratégia pode e não pode ser validada
 

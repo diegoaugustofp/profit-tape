@@ -141,8 +141,9 @@ def test_estocastico_a_mao(periodos_curtos: None) -> None:
 
 def test_true_range_e_gap(periodos_curtos: None) -> None:
     d = indicadores(_ohlc_curto())
-    assert list(d["tr"]) == [4.0] * 5
-    assert d["atr_sma"][1] == 4.0
+    assert np.isnan(d["tr"][0])              # sem close anterior: honesto e' NaN
+    assert list(d["tr"][1:]) == [4.0] * 4
+    assert d["atr_sma"][2] == 4.0
     com_gap = _ohlc_curto()
     com_gap.loc[3, ["open", "high", "low", "close"]] = [111, 112, 110, 111]
     assert indicadores(com_gap)["tr"][3] == 8.0       # |112 - close_ant 104|
@@ -286,3 +287,18 @@ def test_funil_conta_cada_clausula() -> None:
     assert compra["+ limitada tocada em t"] == 2
     assert compra["   ... executada na abertura"] == 2
     assert compra["   ... executada no recuo"] == 0
+
+
+def test_diagnostico_mostra_onde_o_estocastico_dos_candidatos_esta() -> None:
+    from profittape.research.bollinger_scalp import diagnostico_clausulas
+    df = _sequencia()
+    df["tr_ntsl"] = [30.0, 45.0, 90.0, 20.0, 41.0, 10.0]
+    x = marcar_sinais(df)
+    dg = diagnostico_clausulas(x)
+    # candidatos a compra: t3 (Est(t-1)=15) e t5 (Est(t-1)=10)
+    assert dg["compra"]["candidatos"] == 2
+    assert dg["compra"]["est_t1_abaixo_20"] == 2
+    assert dg["compra"]["est_t1_acima_50"] == 0
+    assert dg["venda"]["candidatos"] == 0
+    assert dg["tr"]["pct_barras_tr_ge_stop"] == 50.0      # 45, 90, 41
+    assert dg["tr"]["pct_barras_tr_ge_2x_stop"] == pytest.approx(16.7, abs=0.1)
