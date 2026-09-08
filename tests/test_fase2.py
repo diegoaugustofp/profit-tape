@@ -174,3 +174,26 @@ def test_preparar_amostra_pequena_falha_alto(tmp_path) -> None:  # type: ignore[
     _sintetico(3, forca=0.0).to_parquet(f, index=False)
     with pytest.raises(SystemExit, match="amostra insuficiente"):
         preparar_fase2(f, tmp_path / "out", "WINFUT")
+
+
+def test_carregar_trades_usa_a_pasta_dt(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """Layout hive real: curated/trade/dt=D/sym=S/part.parquet. A primeira
+    versao passava dt=/sym= para _carregar_dia e quebrava em producao."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    from profittape.research.fase2 import carregar_trades_dos_dias
+
+    pasta = tmp_path / "trade" / "dt=2026-09-01" / "sym=WINFUT"
+    pasta.mkdir(parents=True)
+    n = 3
+    pq.write_table(pa.table({
+        "ts_ns": [3, 1, 2], "symbol": ["WINFUT"] * n, "exchange": ["F"] * n,
+        "trade_id": [1, 2, 3], "price": [1.0, 2.0, 3.0], "volume_financeiro": [1.0] * n,
+        "quantidade": [1] * n, "agente_comprador": [3] * n, "agente_vendedor": [85] * n,
+        "trade_type": [2, 3, 13], "is_edit": [False] * n,
+    }), pasta / "part-0000.parquet")
+    out = carregar_trades_dos_dias(tmp_path, "WINFUT", ["2026-09-01", "2026-09-02"])
+    assert list(out) == ["2026-09-01"]
+    assert list(out["2026-09-01"].columns) == ["ts_ns", "price", "trade_type"]
+    assert list(out["2026-09-01"]["ts_ns"]) == [1, 2, 3]      # ordenado

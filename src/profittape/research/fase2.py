@@ -182,11 +182,14 @@ def _desempate_pelo_tape(tr: pd.DataFrame | None, barra: pd.Series,
 
 def carregar_trades_dos_dias(curated: Path, symbol: str,
                              dias: list[str]) -> dict[str, pd.DataFrame]:
+    """_carregar_dia recebe a pasta dt= (o filtro por `sym` vem da particao
+    FILHA sym=). Passar dt=/sym= quebra com "No match for FieldRef.Name(sym)"
+    -- bug real na primeira rodada de producao, 2026-09-08."""
     out: dict[str, pd.DataFrame] = {}
     for d in dias:
-        pasta = curated / "trade" / f"dt={d}" / f"sym={symbol}"
-        if pasta.exists():
-            out[d] = _carregar_dia(pasta, symbol)[["ts_ns", "price", "trade_type"]]
+        pasta_dia = curated / "trade" / f"dt={d}"
+        if (pasta_dia / f"sym={symbol}").exists():
+            out[d] = _carregar_dia(pasta_dia, symbol)[["ts_ns", "price", "trade_type"]]
     return out
 
 
