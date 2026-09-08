@@ -42,8 +42,16 @@ class ProfitClient:
         on_state: Callable[[int, int], None] | None = None,
         on_trade_extra: Callable[[Trade], None] | None = None,
         dll: Any | None = None,
+        login_completo: bool = False,
     ) -> None:
         self.dll_path = dll_path
+        # E1 (2026-09-08): login COMPLETO (DLLInitializeLogin) em vez de
+        # MarketLogin. Motivo: rotear ordem exige a sessao completa, e com
+        # UMA chave de ativacao a conexao do record e' a unica que existe
+        # -- entao e' o record que precisa subir com ela. False por
+        # padrao: todo caller existente (producao ha semanas) tem ZERO
+        # mudanca. Ver docs/EA_ARQUITETURA.md, "Trilha de execucao".
+        self.login_completo = login_completo
         self._key = activation_key
         self._user = user
         self._password = password
@@ -66,6 +74,14 @@ class ProfitClient:
         self.conectado_market = False
         self.conectado_login = False
         self._inicializado = False
+
+        # E1: diagnostico da sessao de roteamento. Preenchido SO' pelas
+        # callbacks do login completo (mudas no MarketLogin). contas_vistas
+        # e' a prova de que a sessao de roteamento subiu de verdade: a DLL
+        # dispara AccountCallback uma vez por conta logo apos o login.
+        self.contadores_roteamento = {"ordem_mudanca": 0, "ordem_historico": 0,
+                                      "conta": 0}
+        self.contas_vistas: list[tuple[int, str]] = []   # (corretora, account_id)
 
         # Referencias fortes aos callbacks. Sem isto o GC do Python coleta o
         # objeto enquanto a DLL ainda guarda o ponteiro, e o proximo evento
@@ -94,20 +110,52 @@ class ProfitClient:
             )
 
         self._montar_callbacks()
-        codigo = self._dll.DLLInitializeMarketLogin(
-            self._key, self._user, self._password,
-            self._cb["state"],
-            self._cb["trade"],
-            self._cb["daily"],
-            self._cb["price_book"],
-            self._cb["offer_book"],
-            self._cb["history"],
-            self._cb["progress"],
-            self._cb["tiny"],
-        )
+        if self.login_completo:
+            # Ordem dos argumentos e' a do MANUAL para DLLInitializeLogin
+            # (e a mesma declarada em bindings._declare): state, historico
+            # de ORDENS (THistoryCallback), mudanca de ordem, conta, e so'
+            # entao os slots de mercado na mesma ordem do MarketLogin.
+            # ATENCAO ao nome: self._cb["history"] e' THistoryTradeCallback
+            # (historico de NEGOCIOS, slot de mercado), NAO o THistoryCallback
+            # de ordens -- esse e' self._cb["ordem_historico"]. Trocar os
+            # dois compila (ctypes nao confere) e corrompe a pilha.
+            if not hasattr(self._dll, "DLLInitializeLogin"):
+                raise LoginFailed(
+                    "login_completo=True mas a DLL nao expoe DLLInitializeLogin "
+                    "-- rode `profit-tape doctor` (secao EXECUCAO) e confira."
+                )
+            nome_init = "DLLInitializeLogin"
+            codigo = self._dll.DLLInitializeLogin(
+                self._key, self._user, self._password,
+                self._cb["state"],
+                self._cb["ordem_historico"],
+                self._cb["ordem_mudanca"],
+                self._cb["conta"],
+                self._cb["trade"],
+                self._cb["daily"],
+                self._cb["price_book"],
+                self._cb["offer_book"],
+                self._cb["history"],
+                self._cb["progress"],
+                self._cb["tiny"],
+            )
+        else:
+            nome_init = "DLLInitializeMarketLogin"
+            codigo = self._dll.DLLInitializeMarketLogin(
+                self._key, self._user, self._password,
+                self._cb["state"],
+                self._cb["trade"],
+                self._cb["daily"],
+                self._cb["price_book"],
+                self._cb["offer_book"],
+                self._cb["history"],
+                self._cb["progress"],
+                self._cb["tiny"],
+            )
         if codigo < 0:
-            raise LoginFailed(f"DLLInitializeMarketLogin devolveu {codigo}")
+            raise LoginFailed(f"{nome_init} devolveu {codigo}")
         self._inicializado = True
+        log.info("profitdll.inicializado", modo=nome_init)
 
         # O offer book order-by-order (com agente e offer_id confiaveis em
         # Int64) so chega pelo setter V2 — o slot V1 do init ficou MUDO em
@@ -130,10 +178,17 @@ class ProfitClient:
         # O login e' assincrono: a chamada acima retorna antes da conexao
         # existir. Subscrever antes do market data estar pronto falha em
         # silencio — o ticker simplesmente nunca entrega evento.
+        # A espera continua sendo por MARKET DATA (e' a captura que manda).
+        # No login completo, o estado de LOGIN e' reportado junto, mas nao
+        # bloqueia: se o roteamento nao subir, a captura nao pode ficar
+        # refem disso -- o E2 confere conectado_login por conta propria.
         limite = time.monotonic() + timeout_s
         while time.monotonic() < limite:
             if self.conectado_market:
-                log.info("profitdll.conectado")
+                log.info("profitdll.conectado",
+                         login_completo=self.login_completo,
+                         roteamento_conectado=self.conectado_login,
+                         contas=len(self.contas_vistas))
                 return
             time.sleep(0.2)
         raise LoginFailed(
@@ -394,9 +449,32 @@ class ProfitClient:
         def _progress(ativo, pct) -> None:
             return
 
+        # ---- E1: callbacks da sessao de roteamento ------------------------
+        # Mesma regra do arquivo: NADA alem de contar e guardar o minimo.
+        # Sem log, sem I/O. O conteudo de ordem (status, preco medio,
+        # quantidade) e' assunto do E2 -- aqui so' se prova que a sessao
+        # sobe e as callbacks disparam.
+        contadores = self.contadores_roteamento
+        contas = self.contas_vistas
+
+        @b.TAccountCallback
+        def _conta(corretora, nome_corretora, account_id, titular) -> None:
+            contadores["conta"] += 1
+            contas.append((int(corretora), str(account_id or "")))
+
+        @b.TOrderChangeCallback
+        def _ordem_mudanca(*_: object) -> None:
+            contadores["ordem_mudanca"] += 1
+
+        @b.THistoryCallback
+        def _ordem_historico(*_: object) -> None:
+            contadores["ordem_historico"] += 1
+
         self._cb = {
             "state": _state, "trade": _trade, "daily": _daily,
             "price_book": _price, "offer_book": _offer_v1,
             "offer_book_v2": _offer_v2,
             "history": _history, "progress": _progress, "tiny": _tiny,
+            "conta": _conta, "ordem_mudanca": _ordem_mudanca,
+            "ordem_historico": _ordem_historico,
         }

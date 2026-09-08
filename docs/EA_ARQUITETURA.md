@@ -845,3 +845,87 @@ Minimo para o E2 por caminho:
 
 Se NENHUM caminho estiver completo, E1/E2 como desenhados nao sao
 possiveis e o proximo passo e' outro.
+
+### E1 — ENTREGUE (v2.06), aguardando os testes A e B do operador
+
+**O que entrou.** `ProfitClient(login_completo=True)` sobe a conexao com
+`DLLInitializeLogin` em vez de `MarketLogin`. Espelhado em
+`runtime.login_completo` no `recorder.yaml` (default **False**: producao
+nao muda ate' o operador ligar) e em `record --login-completo` (sobrescreve
+o yaml, para o record de teste sem editar o de producao).
+
+As tres callbacks a mais que o login completo exige (historico de ORDENS,
+mudanca de ordem, conta) seguem a regra do `client.py`: so' contam, nada
+de I/O. O conteudo de ordem e' assunto do E2. `contas_vistas` guarda
+(corretora, account_id) anunciados pelo `AccountCallback` -- e' a prova de
+que a sessao de roteamento subiu de verdade, e aparece no heartbeat:
+
+    recorder.heartbeat ... roteamento_conectado=True contas=2
+
+**A armadilha que o teste amarra.** `self._cb["history"]` e'
+`THistoryTradeCallback` (historico de NEGOCIOS, slot de mercado). O
+`THistoryCallback` de ORDENS e' outro slot, `self._cb["ordem_historico"]`.
+Trocar os dois compila (ctypes nao confere tipo entre WINFUNCTYPEs) e
+corrompe a pilha na DLL real. O fake guarda cada slot com nome distinto e
+o teste confere identidade callback a callback.
+
+**A espera continua sendo por MARKET DATA.** Se o roteamento nao subir, a
+captura nao fica refem disso -- o E2 confere `conectado_login` por conta
+propria.
+
+#### Teste A — fora do pregao, impacto ZERO na captura
+
+Prova: o login completo conecta, o callback de estado chega, as contas
+sao anunciadas, `SubscribeTicker` aceita. NAO prova fluxo de trades (nao
+ha' trades fora do pregao). Elimina a parte que ja' falhou uma vez
+(`NL_INTERNAL_ERROR` de 26/08).
+
+Pre-condicao: record de producao PARADO (as duas conexoes nao coexistem
+-- e' a segunda que falha, a primeira nao sente). Depois das 18:30, com o
+record ja' encerrado pelo `encerrar_em`:
+
+    profit-tape record -c config/recorder.yaml --login-completo ^
+        --log-file logs/e1_teste_a.log
+
+Deixa 2 minutos e Ctrl+C. O que ler no log, nesta ordem:
+
+1. `profitdll.inicializado modo=DLLInitializeLogin`
+2. `profitdll.estado tipo=0 valor=0` (login ok) -- se vier valor != 0 ou
+   `NL_INTERNAL_ERROR`, e' o incidente de 26/08 de volta: parar aqui.
+3. `profitdll.conectado login_completo=True roteamento_conectado=True contas=N`
+   com N >= 1. **N=0 com roteamento_conectado=True e' suspeito**: sessao
+   subiu mas nenhuma conta anunciada -- o E2 nao teria onde rotear.
+4. `recorder.heartbeat ... roteamento_conectado=True contas=N` repetindo.
+
+ATENCAO: isto grava na MESMA raiz do yaml (`data/raw`). Fora do pregao
+nao chega evento, entao nao suja nada -- mas se preferir isolar, aponte
+um yaml de teste com `storage.raiz` diferente.
+
+#### Teste B — no pregao seguinte, impacto CONTROLADO
+
+Prova: a captura e' identica com o login completo. So' e' possivel no
+pregao, e no pregao a conexao unica e' a de producao -- entao o teste B e'
+a producao subindo com a flag.
+
+1. Ligar `runtime.login_completo: true` no `recorder.yaml` ANTES do
+   agendador subir o record (ou subir a mao com `--login-completo`).
+2. Nos primeiros 10 minutos: heartbeat com `linhas` crescendo no ritmo de
+   sempre, `descartados=0`, `sem_evento_ha_s` baixo, e
+   `roteamento_conectado=True contas>=1`.
+3. Se QUALQUER coisa divergir: Ctrl+C, tirar a flag, subir de novo.
+   Perda: os minutos do teste.
+4. Ao fim do dia, `inspect --dia` do pregao contra os anteriores:
+   contagem de trades por metadado na mesma faixa.
+
+**Rede de seguranca que torna o B aceitavel**: o backfill cobre 30 dias
+corridos. Se o teste custar minutos de captura, `backfill --por-dia` do
+mesmo dia, a noite, recupera. Perda liquida: zero.
+
+Nao existe teste que prove o fluxo de trades sem usar a conexao de
+producao no pregao. Registrado para nao se procurar um atalho que nao
+existe.
+
+#### O que o E1 NAO faz
+
+Nao envia ordem. Nao constroi `ExecutorDeOrdens`. Nao muda o EA. A flag
+so' troca a funcao de inicializacao e liga tres callbacks que contam.

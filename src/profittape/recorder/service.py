@@ -101,7 +101,13 @@ class RecorderService:
             on_state=self._on_state,
             on_trade_extra=self.ea_bridge.publicar if self.ea_bridge else None,
             dll=dll_injetada,
+            login_completo=cfg.runtime.login_completo,
         )
+        if cfg.runtime.login_completo:
+            log.warning("recorder.login_completo",
+                        nota="conexao sobe com DLLInitializeLogin (roteamento). "
+                             "E1 da trilha de execucao -- confira o heartbeat: "
+                             "roteamento_conectado e contas devem aparecer.")
         self._parar = threading.Event()
 
     # ------------------------------------------------------------------
@@ -206,6 +212,12 @@ class RecorderService:
                 # escrevendo). Se cair abaixo da taxa de chegada, a fila sobe
                 # — este numero e' o preditor do descarte, nao o descarte.
                 escrita_linhas_s=vazao,
+                # E1: so' informativo no MarketLogin (sempre False/0). No
+                # login completo, roteamento_conectado=True e contas>0 sao a
+                # prova de que a sessao de roteamento subiu junto com a
+                # captura -- e' o que o teste A do E1 le.
+                roteamento_conectado=self.client.conectado_login,
+                contas=len(self.client.contas_vistas),
             )
             nivel = nivel_ocupacao(st.profundidade_atual, self.bus.maxsize)
             if nivel == "atencao":

@@ -100,6 +100,12 @@ class PipelineConfig(BaseModel):
 class RuntimeConfig(BaseModel):
     tz_offset_horas: int = -3
     heartbeat_s: float = 30.0
+    # E1 (2026-09-08): sobe a conexao do record com DLLInitializeLogin
+    # (sessao completa, com roteamento) em vez de MarketLogin. False por
+    # padrao -- producao nao muda ate' o operador ligar. E' o unico degrau
+    # da trilha de execucao com impacto na captura; protocolo de teste em
+    # docs/EA_ARQUITETURA.md ("Trilha de execucao", E1).
+    login_completo: bool = False
     encerrar_em: str | None = Field(
         default=None,
         description="HH:MM local. Encerra sozinho — util em Agendador de Tarefas.",

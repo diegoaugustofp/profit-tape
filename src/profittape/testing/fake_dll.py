@@ -46,8 +46,18 @@ class FakeProfitDLL:
         atraso_login_s: float = 0.05,
         seed: int = 42,
         com_offer_v2: bool = True,
+        com_login_completo: bool = True,
+        contas: tuple[tuple[int, str, str], ...] = ((32006, "SIMULADOR", "DEMO-1"),),
     ) -> None:
         self.com_offer_v2 = com_offer_v2
+        # E1: com_login_completo=False remove o export DLLInitializeLogin
+        # (simula DLL so-market-data) -- o client precisa falhar CEDO e
+        # com mensagem clara, nao com AttributeError. `contas` sao as que
+        # o AccountCallback vai anunciar apos o login completo, como a DLL
+        # real faz (corretora, nome, account_id).
+        self.com_login_completo = com_login_completo
+        self.contas = contas
+        self.modo_init: str | None = None
         self.eventos_por_ativo = eventos_por_ativo
         self.intervalo_s = intervalo_s
         self.atraso_login_s = atraso_login_s
@@ -65,6 +75,7 @@ class FakeProfitDLL:
     def DLLInitializeMarketLogin(
         self, key, user, password, state, trade, daily, price, offer, hist, prog, tiny
     ):
+        self.modo_init = "market"
         self._cb = {
             "state": state, "trade": trade, "daily": daily, "price": price,
             "offer": offer, "hist": hist, "prog": prog, "tiny": tiny,
@@ -77,8 +88,47 @@ class FakeProfitDLL:
     def _login_assincrono(self) -> None:
         time.sleep(self.atraso_login_s)
         self._cb["state"](0, 0)   # login ok
+        if self.modo_init == "login":
+            # A DLL real anuncia as contas de roteamento logo apos o login
+            # completo, uma callback por conta -- e' assim que ea-contas
+            # as descobre. No MarketLogin isto nunca acontece.
+            for corretora, nome, account_id in self.contas:
+                self._cb["account"](corretora, nome, account_id, "TITULAR")
         time.sleep(self.atraso_login_s)
         self._cb["state"](2, 4)   # market data conectado
+
+    def __getattribute__(self, nome: str) -> object:
+        # Simula a AUSENCIA do export: hasattr(dll, "DLLInitializeLogin")
+        # precisa devolver False quando com_login_completo=False. Tem que
+        # ser __getattribute__ (nao __getattr__): o metodo EXISTE na
+        # classe, entao __getattr__ nunca seria consultado para ele.
+        if nome == "DLLInitializeLogin" and not object.__getattribute__(self, "com_login_completo"):
+            raise AttributeError(nome)
+        return object.__getattribute__(self, nome)
+
+    def DLLInitializeLogin(
+        self, key, user, password, state, hist_ordem, ordem_mudanca, account,
+        trade, daily, price, offer, hist, prog, tiny,
+    ):
+        """
+        Mesma ordem de argumentos do manual/bindings: state, historico de
+        ORDENS, mudanca de ordem, conta, e depois os slots de mercado.
+        Guarda os tres extras com nomes distintos dos de mercado -- o teste
+        do E1 confere que o client passou cada callback no slot certo.
+        """
+        if not self.com_login_completo:
+            raise AttributeError("DLLInitializeLogin")
+        self.modo_init = "login"
+        self._cb = {
+            "state": state, "hist_ordem": hist_ordem,
+            "ordem_mudanca": ordem_mudanca, "account": account,
+            "trade": trade, "daily": daily, "price": price,
+            "offer": offer, "hist": hist, "prog": prog, "tiny": tiny,
+        }
+        t = threading.Thread(target=self._login_assincrono, daemon=True)
+        t.start()
+        self._threads.append(t)
+        return 0
 
     def SubscribeTicker(self, ticker, bolsa):
         self._iniciar(ticker, bolsa, "trade")

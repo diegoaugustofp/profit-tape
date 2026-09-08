@@ -34,10 +34,19 @@ def record(
              "licenca Nelogica so' permite UMA chave de ativacao. Sempre "
              "dry_run=True nesta fase -- so' loga decisoes, nunca envia "
              "ordem. Sem este parametro, comportamento identico a sempre."),
+    login_completo: bool = typer.Option(
+        False, "--login-completo",
+        help="E1 da trilha de execucao (2026-09-08): sobe a conexao com "
+             "DLLInitializeLogin (sessao com roteamento) em vez de "
+             "MarketLogin. Sobrescreve runtime.login_completo do yaml. Use "
+             "num record de TESTE (pasta separada, fora do pregao) antes "
+             "de ligar no yaml de producao -- ver docs/EA_ARQUITETURA.md."),
 ) -> None:
     """Grava tape e book ate o horario configurado ou ate Ctrl+C."""
     configurar(log_level, log_file)
     cfg = RecorderConfig.from_yaml(config)
+    if login_completo:
+        cfg.runtime.login_completo = True
     cred = Credenciais()
 
     if dry_run:
@@ -48,6 +57,8 @@ def record(
             typer.echo(f"  {a.ticker:<10} {a.bolsa}  {'+'.join(flags)}")
         if ea_config:
             typer.echo(f"  EA integrado: --ea-config {ea_config}")
+        modo = "COMPLETO (roteamento)" if cfg.runtime.login_completo else "market data"
+        typer.echo(f"  login: {modo}")
         raise typer.Exit(0)
 
     cred.validar()

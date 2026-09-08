@@ -901,3 +901,28 @@ acumulação, com o record ATIVO.
 
 **Pendente**: operador roda `profit-tape doctor` e manda a seção
 EXECUCAO (E0). O resultado decide a família de funções do E2.
+
+### Continuação (2026-09-08, noite) — E0 respondido, E1 entregue
+
+- **E0 respondido pelo operador**: 36 de 36 exports presentes, caminhos
+  legado e V2 ambos completos. O maior desconhecido do projeto se
+  resolveu do melhor jeito. Decisão: E2 no caminho **legado** (é o que
+  `execucao.py` já usa e testa; os PDFs truncados impedem ler o struct
+  do V2; migração fica como degrau próprio depois do E4).
+- Dois alertas da saída do `doctor` tratados pelo operador: `.env`
+  desatualizado (não era senha malformada) e disco (raw vai para backup
+  após o curate, diariamente).
+- Registro: operador roda Python 3.14; a CI testa 3.12/3.13.
+- **E1 entregue** (`entregue-v2.06`): `login_completo` no `ProfitClient`,
+  `runtime.login_completo` no yaml (default False), `record
+  --login-completo`. Três callbacks de roteamento que só contam;
+  `contas_vistas` no heartbeat como prova de sessão. Fake ganhou
+  `DLLInitializeLogin` com anúncio de contas e simulação de export
+  ausente. Teste amarra cada callback ao slot certo (a armadilha
+  history-de-negócios × history-de-ordens).
+- Protocolo dos testes A (fora do pregão, impacto zero) e B (produção
+  com a flag, perda recuperável por backfill) no `EA_ARQUITETURA.md`.
+- 562 testes, coverage 76%, ruff limpo, mypy strict limpo, com `--cov`.
+
+**Pendente (operador)**: teste A hoje após 18:30 com o record parado;
+mandar as 4 linhas do log. Teste B só depois do A passar.
