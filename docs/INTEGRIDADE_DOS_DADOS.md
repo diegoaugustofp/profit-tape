@@ -39,3 +39,11 @@ book podem ser consequencia direta deste bug, nao um fenomeno de mercado.
 **Recomendacao**: tratar todo book_offer anterior a 2026-08-26 como
 NAO-CONFIAVEL para pesquisa que dependa de completude do stream (OFI,
 queue imbalance). trade do mesmo periodo continua confiavel.
+
+
+## Dados perdidos por travamento de maquina — 18 arquivo(s) sem footer
+
+- **book_offer**, dt=2026-09-08: sym=BOVA11, sym=ITUB4, sym=PETR4, sym=VALE3, sym=WDOFUT, sym=WINFUT
+- **book_price**, dt=2026-09-08: sym=WINFUT
+- **tiny_book**, dt=2026-09-08: sym=BBAS3, sym=BOVA11, sym=ITUB4, sym=MGLU3, sym=PETR4, sym=VALE3, sym=WDOFUT, sym=WEGE3, sym=WINFUT
+- **trade**, dt=2026-09-08: sym=WDOFUT, sym=WINFUT
