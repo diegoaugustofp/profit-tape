@@ -953,6 +953,75 @@ def inventario_deepscalper(
 
 
 @app.command()
+def simulador_conferir(
+    features: Path = typer.Option(Path("data/features/sym=WINFUT/features.parquet"),
+                                  "--features"),
+    ea_config: Path = typer.Option(Path("config/ea.yaml"), "--ea-config"),
+    operacoes_replay: Path = typer.Option(Path("data/research/operacoes_replay.parquet"),
+                                          "--operacoes-replay",
+                                          help="Saida do ea-replay-lote"),
+    z_continuo: bool = typer.Option(
+        False, "--z-continuo",
+        help="NAO recalcular z por dia (o EA recalcula; so' para medir a diferenca)"),
+    sem_circuit_breaker: bool = typer.Option(False, "--sem-circuit-breaker"),
+    saida: Path = typer.Option(Path("data/research/simulador_conferencia"), "--saida"),
+    log_level: str = typer.Option("WARNING", "--log-level"),
+) -> None:
+    """
+    Fase 1 do pre-registro DeepScalper, conferencia 3: o simulador de
+    replay (features.parquet) reproduz o P&L do ea-replay-lote (trades ao
+    vivo) para a regra que o EA ja' roda? Mesmo GestorDeRisco, mesmo
+    decidir(); o que pode divergir e' a barra ou o z. Nao decide nada.
+    """
+    import pandas as pd
+
+    from .ea.config import EAConfig
+    from .research.simulador import (
+        Regras,
+        Simulador,
+        conferir_com_replay,
+        politica_ea,
+        preparar,
+    )
+    configurar(log_level)
+    cfg = EAConfig.from_yaml(ea_config)
+    barras = pd.read_parquet(features)
+    cols_z = None if z_continuo else [f"agf_{s.agent_id}" for s in cfg.sinais]
+    b = preparar(barras, z_por_dia=cols_z, janela_z=cfg.janela_z)
+    sim = Simulador(b, Regras(custo_pontos=cfg.custo_pontos_estimado, risco=cfg.risco,
+                              circuit_breaker=not sem_circuit_breaker))
+    r = sim.rodar(politica_ea(cfg.sinais, cfg.janela_z))
+    saida.mkdir(parents=True, exist_ok=True)
+    r["operacoes"].to_parquet(saida / "operacoes_simulador.parquet", index=False)
+    r["por_dia"].to_csv(saida / "por_dia_simulador.csv", index=False)
+    typer.echo("=" * 72)
+    typer.echo(f"SIMULADOR x EA-REPLAY — {cfg.symbol} — z {'continuo' if z_continuo else 'por dia'}"
+               f" — circuit breaker {'OFF' if sem_circuit_breaker else 'ON'}")
+    typer.echo("=" * 72)
+    typer.echo(f"  simulador: {len(r['operacoes'])} operacoes, {r['pnl_total']:+.1f} pts "
+               f"em {len(r['por_dia'])} pregoes")
+    if not operacoes_replay.exists():
+        typer.echo(f"  (sem {operacoes_replay}: rode ea-replay-lote antes para conferir)")
+        return
+    ea_ops = pd.read_parquet(operacoes_replay)
+    c = conferir_com_replay(r["operacoes"], ea_ops)
+    c["por_dia"].to_csv(saida / "conferencia_por_dia.csv", index=False)
+    typer.echo(f"  ea-replay : {c['n_ea']} operacoes, {c['pnl_ea']:+.1f} pts")
+    typer.echo(f"  casadas (dia, barra, lado): {c['casadas']}   so' sim: {c['so_sim']}   "
+               f"so' EA: {c['so_ea']}")
+    typer.echo(f"  casadas com |dif pnl| > 0.5 pt: {c['casadas_fora_da_tolerancia']}   "
+               f"(max {c['max_dif_pnl_casadas']:.1f})")
+    if c["so_sim"] or c["so_ea"]:
+        typer.echo("\n  nao casadas (primeiras 40):")
+        typer.echo(c["nao_casadas"].to_string(index=False))
+    veredito = ("BATE" if c["so_sim"] == 0 and c["so_ea"] == 0
+                and c["casadas_fora_da_tolerancia"] == 0 else "NAO BATE")
+    typer.echo(f"\n  VEREDITO: {veredito}. Se NAO BATE, o simulador esta' errado ou a "
+               "barra/z difere — nao a regra.")
+    typer.echo(f"  saida: {saida}")
+
+
+@app.command()
 def absorcao_inspecionar(
     dia: str = typer.Argument(..., help="Data no formato 2026-08-27"),
     origem: Path = typer.Option(

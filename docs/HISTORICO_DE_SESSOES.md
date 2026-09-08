@@ -804,3 +804,23 @@ o `resumo.json` para o `RESEARCH_PLANO.md`.
 
 **Pendente**: decidir se a Fase 1 (simulador) começa agora; conferir a
 composição do `custo_pontos_estimado`.
+
+## Sessão 2026-09-08 (noite) — Fase 1: simulador de replay (v1.99)
+
+- Decisão do operador: **custo 11 já inclui spread** → fill no close,
+  sem modelo de book. Fase 1 iniciada.
+- `research/simulador.py` + `simulador-conferir`. Reusa `GestorDeRisco`
+  e `decidir()` do EA em vez de reescrever risco. Relógio = balde local
+  (= `cum_total // volume_barra` do EA); balde pulado conta como barra.
+  Colunas futuras (`labels.py`) removidas antes da política.
+- Conferência 1 (5 barras à mão) e 2 (verificador de look-ahead) feitas.
+  O verificador na primeira versão NÃO pegava o trapaceiro (lia o df
+  original por closure); refeito por truncamento de prefixo com fábrica
+  de política — agora reprova o caso que deve reprovar.
+- Divergência prevista e tratada antes de rodar: z do EA zera a cada dia,
+  z do features.parquet é contínuo. `preparar(z_por_dia=...)` iguala.
+- 538 testes, ruff e mypy strict limpos.
+
+**Pendente**: conferência 3 no dado real (`simulador-conferir` contra o
+`operacoes_replay.parquet` do `ea-replay-lote`). Só depois de BATER a
+Fase 1 está fechada.

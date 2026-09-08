@@ -13,6 +13,7 @@ arquivo cresceu demais para navegar so' por titulo cronologico).
   Fase 2 (supervisionado, forward); RL so' depois e so' com ≥160
   pregoes de book integro. Hiperparametros congelados, sem grade.
 - [IMPLEMENTADO: `inventario-deepscalper` — as quatro contagens da Fase 0 (2026-09-08)](#implementado-inventario-deepscalper--as-quatro-contagens-da-fase-0-2026-09-08)
+- [IMPLEMENTADO: Fase 1 — simulador de replay e `simulador-conferir` (2026-09-08)](#implementado-fase-1--simulador-de-replay-e-simulador-conferir-2026-09-08)
 
 **Perfil de agente / classificacao**
 - [REVISAO DA HIPOTESE DE PERFIL (2026-08-22, operador)](#revisao-da-hipotese-de-perfil-2026-08-22-operador)
@@ -5433,3 +5434,57 @@ nao-confiavel mesmo que exista.
 
 **Pendente**: rodar no dado real e transcrever o `resumo.json` aqui —
 so' entao a ficha forward da Fase 2 pode ser escrita.
+
+## IMPLEMENTADO: Fase 1 — simulador de replay e `simulador-conferir` (2026-09-08)
+
+Decisao do operador que destravou o desenho: **`custo_pontos_estimado`
+(11) JA' INCLUI spread.** Logo o fill e' o CLOSE da barra da decisao nas
+duas pernas — exatamente a convencao do EA (`risco.py`/`service.py`) —
+e nao ha' modelo de book na Fase 1. O "16 pts/op" da leitura da Fase 0
+esta' superado: e' 11.
+
+`src/profittape/research/simulador.py`:
+
+- **Reusa `GestorDeRisco` e `decidir()` do EA.** Stop catastrofico no
+  close, saida por tempo, circuit breaker e a regra "sinal contrario
+  ZERA, nao inverte" sao o codigo de producao, nao uma copia. Uma
+  divergencia na conferencia so' pode vir da BARRA ou do Z.
+- Relogio = balde local (`bar_id − primeiro bar_id do dia`), que e' o
+  `cum_total // volume_barra` do EA. Balde pulado por trade gigante conta
+  como barra na saida por tempo, como no EA (teste dedicado).
+- Politica ve `Obs` = a linha da barra + estado privado. As colunas de
+  `labels.py` (`label`, `ret_h`, ...) sao REMOVIDAS antes de chegar na
+  politica (`COLUNAS_FUTURAS`): nao da' para le-las por engano.
+- `preparar(z_por_dia=[...])`: recalcula z com a janela zerando a cada
+  dia — o que o EA faz ao vivo (deque por processo, `min_periods=25`).
+  O features.parquet tem z continuo. Divergencia PREVISTA antes de rodar:
+  com z continuo, as primeiras ~25-50 barras de cada dia podem gerar
+  sinal que o EA nao gera. A conferencia usa z por dia por padrao.
+
+**As tres conferencias da Fase 1:**
+
+1. P&L de 5 barras a mao = codigo: closes 100000/100020/99990/100050/
+   100030; compra em 0, tempo 2 → −10 −11 = −21; venda em 3, encerramento
+   em 4 → +20 −11 = +9; total −12. Stop: 600 contra → −611. Circuit
+   breaker: −61, −61, −11 e bloqueado. Todos em `tests/test_simulador.py`.
+2. Verificador de look-ahead (`verificar_lookahead`): roda a politica no
+   dado inteiro e em 12 prefixos truncados; decisoes ate' o corte tem de
+   ser identicas. Uma politica que le `df.iloc[t+1]` por closure
+   REPROVA (teste); uma que le `label` nem enxerga a coluna (KeyError).
+   Primeira versao (perturbar o futuro) NAO pegava o trapaceiro, porque
+   ele lia o DataFrame original por closure — trocado por truncamento
+   com fabrica de politica. Limite declarado: audita a POLITICA, nao o
+   pipeline de features (esse tem `normalize.py` como unico lugar com
+   janela).
+3. `simulador-conferir`: regra do EA (do `ea.yaml`) sobre features.parquet
+   x `operacoes_replay.parquet` do `ea-replay-lote`, casando por
+   (dia, balde de entrada, lado). Imprime casadas / so' sim / so' EA /
+   |Δpnl| > 0,5 e o VEREDITO. **Pendente: rodar no dado real.** Se NAO
+   BATE, o simulador esta' errado ou a barra/z difere — nao a regra.
+
+Comando:
+
+    profit-tape simulador-conferir --features data/features/sym=WINFUT/features.parquet --ea-config config/ea.yaml --operacoes-replay data/research/operacoes_replay.parquet
+
+`--z-continuo` mostra o tamanho da diferenca entre as duas convencoes de
+z (esperado: mais operacoes no simulador, no inicio dos dias).
