@@ -821,6 +821,7 @@ composição do `custo_pontos_estimado`.
   z do features.parquet é contínuo. `preparar(z_por_dia=...)` iguala.
 - 538 testes, ruff e mypy strict limpos.
 
-**Pendente**: conferência 3 no dado real (`simulador-conferir` contra o
-`operacoes_replay.parquet` do `ea-replay-lote`). Só depois de BATER a
-Fase 1 está fechada.
+- Conferência 3 no dado real: primeira rodada NÃO BATE (150 × 99) com o
+  padrão "só sim = compras, só EA = vendas" → o replay era do
+  `ea_venda_apenas.yaml`. Segunda rodada com esse yaml: **99/99, Δ=0,0,
+  +6356 nos dois. BATE.** Fase 1 FECHADA (tag `entregue-v2.00`, docs).

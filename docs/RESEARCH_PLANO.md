@@ -5479,8 +5479,35 @@ esta' superado: e' 11.
 3. `simulador-conferir`: regra do EA (do `ea.yaml`) sobre features.parquet
    x `operacoes_replay.parquet` do `ea-replay-lote`, casando por
    (dia, balde de entrada, lado). Imprime casadas / so' sim / so' EA /
-   |Δpnl| > 0,5 e o VEREDITO. **Pendente: rodar no dado real.** Se NAO
-   BATE, o simulador esta' errado ou a barra/z difere — nao a regra.
+   |Δpnl| > 0,5 e o VEREDITO.
+
+### RESULTADO DA CONFERENCIA 3 — dado real (2026-09-08) — **BATE**
+
+    ea_venda_apenas.yaml, 25 pregoes (2026-07-24 a 2026-08-27), z por dia:
+      simulador : 99 operacoes, +6356,0 pts
+      ea-replay : 99 operacoes, +6356,0 pts
+      casadas 99 | so' sim 0 | so' EA 0 | max |Δpnl| = 0,0
+
+Primeira rodada, com o `ea.yaml` sem `lado_permitido`, deu NAO BATE
+(150 x 99): TODAS as 85 "so' simulador" eram compras e TODAS as 34 "so'
+EA" eram vendas — o parquet do replay tinha sido gerado com
+`ea_venda_apenas.yaml`. Diagnostico pelo padrao, nao por adivinhacao;
+confirmado na segunda rodada. As 65 vendas casadas ja' batiam a 0,0 na
+primeira rodada.
+
+O que fica provado: features.parquet (bars.py + flow.py + normalize.py
+por dia) e o construtor ao vivo do EA (ea/sinal.py) produzem a MESMA
+barra, o MESMO close, o MESMO balde e o MESMO z em 25 pregoes. E o
+simulador roda os 25 pregoes em ~1 s contra ~80 s/dia do ea-replay-lote.
+
+**Fase 1 FECHADA.** O simulador e' o instrumento das Fases 2-3. Regras:
+custo 11 (spread dentro), fill no close, z por dia quando for comparar
+com o EA, z continuo quando for research (e' o que o features.parquet
+tem; a diferenca esta' nas primeiras ~25-50 barras de cada dia).
+
+Nota lateral, NAO e' resultado: +3905 (ambos os lados) vs +6356 (so'
+venda) no mesmo periodo e' a assimetria ja' conhecida de 2026-08-27,
+vista pela terceira vez no mesmo dado. Nao conta como evidencia nova.
 
 Comando:
 
