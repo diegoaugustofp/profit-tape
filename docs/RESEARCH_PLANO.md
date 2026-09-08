@@ -15,6 +15,7 @@ arquivo cresceu demais para navegar so' por titulo cronologico).
 - [IMPLEMENTADO: `inventario-deepscalper` — as quatro contagens da Fase 0 (2026-09-08)](#implementado-inventario-deepscalper--as-quatro-contagens-da-fase-0-2026-09-08)
 - [IMPLEMENTADO: Fase 1 — simulador de replay e `simulador-conferir` (2026-09-08)](#implementado-fase-1--simulador-de-replay-e-simulador-conferir-2026-09-08)
 - [FICHA FORWARD: Fase 2 — classificador supervisionado (rascunho v0, 2026-09-08)](#ficha-forward-fase-2--classificador-supervisionado-rascunho-v0-2026-09-08)
+- [FICHA FORWARD: Fase 2 — CONGELADA com os numeros medidos (2026-09-08)](#ficha-forward-fase-2--congelada-com-os-numeros-medidos-2026-09-08)
 
 **Perfil de agente / classificacao**
 - [REVISAO DA HIPOTESE DE PERFIL (2026-08-22, operador)](#revisao-da-hipotese-de-perfil-2026-08-22-operador)
@@ -5676,3 +5677,85 @@ sao dado queimado: servem para achar bug, nao para acreditar.
 
 **Pendente**: rodar no dado real, transcrever os [MEDIR] na ficha,
 congelar, e escrever o `fase2-score` diario.
+
+## FICHA FORWARD: Fase 2 — CONGELADA com os numeros medidos (2026-09-08)
+
+`fase2-preparar` rodado no dado real (v2.03), `--curated` ligado
+(desempate pelo tape). Os [MEDIR] do rascunho v0 ficam assim, e a
+partir daqui a ficha NAO muda sem reiniciar a contagem (§2):
+
+    HIPOTESE   (igual ao rascunho v0)
+    EVENTO     (igual ao rascunho v0) com p* = 0,633, h = 3, k = 1,5
+    TAXA       4,6 eventos/pregao (medida: validacao 2026-08-21..27, 306 barras)
+    EFEITO     +8 pp sobre a NULA = 0,337 (67,3% das barras resolvem por
+               barreira em 3 barras) -> acerto alvo 0,417. E >= +15 pts/op.
+    HORIZONTE  150 / 4,6 = 33 pregoes (~1,6 mes). Teto 60.
+    CRITERIO   FAVORAVEL: acerto >= 0,417 E pts/op >= +15, em n = 150.
+               CONTRA: acerto <= 0,337 OU pts/op <= 0. Resto INCONCLUSIVO.
+    PARADA     (igual ao rascunho v0) — olha em n = 50 e n = 150.
+
+    CARIMBO    codigo entregue-v2.03 (preparar) / entregue-v2.04+ (score)
+               modelo_fase2.pkl  sha256 5c5b0d7c74abad52...
+               ficha_fase2.json  sha256 63c392751f8de08d...
+               features: z_imbalance, z_absorcao, z_rlp_frac,
+                 z_agf_{3,8,39,85,88,92,114,120,1618,4090}, z_fluxo_nacional
+               removida por redundancia: z_tick_imbalance (rho 0,982 c/ imbalance)
+               treino 2026-07-24..08-20 (1307 barras), validacao 08-21..08-27 (306)
+               classes no treino: -1: 581, 0: 561, +1: 471
+               HP: max_depth 4, 200 it, lr 0,05, min_leaf 50, l2 1,0, seed 0
+
+### O que o dado real disse na preparacao (registro, nao decisao)
+
+- **Um sigma de barra e' ~180 pts.** k=1,5 → barreira mediana **274
+  pts**. A barreira de 45 pts (k=0,25) e' atravessada por UMA barra em
+  52% dos casos (o tape desempatou metade dos labels). O custo de 11
+  e' irrelevante para este problema: e' 100% direcao.
+- k caiu no TOPO da grade {0,25..1,5}. Regra aplicada como escrita; a
+  grade NAO se estende agora (seria escolher olhando dado). Registrado.
+- Consequencia no criterio: com desfechos de +-274, qualquer acerto
+  acima de ~35% ja' da' +15 pts/op. **O criterio binario (0,417) e' o
+  que aperta**; o de pontos ficou quase decorativo. Mantido como esta'.
+- DEPURACAO na validacao (n = 23, dado queimado): acerto 0,304 < nula
+  0,337, pnl proxy +4,0. Ruido em n = 23 (+-0,19); a ficha existe para
+  eu nao reagir a isso. Uso legitimo: sanidade. Codigo revisado (lado
+  previsto x label consistentes). O `fase2-preparar` v2.04 passa a
+  imprimir tambem o acerto IN-SAMPLE no mesmo decil — se ~nula, o
+  modelo nao aprendeu nada; se alto, aprendeu ruido. Nao decide.
+
+### Instrumento do forward: `fase2-score` (v2.04)
+
+Ritual diario, depois das 18:30, na pasta DEV (nada disso toca o EA):
+
+    profit-tape curate ...                                   # como sempre
+    profit-tape features WINFUT --volume-barra 120000 --agentes 3,8,39,85,88,92,114,120,1618,4090
+    profit-tape fase2-score WINFUT --dia 2026-09-09
+
+`--agentes` e' OBRIGATORIO no forward: o top-10 por volume muda com o
+historico e uma coluna agf_* do modelo congelado pode sumir. O score
+falha alto se faltar coluna. Tambem falha se o sha256 do pkl nao bater
+com a ficha (carimbo quebrado).
+
+O score: escora o dia com o modelo congelado, resolve o desfecho pelo
+label por dia (mesma regra do preparar, desempate pelo tape), grava
+uma linha por evento em `data/research/fase2/forward_eventos.csv`
+com carimbo (tag + sha256 do modelo + timestamp), sem duplicar
+(dia, bar_id) se re-escorar. Recusa dias <= 2026-08-27 (queimados);
+`--permitir-queimado` so' para olhar barras e NAO grava. O placar fica
+FECHADO ate' n = 50 (sanidade) e n = 150 (veredito) — o comando nao
+imprime acerto antes disso.
+
+### Checklist antes de ligar — estado
+
+- [x] Ficha com TAXA medida (4,6) e HORIZONTE < 6 meses (33 pregoes).
+- [x] Medi quantos eventos cada clausula deixa passar (escolha_k.csv,
+      eventos_validacao.csv).
+- [ ] **Um pregao rodado e as barras-evento olhadas uma a uma**:
+      `fase2-score WINFUT --dia 2026-08-27 --permitir-queimado` e
+      conferir, evento a evento: hora, lado previsto, barreiras em
+      pontos, qual bateu, se o tape desempatou. E' o item que mais pega
+      defeito neste projeto. Operador.
+- [x] Verificador de look-ahead com a politica do modelo (teste).
+- [x] Carimbo em cada observacao (score).
+- [x] Sei o que reinicia a contagem: retreinar, mudar p*, k, h,
+      features, split. Nao reinicia: bug que desvia da ficha.
+- [x] Variante e' config + artefato congelado, nao codigo novo por dia.

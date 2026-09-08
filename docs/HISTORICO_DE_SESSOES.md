@@ -854,3 +854,20 @@ nula E +15 pts/op; teto 60 pregões.
 
 **Pendente**: rodar no dado real → preencher os [MEDIR] da ficha →
 congelar → `fase2-score` diário.
+
+## Sessão 2026-09-08 (noite, 4) — ficha da Fase 2 congelada; `fase2-score` (v2.04)
+
+- `fase2-preparar` rodou no real: p* 0,633, nula 0,337, TAXA 4,6,
+  horizonte 33 pregões, k=1,5 (barreira mediana **274 pts** — um sigma
+  de barra é ~180 pts; custo de 11 irrelevante, o problema é direção).
+  DEPURAÇÃO n=23: acerto 0,304 < nula — ruído, não decide; adicionado
+  acerto in-sample ao preparar como detector de bug.
+- Ficha CONGELADA com os números e hashes no RESEARCH_PLANO.
+- `fase2-score`: escora com modelo congelado, livro `forward_eventos.csv`
+  com carimbo e dedupe, recusa dado queimado, placar fechado até n=50.
+- `features --agentes`: lista fixa de agentes (o top-10 muda com o
+  histórico e derrubaria coluna do modelo congelado).
+- 549 testes, ruff e mypy strict limpos.
+
+**Pendente (operador)**: checklist "um pregão olhado barra a barra"
+com `--permitir-queimado` em 27/08; depois ligar o ritual diário.

@@ -329,6 +329,10 @@ def features(
                                             help="Fixo; omita para sugerir pela mediana."),
     barras_por_dia: int = typer.Option(100, "--barras-por-dia"),
     top_agentes: int = typer.Option(10, "--top-agentes"),
+    agentes: str | None = typer.Option(
+        None, "--agentes",
+        help="Lista FIXA de agentes para agf_* (ex.: 3,8,39). Forward da Fase 2: "
+             "o top-N muda com o historico; o modelo congelado precisa das mesmas colunas"),
     janela_z: int = typer.Option(50, "--janela-z"),
     label_k: float = typer.Option(2.0, "--label-k"),
     label_h: int = typer.Option(10, "--label-h"),
@@ -359,8 +363,10 @@ def features(
     for i, sym in enumerate(simbolos, 1):
         typer.echo(f"\n[{i}/{len(simbolos)}] {sym}")
         try:
+            fixos = [int(a) for a in agentes.split(",")] if agentes else None
             r = gerar(curated, saida, sym, volume_barra, barras_por_dia,
-                      top_agentes, janela_z, label_k, label_h, perfis)
+                      top_agentes, janela_z, label_k, label_h, perfis,
+                      agentes_fixos=fixos)
         except SystemExit as exc:
             # Simbolo com pouco dado (ex.: MGLU3 com 200 trades/dia nao
             # forma barra alguma) nao pode derrubar o lote inteiro — os
@@ -1092,6 +1098,102 @@ def fase2_preparar(
     if hz and hz > 60:
         typer.echo("")
         typer.echo("  ATENCAO: horizonte > 60 pregoes. Pela ficha, NAO LIGA.")
+
+
+@app.command()
+def fase2_score(
+    symbol: str = typer.Argument("WINFUT"),
+    dia: str | None = typer.Option(None, "--dia", help="Um pregao (2026-09-09)"),
+    desde: str | None = typer.Option(None, "--desde", help="Todos os pregoes >= esta data"),
+    features: Path = typer.Option(Path("data/features/sym=WINFUT/features.parquet"),
+                                  "--features"),
+    curated: Path | None = typer.Option(Path("data/curated"), "--curated",
+                                        help="Desempate pelo tape (mesma regra do preparar)"),
+    pasta_fase2: Path = typer.Option(Path("data/research/fase2"), "--pasta-fase2",
+                                     help="Onde estao ficha_fase2.json e modelo_fase2.pkl"),
+    permitir_queimado: bool = typer.Option(
+        False, "--permitir-queimado",
+        help="So' para o checklist (olhar barras de um dia ja' visto). NAO grava no livro"),
+    log_level: str = typer.Option("WARNING", "--log-level"),
+) -> None:
+    """
+    Forward da Fase 2: escora o(s) pregao(oes) com o modelo CONGELADO,
+    grava uma linha por evento em forward_eventos.csv com carimbo
+    (tag + sha256 do modelo) e imprime o placar. Recusa dias ja'
+    usados no treino/validacao (dado queimado) a menos que
+    --permitir-queimado, e nesse caso NAO grava.
+    """
+    import json
+
+    import pandas as pd
+
+    from .research.fase2 import (
+        carregar_modelo,
+        carregar_trades_dos_dias,
+        colunas_tier1,
+        escorar,
+        placar,
+        registrar_forward,
+    )
+    from .research.simulador import preparar
+    configurar(log_level)
+    if (dia is None) == (desde is None):
+        raise SystemExit("informe --dia OU --desde")
+    with open(pasta_fase2 / "ficha_fase2.json", encoding="utf-8") as f:
+        ficha = json.load(f)
+    m = carregar_modelo(Path(ficha["modelo_arquivo"]) if Path(ficha["modelo_arquivo"]).exists()
+                        else pasta_fase2 / "modelo_fase2.pkl")
+    if m["sha256"] != ficha["modelo_sha256"]:
+        raise SystemExit("modelo_fase2.pkl NAO bate com o sha256 da ficha — carimbo quebrado; "
+                         "nao escoro com modelo diferente do congelado")
+    barras = pd.read_parquet(features)
+    b = preparar(barras, z_por_dia=colunas_tier1(barras), janela_z=int(ficha["janela_z"]))
+    todos = sorted(b["dia"].unique())
+    dias = [dia] if dia else [d for d in todos if d >= desde]
+    ultimo_queimado = ficha["dias_validacao"][1]
+    queimados = [d for d in dias if d <= ultimo_queimado]
+    if queimados and not permitir_queimado:
+        raise SystemExit(f"dias {queimados} sao dado queimado (<= {ultimo_queimado}). "
+                         "Use --permitir-queimado so' para olhar barras; nao entra no livro.")
+    faltando = [d for d in dias if d not in todos]
+    if faltando:
+        typer.echo(f"  (sem barras no features.parquet para {faltando}; "
+                   "rode `profit-tape features` com --agentes da ficha)")
+    dias = [d for d in dias if d in todos]
+    if not dias:
+        raise SystemExit("nenhum pregao para escorar")
+    trades = carregar_trades_dos_dias(curated, symbol.strip().upper(), dias) if curated else None
+    ev = escorar(b, m, dias, trades_por_dia=trades)
+    sep = "=" * 72
+    typer.echo(sep)
+    modo = "QUEIMADO (nao grava)" if permitir_queimado else "forward"
+    typer.echo(f"FASE 2 — SCORE {symbol.upper()} — {dias[0]}..{dias[-1]} — "
+               f"modelo {m['sha256'][:12]} — {modo}")
+    typer.echo(sep)
+    if ev.empty:
+        typer.echo("  nenhum evento (conf < p* em todas as barras validas)")
+    else:
+        cols = ["dia", "bar_id", "hora_utc", "close", "lado_previsto", "conf", "barreira_pts",
+                "label", "t_evento", "label_desempatada_tape", "acerto", "pnl_liquido_proxy"]
+        typer.echo(ev[cols].round(3).to_string(index=False))
+    if permitir_queimado:
+        typer.echo("\n  (dado queimado: nada gravado)")
+        return
+    livro = pasta_fase2 / "forward_eventos.csv"
+    tudo = registrar_forward(ev, livro) if not ev.empty else (
+        pd.read_csv(livro, dtype={"dia": str}) if livro.exists() else ev)
+    p = placar(tudo, ficha)
+    typer.echo("")
+    typer.echo(f"  livro: {livro}   eventos acumulados: {p['n']} em {p['pregoes']} pregoes")
+    if p["n"] < p["checkpoint_sanidade"]:
+        typer.echo(f"  placar fechado ate' n = {p['checkpoint_sanidade']} (sanidade) e "
+                   f"n = {p['n_para_veredito']} (veredito). Nao olhe antes.")
+    else:
+        typer.echo(f"  acerto {p['acerto']:.3f}  (nula {p['nula']:.3f}, favoravel >= "
+                   f"{p['alvo_favoravel']:.3f})   pts/op {p['pts_por_op']:+.1f}")
+        if p["n"] < p["n_para_veredito"]:
+            typer.echo(f"  checkpoint de SANIDADE, nao veredito: veredito em n = "
+                       f"{p['n_para_veredito']}")
 
 
 @app.command()

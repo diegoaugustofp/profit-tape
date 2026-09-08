@@ -299,6 +299,12 @@ def preparar_fase2(features: Path, saida: Path, symbol: str, h: int = 3,
     conf, lado = confianca_e_lado(modelo_va, va[feats])
     p_star = float(np.quantile(conf, PERCENTIL_PSTAR))
     ev = eventos_nao_sobrepostos(va, conf, lado, p_star, h, custo)
+    # Sanidade IN-SAMPLE (2026-09-08): o mesmo decil DENTRO do treino. Se
+    # tambem ficar ~nula, o modelo nao aprendeu nada; se ficar alto e a
+    # validacao ~nula, aprendeu ruido. Nao decide -- e' detector de bug.
+    conf_tr, lado_tr = confianca_e_lado(modelo_va, tr[feats])
+    ev_tr = eventos_nao_sobrepostos(tr, conf_tr, lado_tr,
+                                    float(np.quantile(conf_tr, PERCENTIL_PSTAR)), h, custo)
     resolvidas = float((va["label"] != 0).mean())
     nula = resolvidas / 2
     taxa = float(len(ev) / max(1, len(dias_va)))
@@ -324,8 +330,11 @@ def preparar_fase2(features: Path, saida: Path, symbol: str, h: int = 3,
         "DEPURACAO_acerto_validacao": float(ev["acerto"].mean()) if len(ev) else None,
         "DEPURACAO_pnl_proxy_por_op": float(ev["pnl_liquido_proxy"].mean()) if len(ev) else None,
         "DEPURACAO_n_eventos_validacao": len(ev),
+        "DEPURACAO_acerto_treino_in_sample": float(ev_tr["acerto"].mean()) if len(ev_tr) else None,
+        "DEPURACAO_n_eventos_treino_in_sample": len(ev_tr),
         "horizonte_pregoes_para_150": (150 / taxa) if taxa > 0 else None,
         "modelo_sha256": hash_modelo, "modelo_arquivo": str(pkl),
+        "agentes_agf": sorted(int(c.removeprefix("agf_")) for c in tier1 if c.startswith("agf_")),
         "desempate_pelo_tape": trades is not None,
         "classes_treino": {str(k): int(v) for k, v in d["label"].value_counts().items()},
     }
@@ -337,3 +346,98 @@ def preparar_fase2(features: Path, saida: Path, symbol: str, h: int = 3,
     esc["tabela"].to_csv(saida / "escolha_k.csv", index=False)
     ev.to_csv(saida / "eventos_validacao.csv", index=False)
     return {"ficha": ficha, "escolha_k": esc["tabela"], "triagem": tri, "eventos": ev}
+
+
+# -------------------------------------------------------------------- score
+def carregar_modelo(pkl: Path) -> dict[str, Any]:
+    with open(pkl, "rb") as f:
+        m: dict[str, Any] = dict(pickle.load(f))   # artefato proprio (preparar_fase2)
+    m["sha256"] = hashlib.sha256(pkl.read_bytes()).hexdigest()
+    return m
+
+
+def _carimbo() -> str:
+    import subprocess
+    try:
+        return subprocess.run(["git", "describe", "--tags", "--always"], capture_output=True,
+                              text=True, timeout=5, check=False).stdout.strip() or "desconhecido"
+    except OSError:
+        return "desconhecido"
+
+
+def escorar(b: pd.DataFrame, m: dict[str, Any], dias: list[str],
+            trades_por_dia: dict[str, pd.DataFrame] | None = None) -> pd.DataFrame:
+    """Uma linha por EVENTO (nao sobreposto, conf >= p*) nos `dias`, com o
+    desfecho realizado (label por dia, desempate pelo tape) e o P&L proxy.
+    `b` = features.parquet ja' passado por preparar(z_por_dia=...)."""
+    feats: list[str] = m["features"]
+    faltam = [c for c in feats if c not in b.columns]
+    if faltam:
+        raise SystemExit(f"features.parquet sem colunas do modelo congelado: {faltam}. "
+                         "Rode `profit-tape features` com --agentes da ficha.")
+    alvo = Alvo(**m["alvo"])
+    r = rotular_por_dia(b, alvo, trades_por_dia=trades_por_dia)
+    d = r[r["dia"].isin(dias) & r["label_valida"]].dropna(subset=feats)
+    if d.empty:
+        return pd.DataFrame()
+    conf, lado = confianca_e_lado(m["modelo"], d[feats])
+    ev = eventos_nao_sobrepostos(d, conf, lado, float(m["p_star"]), alvo.h, alvo.custo_pontos)
+    extra = d.set_index(["dia", "bar_id"])[["ts_open", "close", "sup", "inf", "t_evento",
+                                            "label_desempatada_tape"]]
+    ev = ev.merge(extra, left_on=["dia", "bar_id"], right_index=True, how="left")
+    ev["hora_utc"] = pd.to_datetime(ev["ts_open"], unit="ns", utc=True).dt.strftime("%H:%M:%S")
+    ev["barreira_pts"] = (ev["sup"] - ev["close"]).round(1)
+    ev["modelo_sha256"] = m["sha256"]
+    ev["carimbo"] = _carimbo()
+    ev["escorado_em"] = pd.Timestamp.now(tz="UTC").isoformat()
+    return ev.drop(columns=["ts_open"])
+
+
+def registrar_forward(ev: pd.DataFrame, arquivo: Path) -> pd.DataFrame:
+    """Anexa ao livro do forward, sem duplicar (dia, bar_id). Re-escorar um
+    dia nao conta duas vezes."""
+    if arquivo.exists():
+        antigo = pd.read_csv(arquivo, dtype={"dia": str})
+        chaves = set(zip(antigo["dia"], antigo["bar_id"], strict=True))
+        novo = ev[[(d, int(bid)) not in chaves
+                   for d, bid in zip(ev["dia"], ev["bar_id"], strict=True)]]
+        tudo = pd.concat([antigo, novo], ignore_index=True)
+    else:
+        arquivo.parent.mkdir(parents=True, exist_ok=True)
+        tudo = ev.copy()
+    tudo.to_csv(arquivo, index=False)
+    return tudo
+
+
+def placar(tudo: pd.DataFrame, ficha: dict[str, Any]) -> dict[str, Any]:
+    n = len(tudo)
+    nula = float(ficha["MEDIDO_nula"])
+    acerto = float(tudo["acerto"].mean()) if n else float("nan")
+    pts = float(tudo["pnl_liquido_proxy"].mean()) if n else float("nan")
+    return {"n": n, "acerto": acerto, "nula": nula, "alvo_favoravel": nula + 0.08,
+            "pts_por_op": pts, "pregoes": int(tudo["dia"].nunique()) if n else 0,
+            "n_para_veredito": 150, "checkpoint_sanidade": 50}
+
+
+def politica_modelo(pkl: Path) -> Any:
+    """Fabrica de politica para verificar_lookahead: a politica so' ve
+    Obs.barra (a linha da barra) e o modelo congelado."""
+    from .simulador import Obs, Ordem
+    m = carregar_modelo(pkl)
+    feats = m["features"]
+    h = int(m["alvo"]["h"])
+    p_star = float(m["p_star"])
+
+    def fabrica(df: pd.DataFrame) -> Any:
+        del df
+
+        def p(o: Obs) -> Ordem | None:
+            if o.pos != 0:
+                return None
+            x = np.array([[float(o.barra[c]) for c in feats]])
+            if np.isnan(x).any():
+                return None
+            conf, lado = confianca_e_lado(m["modelo"], pd.DataFrame(x, columns=feats))
+            return Ordem(int(lado[0]), h) if conf[0] >= p_star else None
+        return p
+    return fabrica

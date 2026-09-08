@@ -197,3 +197,56 @@ def test_carregar_trades_usa_a_pasta_dt(tmp_path) -> None:  # type: ignore[no-un
     assert list(out) == ["2026-09-01"]
     assert list(out["2026-09-01"].columns) == ["ts_ns", "price", "trade_type"]
     assert list(out["2026-09-01"]["ts_ns"]) == [1, 2, 3]      # ordenado
+
+
+def test_score_e_livro_forward(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """preparar em 12 dias; escorar os 2 dias seguintes (forward); re-escorar
+    nao duplica; carimbo presente; dia queimado e' recusado pelo CLI (testado
+    na funcao de placar/registro aqui, o CLI so' orquestra)."""
+    import json
+
+    from profittape.research.fase2 import (
+        carregar_modelo,
+        colunas_tier1,
+        escorar,
+        placar,
+        politica_modelo,
+        registrar_forward,
+    )
+    from profittape.research.simulador import preparar, verificar_lookahead
+
+    todo = _sintetico(14, forca=40.0)
+    dias = sorted(pd.to_datetime(todo["ts_open"], unit="ns", utc=True)
+                  .dt.strftime("%Y-%m-%d").unique())
+    f = tmp_path / "f.parquet"
+    todo[todo["ts_open"] < todo["ts_open"].quantile(12 / 14)].to_parquet(f, index=False)
+    preparar_fase2(f, tmp_path / "out", "WINFUT")
+    with open(tmp_path / "out" / "ficha_fase2.json", encoding="utf-8") as fh:
+        ficha = json.load(fh)
+    m = carregar_modelo(tmp_path / "out" / "modelo_fase2.pkl")
+    assert m["sha256"] == ficha["modelo_sha256"]
+    assert ficha["DEPURACAO_n_eventos_treino_in_sample"] > 0
+
+    b = preparar(todo, z_por_dia=colunas_tier1(todo), janela_z=50)
+    forward = [d for d in dias if d > ficha["dias_validacao"][1]]
+    assert len(forward) == 2
+    ev = escorar(b, m, forward)
+    assert len(ev) > 0 and set(ev["dia"]) <= set(forward)
+    assert (ev["modelo_sha256"] == m["sha256"]).all() and ev["carimbo"].notna().all()
+    assert ev["acerto"].mean() > ficha["MEDIDO_nula"]      # sinal plantado forte
+
+    livro = tmp_path / "out" / "forward_eventos.csv"
+    t1 = registrar_forward(ev, livro)
+    t2 = registrar_forward(ev, livro)                       # de novo: nao duplica
+    assert len(t1) == len(t2) == len(ev)
+    p = placar(t2, ficha)
+    assert p["n"] == len(ev) and p["alvo_favoravel"] == pytest.approx(ficha["MEDIDO_nula"] + 0.08)
+
+    # coluna do modelo faltando -> falha alta
+    with pytest.raises(SystemExit, match="sem colunas do modelo"):
+        escorar(b.drop(columns=[m["features"][0]]), m, forward)
+
+    # a politica do modelo e' causal (verificador da Fase 1)
+    assert verificar_lookahead(b[b["dia"].isin(forward)].reset_index(drop=True),
+                               politica_modelo(tmp_path / "out" / "modelo_fase2.pkl"),
+                               n_cortes=4)["ok"]

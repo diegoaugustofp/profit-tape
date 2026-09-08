@@ -70,7 +70,12 @@ def gerar(
     label_k: float = 2.0,
     label_h: int = 10,
     perfis_csv: Path | None = None,
+    agentes_fixos: list[int] | None = None,
 ) -> dict[str, Any]:
+    """agentes_fixos (2026-09-08, forward da Fase 2): lista EXATA de agentes
+    para as colunas agf_*, no lugar do top-N por volume. O top-N muda
+    conforme o historico cresce e some com uma coluna que um modelo
+    congelado precisa -- no forward a lista e' parte do carimbo."""
     origem = curated / "trade"
     dias = _dias_do_symbol(origem, symbol)
     if not dias:
@@ -108,8 +113,11 @@ def gerar(
     if not tick_por_dia:
         raise ValueError("impossivel inferir tick: sem variacao de preco")
     tick = float(np.median(tick_por_dia))
-    agentes = [a for a, _ in sorted(soma_agente.items(),
-                                    key=lambda kv: -kv[1])[:top_n_agentes]]
+    if agentes_fixos:
+        agentes = sorted(set(agentes_fixos))
+    else:
+        agentes = [a for a, _ in sorted(soma_agente.items(),
+                                        key=lambda kv: -kv[1])[:top_n_agentes]]
 
     # Feature de PERFIL (docs/RESEARCH_PLANO.md, 2026-08-23): so' NACIONAL
     # validou contra a serie oficial da B3 (pearson 0.524); ESTRANGEIRO nao
