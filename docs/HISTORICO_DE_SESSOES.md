@@ -839,3 +839,18 @@ nula E +15 pts/op; teto 60 pregões.
 
 **Pendente**: `fase2-preparar` (mede e congela), depois preencher os
 [MEDIR] e ligar.
+
+## Sessão 2026-09-08 (noite, 3) — `fase2-preparar` (v2.02)
+
+- `research/fase2.py` + comando: triagem de redundância, label por dia
+  com desempate pelo tape, k por regra fixa, HistGradientBoosting fixo,
+  split temporal 80/20, mede p*/nula/TAXA, congela pkl + json com sha256.
+- Dependência nova: `scikit-learn>=1.5` no pyproject (só o
+  HistGradientBoosting; LightGBM descartado).
+- Achado de desenho: o `labels.py` do `features` deixa a barreira
+  atravessar o dia — para a Fase 2 o label é recalculado por dia.
+- Erro meu pego pelo teste (regra de k na borda), documentado no teste.
+- 546 testes, ruff e mypy strict limpos.
+
+**Pendente**: rodar no dado real → preencher os [MEDIR] da ficha →
+congelar → `fase2-score` diário.

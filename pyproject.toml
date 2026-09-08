@@ -17,6 +17,7 @@ dependencies = [
     "typer>=0.12",
     "structlog>=24.1",
     "openpyxl>=3.1",
+    "scikit-learn>=1.5",   # Fase 2 DeepScalper: HistGradientBoosting (2026-09-08)
 ]
 
 [project.optional-dependencies]

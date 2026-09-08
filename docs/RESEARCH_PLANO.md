@@ -5610,9 +5610,9 @@ carrega: tag `entregue-vX.YY`, hash do modelo (.pkl), hash desta ficha.
 
 ### Antes de ligar (checklist §"antes de ligar", adaptado)
 
-- [ ] `fase2-preparar` (comando a escrever): triagem de redundancia,
-      escolha de k, treino com split, medicao de p*, nula e TAXA,
-      gravacao de `ficha_fase2.json` com os numeros e os hashes.
+- [x] `fase2-preparar` (v2.02): triagem de redundancia, escolha de k,
+      treino com split, medicao de p*, nula e TAXA, gravacao de
+      `ficha_fase2.json` com os numeros e os hashes. Ver secao abaixo.
 - [ ] Preencher os tres [MEDIR] acima com os numeros medidos e
       registrar a data de congelamento. HORIZONTE recalculado com a
       TAXA real; se > 60 pregoes, nao liga.
@@ -5623,3 +5623,56 @@ carrega: tag `entregue-vX.YY`, hash do modelo (.pkl), hash desta ficha.
       classificador (fabrica que carrega o .pkl).
 - [ ] `score` diario agendado depois do `curate` (18:30+), gravando
       uma linha por evento com carimbo.
+
+## IMPLEMENTADO: `fase2-preparar` — mede e congela (2026-09-08)
+
+    profit-tape fase2-preparar WINFUT --features data/features/sym=WINFUT/features.parquet --curated data/curated
+
+`src/profittape/research/fase2.py`. Roda SO' em dado queimado. O que faz,
+na ordem, e o que esta' FIXO nele (mudar = pre-registro novo):
+
+1. **z por dia** das Tier 1 (`simulador.preparar`), mesma convencao do
+   EA. Colunas: imbalance, tick_imbalance, absorcao, rlp_frac, agf_*,
+   fluxo_nacional (se existir).
+2. **Triagem de redundancia** (7.2): |rho| > 0,9 → fica a primeira na
+   ordem acima (base antes de agf), a outra sai e e' registrada.
+3. **Label por dia**: Triple-Barrier que NAO atravessa o pregao (o
+   `labels.py` do features atravessa — as ultimas h barras de cada dia
+   olhavam o dia seguinte). sigma = desvio rolante dos log-retornos DO
+   DIA com shift(1); valido so' com i + h <= ultima barra do dia.
+   **Empate intrabarra pelo TAPE** com `--curated`: primeiro negocio de
+   agressao da barra que cruza uma barreira decide (RLP nao decide).
+   Sem tape: ambiguo, label 0.
+4. **Escolha de k, regra fixa** (escrita antes de olhar): o MAIOR k da
+   grade {0,25, 0,5, 0,75, 1, 1,5} com >= 60% das barras validas
+   resolvidas por barreira E barreira mediana >= 2 x custo (22 pts).
+   Maior k = barreira economicamente relevante; o piso mantem a nula
+   perto de 0,5. Nenhum passa → menor da grade, REGISTRADO no json.
+5. **Modelo fixo**: `HistGradientBoostingClassifier`, 3 classes,
+   max_depth 4, 200 iteracoes, lr 0,05, min_samples_leaf 50, l2 1,0,
+   sem early stopping, sem busca. HP gravado no json e no pkl.
+6. **Split temporal por dia** 80/20 → mede p* (percentil 90 da
+   confianca max(P+,P−) na validacao), nula (fracao resolvida / 2) e
+   TAXA (eventos nao sobrepostos por pregao: evento em t bloqueia ate'
+   t+h). Depois retreina no total e congela `modelo_fase2.pkl` com
+   sha256; `ficha_fase2.json` com tudo e sha256 proprio.
+
+Conferido a mao antes dos testes: zigzag +-10 → barreira k=1 ≈ 10,1
+pts, label = sinal do proximo passo, janela valida 26..56 em 60 barras;
+empate com tape decidindo pela inferior; contagem de eventos nao
+sobrepostos (t=0 bloqueia 1-3, t=4 conf baixa, t=5 evento) com pnl
+proxy +9 / −31 / vertical −19. Erro de papel pego pelo teste: eu
+esperava k=1,5 na regra e o codigo (certo) escolheu 1,0 — a barreira
+de 15,15 pts fica 0,15 acima do high; o teste documenta isso.
+
+Sinal plantado (imbalance → proximo close) e' detectado: acerto 0,92 vs
+nula 0,36 na validacao sintetica. Sem sinal: acerto ≈ nula.
+
+**Limites declarados**: `pnl_proxy` assume saida exatamente na barreira
+(sem slippage alem dos 11) ou no close vertical; e' proxy para a
+ficha, nao P&L de execucao — o simulador da Fase 1 e' quem mede P&L
+quando o `score` virar politica. Os numeros DEPURACAO_* da validacao
+sao dado queimado: servem para achar bug, nao para acreditar.
+
+**Pendente**: rodar no dado real, transcrever os [MEDIR] na ficha,
+congelar, e escrever o `fase2-score` diario.

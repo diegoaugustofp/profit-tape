@@ -1022,6 +1022,79 @@ def simulador_conferir(
 
 
 @app.command()
+def fase2_preparar(
+    symbol: str = typer.Argument("WINFUT"),
+    features: Path = typer.Option(Path("data/features/sym=WINFUT/features.parquet"),
+                                  "--features"),
+    curated: Path | None = typer.Option(
+        None, "--curated",
+        help="Raiz do curated para desempatar toque ambiguo pelo TAPE (recomendado)"),
+    h: int = typer.Option(3, "--h", help="CONGELADO na ficha: horizonte do sinal validado"),
+    custo: float = typer.Option(11.0, "--custo",
+                                help="custo_pontos_estimado do EA (spread dentro)"),
+    janela_z: int = typer.Option(50, "--janela-z"),
+    saida: Path = typer.Option(Path("data/research/fase2"), "--saida"),
+    log_level: str = typer.Option("WARNING", "--log-level"),
+) -> None:
+    """
+    Fase 2 DeepScalper, passo "antes de ligar" (RESEARCH_PLANO, FICHA
+    FORWARD). Roda SO' em dado queimado: triagem de redundancia, escolha
+    de k (regra fixa), treino com split temporal por dia, medicao de
+    p*, nula e TAXA, retreino no total e congelamento (.pkl + sha256).
+    Os numeros de validacao sao DEPURACAO, nao evidencia.
+    """
+    configurar(log_level)
+    from .research.fase2 import preparar_fase2
+
+    r = preparar_fase2(features, saida, symbol.strip().upper(), h=h, custo=custo,
+                       janela_z=janela_z, curated=curated)
+    f = r["ficha"]
+    sep = "=" * 72
+    typer.echo(sep)
+    typer.echo(f"FASE 2 — PREPARAR ({f['symbol']}, h={f['h']}, custo={f['custo_pontos']})")
+    typer.echo(sep)
+    typer.echo("  triagem de redundancia (|rho| > 0,9):")
+    typer.echo(f"    mantidas : {', '.join(f['features'])}")
+    for c, m, rho in f["features_removidas_redundancia"]:
+        typer.echo(f"    removida : {c}  (rho={rho:+.3f} com {m})")
+    typer.echo("")
+    typer.echo("  escolha de k (regra fixa: maior k com >= 60% resolvidas e barreira >= 2x custo):")
+    tabela = r["escolha_k"].round(3).to_string(index=False)
+    for linha in tabela.splitlines():
+        typer.echo("    " + linha)
+    typer.echo(f"    -> k = {f['k']}   ({f['k_motivo']})")
+    tape = "SIM" if f["desempate_pelo_tape"] else "NAO (ambiguo conta 0)"
+    typer.echo(f"    desempate pelo tape: {tape}")
+    typer.echo("")
+    typer.echo(f"  split temporal: treino {f['dias_treino'][0]}..{f['dias_treino'][1]} "
+               f"(n={f['n_treino']})  validacao {f['dias_validacao'][0]}.."
+               f"{f['dias_validacao'][1]} (n={f['n_validacao']})")
+    typer.echo(f"  classes no treino: {f['classes_treino']}")
+    typer.echo("")
+    typer.echo("  [MEDIR] da ficha, preenchidos:")
+    typer.echo(f"    p*                       : {f['MEDIDO_p_star']:.3f}")
+    typer.echo(f"    nula (resolvidas/2)      : {f['MEDIDO_nula']:.3f}   "
+               f"(resolvidas {f['MEDIDO_frac_resolvidas']:.3f})")
+    typer.echo(f"    TAXA (eventos/pregao)    : {f['MEDIDO_taxa_eventos_por_pregao']:.2f}")
+    hz = f["horizonte_pregoes_para_150"]
+    if hz:
+        typer.echo(f"    HORIZONTE p/ n=150       : {hz:.0f} pregoes")
+    else:
+        typer.echo("    HORIZONTE p/ n=150       : indefinido (taxa 0)")
+    typer.echo("")
+    typer.echo("  DEPURACAO (validacao queimada; NAO e' evidencia):")
+    typer.echo(f"    eventos {f['DEPURACAO_n_eventos_validacao']}  acerto "
+               f"{(f['DEPURACAO_acerto_validacao'] or 0):.3f}  pnl proxy/op "
+               f"{(f['DEPURACAO_pnl_proxy_por_op'] or 0):+.1f}")
+    typer.echo("")
+    typer.echo(f"  modelo: {f['modelo_arquivo']}  sha256 {f['modelo_sha256'][:16]}...")
+    typer.echo(f"  ficha : {saida / 'ficha_fase2.json'}  sha256 {f['ficha_sha256'][:16]}...")
+    if hz and hz > 60:
+        typer.echo("")
+        typer.echo("  ATENCAO: horizonte > 60 pregoes. Pela ficha, NAO LIGA.")
+
+
+@app.command()
 def absorcao_inspecionar(
     dia: str = typer.Argument(..., help="Data no formato 2026-08-27"),
     origem: Path = typer.Option(
