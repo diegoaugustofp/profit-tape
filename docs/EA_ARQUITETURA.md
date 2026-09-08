@@ -33,6 +33,11 @@ eixo "o que aconteceu em qual sessao".)
 - [Analise de MAE — stop catastrofico e' seguro de cauda ou ja morde? (2026-08-27)](#analise-de-mae--stop-catastrofico-e-seguro-de-cauda-ou-ja-morde-2026-08-27)
 - [RESOLVIDO: causa raiz do travamento de 3+ horas no ea-replay (2026-08-27)](#resolvido-causa-raiz-do-travamento-de-3-horas-no-ea-replay-2026-08-27)
 
+**Trilha de execucao (E0..E5)**
+- [TRILHA DE EXECUCAO — a escada E0..E5 (2026-09-08)](#trilha-de-execucao--a-escada-e0e5-2026-09-08)
+  — nunca abrimos posicao com a DLL. E0 (inventario de exports) entregue;
+  E1 (record com login completo) e' onde mora o impacto na captura.
+
 **Zeragem automatica**
 - [Zeragem automatica da XP — pesquisa e decisao de horario (2026-08-26)](#zeragem-automatica-da-xp--pesquisa-e-decisao-de-horario-2026-08-26)
 
@@ -773,3 +778,70 @@ corretora de uma com a conta da outra, e a DLL nao valida a combinacao.
 
 Conta real exige **os dois** campos preenchidos, com erro explicito
 citando a medicao. Ter a conta real sem a corretora real falha.
+
+## TRILHA DE EXECUCAO — a escada E0..E5 (2026-09-08)
+
+Contexto: avaliacao honesta de 2026-08-31 (com R$ 800/mes de DLL, a
+estrategia so' paga o dado a 3 contratos, e o drawdown a 3 contratos e'
+18,7% do capital estimado em 25 pregoes). O diagnostico do operador foi
+o certo: **muita hipotese, nada em execucao**. Nunca abrimos uma posicao
+com a ProfitDLL. Acumular pregoes e' inevitavel e roda sozinho; o que
+se perdia era o que fazer EM PARALELO.
+
+Levantamento de 2026-09-08 sobre a v2.04, antes de propor:
+
+- `ExecutorDeOrdens` existe, testado contra DLL falsa, e **nunca e'
+  construido fora dos testes**. Nenhum comando do CLI o instancia.
+- `check_exports_ea_ordem` existe e **ninguem o chama** em src/. As
+  funcoes de ordem sao ligadas atras de `if hasattr(...)` em load_dll:
+  se a DLL nao as exportar, nao sao ligadas, em silencio. O manual as
+  marca obsoletas em favor de `SendOrder` V2. **Nunca conferimos qual
+  familia a DLL instalada exporta.** Maior desconhecido do projeto.
+- O EA ja roda DENTRO do record (`record --ea-config`, EABridge), em
+  dry_run. Mas o record conecta com `DLLInitializeMarketLogin` -- so'
+  dado de mercado. **Rotear ordem exige `DLLInitializeLogin`.** Com uma
+  unica chave de ativacao, a mesma conexao tem que capturar E rotear:
+  o record e' quem precisa mudar de login. Isso e' o E1 de verdade --
+  nao "destravar o comando `ea`", que e' processo separado e colide.
+
+### Dependencia que reordena o scalper
+
+Quanto menor o timeframe, maior a fracao do edge comida por slippage.
+`custo_pontos_estimado: 11.0` e' SUPOSICAO, nunca medida contra
+preenchimento real. Num scalper de 1 min, 5 pts de erro nessa
+estimativa decidem se a estrategia existe. **O E4 (slippage medido) e'
+pre-requisito para o scalper ser sequer avaliavel** -- a trilha de
+execucao nao e' o que fazer enquanto se espera, e' o que o scalper
+precisa.
+
+### A escada
+
+| | o que | impacto no record ativo |
+|---|---|---|
+| **E0** | `doctor` inventaria os exports de ordem/posicao/callbacks na DLL instalada, por familia (legada / V2), e diz qual caminho esta completo para o E2 | **nenhum**: puro hasattr no handle, sem DLLInitialize*. O conflito documentado e' na 2a CONEXAO, nao no carregamento (ea-contas ja carregou a DLL com o record ativo sem efeito). Roda a qualquer hora |
+| **E1** | record passa a conectar com `DLLInitializeLogin` (login completo) em vez de MarketLogin, para que a conexao unica possa rotear | **e' AQUI que o impacto mora**: muda o modo de login do processo de captura. Testar em record de TESTE (pasta separada) fora do pregao: captura identica? estabilidade? So' depois trocar o record de producao |
+| **E2** | comando `ea-ordem-teste`: 1 contrato, compra a mercado, confirma callback de ordem, zera. Conta DEMO obrigatoria, sem EA | roda DENTRO do record (mesma conexao), fora do pregao ou no simulador |
+| **E3** | reconciliacao posicao EA x corretora (GetPosition/callback), parada de emergencia na divergencia | o gestor guarda posicao em memoria e nunca confere com a DLL. Em execucao real e' a origem classica de desastre |
+| **E4** | forward em demo com ordens reais, EA atual, 1 contrato. **Mede slippage e latencia de verdade** | destrava a avaliacao do scalper |
+| **E5** | multi-EA | so' depois de um EA sozinho ser confiavel |
+
+Regra da escada: cada degrau e' entregavel e verificavel sozinho, e o
+resultado de um pode invalidar o desenho dos seguintes (E0 decide a
+familia de funcoes que E2 usa; E1 decide se a captura sobrevive ao
+login completo). Nao pular.
+
+### E0 — ENTREGUE (v2.05), resultado pendente
+
+`profit-tape doctor` ganhou a secao "EXECUCAO (E0)". Informativa: nao
+altera o veredito PRONTO/PENDENCIAS do doctor, porque o doctor gateia o
+RECORD e o record nao precisa de funcao de ordem.
+
+Nomes das funcoes tirados dos manuais pt_br e en_us via `strings` (os
+PDFs no projeto estao truncados -- pdftotext e pypdf falham no xref).
+Minimo para o E2 por caminho:
+
+- legado: SendMarketBuyOrder, SendMarketSellOrder, SendZeroPositionAtMarket, SetOrderCallback
+- V2: SendOrder, SendZeroPositionV2, SetOrderChangeCallbackV2
+
+Se NENHUM caminho estiver completo, E1/E2 como desenhados nao sao
+possiveis e o proximo passo e' outro.

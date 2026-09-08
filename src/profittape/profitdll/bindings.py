@@ -435,3 +435,89 @@ def check_exports_ea_contas(dll: Any) -> list[str]:
 def check_exports_ea_ordem(dll: Any) -> list[str]:
     """Mesma ideia, para o que ea/execucao.py precisa (envio de ordem)."""
     return [nome for nome in EXPORTS_OBRIGATORIOS_EA_ORDEM if not hasattr(dll, nome)]
+
+
+# ---------------------------------------------------------------------------
+# E0 — INVENTARIO DOS EXPORTS DE EXECUCAO (2026-09-08)
+#
+# Primeiro degrau da trilha de execucao (ver docs/EA_ARQUITETURA.md, secao
+# "Trilha de execucao"). O problema que isto resolve: as funcoes de ordem
+# sao ligadas em load_dll atras de `if hasattr(dll, "SendMarketBuyOrder")`
+# -- se a DLL instalada nao as exportar, elas simplesmente NAO SAO LIGADAS,
+# em silencio. E o manual as marca como obsoletas em favor do SendOrder V2
+# (struct TConnectorSendOrder). Nunca conferimos contra a DLL real qual
+# das duas familias existe. E' perfeitamente possivel que a primeira
+# tentativa de ordem falhe porque a funcao nao existe nesta versao.
+#
+# Isto e' so' hasattr no handle carregado -- GetProcAddress, nenhum codigo
+# da DLL executa alem do DllMain que o `doctor` ja dispara hoje. NAO
+# conecta (nenhum DLLInitialize*), entao nao entra em conflito com o
+# `record` ativo: o conflito documentado (EA_ARQUITETURA, 2026-08-27) e'
+# na SEGUNDA CONEXAO, nunca no carregamento -- ea-contas carregou a DLL
+# num segundo processo com o record ativo e o record nao sentiu nada.
+#
+# Nomes tirados dos manuais pt_br e en_us (via `strings`; os PDFs estao
+# truncados e nenhum extrator de texto abre o xref). Uma familia
+# "completa" e' o conjunto minimo que o degrau E2 (ordem de teste em demo)
+# precisa: enviar a mercado, zerar, e ouvir o callback de ordem.
+# ---------------------------------------------------------------------------
+EXPORTS_EXECUCAO: dict[str, tuple[str, ...]] = {
+    "ordem_legada_plana": (
+        "SendMarketBuyOrder", "SendMarketSellOrder",
+        "SendBuyOrder", "SendSellOrder",
+        "SendStopBuyOrder", "SendStopSellOrder",
+        "SendZeroPositionAtMarket", "SendZeroPosition",
+        "SendCancelOrder", "SendCancelOrders", "SendCancelAllOrders",
+        "SendChangeOrder",
+    ),
+    "ordem_v2_struct": (
+        "SendOrder",
+        "SendChangeOrderV2", "SendCancelOrderV2", "SendCancelOrdersV2",
+        "SendCancelAllOrdersV2", "SendZeroPositionV2",
+    ),
+    "posicao": (
+        "GetPosition", "GetPositionV2", "SetAssetPositionListCallback",
+    ),
+    "callbacks_de_ordem": (
+        "SetOrderCallback", "SetOrderChangeCallback",
+        "SetOrderChangeCallbackV2",
+        "SetHistoryCallback", "SetHistoryCallbackV2",
+        "SetOrderHistoryCallback",
+    ),
+    "consulta_de_ordem": (
+        "GetOrder", "GetOrders", "GetOrderDetails", "GetOrderProfitID",
+        "EnumerateAllOrders", "EnumerateOrdersByInterval",
+    ),
+    "conta": (
+        "GetAccount", "GetAccountCount", "SetAccountCallback",
+    ),
+}
+
+# Minimo para o degrau E2 em cada caminho. Se NENHUM dos dois estiver
+# completo, E1/E2 como desenhados nao sao possiveis e o proximo passo e'
+# outro (provavelmente migrar para o que existir).
+MINIMO_E2_LEGADO = ("SendMarketBuyOrder", "SendMarketSellOrder",
+                    "SendZeroPositionAtMarket", "SetOrderCallback")
+MINIMO_E2_V2 = ("SendOrder", "SendZeroPositionV2", "SetOrderChangeCallbackV2")
+
+
+def inventario_exports_execucao(dll: Any) -> dict[str, Any]:
+    """
+    Devolve, por familia, o que esta PRESENTE e o que esta AUSENTE no
+    handle, mais o veredito por caminho (legado / V2) para o degrau E2.
+    Puro hasattr -- nao conecta, nao chama nada da DLL.
+    """
+    familias: dict[str, dict[str, list[str]]] = {}
+    for familia, nomes in EXPORTS_EXECUCAO.items():
+        presentes = [n for n in nomes if hasattr(dll, n)]
+        ausentes = [n for n in nomes if not hasattr(dll, n)]
+        familias[familia] = {"presentes": presentes, "ausentes": ausentes}
+    legado_ok = all(hasattr(dll, n) for n in MINIMO_E2_LEGADO)
+    v2_ok = all(hasattr(dll, n) for n in MINIMO_E2_V2)
+    return {
+        "familias": familias,
+        "caminho_legado_completo": legado_ok,
+        "caminho_v2_completo": v2_ok,
+        "minimo_legado_ausente": [n for n in MINIMO_E2_LEGADO if not hasattr(dll, n)],
+        "minimo_v2_ausente": [n for n in MINIMO_E2_V2 if not hasattr(dll, n)],
+    }

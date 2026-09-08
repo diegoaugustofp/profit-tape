@@ -871,3 +871,33 @@ congelar → `fase2-score` diário.
 
 **Pendente (operador)**: checklist "um pregão olhado barra a barra"
 com `--permitir-queimado` em 27/08; depois ligar o ritual diário.
+
+---
+
+## Sessão 2026-09-08 (noite) — trilha de execução aberta: E0 entregue
+
+Retomada da avaliação honesta de 31/08 ("muita hipótese, nada em
+execução"). O operador decidiu seguir a escada E0..E5 em paralelo à
+acumulação, com o record ATIVO.
+
+- **Levantamento sobre a v2.04** antes de propor: `ExecutorDeOrdens` nunca
+  é construído fora de teste; `check_exports_ea_ordem` existe e ninguém
+  chama; as funções de ordem são ligadas atrás de `hasattr` (silêncio se
+  ausentes) e o manual as marca obsoletas em favor do `SendOrder` V2.
+  **Nunca conferimos qual família a DLL instalada exporta.**
+- **Correção do meu desenho de 31/08**: E1 não é "destravar o comando
+  `ea`" (processo separado, colide com o record). O EA já roda dentro do
+  record via EABridge, mas o record conecta com MarketLogin — rotear
+  exige `DLLInitializeLogin`. E1 real = record com login completo. É o
+  único degrau com impacto na captura; E0 tem zero.
+- **E0 entregue** (`entregue-v2.05`): `doctor` inventaria exports de
+  ordem/posição/callbacks por família e diz qual caminho (legado/V2)
+  está completo para o E2. Informativo, não altera o veredito do doctor.
+  Puro hasattr — roda com o record ligado.
+- Manuais no projeto estão truncados (xref quebrado); nomes extraídos via
+  `strings` dos dois PDFs.
+- Escada registrada no `EA_ARQUITETURA.md` (não estava em doc nenhum).
+- 556 testes, coverage 76%, ruff limpo, mypy strict limpo, com `--cov`.
+
+**Pendente**: operador roda `profit-tape doctor` e manda a seção
+EXECUCAO (E0). O resultado decide a família de funções do E2.

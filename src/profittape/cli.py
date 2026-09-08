@@ -98,6 +98,29 @@ def doctor(
                 typer.echo("  offer book   SEM SetOfferBookCallbackV2 — o offer book")
                 typer.echo("               pode nao entregar NADA nesta versao (visto em")
                 typer.echo("               producao). Estrategias de fila ficam bloqueadas.")
+
+            # E0 (2026-09-08): inventario de execucao. INFORMATIVO -- nao
+            # mexe em `ok`, porque o doctor gateia o RECORD, e o record
+            # nao precisa de funcao de ordem. Puro hasattr, nao conecta.
+            from .profitdll.bindings import inventario_exports_execucao
+            inv = inventario_exports_execucao(dll)
+            typer.echo("\n  EXECUCAO (E0) — exports de ordem/posicao nesta DLL:")
+            for familia, r in inv["familias"].items():
+                n_p, n_a = len(r["presentes"]), len(r["ausentes"])
+                typer.echo(f"    {familia:<22} {n_p} presente(s), {n_a} ausente(s)")
+                if r["ausentes"]:
+                    typer.echo(f"      ausentes: {', '.join(r['ausentes'])}")
+            leg = "COMPLETO" if inv["caminho_legado_completo"] else "INCOMPLETO"
+            v2 = "COMPLETO" if inv["caminho_v2_completo"] else "INCOMPLETO"
+            typer.echo(f"    caminho LEGADO (o que execucao.py usa hoje): {leg}")
+            if inv["minimo_legado_ausente"]:
+                typer.echo(f"      falta: {', '.join(inv['minimo_legado_ausente'])}")
+            typer.echo(f"    caminho V2 (SendOrder/struct):               {v2}")
+            if inv["minimo_v2_ausente"]:
+                typer.echo(f"      falta: {', '.join(inv['minimo_v2_ausente'])}")
+            if not inv["caminho_legado_completo"] and not inv["caminho_v2_completo"]:
+                typer.echo("    -> NENHUM caminho completo: E1/E2 como desenhados")
+                typer.echo("       nao sao possiveis nesta DLL. Registrar e redesenhar.")
         except Exception as exc:
             typer.echo(f"  DLL          FALHOU: {exc}")
             ok = False
