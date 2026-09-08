@@ -761,3 +761,23 @@ Sessão só de documentação; nenhum código tocado. Tag `entregue-v1.95`
 **Pendente (Fase 0, custo zero)**: contar pregões com book íntegro,
 barras/hora (define `h`), distribuição do spread, barras/pregão (TAXA
 da ficha forward).
+
+## Sessão 2026-09-08 — `inventario-deepscalper` (Fase 0) e pasta separada do record
+
+Tag `entregue-v1.96`.
+
+- **Comando novo** `inventario-deepscalper`: as quatro contagens do
+  pré-registro (barras/pregão, barras/hora → `h`, spread em ticks via
+  `tiny_book`, pregões com book íntegro → faltantes para o portão de 160).
+  Categoria `features`, zero trial. Dois cálculos conferidos à mão antes
+  dos testes; a conferência do "lado vazio" pegou um defeito de ordem
+  (filtro antes do ffill).
+- **Operação**: operador separou o `record` numa pasta congelada em tag
+  (`profit-tape-record`, venv próprio, `pip install .` sem `-e`), com o
+  dev em `profit-tape`. Registrado em `docs/OPERACAO.md` com o ritual de
+  promoção. Motivo real: `-e` faz o processo carregar módulo NOVO no
+  meio do pregão.
+- 522 testes, coverage 76%, ruff limpo, mypy strict limpo.
+
+**Pendente**: rodar `inventario-deepscalper` no dado real e transcrever
+o `resumo.json` para o `RESEARCH_PLANO.md`.

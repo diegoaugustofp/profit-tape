@@ -674,3 +674,40 @@ o que estiver la'. Antes de empurrar, trazer o remoto:
 
 E preferir editar arquivo do repositorio **localmente**, nao pela web:
 commit web nasce so' no remoto e o proximo push local pode apaga-lo.
+
+## Duas pastas: `record` congelado numa TAG, desenvolvimento em outra (2026-09-08)
+
+**Problema**: com `pip install -e` o `record` importa direto da pasta de
+codigo. Como o Python importa modulo sob demanda, um arquivo editado as
+14h pode ser carregado NOVO pelo processo que comecou as 8h50 — o record
+vira mistura de duas versoes, sem aviso. E o `pip install` falha com o
+processo rodando (arquivo em uso).
+
+**Estrutura adotada pelo operador (2026-09-08)**:
+
+    C:\projetos\profit-tape          DEV: main; bundles e pip aqui, a qualquer hora
+    C:\projetos\profit-tape-record   PROD: checkout numa tag, venv proprio,
+                                     `pip install .` SEM -e; so' o NSSM usa
+    storage.raiz / --log-file        absolutos no yaml; os dois apontam pro mesmo dado
+
+NSSM: `Application` = `...\profit-tape-record\.venv\Scripts\profit-tape.exe`,
+`AppDirectory` = `...\profit-tape-record`. O `recorder.yaml` e' gitignorado
+— copia manual.
+
+**Promocao** (so' quando a entrega toca `record`/`pipeline`/`storage`;
+docs e research nunca precisam ir), entre 18:30 e 08:50:
+
+    nssm status profit-tape-record        # parado
+    cd C:\projetos\profit-tape-record
+    git fetch origin --tags
+    git checkout entregue-vX.YY
+    .\.venv\Scripts\pip install .
+    .\.venv\Scripts\profit-tape record --dry-run -c config\recorder.yaml
+
+Se o dry-run reclamar, `git checkout` da tag anterior volta em segundos.
+
+**Consequencia para a disciplina**: o carimbo de versao de uma observacao
+forward e' a tag da pasta RECORD, nao a do dev. Registre cada promocao no
+`HISTORICO_DE_SESSOES.md` ("record em vX.YY desde AAAA-MM-DD"). E "qual
+tag foi aplicada" agora tem duas respostas — `git describe --tags` em
+cada pasta.

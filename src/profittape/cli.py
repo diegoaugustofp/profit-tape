@@ -903,6 +903,56 @@ def perfil_volume_horario(
 
 
 @app.command()
+def inventario_deepscalper(
+    symbol: str = typer.Argument("WINFUT"),
+    curated: Path = typer.Option(Path("data/curated"), "--curated"),
+    raw: Path = typer.Option(Path("data/raw"), "--raw",
+                             help="Raiz do raw (book_offer/book_price/tiny_book nao sao curados)"),
+    volume_barra: int = typer.Option(120_000, "--volume-barra",
+                                     help="CONGELADO do EA (config/ea.yaml)"),
+    data_book_confiavel: str = typer.Option(
+        "2026-08-26", "--data-book-confiavel",
+        help="Primeiro dia com book_offer confiavel (v0.55, INTEGRIDADE_DOS_DADOS.md)"),
+    saida: Path = typer.Option(Path("data/research/inventario_deepscalper"), "--saida"),
+    log_level: str = typer.Option("WARNING", "--log-level"),
+) -> None:
+    """
+    Fase 0 do pre-registro DeepScalper (RESEARCH_PLANO.md, 2026-09-07):
+    barras/pregao (TAXA), barras/hora (define `h`), spread em ticks,
+    pregoes com book integro (portao de 160 da Fase 3). Categoria
+    `features`: zero trial. MEDE; nao decide nada.
+    """
+    configurar(log_level)
+    from .research.inventario_deepscalper import PORTAO_FASE_3, gravar, inventario
+
+    r = inventario(curated, raw, symbol.strip().upper(), volume_barra,
+                   data_book_confiavel)
+    gravar(r, saida)
+    s = r["resumo"]
+    typer.echo("=" * 72)
+    typer.echo(f"INVENTARIO DEEPSCALPER (Fase 0) — {s['symbol']} — "
+               f"barra de {s['volume_barra']:,} contratos")
+    typer.echo("=" * 72)
+    typer.echo(f"  pregoes com trade curated        : {s['pregoes_trade']}")
+    typer.echo(f"  pregoes com book INTEGRO         : {s['pregoes_book_integro']}"
+               f"   (>= {s['data_book_confiavel']}, offer+price presentes)")
+    typer.echo(f"  faltam para o portao da Fase 3   : {s['faltam_para_portao_fase3']}"
+               f"   (portao = {PORTAO_FASE_3})")
+    typer.echo(f"  barras por pregao (mediana)      : {s['barras_por_pregao_mediana']:.0f}"
+               "   <- TAXA da ficha forward")
+    typer.echo(f"  horas por pregao (mediana)       : {s['horas_por_pregao_mediana']:.2f}")
+    typer.echo(f"  barras por hora (mediana)        : {s['barras_por_hora_mediana']:.2f}")
+    typer.echo(f"  h (barras que cobrem 120 min)    : {s['h_120min']}")
+    typer.echo(f"  tick (mediana)                   : {s['tick_mediana']:.1f}")
+    typer.echo(f"  spread mediana / p90 (ticks)     : {s['spread_mediana_ticks']:.2f} / "
+               f"{s['spread_p90_ticks']:.2f}   "
+               f"em {s['pregoes_com_tiny_book']} pregoes com tiny_book")
+    typer.echo(f"  fracao do tempo-evento em 1 tick : {s['spread_frac_1tick']:.2f}")
+    typer.echo("\n  spread ponderado por EVENTO de tiny_book, nao por tempo; <= 0 excluido")
+    typer.echo(f"  saida: {saida}  (por_dia.csv, por_dia.parquet, resumo.json)")
+
+
+@app.command()
 def absorcao_inspecionar(
     dia: str = typer.Argument(..., help="Data no formato 2026-08-27"),
     origem: Path = typer.Option(

@@ -12,6 +12,7 @@ arquivo cresceu demais para navegar so' por titulo cronologico).
   — curadoria em `docs/CURADORIA_DEEPSCALPER.md`. Portao decisivo e' a
   Fase 2 (supervisionado, forward); RL so' depois e so' com ≥160
   pregoes de book integro. Hiperparametros congelados, sem grade.
+- [IMPLEMENTADO: `inventario-deepscalper` — as quatro contagens da Fase 0 (2026-09-08)](#implementado-inventario-deepscalper--as-quatro-contagens-da-fase-0-2026-09-08)
 
 **Perfil de agente / classificacao**
 - [REVISAO DA HIPOTESE DE PERFIL (2026-08-22, operador)](#revisao-da-hipotese-de-perfil-2026-08-22-operador)
@@ -5358,3 +5359,38 @@ Fase 4.
    com nome novo e comparar contra TSM simples antes de comemorar.
 4. O simulador da Fase 1 e' o artefato mais reaproveitavel: serve ao
    resto do pipeline mesmo se tudo acima morrer na Fase 2.
+
+## IMPLEMENTADO: `inventario-deepscalper` — as quatro contagens da Fase 0 (2026-09-08)
+
+Categoria `features`, zero trial. MEDE; nao decide.
+
+    profit-tape inventario-deepscalper WINFUT --curated data/curated --raw data/raw
+
+Por pregao (`por_dia.csv`) e mediana entre pregoes (`resumo.json`):
+
+1. `barras` — barras de volume completas com `volume_barra` (120.000,
+   congelado do EA), mesma convencao de `features/bars.py`. E' a TAXA da
+   ficha forward.
+2. `barras_por_hora` e `h_120min = round(2 * barras_por_hora)` — o `h` do
+   hindsight bonus e' a mediana de `h_120min`.
+3. `spread_mediana_ticks`, `p90`, `frac_1tick` — do `tiny_book` (raw; o
+   book nao e' curado). Ponderacao por EVENTO de tiny_book, nao por
+   tempo; spread <= 0 (travado/cruzado) sai; lado com price 0 esvazia a
+   cotacao em vez de arrastar a anterior. Tick inferido do proprio dia.
+4. `book_integro` — dia >= 2026-08-26 (v0.55) E book_offer E book_price
+   presentes. `faltam_para_portao_fase3` = 160 − integros.
+
+Conferido a mao antes do teste: 250 contratos / barra 100 em 2 h → 2
+barras, 1/h, `h`=2; tiny [2, 1, 0, vazio, 2] ticks → mediana 2, 1/3 em
+1 tick, 1 invalido, o vazio nao entra em nenhuma conta. O caso do lado
+vazio pegou um defeito real: filtrar `price > 0` ANTES do ffill
+arrastava a cotacao velha por cima do vazio e contava um invalido a
+mais.
+
+**Limitacao declarada**: `book_integro` diz que os streams EXISTEM no
+dia; nao mede completude (o bug de 2026-08-26 e' silencioso por
+construcao, ver INTEGRIDADE_DOS_DADOS.md). Antes da data de corte, e'
+nao-confiavel mesmo que exista.
+
+**Pendente**: rodar no dado real e transcrever o `resumo.json` aqui —
+so' entao a ficha forward da Fase 2 pode ser escrita.
