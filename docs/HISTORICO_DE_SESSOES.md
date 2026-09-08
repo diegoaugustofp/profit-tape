@@ -945,3 +945,21 @@ mandar as 4 linhas do log. Teste B só depois do A passar.
 
 **Pendente (operador)**: repetir o teste A com `--sem-encerramento`, 2
 minutos; o que falta provar é `contas>=1` no heartbeat.
+
+### Continuação (2026-09-08, 20:14) — teste A PASSOU; contas=14 a explicar (v2.08)
+
+- **Teste A repetido com `--sem-encerramento`: passou.** 2,1 min estável,
+  `corretora_pronta=True`, `GetAccount()` retorno 0, zero descartes. E1
+  provado fora do pregão.
+- **`contas=14`** para um login com duas contas, com 8 eventos
+  ROTEAMENTO=5 no log. Duplicata (re-anúncio por notificação) ou entrada
+  real — o log não distinguia. v2.08: pares deduplicados + contador bruto
+  + `profitdll.contas` com os pares `corretora:conta` uma vez. O teste B
+  responde.
+- Registro para o E2: ROTEAMENTO oscila 5→2→5; conferir `corretora_pronta`
+  no momento do envio.
+- 567 testes, coverage 76%, ruff/mypy limpos.
+
+**Pendente (operador)**: teste B amanhã — `runtime.login_completo: true`
+no yaml de produção antes do agendador subir; olhar 10 min de heartbeat;
+mandar o `profitdll.contas`.

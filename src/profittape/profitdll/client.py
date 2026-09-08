@@ -505,8 +505,16 @@ class ProfitClient:
 
         @b.TAccountCallback
         def _conta(corretora, nome_corretora, account_id, titular) -> None:
+            # v2.08: DEDUPLICADO. No teste A de 08/09 o heartbeat mostrou
+            # contas=14 para um login com DUAS contas -- e havia exatamente
+            # 8 eventos ROTEAMENTO=5 no mesmo log. Hipotese: a DLL
+            # re-anuncia as contas a cada notificacao de corretora. O
+            # contador bruto fica em contadores["conta"] (invocacoes);
+            # contas_vistas guarda so' pares unicos, em ordem de chegada.
             contadores["conta"] += 1
-            contas.append((int(corretora), str(account_id or "")))
+            par = (int(corretora), str(account_id or ""))
+            if par not in contas:
+                contas.append(par)
 
         @b.TOrderChangeCallback
         def _ordem_mudanca(*_: object) -> None:

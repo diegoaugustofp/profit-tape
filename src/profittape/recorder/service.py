@@ -179,6 +179,7 @@ class RecorderService:
         hb = self.cfg.runtime.heartbeat_s
         limite_descarte = self.cfg.runtime.alerta_taxa_descarte
         proximo = time.monotonic()
+        contas_logadas: list[tuple[int, str]] = []
 
         while not self._parar.is_set():
             time.sleep(0.5)
@@ -219,7 +220,18 @@ class RecorderService:
                 login_ok=self.client.conectado_login,
                 corretora_pronta=self.client.corretora_pronta,
                 contas=len(self.client.contas_vistas),
+                contas_callbacks=self.client.contadores_roteamento["conta"],
             )
+            # v2.08: os pares (corretora, conta) UMA vez, quando a lista
+            # mudar -- da thread principal, nunca do callback. E' o que
+            # decide o "14 contas" do teste A: duplicata ou entrada real.
+            contas_agora = list(self.client.contas_vistas)
+            if contas_agora != contas_logadas:
+                log.info("profitdll.contas",
+                         pares=[f"{c}:{a}" for c, a in contas_agora],
+                         unicas=len(contas_agora),
+                         callbacks=self.client.contadores_roteamento["conta"])
+                contas_logadas = contas_agora
             nivel = nivel_ocupacao(st.profundidade_atual, self.bus.maxsize)
             if nivel == "atencao":
                 log.warning("recorder.fila_subindo",

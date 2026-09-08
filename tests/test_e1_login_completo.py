@@ -213,3 +213,24 @@ def test_sem_encerramento_ignora_encerrar_em(tmp_path: Path) -> None:
     # e sem a flag o horario do yaml continua valendo
     r2 = CliRunner().invoke(app, ["record", "-c", str(yaml), "--dry-run"])
     assert "encerramento: 18:30" in r2.output
+
+
+def test_contas_repetidas_pela_dll_sao_deduplicadas() -> None:
+    """Teste A real (08/09): contas=14 para um login com DUAS contas, com 8
+    eventos ROTEAMENTO=5 no mesmo log. Se a DLL re-anuncia a cada
+    notificacao, contas_vistas precisa ter os pares UNICOS e o contador
+    bruto precisa mostrar a multiplicidade -- e' isso que distingue
+    duplicata de entrada real."""
+    fake = FakeProfitDLL(eventos_por_ativo=1,
+                         contas=((32006, "SIMULADOR", "DEMO-1"),
+                                 (1234, "XP", "REAL-9")))
+    c = _client(fake, login_completo=True)
+    c.connect(timeout_s=5)
+    try:
+        # a DLL "re-anuncia" mais seis vezes
+        for _ in range(6):
+            fake.GetAccount()
+        assert c.contadores_roteamento["conta"] == 14
+        assert c.contas_vistas == [(32006, "DEMO-1"), (1234, "REAL-9")]
+    finally:
+        c.disconnect()

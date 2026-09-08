@@ -927,6 +927,71 @@ Nao existe teste que prove o fluxo de trades sem usar a conexao de
 producao no pregao. Registrado para nao se procurar um atalho que nao
 existe.
 
+#### Teste A rodou (2026-09-08 18:46, v2.06) — resultado e duas correcoes (v2.07)
+
+O log do operador provou: `DLLInitializeLogin` retornou 0; LOGIN 0/0
+(o `NL_INTERNAL_ERROR` de 26/08 NAO voltou); ROTEAMENTO passou por
+1, 2, 4 e chegou em **5 (BROKER_CONNECTED)**; MARKET_DATA em 4; os 9
+tickers aceitos; 27 eventos fluiram com 0 descartes. **A conexao unica
+com sessao completa funciona.**
+
+Mas o log tambem expos dois erros meus (Claude):
+
+1. **Protocolo**: o teste durou 4 segundos. O yaml de producao tem
+   `encerrar_em: 18:30` e o teste rodou as 18:46 -- o record se encerrou
+   1,5 s apos subir. Nenhum heartbeat. Corrigido com `record
+   --sem-encerramento`, que anula o horario do yaml.
+
+2. **Codigo**: `contas=0`. O `AccountCallback` so' dispara depois de
+   `GetAccount()`, e `GetAccount()` so' vale com ROTEAMENTO=5 -- o
+   `ea/contas.py` aprendeu isso em 26/08. A v2.06 nunca chamava
+   `GetAccount()`, e pior: `roteamento_conectado` era LOGIN=0, o PRIMEIRO
+   dos quatro sinais -- o mesmo bug de 26/08, repetido. No log real o
+   `valor=5` chegou 0,35 s DEPOIS de `connect()` devolver; um E2 que
+   chamasse `GetAccount()` logo apos o connect correria contra a DLL.
+
+   O fake escondeu isso: anunciava contas no login, sem `GetAccount()` --
+   mais generoso que a DLL. Corrigido para ser fiel: contas SO' apos
+   `GetAccount()`, e o 5 chega depois do market data como no log real.
+
+   Client v2.07: `roteamento_estado` separado de `conectado_login`;
+   `corretora_pronta` (== 5) e' o que o E2 vai exigir; apos market data
+   pronto, espera ate' 5 s pela corretora e chama `GetAccount()` UMA vez
+   da thread principal (nunca de callback -- reentrar na DLL de dentro
+   de um callback e' indefinido). Se a corretora nao ficar pronta no
+   prazo, loga e segue: a captura nunca fica refem. Heartbeat mostra
+   `login_ok`, `corretora_pronta`, `contas`.
+
+#### Teste A repetido (2026-09-08 20:14, v2.07) — PASSOU, com um numero a explicar
+
+2,1 minutos estavel. `corretora_pronta=True`, `contas_pedidas retorno=0`,
+zero descartes, 23 eventos (snapshots de subscribe). **E1 provado ate'
+onde da' para provar fora do pregao.**
+
+O numero: **`contas=14`**. O login tem DUAS contas (demo e real; o
+`ea-contas` de agosto achou duas). No mesmo log ha' exatamente **8
+eventos `tipo=1 valor=5`**, e o ROTEAMENTO oscilou 5 -> 2 -> 5 antes de
+estabilizar. Duas hipoteses, e o log da v2.07 nao distingue:
+
+1. a DLL re-anuncia as mesmas contas a cada notificacao de corretora e
+   o contador somava invocacoes (7 x 2 = 14);
+2. sao 14 entradas reais (subcontas, outras corretoras).
+
+Importa para o E2: ele roteia para UMA conta especifica via
+`RoteamentoConfig.conta_para()`. Lista errada ou duplicada embaixo da
+primeira ordem nao e' aceitavel.
+
+v2.08: `contas_vistas` deduplicado (pares unicos, ordem de chegada);
+`contadores_roteamento["conta"]` continua bruto (invocacoes); heartbeat
+mostra os dois (`contas`, `contas_callbacks`); e `profitdll.contas` loga
+os pares `corretora:conta` UMA vez, da thread principal, quando a lista
+muda. O teste B, rodando sobre a v2.08, responde isto de graca.
+
+Observacao para o E2/E3: o ROTEAMENTO oscila (5 -> 2 -> 5 em 2 ms).
+`corretora_pronta` reflete o ULTIMO valor. Uma ordem enviada no
+instante do 2 seria recusada. O E2 confere `corretora_pronta` NO
+MOMENTO do envio, nao uma vez no inicio.
+
 #### O que o E1 NAO faz
 
 Nao envia ordem. Nao constroi `ExecutorDeOrdens`. Nao muda o EA. A flag
