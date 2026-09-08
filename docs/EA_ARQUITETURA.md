@@ -885,17 +885,19 @@ Pre-condicao: record de producao PARADO (as duas conexoes nao coexistem
 record ja' encerrado pelo `encerrar_em`:
 
     profit-tape record -c config/recorder.yaml --login-completo ^
-        --log-file logs/e1_teste_a.log
+        --sem-encerramento --log-file logs/e1_teste_a.log
 
-Deixa 2 minutos e Ctrl+C. O que ler no log, nesta ordem:
+`--sem-encerramento` e' obrigatorio: o yaml de producao encerra as 18:30 e
+o teste roda depois disso. Deixa 2 minutos e Ctrl+C. O que ler:
 
 1. `profitdll.inicializado modo=DLLInitializeLogin`
-2. `profitdll.estado tipo=0 valor=0` (login ok) -- se vier valor != 0 ou
-   `NL_INTERNAL_ERROR`, e' o incidente de 26/08 de volta: parar aqui.
-3. `profitdll.conectado login_completo=True roteamento_conectado=True contas=N`
-   com N >= 1. **N=0 com roteamento_conectado=True e' suspeito**: sessao
-   subiu mas nenhuma conta anunciada -- o E2 nao teria onde rotear.
-4. `recorder.heartbeat ... roteamento_conectado=True contas=N` repetindo.
+2. `profitdll.estado tipo=0 valor=0` (login) e `tipo=1 valor=5`
+   (corretora) -- se o 5 nao vier, `GetAccount()` nao e' chamado e o
+   log mostra `profitdll.corretora_nao_pronta`.
+3. `profitdll.contas_pedidas retorno=0`
+4. `recorder.heartbeat ... login_ok=True corretora_pronta=True contas=N`
+   com **N >= 1**. Zero contas com corretora pronta e' o caso a
+   investigar: o E2 nao teria onde rotear.
 
 ATENCAO: isto grava na MESMA raiz do yaml (`data/raw`). Fora do pregao
 nao chega evento, entao nao suja nada -- mas se preferir isolar, aponte

@@ -926,3 +926,22 @@ EXECUCAO (E0). O resultado decide a família de funções do E2.
 
 **Pendente (operador)**: teste A hoje após 18:30 com o record parado;
 mandar as 4 linhas do log. Teste B só depois do A passar.
+
+### Continuação (2026-09-08, 18:46) — teste A rodou; duas correções (v2.07)
+
+- **Teste A provou o essencial**: login completo conecta (0), corretora
+  chega em BROKER_CONNECTED(5), market data em 4, 9 tickers aceitos, 27
+  eventos com 0 descartes. `NL_INTERNAL_ERROR` de 26/08 não voltou.
+- **Erro de protocolo meu**: o teste durou 4 s — `encerrar_em: 18:30` do
+  yaml de produção, teste às 18:46. Corrigido com `--sem-encerramento`.
+- **Erro de código meu**: `contas=0`. Nunca chamava `GetAccount()`, e
+  `roteamento_conectado` era LOGIN=0 — o mesmo bug que o `contas.py`
+  corrigiu em 26/08, repetido por mim. O fake escondia (anunciava contas
+  no login). Corrigido: `corretora_pronta` (ROTEAMENTO=5) separado do
+  login; `GetAccount()` uma vez após a corretora, da thread principal,
+  com espera limitada que nunca prende a captura; fake fiel à sequência
+  real do log.
+- 566 testes, coverage 76%, ruff/mypy limpos.
+
+**Pendente (operador)**: repetir o teste A com `--sem-encerramento`, 2
+minutos; o que falta provar é `contas>=1` no heartbeat.

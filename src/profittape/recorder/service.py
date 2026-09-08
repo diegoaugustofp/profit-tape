@@ -107,7 +107,7 @@ class RecorderService:
             log.warning("recorder.login_completo",
                         nota="conexao sobe com DLLInitializeLogin (roteamento). "
                              "E1 da trilha de execucao -- confira o heartbeat: "
-                             "roteamento_conectado e contas devem aparecer.")
+                             "corretora_pronta=True e contas>=1 devem aparecer.")
         self._parar = threading.Event()
 
     # ------------------------------------------------------------------
@@ -216,7 +216,8 @@ class RecorderService:
                 # login completo, roteamento_conectado=True e contas>0 sao a
                 # prova de que a sessao de roteamento subiu junto com a
                 # captura -- e' o que o teste A do E1 le.
-                roteamento_conectado=self.client.conectado_login,
+                login_ok=self.client.conectado_login,
+                corretora_pronta=self.client.corretora_pronta,
                 contas=len(self.client.contas_vistas),
             )
             nivel = nivel_ocupacao(st.profundidade_atual, self.bus.maxsize)

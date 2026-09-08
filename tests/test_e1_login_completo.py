@@ -13,6 +13,8 @@ prova aqui, contra o FakeProfitDLL:
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from profittape.pipeline.bus import EventBus
@@ -34,6 +36,7 @@ def test_default_continua_market_login_sem_nenhuma_mudanca() -> None:
         assert fake.modo_init == "market"
         assert c.login_completo is False
         assert c.conectado_market
+        assert c.roteamento_estado is None
         # no MarketLogin as callbacks de roteamento existem mas ficam mudas
         assert c.contadores_roteamento == {"ordem_mudanca": 0,
                                            "ordem_historico": 0, "conta": 0}
@@ -42,7 +45,11 @@ def test_default_continua_market_login_sem_nenhuma_mudanca() -> None:
         c.disconnect()
 
 
-def test_login_completo_usa_dllinitializelogin_e_anuncia_contas() -> None:
+def test_login_completo_usa_dllinitializelogin_e_pede_as_contas() -> None:
+    """v2.07: as contas so' existem apos GetAccount(), e GetAccount() so'
+    vale com a corretora em BROKER_CONNECTED(5). O client precisa esperar
+    o 5 (que no teste A real chegou DEPOIS do market data) e chamar UMA
+    vez. Na v2.06 nunca chamava -- contas=0 no teste A."""
     fake = FakeProfitDLL(eventos_por_ativo=1,
                          contas=((32006, "SIMULADOR", "DEMO-1"),
                                  (1234, "XP", "REAL-9")))
@@ -51,9 +58,40 @@ def test_login_completo_usa_dllinitializelogin_e_anuncia_contas() -> None:
     try:
         assert fake.modo_init == "login"
         assert c.conectado_market          # a captura continua sendo o gate
-        assert c.conectado_login           # e a sessao de roteamento subiu
+        assert c.conectado_login           # login basico
+        assert c.corretora_pronta          # e a CORRETORA (5), que e' o que vale
+        assert c.contas_pedidas
+        assert fake.get_account_chamadas == 1
         assert c.contadores_roteamento["conta"] == 2
         assert c.contas_vistas == [(32006, "DEMO-1"), (1234, "REAL-9")]
+    finally:
+        c.disconnect()
+
+
+def test_login_ok_nao_e_corretora_pronta() -> None:
+    """O bug de 26/08 (contas.py) repetido na v2.06 (client.py): LOGIN=0 e'
+    o primeiro sinal, nao 'tudo pronto'. Os dois estados sao distintos."""
+    fake = FakeProfitDLL(eventos_por_ativo=1, atraso_login_s=0.3)
+    c = _client(fake, login_completo=True)
+    # dispara so' o login, sem corretora
+    c._montar_callbacks()
+    c._cb["state"](0, 0)
+    assert c.conectado_login
+    assert not c.corretora_pronta
+    c._cb["state"](1, 2)              # servidor de roteamento, ainda nao a corretora
+    assert not c.corretora_pronta
+    c._cb["state"](1, 5)
+    assert c.corretora_pronta
+
+
+def test_market_login_nunca_chama_getaccount() -> None:
+    fake = FakeProfitDLL(eventos_por_ativo=1)
+    c = _client(fake)
+    c.connect(timeout_s=5)
+    try:
+        assert not c.contas_pedidas
+        assert getattr(fake, "get_account_chamadas", 0) == 0
+        assert not c.corretora_pronta
     finally:
         c.disconnect()
 
@@ -128,3 +166,50 @@ def test_callbacks_de_roteamento_so_contam_nao_fazem_io() -> None:
         assert c.contadores_roteamento["ordem_historico"] == antes["ordem_historico"] + 1
     finally:
         c.disconnect()
+
+
+def test_corretora_nunca_pronta_nao_bloqueia_a_captura() -> None:
+    """Se a corretora nao chegar ao 5, connect() devolve mesmo assim: a
+    captura manda. So' loga e nao chama GetAccount()."""
+    class SemCorretora(FakeProfitDLL):
+        def _login_assincrono(self) -> None:
+            import time as _t
+            _t.sleep(self.atraso_login_s)
+            self._cb["state"](0, 0)
+            _t.sleep(self.atraso_login_s)
+            self._cb["state"](2, 4)      # mercado sobe, corretora nunca
+    fake = SemCorretora(eventos_por_ativo=1)
+    c = _client(fake, login_completo=True)
+    import time as _t
+    t0 = _t.monotonic()
+    c.connect(timeout_s=5)
+    try:
+        assert c.conectado_market
+        assert not c.corretora_pronta
+        assert not c.contas_pedidas
+        assert getattr(fake, "get_account_chamadas", 0) == 0
+        assert _t.monotonic() - t0 < 8     # espera limitada (5 s), nao infinita
+    finally:
+        c.disconnect()
+
+
+def test_sem_encerramento_ignora_encerrar_em(tmp_path: Path) -> None:
+    """A falha de protocolo do teste A (v2.06): o yaml de producao encerra as
+    18:30 e o teste rodou as 18:46 -- durou 4 s. `--sem-encerramento`
+    precisa anular o horario, e `--dry-run` mostra o resultado."""
+    from typer.testing import CliRunner
+
+    from profittape.cli import app
+    yaml = tmp_path / "r.yaml"
+    yaml.write_text(
+        "ativos:\n  - ticker: WINFUT\n    bolsa: F\n    trades: true\n"
+        "storage:\n  raiz: " + str(tmp_path / "raw").replace("\\", "/") + "\n"
+        "runtime:\n  encerrar_em: '18:30'\n", encoding="utf-8")
+    r = CliRunner().invoke(app, ["record", "-c", str(yaml), "--dry-run",
+                                 "--login-completo", "--sem-encerramento"])
+    assert r.exit_code == 0, r.output
+    assert "COMPLETO (roteamento)" in r.output
+    assert "encerramento: so Ctrl+C" in r.output
+    # e sem a flag o horario do yaml continua valendo
+    r2 = CliRunner().invoke(app, ["record", "-c", str(yaml), "--dry-run"])
+    assert "encerramento: 18:30" in r2.output

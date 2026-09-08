@@ -73,6 +73,14 @@ class ProfitClient:
 
         self.conectado_market = False
         self.conectado_login = False
+        # E1 v2.07: o BUG que o ea/contas.py corrigiu em 26/08 e que eu
+        # repeti na v2.06 -- "conectado_login" (tipo=LOGIN valor=0) e' o
+        # PRIMEIRO dos quatro sinais, nao "tudo pronto". GetAccount() e
+        # qualquer ordem dependem da CORRETORA conectada: tipo=ROTEAMENTO
+        # valor=BROKER_CONNECTED(5). Visto no teste A de 08/09: o valor=5
+        # chegou 0,35 s DEPOIS de connect() ter devolvido.
+        self.roteamento_estado: int | None = None
+        self.contas_pedidas = False
         self._inicializado = False
 
         # E1: diagnostico da sessao de roteamento. Preenchido SO' pelas
@@ -187,14 +195,50 @@ class ProfitClient:
             if self.conectado_market:
                 log.info("profitdll.conectado",
                          login_completo=self.login_completo,
-                         roteamento_conectado=self.conectado_login,
+                         login_ok=self.conectado_login,
+                         corretora=self.roteamento_estado,
                          contas=len(self.contas_vistas))
+                if self.login_completo:
+                    self._pedir_contas(timeout_s=5.0)
                 return
             time.sleep(0.2)
         raise LoginFailed(
             f"Market data nao conectou em {timeout_s}s. Verifique credencial, "
             f"chave de ativacao e se o Profit esta aberto e logado."
         )
+
+    @property
+    def corretora_pronta(self) -> bool:
+        """ROTEAMENTO em BROKER_CONNECTED(5). E' ISTO que GetAccount() e o
+        envio de ordem exigem -- nao o login basico."""
+        return self.roteamento_estado == 5
+
+    def _pedir_contas(self, timeout_s: float) -> None:
+        """
+        Espera (limitado) a corretora ficar pronta e chama GetAccount() UMA
+        vez. As contas chegam depois, pelo AccountCallback -- aparecem no
+        heartbeat. Nunca bloqueia a captura: se a corretora nao ficar
+        pronta no prazo, loga e segue; o E2 confere corretora_pronta antes
+        de qualquer ordem. Chamado da thread principal, nunca de callback
+        (reentrar na DLL de dentro de um callback e' comportamento
+        indefinido).
+        """
+        assert self._dll is not None
+        limite = time.monotonic() + timeout_s
+        while time.monotonic() < limite and not self.corretora_pronta:
+            time.sleep(0.1)
+        if not self.corretora_pronta:
+            log.warning("profitdll.corretora_nao_pronta",
+                        estado=self.roteamento_estado, esperou_s=timeout_s,
+                        nota="GetAccount() nao chamado; captura segue normal")
+            return
+        get_account = getattr(self._dll, "GetAccount", None)
+        if get_account is None:
+            log.warning("profitdll.sem_getaccount")
+            return
+        ret = get_account()
+        self.contas_pedidas = True
+        log.info("profitdll.contas_pedidas", retorno=int(ret))
 
     def disconnect(self) -> None:
         if self._inicializado and self._dll is not None:
@@ -280,6 +324,8 @@ class ProfitClient:
                 self.conectado_market = valor in (2, 3, 4)
             elif tipo == ConnState.LOGIN:
                 self.conectado_login = valor == 0
+            elif tipo == ConnState.ROTEAMENTO:
+                self.roteamento_estado = valor
             if self._on_state is not None:
                 self._on_state(tipo, valor)
 

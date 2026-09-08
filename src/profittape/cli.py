@@ -41,12 +41,19 @@ def record(
              "MarketLogin. Sobrescreve runtime.login_completo do yaml. Use "
              "num record de TESTE (pasta separada, fora do pregao) antes "
              "de ligar no yaml de producao -- ver docs/EA_ARQUITETURA.md."),
+    sem_encerramento: bool = typer.Option(
+        False, "--sem-encerramento",
+        help="Ignora runtime.encerrar_em do yaml (roda ate' Ctrl+C). Para o "
+             "teste A do E1 fora do pregao: o yaml de producao encerra as "
+             "18:30, e o teste roda DEPOIS disso -- na v2.06 ele durou 4 s."),
 ) -> None:
     """Grava tape e book ate o horario configurado ou ate Ctrl+C."""
     configurar(log_level, log_file)
     cfg = RecorderConfig.from_yaml(config)
     if login_completo:
         cfg.runtime.login_completo = True
+    if sem_encerramento:
+        cfg.runtime.encerrar_em = None
     cred = Credenciais()
 
     if dry_run:
@@ -59,6 +66,7 @@ def record(
             typer.echo(f"  EA integrado: --ea-config {ea_config}")
         modo = "COMPLETO (roteamento)" if cfg.runtime.login_completo else "market data"
         typer.echo(f"  login: {modo}")
+        typer.echo(f"  encerramento: {cfg.runtime.encerrar_em or 'so Ctrl+C'}")
         raise typer.Exit(0)
 
     cred.validar()

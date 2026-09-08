@@ -89,13 +89,33 @@ class FakeProfitDLL:
         time.sleep(self.atraso_login_s)
         self._cb["state"](0, 0)   # login ok
         if self.modo_init == "login":
-            # A DLL real anuncia as contas de roteamento logo apos o login
-            # completo, uma callback por conta -- e' assim que ea-contas
-            # as descobre. No MarketLogin isto nunca acontece.
-            for corretora, nome, account_id in self.contas:
-                self._cb["account"](corretora, nome, account_id, "TITULAR")
+            # Sequencia REAL observada no teste A de 08/09: a corretora
+            # (tipo=1) passa por 1,2,4 e chega em 5 (BROKER_CONNECTED)
+            # -- e chegou DEPOIS do market data no log real, entao aqui
+            # tambem vem depois, para o client nao poder contar com a
+            # ordem. As contas NAO sao anunciadas aqui: so' apos
+            # GetAccount() (versao v2.06 do fake anunciava no login e
+            # escondeu exatamente esse bug do client).
+            self._cb["state"](1, 1)
+            self._cb["state"](1, 2)
         time.sleep(self.atraso_login_s)
         self._cb["state"](2, 4)   # market data conectado
+        if self.modo_init == "login":
+            time.sleep(self.atraso_login_s)
+            self._cb["state"](1, 4)
+            self._cb["state"](1, 5)   # corretora pronta -- so' agora GetAccount() vale
+        self.roteamento_pronto = self.modo_init == "login"
+
+    def GetAccount(self) -> int:
+        """Como a DLL real: dispara AccountCallback uma vez por conta, e
+        so' se a corretora estiver conectada. Antes disso, nao devolve
+        nada (o ea/contas.py aprendeu isso em 26/08)."""
+        self.get_account_chamadas = getattr(self, "get_account_chamadas", 0) + 1
+        if self.modo_init != "login" or not getattr(self, "roteamento_pronto", False):
+            return -1
+        for corretora, nome, account_id in self.contas:
+            self._cb["account"](corretora, nome, account_id, "TITULAR")
+        return 0
 
     def __getattribute__(self, nome: str) -> object:
         # Simula a AUSENCIA do export: hasattr(dll, "DLLInitializeLogin")
