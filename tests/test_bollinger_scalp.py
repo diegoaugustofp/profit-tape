@@ -43,6 +43,13 @@ def _ohlc_curto() -> pd.DataFrame:
     return df
 
 
+@pytest.fixture(autouse=True)
+def sem_aquecimento(monkeypatch: pytest.MonkeyPatch) -> None:
+    """As sequencias construidas tem 6 barras; o aquecimento de 21 e'
+    testado a parte."""
+    monkeypatch.setattr(bs, "AQUECIMENTO_BARRAS", 0)
+
+
 @pytest.fixture
 def periodos_curtos(monkeypatch: pytest.MonkeyPatch) -> None:
     """Periodos reduzidos para a conta caber no papel. Os asserts sao
@@ -236,12 +243,38 @@ def test_compra_dispara_na_barra_certa_com_limite_na_maxima_da_correcao() -> Non
     assert not x["sinal_venda"].any()
 
 
-def test_estocastico_bloqueia_a_compra() -> None:
+def test_estocastico_bloqueia_a_compra_so_quando_ligado() -> None:
     df = _sequencia()
     df.loc[2, "est_ntsl"] = 25.0                 # nao esta' sobrevendido
-    x = marcar_sinais(df)
+    x = marcar_sinais(df, usar_estocastico=True)
     assert not x["sinal_compra"][3]
     assert x["c_compra_t1"][3] and x["c_compra_t2"][3] and not x["c_compra_est"][3]
+    assert marcar_sinais(df)["sinal_compra"][3]  # v1: estocastico fora
+
+
+def test_aquecimento_e_hora_limite(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(bs, "AQUECIMENTO_BARRAS", 4)
+    x = marcar_sinais(_sequencia())
+    assert not x["sinal_compra"][3]              # e' a 4a barra (pos 3 < 4)
+    assert x["sinal_compra"][5]
+    df = _sequencia()
+    df["hora_int"] = [1258, 1258, 1259, 1259, 1300, 1300]
+    monkeypatch.setattr(bs, "AQUECIMENTO_BARRAS", 0)
+    x = marcar_sinais(df)
+    assert x["sinal_compra"][3] and not x["sinal_compra"][5]   # 13:00 fecha
+
+
+def test_stop_e_geometria_em_fracao_do_atr() -> None:
+    """ATR21(t-1) = 90 -> stop 0,7 x 90 = 63 -> 65 ao tick; alvos 65 / 105,6->105 /
+    162,5->165; trailing ativa 40,6->40, puxa 16,25->15, passo 8,1->10."""
+    df = _sequencia()
+    df["atr_ntsl"] = [50.0, 50.0, 90.0, 40.0, 90.0, 40.0]
+    x = marcar_sinais(df)
+    assert x["stop_pts"][3] == 65.0
+    assert (x["alvo1_pts"][3], x["alvo2_pts"][3], x["alvo3_pts"][3]) == (65.0, 105.0, 165.0)
+    assert (x["trailing_ativa_pts"][3], x["trailing_puxa_pts"][3],
+            x["trailing_passo_pts"][3]) == (40.0, 15.0, 10.0)
+    assert np.isnan(x["stop_pts"][4])
 
 
 def test_venda_e_o_espelho_exato() -> None:
@@ -284,7 +317,7 @@ def test_funil_conta_cada_clausula() -> None:
     f = contar_clausulas(x)
     compra = f[f["lado"] == "compra"].set_index("clausula")["n"]
     assert compra["barras"] == 6
-    assert compra["+ estocastico(t-1) extremo"] == 2
+    assert compra["+ janela (aquecimento, ate' 13h)"] == 2
     assert compra["+ limitada tocada em t"] == 2
     assert compra["   ... executada na abertura"] == 2
     assert compra["   ... executada no recuo"] == 0
@@ -319,4 +352,4 @@ def test_funil_ignora_pregao_incompleto() -> None:
     f = contar_clausulas(x)
     compra = f[f["lado"] == "compra"].set_index("clausula")
     assert compra.loc["barras", "n"] == 6                       # so' o dia inteiro
-    assert compra.loc["+ estocastico(t-1) extremo", "por_pregao"] == 2.0   # / 1, nao / 2
+    assert compra.loc["+ janela (aquecimento, ate' 13h)", "por_pregao"] == 2.0   # / 1, nao / 2

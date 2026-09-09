@@ -36,6 +36,7 @@ sinal (>k) divergiu em 43 de 2.980 barras.
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -66,8 +67,35 @@ EST_MEDIA = 3
 EST_SOBREVENDIDO = 20.0
 EST_SOBRECOMPRADO = 80.0
 ATR_PERIODO = 21
-
 TICK_WIN = 5.0                 # pontos por tick
+
+# v1 (ficha de 2026-09-09): estocastico FORA da regra de entrada -- a
+# clausula extrema disparava 1,5 / 0 vezes por pregao (7.6). Fica no
+# diagnostico e como variante futura "acelerador" (entrada a mercado na
+# abertura de t em vez de limitada em high(t-2)).
+USAR_ESTOCASTICO_V1 = False
+
+# Stop = K_ATR x ATR21(t-1), congelado no sinal, arredondado ao tick.
+# k = 0,7 declarado pelo operador em 2026-09-09; a ancora e' que k = 0,5
+# reproduz os 8 ticks da spec no centro da janela (ATR21 mediano 88 pts).
+# A geometria da spec (8 / 13 / 20 ticks; trailing 5 -> 2, passo 1) vira
+# fracao do stop, para que so' exista UM numero novo.
+K_ATR = 0.7
+ALVOS_FRACAO_DO_STOP = (1.0, 13.0 / 8.0, 20.0 / 8.0)
+TRAILING_ATIVA_FRACAO = 5.0 / 8.0
+TRAILING_PUXA_FRACAO = 2.0 / 8.0
+TRAILING_PASSO_FRACAO = 1.0 / 8.0
+AQUECIMENTO_BARRAS = 21          # sem entrada nas primeiras 21 barras do pregao
+HORA_ULTIMA_ENTRADA = 1300       # HHMM, exclusivo
+
+
+def arredondar_ao_tick(pts: float, tick: float = TICK_WIN) -> float:
+    """Meio-tick vai para CIMA. `round()` do Python arredonda 32,5 para 32
+    (par) -- 162,5 pts virava 160 em vez de 165; pego na conferencia a mao."""
+    if pd.isna(pts):
+        return float("nan")
+    return float(max(tick, math.floor(pts / tick + 0.5) * tick))
+
 SEGUNDOS_BARRA = 15
 
 
@@ -259,16 +287,22 @@ def equivalencia(d: pd.DataFrame, tolerancia: float = 0.5) -> dict[str, Any]:
 # ---------------------------------------------------------------------
 def marcar_sinais(d: pd.DataFrame, col_sup: str = "bb_sup_ntsl",
                   col_inf: str = "bb_inf_ntsl",
-                  col_est: str = "est_ntsl") -> pd.DataFrame:
+                  col_est: str = "est_ntsl",
+                  usar_estocastico: bool = USAR_ESTOCASTICO_V1,
+                  col_atr: str = "atr_ntsl") -> pd.DataFrame:
     """
     Barra t e' a de ENTRADA. Compra:
         t-2  vermelha (close<open)  e close > banda superior
         t-1  branca   (close>open)  e close > banda superior
-             e estocastico(t-1) < 20
+             [e estocastico(t-1) < 20 -- so' se usar_estocastico]
         t    ordem LIMITADA de compra em high(t-2), valida so' em t
-    Venda e' o espelho (banda inferior, > 80, limitada em low(t-2)).
+    Venda e' o espelho (banda inferior, [> 80], limitada em low(t-2)).
     Doji nao e' vermelho nem branco. As tres barras no mesmo dia e no
-    mesmo bloco contiguo.
+    mesmo bloco contiguo. Sem entrada nas primeiras AQUECIMENTO_BARRAS
+    do pregao nem a partir de HORA_ULTIMA_ENTRADA.
+
+    `stop_pts` = K_ATR x ATR21(t-1), ao tick; alvos e trailing em
+    `alvo1/2/3_pts`, `trailing_ativa/puxa/passo_pts` (fracoes do stop).
 
     `executou`: a limitada foi TOCADA em t (low <= limite na compra).
     Toque nao e' preenchimento garantido -- na fila da B3 o limite pode
@@ -295,18 +329,36 @@ def marcar_sinais(d: pd.DataFrame, col_sup: str = "bb_sup_ntsl",
     x["c_compra_t2"] = (lag(vermelha, 2) & lag(acima, 2)).fillna(False).astype(bool)
     x["c_compra_t1"] = (lag(branca, 1) & lag(acima, 1)).fillna(False).astype(bool)
     x["c_compra_est"] = (lag(est, 1) < EST_SOBREVENDIDO).fillna(False).astype(bool)
+    # aquecimento por pregao + horario: posicao da barra dentro do dia
+    pos_dia = x.groupby("dia").cumcount()
+    janela = (pos_dia >= AQUECIMENTO_BARRAS)
+    if "hora_int" in x.columns:
+        janela &= (x["hora_int"] < HORA_ULTIMA_ENTRADA)
+    x["c_janela"] = janela.astype(bool)
+    est_c = x["c_compra_est"] if usar_estocastico else True
     x["sinal_compra"] = (x["c_compra_t2"] & x["c_compra_t1"]
-                         & x["c_compra_est"] & mesmo_dia).astype(bool)
+                         & est_c & mesmo_dia & janela).astype(bool)
 
     x["c_venda_t2"] = (lag(branca, 2) & lag(abaixo, 2)).fillna(False).astype(bool)
     x["c_venda_t1"] = (lag(vermelha, 1) & lag(abaixo, 1)).fillna(False).astype(bool)
     x["c_venda_est"] = (lag(est, 1) > EST_SOBRECOMPRADO).fillna(False).astype(bool)
+    est_v = x["c_venda_est"] if usar_estocastico else True
     x["sinal_venda"] = (x["c_venda_t2"] & x["c_venda_t1"]
-                        & x["c_venda_est"] & mesmo_dia).astype(bool)
+                        & est_v & mesmo_dia & janela).astype(bool)
 
     x["preco_limite"] = np.nan
     x.loc[x["sinal_compra"], "preco_limite"] = lag(x["high"], 2)[x["sinal_compra"]]
     x.loc[x["sinal_venda"], "preco_limite"] = lag(x["low"], 2)[x["sinal_venda"]]
+
+    sinal = x["sinal_compra"] | x["sinal_venda"]
+    atr1 = lag(x[col_atr], 1) if col_atr in x.columns else pd.Series(np.nan, index=x.index)
+    x["stop_pts"] = np.nan
+    x.loc[sinal, "stop_pts"] = (K_ATR * atr1[sinal]).map(arredondar_ao_tick)
+    for i, fr in enumerate(ALVOS_FRACAO_DO_STOP, 1):
+        x[f"alvo{i}_pts"] = (x["stop_pts"] * fr).map(arredondar_ao_tick)
+    for nome, fr in (("ativa", TRAILING_ATIVA_FRACAO), ("puxa", TRAILING_PUXA_FRACAO),
+                     ("passo", TRAILING_PASSO_FRACAO)):
+        x[f"trailing_{nome}_pts"] = (x["stop_pts"] * fr).map(arredondar_ao_tick)
 
     x["executou"] = False
     x["tipo_execucao"] = ""
@@ -363,7 +415,8 @@ def contar_clausulas(x: pd.DataFrame) -> pd.DataFrame:
             ("barras", pd.Series(True, index=x.index)),
             ("t-1 fora da banda e cor de sinal", x[f"{pref}_t1"]),
             ("+ t-2 correcao fora da banda", x[f"{pref}_t1"] & x[f"{pref}_t2"]),
-            ("+ estocastico(t-1) extremo", x[sinal]),
+            ("+ janela (aquecimento, ate' 13h)" + (" + estocastico" if USAR_ESTOCASTICO_V1 else ""),
+             x[sinal]),
             ("+ limitada tocada em t", x[sinal] & x["executou"]),
             ("   ... executada na abertura",
              x[sinal] & x["executou"] & (x["tipo_execucao"] == "abertura")),

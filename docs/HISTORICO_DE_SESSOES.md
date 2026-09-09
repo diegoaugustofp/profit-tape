@@ -999,3 +999,27 @@ mandar o `profitdll.contas`.
   vez na suite completa e passou 5x isolado e na repeticao: depende de
   `time.sleep(0.05)` sob carga. Nao e' desta entrega; fica anotado.
 - 569 testes, ruff e mypy strict limpos.
+
+### Continuacao (2026-09-09, tarde) — v1 congelada e ficha escrita (v2.11)
+
+- Operador decidiu: janela 09-13h com 21 barras de aquecimento;
+  estocastico FORA do v1 (fica como variante "acelerador": com extremo,
+  entrada a mercado na abertura de t); stop = fracao do ATR21 com
+  k = 0,7 (a manha tem varias volatilidades: ATR21 mediano 81 / 119 /
+  90 / 58 pts as 09 / 10 / 11 / 12h). Geometria da spec preservada
+  como fracao do stop (alvos 1 / 1,625 / 2,5; trailing 0,625 / 0,25 /
+  0,125) -- um numero novo so'.
+- Funil v1 (2 pregoes inteiros, 09:08-13:00): 82 / 56 sinais por
+  pregao; limitada tocada em 83% / 91%, 77% na abertura de t; sinais a
+  cada 4 barras -> operacoes por pregao dependem da duracao, a medir no
+  replay pelo tape.
+- Ficha de seis linhas escrita (docs/BOLLINGER_SCALP.md §0): efeito
+  binario na perna 1 (nula de lucro p1 = 0,59 apos custo), n = 370.
+- Codigo: `marcar_sinais` com `usar_estocastico=False` por default,
+  janela (aquecimento + 13h), `stop_pts` e geometria; conferencia a mao
+  pegou o `round()` par do Python (162,5 -> 160): meio-tick agora vai
+  para cima. 571 testes, ruff e mypy limpos.
+
+**Proximo**: barras de 15s montadas do tape (com a equivalencia ja'
+provada contra o grafico) e replay das tres pernas pelo tape -> TAXA de
+operacoes e p1 de depuracao -> HORIZONTE final -> ligar.

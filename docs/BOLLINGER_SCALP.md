@@ -1,9 +1,65 @@
 # Scalp de Bollinger modificada (15s) — hipótese em formalização
 
-Estado: **ANTES do pré-registro**. Este documento é o texto que vai
-virar a ficha de seis linhas do forward (skill `disciplina-forward`)
-quando as dúvidas abertas fecharem e a TAXA for medida. Nada aqui foi
-calibrado: os números são os que o operador opera.
+Estado (2026-09-09): **ficha escrita (§0), v1 congelada**. Falta a
+depuração pelo tape (replay das três pernas) para preencher os dois
+campos "a medir" antes de ligar o forward. Nada aqui foi calibrado a
+resultado: os números são os do operador ou medidos em features.
+
+## 0. Ficha de seis linhas (v1, `entregue-v2.11`)
+
+    HIPOTESE   Na manha do WIN, com o preco trabalhando acima da banda
+               estreita (0,38 sigma / 21 em 15s), uma correcao de uma
+               barra seguida de retomada e' continuacao: comprar o
+               reteste do topo da correcao, com stop de 0,7 x ATR21 e
+               alvos de 1 / 1,625 / 2,5 stops, paga o custo. Espelho
+               na venda.
+
+    EVENTO     Barra de 15s, indicadores reiniciados a cada pregao,
+               janela = a partir da 22a barra do dia ate' 12:59:45.
+               t-2 vermelha e close > B_sup; t-1 branca e close > B_sup;
+               em t, limitada de compra em high(t-2), lote 3, cancela
+               se nao executar em t. Sem estocastico. Sinal com posicao
+               aberta e' ignorado. Stop = 0,7 x ATR21(t-1) ao tick
+               (meio-tick para cima), congelado; alvos 1 / 1,625 / 2,5
+               stops; trailing nas pernas 2 e 3: ativa a 0,625 stop,
+               puxa para 0,25 atras da maxima favoravel, passo 0,125;
+               perna 1 nao se move. Zeragem 17:30. Execucao parcial de
+               n contratos -> pernas RP1, RP2, final nessa ordem.
+               Circuit breaker de 3 perdas mantido.
+
+    TAXA       SINAIS: 82 compra + 56 venda por pregao (09:08-13:00,
+               2 pregoes inteiros medidos no grafico); limitada tocada
+               em 83% / 91% deles, 77% ja' na abertura de t. Sinais a
+               cada 4 barras na mediana -> a maioria cai dentro de uma
+               operacao aberta. OPERACOES por pregao: A MEDIR no replay
+               pelo tape (depuracao). Ordem de grandeza esperada: 10-30.
+
+    EFEITO     Resultado BINARIO por operacao na perna 1: alvo1 (+1
+               stop) antes do stop (-1 stop), ordem intrabarra pelo
+               tape. Nula de lucro apos custo (11 pts) com stop mediano
+               62 pts: p1 = 0,59. Quero enxergar p1 >= 0,65 contra
+               p1 <= 0,55: meia-largura de 5 pp -> n = 370 operacoes.
+               Secundario, so' reportado: P&L total das 3 pernas em
+               pontos, por operacao e por pregao.
+
+    HORIZONTE  n = 370 / (operacoes por pregao). A 20 por pregao, ~19
+               pregoes (1 mes); a 10, ~37 (2 meses); a 5, ~74 (3,5
+               meses). Todos < 6 meses. Numero final depois do replay.
+
+    CRITERIO   Ao atingir n = 370: p1 >= 0,65 favoravel; p1 <= 0,55
+               contra; entre os dois, inconclusivo (e o P&L secundario
+               nao promove um inconclusivo). IC de 95% reportado sempre.
+
+    PARADA     Olho em n = 185 (metade) so' para defeito de
+               especificacao (barras marcadas, uma a uma), NAO para
+               veredito. Decido em n = 370. Sequencia de perdas, dia
+               ruim ou circuit breaker NAO autorizam parar antes: sao
+               risco, nao veredito. Mudanca de qualquer numero acima
+               reinicia a contagem (carimbo de versao).
+
+Variantes registradas para DEPOIS (nao v1): estocastico como
+"acelerador" (com <20 / >80, entrada a mercado na abertura de t em vez
+de limitada); regra de horario por volume (perfil medido, platô 13-16h).
 
 Origem: especificação do operador em 2026-09-04
 (`Scalping com bandas de Bollinger.md`), consolidada em conversa na
