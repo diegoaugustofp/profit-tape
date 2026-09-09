@@ -1056,3 +1056,20 @@ operacoes e p1 de depuracao -> HORIZONTE final -> ligar.
 **Pendente (Diego)**: `profit-tape bollinger-replay WINFUT --dumps <pasta
 dos dump*.txt>` no curated. A saida preenche OPERACOES por pregao e o
 p1 de depuracao da ficha; a comparacao tape x grafico valida as barras.
+
+### Continuação (2026-09-09, 15:25) — reconexão real durante o teste B: E1 fechado com evidência de produção
+
+- Internet caiu duas vezes durante o pregão com `login_completo: true`
+  em produção. A primeira, registrada em detalhe: ~83 s
+  (15:23:42–15:25:05), roteamento e mercado fora do ar juntos, heartbeat
+  com `linhas` congelada, `sem_evento_ha_s` até 79,3.
+- Recuperação idêntica à sequência do teste A: tudo gerenciado pela DLL
+  sozinha (`DLLInitializeLogin` nunca rechamado). `contas_callbacks`
+  saltou +6 no restabelecimento — confirma de vez que a DLL re-anuncia
+  contas a cada reconexão, não só no login inicial.
+- **Validação ao vivo, não mais teórica**: `corretora_pronta` seguiu o
+  estado real durante toda a queda — caiu e voltou sozinho. Confirma a
+  necessidade de o E2 checar `corretora_pronta` no instante do envio.
+- Lacuna real de dado nos ~83 s, registrada em `INTEGRIDADE_DOS_DADOS.md`
+  — não é bug, `descartados=0` mede só fila cheia, não conexão caída.
+- **E1 fechado.** Próximo passo: E2.

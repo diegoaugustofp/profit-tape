@@ -47,3 +47,34 @@ queue imbalance). trade do mesmo periodo continua confiavel.
 - **book_price**, dt=2026-09-08: sym=WINFUT
 - **tiny_book**, dt=2026-09-08: sym=BBAS3, sym=BOVA11, sym=ITUB4, sym=MGLU3, sym=PETR4, sym=VALE3, sym=WDOFUT, sym=WEGE3, sym=WINFUT
 - **trade**, dt=2026-09-08: sym=WDOFUT, sym=WINFUT
+## Lacuna por queda de rede real durante o teste B do E1 (2026-09-09, ~83 s)
+
+Durante o teste B (record de produção com `login_completo: true`), a
+internet caiu duas vezes ao longo do pregão. A primeira ficou registrada
+com precisão no log:
+
+- **15:23:42 -> 15:25:05** (~83 s): `linhas` do heartbeat CONGELADO no
+  mesmo valor pelos dois heartbeats intermediarios, `sem_evento_ha_s`
+  subindo 19,2 -> 49,2 -> 79,3. Roteamento (`tipo=1`) E mercado (`tipo=2`)
+  oscilando juntos ate' a DLL reconectar sozinha.
+- `descartados=0` durante toda a janela -- **nao contradiz a lacuna**:
+  esse contador so' mede descarte por fila cheia (`queue.Full`), nunca
+  dado que nunca chegou por a conexao ter caido. As duas coisas sao
+  independentes; aqui a fila nunca encheu porque nao havia nada chegando.
+- Nenhum negocio de nenhum dos 9 ativos foi capturado nesses ~83 s. Nao
+  ha' como recuperar -- nunca chegou a DLL, entao nunca esteve em
+  nenhum buffer nosso.
+- Houve uma SEGUNDA queda no mesmo pregao, mencionada pelo operador mas
+  sem log detalhado anexado aqui.
+
+**Se algo parecer estranho em research sobre 09/09 perto de 15:23-15:25**:
+suspeitar desta lacuna antes de qualquer hipotese de mercado. Volume ou
+contagem de trades anormalmente baixa nesse minuto e meio e' esperado,
+nao sinal.
+
+**O lado bom, registrado no EA_ARQUITETURA.md (E1)**: a reconexao foi
+inteiramente gerenciada pela DLL (nosso codigo nunca rechama
+`DLLInitializeLogin`); `corretora_pronta` seguiu o estado real durante
+toda a queda (caiu para False, voltou True sozinho quando a DLL avisou),
+validando ao vivo a regra de checar `corretora_pronta` no MOMENTO do
+envio de ordem, nao uma vez so' no inicio.

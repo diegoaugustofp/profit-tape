@@ -1017,6 +1017,38 @@ pre-v2.06 por isso. Correcao duravel proposta antes do E2: versao vinda
 da tag (`setuptools-scm`), para `doctor` e `pip show` denunciarem o
 descompasso em 5 segundos.
 
+#### Teste B: reconexao REAL validou corretora_pronta ao vivo (2026-09-09)
+
+Durante o pregao de producao com `login_completo: true`, a internet caiu
+duas vezes. A primeira ficou registrada em detalhe: ~83 s
+(15:23:42-15:25:05) com roteamento E mercado fora do ar juntos, `linhas`
+do heartbeat congelada, `sem_evento_ha_s` subindo ate' 79,3.
+
+A recuperacao foi IDENTICA a sequencia do teste A original -- LOGIN,
+depois MERCADO 1->2->4, depois ROTEAMENTO 1->2->4->5 com a mesma rajada
+de re-anuncio de contas (`contas_callbacks` saltou +6, confirmando de vez
+que a DLL re-anuncia as contas a cada reconexao, nao so' no login
+inicial). Tudo gerenciado pela DLL sozinha: `DLLInitializeLogin` nunca e'
+rechamado (confirmado no codigo antes deste evento, ver secao acima) --
+o socket caiu e voltou dentro da MESMA sessao.
+
+**O que isto prova**: `corretora_pronta` (o ultimo valor de ROTEAMENTO
+recebido, nao "ja vimos o 5 alguma vez") seguiu o estado real durante
+TODA a queda -- caiu para False as 15:23:45, ficou False por ~80 s,
+voltou True sozinho as 15:25:15. Isto deixa de ser exigencia teorica do
+E2 e vira validado ao vivo: se uma ordem fosse enviada em qualquer
+momento entre 15:23:45 e 15:25:15 sem checar `corretora_pronta` no
+instante do envio, ela sairia (ou tentaria sair) contra uma sessao morta.
+
+**Lacuna de dado, registrada** (nao e' bug, e' consequencia esperada de
+queda de rede): nenhum negocio de nenhum dos 9 ativos foi capturado
+nesses ~83 s. `descartados=0` continua correto -- esse contador mede so'
+fila cheia, nunca dado que nunca chegou por a conexao ter caido. Ver
+`docs/INTEGRIDADE_DOS_DADOS.md`.
+
+**E1: fechado, com evidencia de producao real** (nao so' teste A e B
+limpos). O proximo passo e' o E2.
+
 #### O que o E1 NAO faz
 
 Nao envia ordem. Nao constroi `ExecutorDeOrdens`. Nao muda o EA. A flag
