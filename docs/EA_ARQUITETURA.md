@@ -992,6 +992,31 @@ Observacao para o E2/E3: o ROTEAMENTO oscila (5 -> 2 -> 5 em 2 ms).
 instante do 2 seria recusada. O E2 confere `corretora_pronta` NO
 MOMENTO do envio, nao uma vez no inicio.
 
+#### Teste A, terceira rodada (2026-09-08 22:29, v2.08) — contas=14 EXPLICADO
+
+    profitdll.contas  callbacks=12  pares=[32006:..., 1003:...]  unicas=2
+
+Hipotese 1 confirmada: **duas contas unicas** (corretora 32006 =
+simulador, 1003 = real), re-anunciadas pela DLL a cada notificacao de
+corretora. Os callbacks foram de 12 para 14 ENTRE dois heartbeats -- o
+re-anuncio continua ao longo da sessao, nao so' no login. O E2 usa
+`contas_vistas` (deduplicado), nunca o contador bruto.
+
+`contas_pedidas` chegou 3 ms depois do primeiro `valor=5`, no meio da
+rajada: a espera pela corretora funciona como desenhada.
+
+**E1 fora do pregao: FECHADO.** Falta so' o teste B (captura no pregao).
+
+Nota operacional descoberta no caminho: o checkout de producao
+(`profit-tape-record`) usa `pip install .` SEM `-e` -- escolha correta
+(o record nao pode ser afetado por `git merge` no meio do pregao), com o
+custo de que cada merge exige re-rodar `pip install .`, e a versao
+`0.1.0` fixa no pyproject torna o descompasso invisivel (o `doctor`
+mostra 0.1.0 para qualquer tag). O backfill de 08/09 rodou sobre codigo
+pre-v2.06 por isso. Correcao duravel proposta antes do E2: versao vinda
+da tag (`setuptools-scm`), para `doctor` e `pip show` denunciarem o
+descompasso em 5 segundos.
+
 #### O que o E1 NAO faz
 
 Nao envia ordem. Nao constroi `ExecutorDeOrdens`. Nao muda o EA. A flag

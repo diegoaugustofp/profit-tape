@@ -1023,3 +1023,18 @@ mandar o `profitdll.contas`.
 **Proximo**: barras de 15s montadas do tape (com a equivalencia ja'
 provada contra o grafico) e replay das tres pernas pelo tape -> TAXA de
 operacoes e p1 de depuracao -> HORIZONTE final -> ligar.
+
+### Continuação (2026-09-08, 22:29) — contas=14 explicado; E1 fechado fora do pregão (v2.09, só docs)
+
+- `profitdll.contas unicas=2 callbacks=14`: duas contas (32006 simulador,
+  1003 real), re-anunciadas pela DLL a cada notificação de corretora,
+  inclusive durante a sessão. O E2 usa a lista deduplicada.
+- Descoberta operacional: `profit-tape-record` usa `pip install .` sem
+  `-e` (correto para produção), e o backfill de hoje rodou sobre código
+  pré-v2.06 porque o install não foi refeito após o merge. A versão fixa
+  `0.1.0` esconde isso. Proposta: `setuptools-scm` antes do E2.
+- O backfill nunca lê `login_completo` (sempre MarketLogin, por desenho).
+
+**Pendente (operador)**: (1) `git log --oneline entregue-v2.08..HEAD` no
+`profit-tape-record` — 3 commits desconhecidos; (2) teste B amanhã com
+`login_completo: true` no yaml de `profit-tape-record`.
