@@ -982,3 +982,20 @@ mandar o `profitdll.contas`.
   bloco = NaN, era o único "NAO BATE"); `diagnostico_clausulas` no
   comando (quantis do estocástico nos candidatos, % barras com TR ≥
   stop). 514 testes, ruff e mypy limpos.
+
+### Continuacao (2026-09-09) — cobertura por pregao no funil (v2.10)
+
+- O dump de 4 dias saiu com 03 e 04/09 pela metade (parametro igual
+  nos 4 dias; o console nao guardou tudo). O "por pregao" dividia por
+  4. Agora `cobertura_por_pregao` marca pregao inteiro (>= 80% do mais
+  cheio) e o funil so' conta esses. Refeito: 86 / 58 candidatos por
+  pregao em 09-13h; com estocastico extremo, 1,5 / 0.
+- Regra pratica: um pregao por dump (09-13h = 960 linhas).
+- Abertura: 09:00-09:02 e' leilao; barra nasce no primeiro negocio.
+  Proposta: indicadores reiniciam por pregao + 21 barras de aquecimento.
+- INCREMENTO_vX.md das entregas passa a sair em ASCII puro (o de v2.09
+  saiu com acentos UTF-8 e ficou ilegivel no Windows).
+- `tests/test_alertas_vigia.py::test_vigia_detecta_travado` falhou uma
+  vez na suite completa e passou 5x isolado e na repeticao: depende de
+  `time.sleep(0.05)` sob carga. Nao e' desta entrega; fica anotado.
+- 569 testes, ruff e mypy strict limpos.

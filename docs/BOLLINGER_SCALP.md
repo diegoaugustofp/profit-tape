@@ -122,13 +122,21 @@ da barra é (data, `CurrentBar`), porque `Time` em HHMM repete 4 vezes.
 **Banda**: meia-largura de 0,38σ = 19 pts no dia inteiro, 26 pts nas
 manhãs (4–5 ticks). "Acima da banda" é `close > SMA21 + ~4 ticks`.
 
-**Funil (09–14h, 4 pregões; compra / venda por pregão)**:
+**Funil (janela 09–13h, só os 2 pregões inteiros do dump — 03 e 04/09
+vieram pela metade; compra / venda por pregão)**:
 
 | cláusula | compra | venda |
 |---|---|---|
-| t−1 fora da banda com cor de sinal | 204 | 193 |
-| + t−2 correção fora da banda | 60 | 51 |
-| + estocástico(t−1) extremo (<20 / >80) | **0,75** | **0** |
+| + t−2 correção fora da banda (candidatos) | 86 | 58 |
+| + estocástico(t−1) extremo (<20 / >80) | **1,5** | **0** |
+
+Abertura (2026-09-09): 09:00–09:02 é leilão e o índice demora a abrir;
+a primeira barra nasce no primeiro negócio de agressão (leilão =
+`trade_type 4`, fora das barras). Proposta declarada: **janela dos
+indicadores reinicia a cada pregão** (o close de ontem não é informação
+para um scalp de 15s) e **sem entrada nas primeiras 21 barras** do dia
+(~09:08). Diverge do gráfico só nesses 5 minutos. Aguardando
+confirmação.
 
 **O estocástico seca a hipótese, e é estrutural (7.6)**: entre os
 candidatos a compra, `Est(t−1)` tem mediana 72 e p5 = 41; abaixo de 20,

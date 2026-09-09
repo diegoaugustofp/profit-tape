@@ -907,7 +907,14 @@ def bollinger_scalp(
     if r["atr"]:
         typer.echo(f"  ATR21: p50={r['atr']['atr21_p50_pts']} p90={r['atr']['atr21_p90_pts']} "
                    f"pts (stop da hipotese = 40 pts)")
-    typer.echo("\n--- FUNIL DA REGRA (7.4: quantos gatilhos cada clausula deixa passar) ---")
+    cob = r["cobertura"]
+    typer.echo("\n--- COBERTURA POR PREGAO (o funil so' conta os inteiros) ---")
+    typer.echo(cob.to_string(index=False))
+    n_int = int(cob["inteiro"].sum())
+    if n_int < len(cob):
+        typer.echo(f"  AVISO: {len(cob) - n_int} pregao(oes) incompleto(s) fora do funil. "
+                   "Regra pratica: um pregao por dump.")
+    typer.echo(f"\n--- FUNIL DA REGRA (7.4) -- por_pregao = / {n_int} pregao(oes) inteiro(s) ---")
     typer.echo(r["funil"].to_string(index=False))
     dg = r["diagnostico"]
     typer.echo("\n--- DIAGNOSTICO (7.6: se uma clausula nunca dispara, e' o desenho) ---")

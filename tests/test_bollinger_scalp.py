@@ -219,6 +219,7 @@ def _sequencia() -> pd.DataFrame:
     df["bb_inf_ntsl"] = 90.0
     df["est_ntsl"] = est
     df["dia"] = dt.date(2026, 9, 1)
+    df["hora_int"] = [900, 900, 900, 900, 901, 901]
     df["bloco"] = 1
     return df
 
@@ -302,3 +303,20 @@ def test_diagnostico_mostra_onde_o_estocastico_dos_candidatos_esta() -> None:
     assert dg["venda"]["candidatos"] == 0
     assert dg["tr"]["pct_barras_tr_ge_stop"] == 50.0      # 45, 90, 41
     assert dg["tr"]["pct_barras_tr_ge_2x_stop"] == pytest.approx(16.7, abs=0.1)
+
+
+def test_funil_ignora_pregao_incompleto() -> None:
+    """Um dia com a manha faltando nao e' meio pregao: sai do funil e do
+    divisor. Medido em 2026-09-08 num dump de 4 dias com 2 pela metade."""
+    from profittape.research.bollinger_scalp import cobertura_por_pregao
+    a = _sequencia()                                   # dia inteiro: 6 barras, 2 sinais
+    b = _sequencia().iloc[:2].copy()                   # dia pela metade: 2 barras
+    b["dia"] = dt.date(2026, 9, 2)
+    b["bloco"] = 2
+    x = marcar_sinais(pd.concat([a, b], ignore_index=True))
+    cob = cobertura_por_pregao(x)
+    assert list(cob["inteiro"]) == [True, False]
+    f = contar_clausulas(x)
+    compra = f[f["lado"] == "compra"].set_index("clausula")
+    assert compra.loc["barras", "n"] == 6                       # so' o dia inteiro
+    assert compra.loc["+ estocastico(t-1) extremo", "por_pregao"] == 2.0   # / 1, nao / 2

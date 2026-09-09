@@ -326,14 +326,36 @@ def marcar_sinais(d: pd.DataFrame, col_sup: str = "bb_sup_ntsl",
 # ---------------------------------------------------------------------
 # 5. Contagem por clausula (7.4)
 # ---------------------------------------------------------------------
+def cobertura_por_pregao(x: pd.DataFrame, fracao_inteiro: float = 0.8) -> pd.DataFrame:
+    """
+    Quantas barras cada pregao trouxe e de que hora a que hora. Um
+    pregao e' INTEIRO se tem >= `fracao_inteiro` das barras do pregao
+    mais cheio do dump. Medido em 2026-09-08: um dump de 4 dias saiu com
+    01 e 02 inteiros e 03 e 04 so' de 12:24 em diante -- e o "por
+    pregao" dividia por 4.
+    """
+    g = x.groupby("dia")
+    c = pd.DataFrame({"barras": g.size(), "inicio": g["hora_int"].min(),
+                      "fim": g["hora_int"].max()})
+    c["inteiro"] = c["barras"] >= fracao_inteiro * c["barras"].max()
+    return c.reset_index()
+
+
 def contar_clausulas(x: pd.DataFrame) -> pd.DataFrame:
     """
     Funil, por lado: quantas barras sobrevivem a cada clausula, em
     absoluto e por pregao. E' o numero que decide se a hipotese tem
     TAXA para um forward (skill disciplina-forward: horizonte por
     TAXA x EFEITO) ou se uma clausula seca tudo.
+
+    `por_pregao` divide so' pelos pregoes INTEIROS do dump, e conta so'
+    as barras deles -- um pregao pela metade nao e' meio pregao de
+    sinais, e' um pregao com a manha faltando.
     """
-    pregoes = max(int(x["dia"].nunique()), 1)
+    cob = cobertura_por_pregao(x)
+    inteiros = set(cob.loc[cob["inteiro"], "dia"])
+    x = x[x["dia"].isin(inteiros)]
+    pregoes = max(len(inteiros), 1)
     linhas = []
     for lado, pref, sinal in (("compra", "c_compra", "sinal_compra"),
                               ("venda", "c_venda", "sinal_venda")):
@@ -412,6 +434,7 @@ def rodar(log_path: Path, saida: Path) -> dict[str, Any]:
     eq = equivalencia(d)
     x = marcar_sinais(d)
     funil = contar_clausulas(x)
+    cobertura = cobertura_por_pregao(x)
     largura = largura_banda_em_pontos(d)
     diag = diagnostico_clausulas(x)
     atr = d["atr_ntsl"].dropna()
@@ -423,10 +446,11 @@ def rodar(log_path: Path, saida: Path) -> dict[str, Any]:
     x.to_parquet(saida / "barras_15s.parquet", index=False)
     resumo = {"dump": meta, "equivalencia": eq, "largura_banda": largura,
               "atr": atr_pts, "diagnostico": diag,
+              "cobertura": cobertura.to_dict(orient="records", ),
               "funil": funil.to_dict(orient="records")}
     (saida / "resumo.json").write_text(json.dumps(resumo, indent=2, default=str),
                                        encoding="utf-8")
     log.info("bollinger_scalp.rodada", **meta, saida=str(saida))
     return {"meta": meta, "equivalencia": eq, "funil": funil,
             "largura_banda": largura, "atr": atr_pts, "diagnostico": diag,
-            "barras": x}
+            "cobertura": cobertura, "barras": x}
