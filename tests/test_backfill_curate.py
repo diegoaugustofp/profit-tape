@@ -90,7 +90,12 @@ def test_curadoria_deduplica_e_exclui_ts_invalido(tmp_path: Path) -> None:
     sink.close()
 
     t = curar_trades(raw, curated)
-    assert t == {"lidas": 5, "duplicatas": 1, "ts_invalido": 1, "gravadas": 3, "particoes": 1}
+    # subconjunto, nao igualdade exata: segundos_leitura/segundos_total
+    # (2026-09-09, diagnostico de performance) sao FLOAT e variam por
+    # execucao -- nao pertencem a uma comparacao de CONTAGENS exatas.
+    assert {k: t[k] for k in ("lidas", "duplicatas", "ts_invalido",
+                              "gravadas", "particoes")} == {
+        "lidas": 5, "duplicatas": 1, "ts_invalido": 1, "gravadas": 3, "particoes": 1}
 
     tabela = ds.dataset(curated / "trade", format="parquet", partitioning="hive").to_table()
     ids = tabela["trade_id"].to_pylist()
@@ -638,3 +643,129 @@ def test_curate_loga_progresso_por_dia_nao_so_resumo_final(tmp_raiz: Path, capsy
     assert out.count("curate.dia_ok") == 3       # um log por dia, nao so' no fim
     for dia in ("2026-08-11", "2026-08-12", "2026-08-13"):
         assert dia in out
+
+
+def _escrever_dia_trade(raiz: Path, dia: str, symbol: str,
+                        n_arquivos: int, linhas_por_arquivo: int = 2) -> None:
+    """Gera N arquivos .parquet saudaveis de trade para um (dia, symbol) --
+    o cenario comum (sem corrupcao) que o caminho rapido do curate precisa
+    cobrir. IDs de trade sequenciais e unicos entre arquivos para nao
+    disparar dedup incidental."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    d = raiz / "trade" / f"dt={dia}" / f"sym={symbol}"
+    d.mkdir(parents=True, exist_ok=True)
+    prox_id = 1
+    for i in range(n_arquivos):
+        base = prox_id
+        ids = list(range(base, base + linhas_por_arquivo))
+        prox_id += linhas_por_arquivo
+        n = linhas_por_arquivo
+        cols = dict(
+            ts_ns=[1000 + k for k in ids], ts_recv_ns=[k for k in ids],
+            symbol=[symbol] * n, exchange=["F"] * n, trade_id=ids,
+            price=[float(k) for k in ids], volume_financeiro=[1.0] * n,
+            quantidade=[1] * n, agente_comprador=[3] * n,
+            agente_vendedor=[85] * n, trade_type=[2] * n, is_edit=[False] * n,
+        )
+        pq.write_table(pa.table(cols), d / f"part-{i:04d}.parquet")
+
+
+def test_curate_caminho_rapido_nao_abre_fragmento_a_fragmento(
+    tmp_raiz: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    PERFORMANCE (2026-09-09): com a rotacao por IDADE (todo arquivo fecha aos
+    900s, ativo ou nao -- close_idle em parquet_sink.py), um dia comum ja'
+    produz centenas de arquivos de trade; um dia com reinicio passa de 800.
+    Um dia de 5,4M linhas / 280 arquivos levou 55 minutos no loop antigo
+    (fragment.to_table() um de cada vez, em Python).
+
+    Nao basta o resultado bater -- e' facil o caminho rapido silenciosamente
+    cair pro lento sem ninguem notar. Este teste prova que o atalho e'
+    REALMENTE tomado: `pa.concat_tables` so' e' chamado no FALLBACK (o
+    caminho rapido usa `dataset.to_table()` direto, sem concat manual) --
+    se ele for chamado, o teste falha, mesmo que o total de linhas esteja
+    certo.
+    """
+    curated = tmp_raiz.parent / "curated"
+    _escrever_dia_trade(tmp_raiz, "2026-08-14", "WINFUT", n_arquivos=50)
+
+    import pyarrow as pa_mod
+
+    chamado = {"n": 0}
+    original = pa_mod.concat_tables
+
+    def _espiao(*a: object, **k: object) -> object:
+        chamado["n"] += 1
+        return original(*a, **k)
+
+    monkeypatch.setattr(pa_mod, "concat_tables", _espiao)
+
+    totais = curar_trades(tmp_raiz, curated)
+
+    assert chamado["n"] == 0, (
+        "pa.concat_tables foi chamado -- o curate caiu no fallback lento "
+        "sem nenhum arquivo corrompido para justificar")
+    assert totais["gravadas"] == 100          # 50 arquivos x 2 linhas
+    assert totais["duplicatas"] == 0
+    assert totais["ts_invalido"] == 0
+
+
+def test_curate_caminho_lento_ainda_e_correto_com_muitos_arquivos(
+    tmp_raiz: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """O fallback fragmento-a-fragmento precisa continuar correto quando
+    disparado num dia com VARIOS arquivos saudaveis e um so' podre -- nao so'
+    no caso minimo de 2 arquivos que o teste original de 22/08 cobre."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    curated = tmp_raiz.parent / "curated"
+    _escrever_dia_trade(tmp_raiz, "2026-08-14", "WINFUT",
+                       n_arquivos=20, linhas_por_arquivo=3)
+
+    ruim = tmp_raiz / "trade" / "dt=2026-08-14" / "sym=WINFUT" / "part-9999.parquet"
+    cols = dict(ts_ns=[999000], ts_recv_ns=[999], symbol=["WINFUT"],
+                exchange=["F"], trade_id=[999], price=[9.0],
+                volume_financeiro=[1.0], quantidade=[1],
+                agente_comprador=[3], agente_vendedor=[85],
+                trade_type=[2], is_edit=[False])
+    pq.write_table(pa.table(cols), ruim)
+    b = bytearray(ruim.read_bytes())
+    for i in range(50, min(80, len(b) - 8)):
+        b[i] = 0xFF
+    ruim.write_bytes(bytes(b))
+
+    totais = curar_trades(tmp_raiz, curated)
+
+    assert totais["gravadas"] == 60            # 20 arquivos bons x 3, o podre fora
+    out = capsys.readouterr().out
+    assert "curate.leitura_em_lote_falhou" in out
+    assert "curate.arquivo_pulado" in out
+
+
+def test_curate_loga_quebra_leitura_x_processamento(
+    tmp_raiz: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A instrumentacao que deveria existir antes de eu adivinhar a causa da
+    lentidao de 09/09: proxima vez, o log diz onde o tempo foi, sem
+    reproduzir nada. segundos = leitura + processamento, sempre."""
+    curated = tmp_raiz.parent / "curated"
+    _escrever_dia_trade(tmp_raiz, "2026-08-14", "WINFUT", n_arquivos=10)
+
+    curar_trades(tmp_raiz, curated)
+    out = capsys.readouterr().out
+
+    assert "segundos_leitura=" in out
+    assert "segundos_processamento=" in out
+
+    import re
+    m = re.search(
+        r"segundos=([\d.]+).*segundos_leitura=([\d.]+).*"
+        r"segundos_processamento=([\d.]+)", out)
+    assert m, f"campos nao encontrados na linha de log:\n{out}"
+    total, leitura, proc = (float(x) for x in m.groups())
+    assert proc >= 0.0             # nunca "processamento negativo" (-0.0)
+    assert total >= leitura - 0.15  # folga por arredondamento

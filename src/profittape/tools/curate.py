@@ -38,7 +38,7 @@ from ..storage.validacao import relatorio
 log = structlog.get_logger(__name__)
 
 
-def curar_trades(raiz_raw: Path, raiz_curated: Path) -> dict[str, int]:
+def curar_trades(raiz_raw: Path, raiz_curated: Path) -> dict[str, int | float]:
     """
     Processa particao por particao de dia — nunca o dataset inteiro em memoria.
     Um mes de WINFUT nao cabe, e nao precisa caber.
@@ -65,7 +65,8 @@ def curar_trades(raiz_raw: Path, raiz_curated: Path) -> dict[str, int]:
     log.info("curate.destino", raiz_raw=str(raiz_raw.resolve()),
              raiz_curated=str(raiz_curated.resolve()), dias_encontrados=len(dias_totais))
 
-    totais = {"lidas": 0, "duplicatas": 0, "ts_invalido": 0, "gravadas": 0, "particoes": 0}
+    totais = {"lidas": 0, "duplicatas": 0, "ts_invalido": 0, "gravadas": 0,
+              "particoes": 0, "segundos_leitura": 0.0, "segundos_total": 0.0}
 
     for idx, pasta_dia in enumerate(dias_totais, 1):
         dia = pasta_dia.name.split("=", 1)[1]
@@ -88,19 +89,51 @@ def curar_trades(raiz_raw: Path, raiz_curated: Path) -> dict[str, int]:
             arquivos_dia, format=ds.ParquetFileFormat(),
             partitioning=ds.partitioning(flavor="hive"),
         )
-        partes_ok = []
-        for frag in dataset.get_fragments():
-            try:
-                partes_ok.append(frag.to_table())
-            except Exception as exc:
-                log.warning("curate.arquivo_pulado", dia=dia, arquivo=frag.path,
-                           erro=f"{type(exc).__name__}: {str(exc)[:100]}")
-        if not partes_ok:
-            log.warning("curate.dia_sem_arquivo_legivel", dia=dia)
-            continue
-        tabela = pa.concat_tables(partes_ok, promote_options="permissive")
+        # PERFORMANCE (2026-09-09): com a rotacao por IDADE do writer (todo
+        # arquivo fecha aos 900s de vida, ativo ou nao -- ver
+        # storage/parquet_sink.py:close_idle), um dia comum de 6,5h ja' produz
+        # ~500-600 arquivos de trade; um dia com reinicio (queda de energia,
+        # disco cheio, teste manual) passa de 800. O loop fragmento-a-
+        # fragmento abre cada arquivo em Python, um de cada vez -- e' o que
+        # fazia um dia de 5,4M linhas / 280 arquivos levar 55 minutos.
+        #
+        # dataset.to_table() le TODOS os fragmentos de uma vez, em C++, com o
+        # pool de threads interno do arrow -- e sem o round-trip Python por
+        # arquivo. E' tambem MAIS correto que o concat manual de antes: ele
+        # aplica o schema UNIFICADO do dataset a cada fragmento na leitura,
+        # em vez de exigir promote_options="permissive" depois (que so'
+        # tapava a falta dessa unificacao).
+        #
+        # Mas o loop fragmento-a-fragmento nao e' so' velocidade -- e' o que
+        # ISOLA um arquivo com corrupcao interna (footer valido, row group
+        # com ZSTD quebrado; incidente real de 22/08, ver o teste
+        # test_curate_pula_arquivo_com_zstd_corrompido). Um to_table() em
+        # lote explode no primeiro fragmento podre e perderia o DIA INTEIRO,
+        # nao so' o arquivo ruim. Por isso o caminho rapido e' OTIMISTA: cai
+        # para o loop antigo, byte a byte identico, so' quando ele falha --
+        # o caso raro paga o preco, o caso comum (quase sempre) nao.
+        try:
+            tabela = dataset.to_table(use_threads=True)
+        except Exception as exc:
+            log.warning("curate.leitura_em_lote_falhou", dia=dia,
+                       erro=f"{type(exc).__name__}: {str(exc)[:150]}",
+                       nota="algum arquivo deste dia tem corrupcao interna -- "
+                            "isolando fragmento a fragmento (mais lento, "
+                            "identifica qual)")
+            partes_ok = []
+            for frag in dataset.get_fragments():
+                try:
+                    partes_ok.append(frag.to_table())
+                except Exception as exc2:
+                    log.warning("curate.arquivo_pulado", dia=dia, arquivo=frag.path,
+                               erro=f"{type(exc2).__name__}: {str(exc2)[:100]}")
+            if not partes_ok:
+                log.warning("curate.dia_sem_arquivo_legivel", dia=dia)
+                continue
+            tabela = pa.concat_tables(partes_ok, promote_options="permissive")
         if tabela.num_rows == 0:
             continue
+        t_leitura = time.monotonic() - t0
         df = tabela.to_pandas()
         totais["lidas"] += len(df)
 
@@ -131,13 +164,34 @@ def curar_trades(raiz_raw: Path, raiz_curated: Path) -> dict[str, int]:
             )
             totais["gravadas"] += len(grupo)
         totais["particoes"] += 1
+        # DIAGNOSTICO (2026-09-09): quebra leitura x processamento. Um dia de
+        # 5,4M linhas/280 arquivos levou 55 min aqui, mas um benchmark
+        # sintetico na MESMA escala (800 arquivos/4M linhas) levou 9s no
+        # sandbox de desenvolvimento -- leitura e sort/dedup pesam parecido,
+        # nenhum dos dois chega a minutos. A causa provavel e' EXTERNA ao
+        # Python (antivirus escaneando cada abertura de arquivo no Windows e'
+        # o suspeito classico para este padrao -- muitos arquivos pequenos,
+        # mesmo processo). Esta quebra existe para a proxima vez que travar
+        # lento dizer ONDE, em vez de adivinhar de novo.
+        segundos_total = round(time.monotonic() - t0, 1)
+        # max(0, ...): em dias muito pequenos (testes, dia quase vazio), o
+        # ruido de sub-milissegundo entre as duas chamadas a time.monotonic()
+        # pode deixar segundos_total < t_leitura por uma fracao inexistente,
+        # o que arredondaria para -0.0 -- sem sentido nenhum de "processamento
+        # negativo". Em qualquer dia real a diferenca e' ordens de magnitude
+        # maior que esse ruido.
+        segundos_processamento = round(max(0.0, segundos_total - t_leitura), 1)
+        totais["segundos_leitura"] += t_leitura
+        totais["segundos_total"] += segundos_total
         log.info("curate.dia_ok", dia=dia, linhas_lidas=len(df),
-                 duplicatas=antes - len(df), segundos=round(time.monotonic() - t0, 1))
+                 duplicatas=antes - len(df), segundos=segundos_total,
+                 segundos_leitura=round(t_leitura, 1),
+                 segundos_processamento=segundos_processamento)
 
     return totais
 
 
-def imprimir_relatorio(t: dict[str, int]) -> None:
+def imprimir_relatorio(t: dict[str, int | float]) -> None:
     print("=" * 60)
     print("CURADORIA raw -> curated")
     print("=" * 60)
@@ -146,6 +200,14 @@ def imprimir_relatorio(t: dict[str, int]) -> None:
     print(f"  duplicatas removidas: {t['duplicatas']:,}")
     print(f"  ts invalido excluido: {t['ts_invalido']:,}")
     print(f"  linhas gravadas     : {t['gravadas']:,}")
+    if t.get("segundos_total", 0) > 0:
+        pct_leitura = 100 * t["segundos_leitura"] / t["segundos_total"]
+        print(f"  tempo total         : {t['segundos_total']:.1f}s "
+              f"(leitura {pct_leitura:.0f}% / processamento {100-pct_leitura:.0f}%)")
+        if t["segundos_total"] > 300 and pct_leitura < 30:
+            print("\n  NOTA: leitura e' fracao pequena do tempo mas o total e'")
+            print("  alto -- suspeite de algo FORA do Python (antivirus, disco,")
+            print("  pasta sincronizada) antes de otimizar o codigo de novo.")
     if t["lidas"]:
         if t["ts_invalido"] / t["lidas"] > 0.001:
             print("\n  ALERTA: mais de 0,1% com timestamp invalido. Isso e' bug de")
