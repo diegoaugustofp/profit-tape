@@ -1260,6 +1260,71 @@ def fase2_score(
 
 
 @app.command()
+def bollinger_replay(
+    symbol: str = typer.Argument("WINFUT"),
+    curated: Path = typer.Option(Path("data/curated"), "--curated"),
+    saida: Path = typer.Option(Path("data/research/bollinger_replay"), "--saida"),
+    dumps: Path | None = typer.Option(
+        None, "--dumps",
+        help="Pasta com dumpAAAAMMDD.txt do grafico de 15s: compara tape x grafico nesses dias"),
+    dias: str | None = typer.Option(
+        None, "--dias", help="Lista 2026-09-01,2026-09-02 (default: todos)"),
+    log_level: str = typer.Option("INFO", "--log-level"),
+) -> None:
+    """
+    Scalp de Bollinger v1: replay das tres pernas pelo TAPE (depuracao).
+
+    Barras de 15s montadas do tape, regra v1 (docs/BOLLINGER_SCALP.md
+    secao 0), limitada em t, tres pernas, trailing e zeragem executados
+    negocio a negocio. Preenche os dois campos "a medir" da ficha:
+    OPERACOES por pregao e um p1 de depuracao. Nao e' o forward.
+    """
+    configurar(log_level)
+    import re
+
+    from .research.bollinger_replay import rodar
+
+    mapa: dict[str, Path] | None = None
+    if dumps is not None:
+        mapa = {}
+        for f in sorted(dumps.glob("dump*.txt")):
+            m = re.search(r"(\d{4})(\d{2})(\d{2})", f.name)
+            if m:
+                mapa[f"{m.group(1)}-{m.group(2)}-{m.group(3)}"] = f
+    lista = [d.strip() for d in dias.split(",")] if dias else None
+    r = rodar(curated, symbol.strip().upper(), saida, mapa, lista)
+    res = r["resumo"]
+    typer.echo("=" * 72)
+    typer.echo("SCALP DE BOLLINGER v1 — replay pelo tape (DEPURACAO)")
+    typer.echo("=" * 72)
+    typer.echo(f"  pregoes {res['pregoes']} | sinais {res['sinais']} | operacoes "
+               f"{res['operacoes']} ({res['operacoes_por_pregao']} por pregao) "
+               f"| sem execucao {res['sinais_sem_execucao']} {res['nao_exec_por_motivo']}")
+    if "p1" in res:
+        typer.echo(f"  p1 (alvo1 antes do stop) = {res['p1']}  IC95 {res['p1_ic95']}  "
+                   f"| nula de lucro apos custo = {res['p1_nula_lucro']}")
+        typer.echo(f"  compra {res['compra']} venda {res['venda']} | abertura {res['abertura']} "
+                   f"recuo {res['recuo']} | stop mediano {res['stop_mediano_pts']} pts "
+                   f"| duracao mediana {res['duracao_mediana_s']} s")
+        typer.echo(f"  P&L liquido: {res['pnl_liquido_medio_pts']} pts/operacao, "
+                   f"{res['pnl_liquido_por_pregao_pts']} pts/pregao (3 contratos, custo 33)")
+        for i in (1, 2, 3):
+            typer.echo(f"  perna {i}: {res[f'p{i}_motivos']}")
+    comp = res.get("comparacoes_com_dump") or {}
+    if comp:
+        typer.echo("\n--- TAPE x GRAFICO (mesmo dia; o replay ve os mesmos gatilhos?) ---")
+        for dia, c in comp.items():
+            campos = ("open", "high", "low", "close")
+            ohlc = "/".join(str(c.get(f"{k}_divergentes")) for k in campos)
+            typer.echo(f"  {dia}: comuns {c['comuns']} | so tape {c['so_tape']} "
+                       f"so dump {c['so_dump']} | OHLC divergentes o/h/l/c = {ohlc} "
+                       f"| sinais compra tape/dump {c.get('sinal_compra_tape')}/"
+                       f"{c.get('sinal_compra_dump')} venda {c.get('sinal_venda_tape')}/"
+                       f"{c.get('sinal_venda_dump')}")
+    typer.echo(f"\n  saida: {saida}")
+
+
+@app.command()
 def absorcao_inspecionar(
     dia: str = typer.Argument(..., help="Data no formato 2026-08-27"),
     origem: Path = typer.Option(

@@ -217,6 +217,31 @@ Estranhezas do dump a esclarecer: barras começam às 09:02:45 nos dois
 dias completos (11 barras de abertura ausentes); 03 e 04/09 só têm
 12:24–14:00 no dump de 4 dias, com recorte idêntico.
 
+## 5.2 Cinco pregões inteiros no gráfico (2026-09-09) e o replay pelo tape
+
+Dumps de um pregão cada (01, 02, 03, 04, 08/09), buffer segura o dia:
+equivalência bate nos cinco (dif_max 0,0 em todos os campos). Funil v1
+(janela 09:08–13:00): **69 sinais de compra e 63 de venda por pregão**,
+tocados 59 / 58 = **117 por pregão**. O espelho aparece: 03/09 (dia de
+baixa) deu 47 compras e 79 vendas.
+
+`profit-tape bollinger-replay` (`entregue-v2.13`): barras de 15s
+montadas do **tape** (agressão; balde de 15s no relógio; indicadores
+reiniciam por pregão), regra v1, e as três pernas executadas negócio a
+negócio — limitada em t (abertura se o primeiro negócio já está a
+favor; recuo só se um negócio **atravessa** o limite), stop/alvo por
+perna, trailing atrás da máxima favorável, zeragem 17:30, circuit
+breaker de 3 perdas líquidas seguidas, sinal com posição aberta
+ignorado. `--dumps` compara as barras do tape com as do gráfico nos
+mesmos dias (OHLC e sinais) — a prova de que o replay vê o que o
+operador vê. Saída: `operacoes.parquet` (uma linha por sinal, com
+`motivo_nao_exec` ou as três pernas) e o resumo com p1, IC95 de Wilson,
+nula de lucro, operações por pregão.
+
+Assunções do replay, registradas: lote 3 inteiro; alvo no toque; stop
+no preço do stop (slippage zero); stop antes do alvo no mesmo negócio;
+custo 33 pts por operação (11 × 3).
+
 ## 6. Dúvidas — fechadas em 2026-09-05, exceto as que o dump responde
 
 Fechadas: TR fora do v1; trailing atrás da máxima favorável, RP1

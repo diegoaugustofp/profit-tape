@@ -1038,3 +1038,21 @@ operacoes e p1 de depuracao -> HORIZONTE final -> ligar.
 **Pendente (operador)**: (1) `git log --oneline entregue-v2.08..HEAD` no
 `profit-tape-record` — 3 commits desconhecidos; (2) teste B amanhã com
 `login_completo: true` no yaml de `profit-tape-record`.
+### Continuacao (2026-09-09, noite) — cinco dumps inteiros e o replay pelo tape (v2.13)
+
+- Cinco dumps de um pregao cada: equivalencia bate em todos; funil v1
+  = 69 / 63 sinais por pregao, 117 tocados; espelho visivel no 03/09.
+- `research/bollinger_replay.py` + comando `bollinger-replay`: barras
+  de 15s do tape, comparacao tape x grafico (`--dumps`), replay das
+  tres pernas negocio a negocio com a contabilidade completa dos sinais
+  (posicao_aberta / circuit_breaker / nao_atravessou / operacao).
+- Conferido a mao: recuo com trailing puxando a 1045 (+60/+45/+45,
+  liquido 117), abertura a favor com stop cheio (-213), toque sem
+  atravessar. 10 testes (espelho da venda, posicao aberta, circuit
+  breaker, zeragem 17:30, barras do tape com RLP fora, comparacao,
+  resumo). 581 testes, ruff e mypy limpos.
+- Smoke end-to-end em curated sintetico + dump real: roda.
+
+**Pendente (Diego)**: `profit-tape bollinger-replay WINFUT --dumps <pasta
+dos dump*.txt>` no curated. A saida preenche OPERACOES por pregao e o
+p1 de depuracao da ficha; a comparacao tape x grafico valida as barras.
