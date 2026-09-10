@@ -242,7 +242,7 @@ Assunções do replay, registradas: lote 3 inteiro; alvo no toque; stop
 no preço do stop (slippage zero); stop antes do alvo no mesmo negócio;
 custo 33 pts por operação (11 × 3).
 
-## 5.3 Primeiro replay (2026-09-10, 30 pregões) — PRELIMINAR
+## 5.3 Primeiro replay (2026-09-10, 30 pregões) — INVÁLIDO, ver 5.4
 
 Tape × gráfico **não bateu**: high/low divergem em ~4% das barras,
 open/close em ~30%. Padrão de RLP (imprime dentro do spread). A v2.24
@@ -260,6 +260,37 @@ perna 3 nunca vê 2,5 stops. A entrada, com barreira simétrica, não se
 distingue de moeda nesta amostra. Nada foi ajustado: é amostra de
 depuração e o dado ainda não está limpo. Próximo: equivalência das
 barras fechada, rerodar, e só então conversa de desenho.
+
+## 5.4 O que o segundo replay mostrou (2026-09-10, v2.25)
+
+**Barras**: o gráfico do Profit monta o OHLC com **agressão + RLP**.
+Com esse conjunto, 1–2 barras divergentes por dia (contra ~700) e os
+sinais batem exatamente onde o tape está inteiro (01/09: 85/85,
+67/67). Leilão não muda nada. As barras do replay passam a usar
+agressão + RLP; a **execução** continua contra agressão (RLP não é um
+preço em que a ordem do operador necessariamente executa). Recorder
+começou tarde em 04/09 (09:26) e 08/09 (10:01); 02 e 03/09 não foram
+capturados (licença do backfill — fora deste escopo).
+
+**Defeito de processo na v2.13**: uma substituição de texto não casou
+(o `ruff format` reformatou o laço antes) e foi em silêncio, nos testes
+também. O replay ainda tinha `break` no circuit breaker e `continue`
+mudo na posição aberta: ~90% dos sinais sumiam da contagem. Corrigido
+com edição verificada (`assert count == 1`) — regra nova de engenharia.
+
+**Taxa da regra**, reproduzida com as barras reais de 01/09: 152
+sinais; com circuit breaker, **5 operações** (145 bloqueadas); sem,
+**118 operações** (13 ignoradas por posição aberta, 21 não
+atravessadas). As "13,3 operações por pregão" da 5.3 eram o circuit
+breaker fechando cada pregão nos primeiros minutos. O `--ignorar-
+circuit-breaker` mede a regra inteira.
+
+**Resultado (5.3, ainda válido como direção, não como número)**: p1 ≈
+0,49 é a perna 1 se comportando como moeda; pernas 2/3 positivas em
+61% das vezes com média ≈ 0 (o trailing paga +0,375 stop quase sempre
+e −1 stop no resto); custo de 33 pts por operação é a perda inteira.
+Rerodar com barras corrigidas, com e sem circuit breaker, antes da
+conversa de desenho.
 
 ## 6. Dúvidas — fechadas em 2026-09-05, exceto as que o dump responde
 

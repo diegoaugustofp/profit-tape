@@ -104,8 +104,9 @@ def test_sinal_com_posicao_aberta_e_ignorado() -> None:
         [_sinal(600, 1, 1000.0), _sinal(900, 1, 1000.0, 915), _sinal(1500, 1, 1000.0, 925)]
     )
     ops = br.replay_pregao(sinais, _tape(seq), "2026-09-01")
-    assert [o["hora_sinal"] for o in ops] == [910, 925]
-    assert ops[1]["executou"] and ops[1]["pnl_bruto_pts"] == 310.0  # 60 + 100 + 150
+    assert [o["hora_sinal"] for o in ops] == [910, 915, 925]
+    assert ops[1]["motivo_nao_exec"] == "posicao_aberta" and not ops[1]["executou"]
+    assert ops[2]["executou"] and ops[2]["pnl_bruto_pts"] == 310.0  # 60 + 100 + 150
 
 
 def test_circuit_breaker_tres_perdas_liquidas_seguidas() -> None:
@@ -117,7 +118,12 @@ def test_circuit_breaker_tres_perdas_liquidas_seguidas() -> None:
         sinais.append(_sinal(b, 1, 1000.0, 910 + 5 * k))
     seq.append((3000, 990.0))
     ops = br.replay_pregao(pd.DataFrame(sinais), _tape(seq), "2026-09-01")
-    assert len(ops) == 3  # o 4o sinal nem aparece
+    assert [o["executou"] for o in ops] == [True, True, True, False]
+    assert ops[3]["motivo_nao_exec"] == "circuit_breaker"
+    ops = br.replay_pregao(
+        pd.DataFrame(sinais), _tape(seq), "2026-09-01", ignorar_circuit_breaker=True
+    )
+    assert [o["executou"] for o in ops] == [True, True, True, True]
 
 
 def test_zeragem_as_17h30_fecha_as_pernas_abertas() -> None:

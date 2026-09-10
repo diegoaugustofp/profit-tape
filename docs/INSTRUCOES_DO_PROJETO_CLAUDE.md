@@ -58,3 +58,13 @@ sugere, pergunte ao Diego antes de continuar — nao assuma.
 - `docs/RESEARCH_PLANO.md`, `docs/EA_ARQUITETURA.md`,
   `docs/OPERACAO.md` — estado atual por assunto (cada um tem indice
   agrupado por tema no topo).
+
+## Regra de engenharia adicionada em 2026-09-10 (v2.25)
+
+Substituição de texto por script (`s.replace(old, new)`) só é edição se
+conferir que `old` casou exatamente uma vez (`assert s.count(old) == 1`)
+ANTES de escrever. Na v2.13, um `ruff format` reformatou o trecho entre
+a leitura e a substituição; o `replace` não casou, foi em silêncio no
+código e nos testes, e a suíte passou verde com o comportamento errado.
+Preferir `str_replace` com `old_str` (falha alto se não casar) e rodar
+o `ruff format` ANTES de qualquer substituição, nunca entre elas.

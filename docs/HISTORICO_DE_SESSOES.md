@@ -1125,3 +1125,20 @@ real de leitura.
   mypy limpos.
 - Perguntas ao operador: 02 e 03/09 nao estao no curated? Recorder
   teve buraco em 04 e 08/09?
+
+### Continuacao (2026-09-10, tarde) — RLP no OHLC do grafico; defeito de processo na v2.13 (v2.25)
+
+- Tape x grafico com tres candidatos: o grafico usa AGRESSAO + RLP
+  (1-2 barras divergentes/dia; sinais 85/85, 67/67 em 01/09). Barras
+  do replay passam a agressao + RLP; execucao continua contra agressao.
+- DEFEITO DE PROCESSO: na v2.13 uma substituicao de texto nao casou
+  (ruff format reformatou antes) e foi em silencio -- no codigo E nos
+  testes. O replay tinha `break` no circuit breaker e `continue` mudo
+  na posicao aberta; ~90% dos sinais sumiam. Reproduzido com as barras
+  reais de 01/09: 152 sinais -> 5 operacoes com CB, 118 sem.
+  Corrigido com edicao verificada (assert count == 1). REGRA NOVA:
+  toda substituicao de texto por script confere que casou exatamente
+  uma vez; str_replace com old_str e' o padrao.
+- `--ignorar-circuit-breaker` no bollinger-replay (mesmo padrao do
+  ea-replay-lote). 626 testes, ruff e mypy limpos.
+- 02 e 03/09 nao estao no curated (licenca do backfill; fora de escopo).

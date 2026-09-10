@@ -52,7 +52,15 @@ log = structlog.get_logger(__name__)
 _NS = 1_000_000_000
 _PERIODO_NS = bs.SEGUNDOS_BARRA * _NS
 TZ_OFFSET_H = -3
-TIPOS_OHLC_PADRAO = (2, 3)  # agressao; RLP (13) e leilao (4) fora
+TIPOS_OHLC_PADRAO = (2, 3)  # agressao: e' contra ISTO que a limitada e as pernas executam
+# O GRAFICO do Profit monta o OHLC com agressao + RLP. Medido em
+# 2026-09-10 (01, 04, 08/09): so' agressao diverge em ~700 barras/dia
+# (open/close); com RLP, 1-2 barras/dia e os sinais batem exatamente
+# onde o tape esta' inteiro (85/85, 67/67). Leilao nao muda nada.
+# As BARRAS (indicadores, sinais) usam este conjunto, para ver o que o
+# operador ve. A EXECUCAO continua contra agressao: RLP nao e' um preco
+# em que a ordem do operador necessariamente executa.
+TIPOS_OHLC_GRAFICO = (2, 3, 13)
 # O grafico do Profit pode montar o OHLC com outro conjunto de negocios.
 # Medido em 2026-09-10 com (2, 3): high/low divergem em ~4% das barras,
 # open/close em ~30% -- padrao de RLP (imprime DENTRO do spread: nao
@@ -207,6 +215,19 @@ class Operacao:
         return float(sum(p.resultado_pts for p in self.pernas))
 
 
+def _sinal_nao_exec(dia: str, lado: int, s: pd.Series, motivo: str) -> Operacao:
+    op = Operacao(
+        dia=dia,
+        lado=lado,
+        ts_sinal_ns=int(s["ts_ini_ns"]),
+        hora_sinal=int(s["hora_int"]),
+        preco_limite=float(s["preco_limite"]),
+        stop_pts=float(s["stop_pts"]),
+    )
+    op.motivo_nao_exec = motivo
+    return op
+
+
 def _hora_local(ts_ns: int) -> int:
     seg = (ts_ns // _NS + TZ_OFFSET_H * 3600) % 86400
     return int(seg // 3600) * 100 + int((seg % 3600) // 60)
@@ -270,6 +291,7 @@ def replay_pregao(
     custo_por_contrato: float = CUSTO_POR_CONTRATO_PTS,
     contratos: int = CONTRATOS,
     max_perdas: int = MAX_PERDAS_CONSECUTIVAS,
+    ignorar_circuit_breaker: bool = False,
 ) -> list[dict[str, Any]]:
     """
     `sinais` = saida de `indicadores_e_sinais_do_tape` para o pregao.
@@ -290,15 +312,21 @@ def replay_pregao(
     proximo_negocio_livre = 0  # posicao so' pode abrir apos fechar
 
     for _, s in baldes_sinal.iterrows():
-        if bloqueado:
-            break
         balde = int(s["ts_ini_ns"] // _PERIODO_NS)
         i0 = int(np.searchsorted(ini_balde, balde, side="left"))
         i1 = int(np.searchsorted(ini_balde, balde, side="right"))
-        if i0 >= n or i0 < proximo_negocio_livre:
-            continue  # posicao aberta (ou fechou dentro de t)
         lado = 1 if bool(s["sinal_compra"]) else -1
         limite = float(s["preco_limite"])
+        # Todo sinal vira uma linha: o funil inteiro (posicao aberta,
+        # circuit breaker, nao atravessou, operacao) tem que ser visivel.
+        # Na v2.13 o `break`/`continue` engoliam ~90% dos sinais e o
+        # replay parecia ter 13 operacoes por pregao (2026-09-10).
+        if bloqueado:
+            ops.append(_sinal_nao_exec(dia, lado, s, "circuit_breaker"))
+            continue
+        if i0 >= n or i0 < proximo_negocio_livre:
+            ops.append(_sinal_nao_exec(dia, lado, s, "posicao_aberta"))
+            continue
         op = Operacao(
             dia=dia,
             lado=lado,
@@ -336,7 +364,7 @@ def replay_pregao(
         ops.append(op)
         liquido = op.pnl_bruto_pts() - custo_por_contrato * contratos
         perdas_seguidas = perdas_seguidas + 1 if liquido < 0 else 0
-        if perdas_seguidas >= max_perdas:
+        if perdas_seguidas >= max_perdas and not ignorar_circuit_breaker:
             bloqueado = True
 
     return [_op_para_dict(o, custo_por_contrato, contratos) for o in ops]
@@ -459,6 +487,8 @@ def rodar(
     saida: Path,
     dumps: dict[str, Path] | None = None,
     dias: list[str] | None = None,
+    ignorar_circuit_breaker: bool = False,
+    tipos_ohlc: tuple[int, ...] = TIPOS_OHLC_GRAFICO,
 ) -> dict[str, Any]:
     origem = curated / "trade"
     pastas = _dias_do_symbol(origem, symbol)
@@ -472,7 +502,7 @@ def rodar(
     for i, pasta in enumerate(pastas, 1):
         dia = pasta.name.split("=", 1)[1]
         trades = _carregar_dia(pasta, symbol)
-        barras = barras_15s_do_tape(trades, dia)
+        barras = barras_15s_do_tape(trades, dia, tipos_ohlc)
         if barras.empty:
             log.warning("bollinger_replay.sem_barras", dia=dia)
             continue
@@ -486,7 +516,7 @@ def rodar(
                 b_c = barras_15s_do_tape(trades, dia, tipos)
                 s_c = indicadores_e_sinais_do_tape(b_c) if not b_c.empty else b_c
                 comparacoes[dia][nome] = comparar_com_dump(s_c, dump)
-        ops = replay_pregao(sinais, trades, dia)
+        ops = replay_pregao(sinais, trades, dia, ignorar_circuit_breaker=ignorar_circuit_breaker)
         todas_ops.extend(ops)
         n_ex = sum(1 for o in ops if o["executou"])
         log.info(
