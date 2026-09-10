@@ -42,8 +42,19 @@ def curar_trades(raiz_raw: Path, raiz_curated: Path,
                  modo_leitura: str = "lote",
                  diagnostico: bool = False) -> dict[str, int | float]:
     """
-    Processa particao por particao de dia — nunca o dataset inteiro em memoria.
+    Processa particao por particao de (dia, simbolo) — nunca o dataset
+    inteiro em memoria, nem o dia inteiro com todos os simbolos misturados.
     Um mes de WINFUT nao cabe, e nao precisa caber.
+
+    GRANULARIDADE (2026-09-10c): antes lia o dia inteiro (todos os simbolos
+    juntos) de uma vez -- ate' 318 arquivos, ~3,9 GB de WorkingSet visto em
+    producao. Dois runs de --diagnostico no MESMO dia travaram na MESMA
+    posicao da lista (arquivo ~200-225), o segundo MAIS LENTO que o
+    primeiro -- descarta cache frio e contencao externa pontual, aponta pra
+    algo ligado a ARQUIVOS ESPECIFICOS naquela posicao. Como rglob() perco-
+    rre as pastas sym=* em ordem, essa posicao e' um SIMBOLO especifico.
+    Ler por (dia, simbolo) faz esse simbolo aparecer NOMEADO no log em vez
+    de escondido num indice numerico.
 
     modo_leitura: "lote" (default, paralelo), "sequencial" (lote sem
     threads) ou "fragmento" (pula o lote, vai direto pro loop antigo --
@@ -51,15 +62,14 @@ def curar_trades(raiz_raw: Path, raiz_curated: Path,
 
     diagnostico: forca o loop fragmento-a-fragmento (independente de
     modo_leitura) e loga progresso a cada 25 arquivos
-    (curate.leitura_progresso). Use quando um dia estiver demorando horas
+    (curate.leitura_progresso). Use quando uma particao estiver demorando
     e precisar saber se a leitura trava LINEARMENTE (todo arquivo custando
     o mesmo -- suspeita de IO/antivirus) ou NUM ARQUIVO especifico (pulo
     brusco de tempo entre dois checkpoints).
 
-    Os checkpoints curate.leitura_ok / conversao_pandas_ok / dedup_ok sao
-    SEMPRE emitidos, com ou sem diagnostico -- e' o que falta hoje: o log
-    padrao so' sai ao FIM do dia inteiro (leitura + pandas + dedup +
-    escrita), inutil quando o dia leva horas.
+    Os checkpoints curate.leitura_ok / conversao_pandas_ok / dedup_ok /
+    particao_ok sao SEMPRE emitidos, com ou sem diagnostico, um por
+    (dia, simbolo).
     """
     if modo_leitura not in ("lote", "sequencial", "fragmento"):
         raise ValueError(
@@ -84,31 +94,57 @@ def curar_trades(raiz_raw: Path, raiz_curated: Path,
         )
 
     dias_totais = sorted(origem.glob("dt=*"))
+    # (2026-09-10c) GRANULARIDADE MUDOU DE DIA PARA (DIA, SIMBOLO). Motivo:
+    # dois runs completos de --diagnostico no MESMO dia (318 arquivos)
+    # travaram na MESMA posicao (arquivo ~200-225), e o SEGUNDO run foi
+    # MAIS LENTO que o primeiro (79s contra 39,7s no mesmo intervalo) --
+    # isso descarta cache frio esquentando E contencao externa pontual (as
+    # duas prediriam melhora ou aleatoriedade na segunda vez). Uma posicao
+    # fixa e reproduzivel na lista de arquivos aponta pra ALGO ligado a
+    # ARQUIVOS ESPECIFICOS que sempre caem ali -- e como rglob() percorre
+    # as pastas sym=* em ordem, essa posicao corresponde a um SIMBOLO
+    # especifico. Ler por simbolo, em vez do dia inteiro misturado, faz
+    # esse simbolo aparecer NOMEADO no log em vez de escondido num indice
+    # numerico -- e' o proprio diagnostico, nao so' contorno do sintoma.
+    #
+    # Efeito colateral bom: nunca mais 318 arquivos na memoria de uma vez
+    # (WorkingSet de 3,9 GB visto em producao) -- agora e' ~28-36 por vez,
+    # o tamanho tipico de UM simbolo num pregao.
+    trabalho: list[tuple[str, Path, str]] = []
+    for pasta_dia in dias_totais:
+        dia_nome = pasta_dia.name.split("=", 1)[1]
+        simbolos = sorted(
+            p.name.split("=", 1)[1] for p in pasta_dia.glob("sym=*") if p.is_dir()
+        )
+        for simbolo in simbolos:
+            trabalho.append((dia_nome, pasta_dia, simbolo))
+
     log.info("curate.destino", raiz_raw=str(raiz_raw.resolve()),
-             raiz_curated=str(raiz_curated.resolve()), dias_encontrados=len(dias_totais))
+             raiz_curated=str(raiz_curated.resolve()), dias_encontrados=len(dias_totais),
+             particoes_encontradas=len(trabalho))
 
     totais = {"lidas": 0, "duplicatas": 0, "ts_invalido": 0, "gravadas": 0,
               "particoes": 0, "segundos_leitura": 0.0, "segundos_total": 0.0}
 
-    for idx, pasta_dia in enumerate(dias_totais, 1):
-        dia = pasta_dia.name.split("=", 1)[1]
+    for idx, (dia, pasta_dia, symbol) in enumerate(trabalho, 1):
         t0 = time.monotonic()
-        # Le so' os .parquet finalizados, fragmento a fragmento. Dois modos de
-        # falha ja' vistos em producao: (1) arquivo sem footer — exclude_
-        # invalid_files pula; (2) footer VALIDO mas row group internamente
-        # corrompido (ZSTD decompression failed) — passa pelo filtro de footer
-        # e explode no to_table. So' lendo fragmento a fragmento da' pra isolar
-        # o arquivo podre e pular, salvando os sadios do mesmo dia.
-        arquivos_dia = [
-            str(p) for p in pasta_dia.rglob("*.parquet")
+        # Le so' os .parquet finalizados desta (dia, simbolo), fragmento a
+        # fragmento se precisar. Dois modos de falha ja' vistos em producao:
+        # (1) arquivo sem footer — exclude_invalid_files pula; (2) footer
+        # VALIDO mas row group internamente corrompido (ZSTD decompression
+        # failed) — passa pelo filtro de footer e explode no to_table. So'
+        # lendo fragmento a fragmento da' pra isolar o arquivo podre e pular,
+        # salvando os sadios do mesmo simbolo.
+        arquivos_symbol = [
+            str(p) for p in (pasta_dia / f"sym={symbol}").rglob("*.parquet")
             if not p.name.endswith(".inprogress")
         ]
-        if not arquivos_dia:
+        if not arquivos_symbol:
             continue
-        log.info("curate.processando", dia=dia, progresso=f"{idx}/{len(dias_totais)}",
-                 arquivos=len(arquivos_dia))
+        log.info("curate.processando", dia=dia, symbol=symbol,
+                 progresso=f"{idx}/{len(trabalho)}", arquivos=len(arquivos_symbol))
         dataset = ds.dataset(
-            arquivos_dia, format=ds.ParquetFileFormat(),
+            arquivos_symbol, format=ds.ParquetFileFormat(),
             partitioning=ds.partitioning(flavor="hive"),
         )
         # PERFORMANCE (2026-09-09): com a rotacao por IDADE do writer (todo
@@ -159,7 +195,7 @@ def curar_trades(raiz_raw: Path, raiz_curated: Path,
             try:
                 tabela = dataset.to_table(use_threads=(modo_leitura == "lote"))
             except Exception as exc:
-                log.warning("curate.leitura_em_lote_falhou", dia=dia,
+                log.warning("curate.leitura_em_lote_falhou", dia=dia, symbol=symbol,
                            erro=f"{type(exc).__name__}: {str(exc)[:150]}",
                            nota="algum arquivo deste dia tem corrupcao interna -- "
                                 "isolando fragmento a fragmento (mais lento, "
@@ -168,23 +204,23 @@ def curar_trades(raiz_raw: Path, raiz_curated: Path,
         if tabela is None:
             partes_ok = []
             t_frag0 = time.monotonic()
-            total_frag = len(arquivos_dia)
+            total_frag = len(arquivos_symbol)
             for i, frag in enumerate(dataset.get_fragments(), start=1):
                 try:
                     partes_ok.append(frag.to_table())
                 except Exception as exc2:
-                    log.warning("curate.arquivo_pulado", dia=dia, arquivo=frag.path,
+                    log.warning("curate.arquivo_pulado", dia=dia, symbol=symbol, arquivo=frag.path,
                                erro=f"{type(exc2).__name__}: {str(exc2)[:100]}")
                 if diagnostico and i % 25 == 0:
-                    log.info("curate.leitura_progresso", dia=dia,
+                    log.info("curate.leitura_progresso", dia=dia, symbol=symbol,
                             arquivos_lidos=i, arquivos_total=total_frag,
                             segundos_decorridos=round(time.monotonic() - t_frag0, 1))
             if diagnostico and total_frag % 25 != 0:
-                log.info("curate.leitura_progresso", dia=dia,
+                log.info("curate.leitura_progresso", dia=dia, symbol=symbol,
                         arquivos_lidos=total_frag, arquivos_total=total_frag,
                         segundos_decorridos=round(time.monotonic() - t_frag0, 1))
             if not partes_ok:
-                log.warning("curate.dia_sem_arquivo_legivel", dia=dia)
+                log.warning("curate.dia_sem_arquivo_legivel", dia=dia, symbol=symbol)
                 continue
             tabela = pa.concat_tables(partes_ok, promote_options="permissive")
         if tabela.num_rows == 0:
@@ -195,11 +231,12 @@ def curar_trades(raiz_raw: Path, raiz_curated: Path,
         # curate.dia_ok, que so' sai no FIM do dia inteiro (leitura +
         # to_pandas + sort/dedup + escrita). Um dia de horas nunca produzia
         # ESTE numero isolado; agora produz, assim que a leitura termina.
-        log.info("curate.leitura_ok", dia=dia, arquivos=len(arquivos_dia),
+        log.info("curate.leitura_ok", dia=dia, symbol=symbol,
+                 arquivos=len(arquivos_symbol),
                  linhas=tabela.num_rows, segundos_leitura=round(t_leitura, 1))
         t_pandas0 = time.monotonic()
         df = tabela.to_pandas()
-        log.info("curate.conversao_pandas_ok", dia=dia, linhas=len(df),
+        log.info("curate.conversao_pandas_ok", dia=dia, symbol=symbol, linhas=len(df),
                  segundos=round(time.monotonic() - t_pandas0, 1))
         totais["lidas"] += len(df)
 
@@ -214,11 +251,18 @@ def curar_trades(raiz_raw: Path, raiz_curated: Path,
               .drop_duplicates(subset=["symbol", "trade_id"], keep="last")
               .sort_values("ts_ns", kind="stable")
         )
-        log.info("curate.dedup_ok", dia=dia, linhas_antes=antes,
+        log.info("curate.dedup_ok", dia=dia, symbol=symbol, linhas_antes=antes,
                  linhas_depois=len(df), duplicatas=antes - len(df),
                  segundos=round(time.monotonic() - t_dedup0, 1))
         totais["duplicatas"] += antes - len(df)
 
+        # groupby aqui e' DEFESA, nao logica nova: como so' lemos arquivos da
+        # pasta sym={symbol}, todo grupo deveria ser esse mesmo simbolo. Mas
+        # a garantia de verdade e' a coluna "symbol" dos DADOS, nao o nome da
+        # pasta -- se algum dia um arquivo for escrito na particao errada
+        # (bug no writer, nunca visto, mas o comportamento ORIGINAL ja' se
+        # protegia disso), isto ainda escreve cada linha no destino certo em
+        # vez de silenciosamente misturar simbolos.
         for sym, grupo in df.groupby("symbol", observed=True):
             destino = raiz_curated / "trade" / f"dt={dia}" / f"sym={sym}"
             destino.mkdir(parents=True, exist_ok=True)
@@ -234,26 +278,21 @@ def curar_trades(raiz_raw: Path, raiz_curated: Path,
             )
             totais["gravadas"] += len(grupo)
         totais["particoes"] += 1
-        # DIAGNOSTICO (2026-09-09): quebra leitura x processamento. Um dia de
-        # 5,4M linhas/280 arquivos levou 55 min aqui, mas um benchmark
-        # sintetico na MESMA escala (800 arquivos/4M linhas) levou 9s no
-        # sandbox de desenvolvimento -- leitura e sort/dedup pesam parecido,
-        # nenhum dos dois chega a minutos. A causa provavel e' EXTERNA ao
-        # Python (antivirus escaneando cada abertura de arquivo no Windows e'
-        # o suspeito classico para este padrao -- muitos arquivos pequenos,
-        # mesmo processo). Esta quebra existe para a proxima vez que travar
-        # lento dizer ONDE, em vez de adivinhar de novo.
+        # PERFORMANCE (2026-09-09/10): quebra leitura x pandas x dedup ao
+        # longo do run inteiro (curate.leitura_ok / conversao_pandas_ok /
+        # dedup_ok ja' mostram isso por particao, em tempo real -- isto e' so'
+        # o acumulado pro relatorio final).
         segundos_total = round(time.monotonic() - t0, 1)
-        # max(0, ...): em dias muito pequenos (testes, dia quase vazio), o
-        # ruido de sub-milissegundo entre as duas chamadas a time.monotonic()
-        # pode deixar segundos_total < t_leitura por uma fracao inexistente,
-        # o que arredondaria para -0.0 -- sem sentido nenhum de "processamento
-        # negativo". Em qualquer dia real a diferenca e' ordens de magnitude
+        # max(0, ...): em particoes muito pequenas (testes), o ruido de
+        # sub-milissegundo entre chamadas a time.monotonic() pode deixar
+        # segundos_total < t_leitura por uma fracao inexistente, o que
+        # arredondaria para -0.0 -- sem sentido nenhum de "processamento
+        # negativo". Numa particao real a diferenca e' ordens de magnitude
         # maior que esse ruido.
         segundos_processamento = round(max(0.0, segundos_total - t_leitura), 1)
         totais["segundos_leitura"] += t_leitura
         totais["segundos_total"] += segundos_total
-        log.info("curate.dia_ok", dia=dia, linhas_lidas=len(df),
+        log.info("curate.particao_ok", dia=dia, symbol=symbol, linhas_lidas=len(df),
                  duplicatas=antes - len(df), segundos=segundos_total,
                  segundos_leitura=round(t_leitura, 1),
                  segundos_processamento=segundos_processamento)
@@ -265,7 +304,7 @@ def imprimir_relatorio(t: dict[str, int | float]) -> None:
     print("=" * 60)
     print("CURADORIA raw -> curated")
     print("=" * 60)
-    print(f"  particoes de dia    : {t['particoes']}")
+    print(f"  particoes (dia+simbolo): {t['particoes']}")
     print(f"  linhas lidas        : {t['lidas']:,}")
     print(f"  duplicatas removidas: {t['duplicatas']:,}")
     print(f"  ts invalido excluido: {t['ts_invalido']:,}")

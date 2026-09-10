@@ -621,7 +621,9 @@ def test_curate_loga_progresso_por_dia_nao_so_resumo_final(tmp_raiz: Path, capsy
     """
     Pedido real do operador (2026-08-24): com 20+ dias e 9 simbolos, o curate
     ficava mudo por minutos ate' o resumo final — indistinguivel de travado.
-    Agora loga curate.destino no inicio e curate.dia_ok POR DIA processado.
+    Agora loga curate.destino no inicio e curate.particao_ok POR (DIA,
+    SIMBOLO) processado (evento renomeado de dia_ok em 2026-09-10c quando a
+    granularidade de leitura passou de dia inteiro para dia+simbolo).
     """
     import pyarrow as pa
     import pyarrow.parquet as pq
@@ -640,7 +642,7 @@ def test_curate_loga_progresso_por_dia_nao_so_resumo_final(tmp_raiz: Path, capsy
     curar_trades(tmp_raiz, tmp_raiz.parent / "curated")
     out = capsys.readouterr().out
     assert "curate.destino" in out
-    assert out.count("curate.dia_ok") == 3       # um log por dia, nao so' no fim
+    assert out.count("curate.particao_ok") == 3   # um log por dia (1 simbolo cada)
     for dia in ("2026-08-11", "2026-08-12", "2026-08-13"):
         assert dia in out
 
@@ -986,3 +988,84 @@ def test_progresso_conta_arquivos_pulados_tambem(
     marcas = re.findall(r"arquivos_lidos=(\d+)", out)
     assert marcas[-1] == "31"          # 30 boas + 1 podre = 31 tentativas
     assert "curate.arquivo_pulado" in out
+
+
+def test_curate_le_por_simbolo_nao_o_dia_inteiro_junto(
+    tmp_raiz: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    A mudanca central de 2026-09-10c: dois runs identicos de --diagnostico
+    travaram na MESMA posicao da lista combinada (~200-225 de 318), o
+    segundo MAIS LENTO -- descarta cache e contencao pontual, aponta pra
+    arquivos especificos que rglob() sempre encontra naquela posicao (um
+    SIMBOLO, dado que as pastas sym=* sao percorridas em ordem). Ler por
+    (dia, simbolo) faz esse simbolo aparecer nomeado.
+
+    Prova pelo dataset PASSADO a cada chamada de ds.dataset(): cada chamada
+    precisa conter arquivos de UM SO' simbolo -- nunca os dois misturados.
+    """
+    _escrever_dia_trade(tmp_raiz, "2026-08-14", "WINFUT", n_arquivos=5)
+    _escrever_dia_trade(tmp_raiz, "2026-08-14", "PETR4", n_arquivos=3)
+    curated = tmp_raiz.parent / "curated"
+
+    import profittape.tools.curate as curate_mod
+
+    listas_de_arquivos: list[list[str]] = []
+    original_fabrica = curate_mod.ds.dataset
+
+    def _fabrica_espia(arquivos: list[str], *a: object, **k: object) -> object:
+        listas_de_arquivos.append(list(arquivos))
+        return original_fabrica(arquivos, *a, **k)
+
+    monkeypatch.setattr(curate_mod.ds, "dataset", _fabrica_espia)
+
+    totais = curar_trades(tmp_raiz, curated)
+
+    assert len(listas_de_arquivos) == 2, (
+        "esperava exatamente 2 chamadas a ds.dataset() -- uma por simbolo, "
+        f"nao o dia inteiro de uma vez; veio {len(listas_de_arquivos)}")
+    for lista in listas_de_arquivos:
+        simbolos_na_lista = {"WINFUT" if "sym=WINFUT" in p else "PETR4"
+                             for p in lista}
+        assert len(simbolos_na_lista) == 1, (
+            f"uma chamada misturou simbolos: {lista}")
+    assert totais["particoes"] == 2       # (dia, WINFUT) + (dia, PETR4)
+    assert totais["gravadas"] == 5 * 2 + 3 * 2   # 2 linhas/arquivo cada
+
+
+def test_simbolo_corrompido_nao_contamina_outro_simbolo_saudavel(
+    tmp_raiz: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Antes da v2.10c, um arquivo podre em QUALQUER simbolo derrubava a
+    leitura em lote do DIA INTEIRO (todos os simbolos misturados), caindo
+    no fallback lento para o dia todo. Agora o fallback e' escopado ao
+    simbolo podre -- o simbolo saudavel nem passa pelo caminho lento."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    curated = tmp_raiz.parent / "curated"
+    _escrever_dia_trade(tmp_raiz, "2026-08-14", "WINFUT", n_arquivos=10)
+    _escrever_dia_trade(tmp_raiz, "2026-08-14", "PETR4", n_arquivos=5)
+
+    ruim = tmp_raiz / "trade" / "dt=2026-08-14" / "sym=PETR4" / "part-9999.parquet"
+    cols = dict(ts_ns=[999000], ts_recv_ns=[999], symbol=["PETR4"],
+                exchange=["F"], trade_id=[999], price=[9.0],
+                volume_financeiro=[1.0], quantidade=[1],
+                agente_comprador=[3], agente_vendedor=[85],
+                trade_type=[2], is_edit=[False])
+    pq.write_table(pa.table(cols), ruim)
+    b = bytearray(ruim.read_bytes())
+    for i in range(50, min(80, len(b) - 8)):
+        b[i] = 0xFF
+    ruim.write_bytes(bytes(b))
+
+    totais = curar_trades(tmp_raiz, curated)
+    out = capsys.readouterr().out
+
+    assert totais["gravadas"] == 20 + 10   # WINFUT 10x2 + PETR4 5x2 (podre fora)
+    # o aviso de fallback e o arquivo pulado tem que citar PETR4, nunca WINFUT
+    assert "symbol=PETR4" in out
+    assert "curate.arquivo_pulado" in out
+    # WINFUT (saudavel) nunca deveria precisar do fallback lento
+    linhas_winfut = [linha for linha in out.splitlines() if "symbol=WINFUT" in linha]
+    assert not any("leitura_em_lote_falhou" in linha for linha in linhas_winfut)
