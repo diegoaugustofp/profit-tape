@@ -354,14 +354,23 @@ def curate(
              "antigo arquivo-a-arquivo -- mais lento mas e' o unico modo que "
              "ja terminou de verdade em producao; use se 'sequencial' "
              "tambem nao der sinal de vida)."),
+    diagnostico: bool = typer.Option(
+        False, "--diagnostico",
+        help="Forca leitura fragmento-a-fragmento e loga progresso a cada 25 "
+             "arquivos (curate.leitura_progresso) -- diz se a lentidao e' "
+             "LINEAR (todo arquivo custando igual, suspeita de IO/antivirus) "
+             "ou concentrada NUM arquivo (pulo brusco entre checkpoints). "
+             "Use quando um dia estiver demorando horas sem log nenhum."),
 ) -> None:
     """
     Deduplica e ordena raw -> curated. Rode SEMPRE antes de calcular features.
 
     Idempotente: reprocessar sobrescreve a mesma saida. Loga progresso por dia
-    (curate.processando / curate.dia_ok, com segundos_leitura e
-    segundos_processamento separados) — uma curadoria de 20+ dias fica muda
-    por minutos sem isso, indistinguivel de travada.
+    (curate.processando / curate.dia_ok) e, desde 2026-09-10, tambem por
+    ETAPA dentro do dia (curate.leitura_ok / conversao_pandas_ok / dedup_ok,
+    mais curate.leitura_progresso com --diagnostico) — o log so' por dia
+    fica mudo por HORAS se um dia sozinho for grande, indistinguivel de
+    travado.
     """
     configurar(log_level, log_file)
     from .tools.curate import curar_trades, imprimir_relatorio
@@ -369,7 +378,8 @@ def curate(
     if modo_leitura not in ("lote", "sequencial", "fragmento"):
         raise typer.BadParameter(
             "--modo-leitura precisa ser 'lote', 'sequencial' ou 'fragmento'")
-    imprimir_relatorio(curar_trades(raw, curated, modo_leitura=modo_leitura))
+    imprimir_relatorio(curar_trades(raw, curated, modo_leitura=modo_leitura,
+                                    diagnostico=diagnostico))
 
 
 @app.command()

@@ -39,7 +39,8 @@ log = structlog.get_logger(__name__)
 
 
 def curar_trades(raiz_raw: Path, raiz_curated: Path,
-                 modo_leitura: str = "lote") -> dict[str, int | float]:
+                 modo_leitura: str = "lote",
+                 diagnostico: bool = False) -> dict[str, int | float]:
     """
     Processa particao por particao de dia — nunca o dataset inteiro em memoria.
     Um mes de WINFUT nao cabe, e nao precisa caber.
@@ -47,6 +48,18 @@ def curar_trades(raiz_raw: Path, raiz_curated: Path,
     modo_leitura: "lote" (default, paralelo), "sequencial" (lote sem
     threads) ou "fragmento" (pula o lote, vai direto pro loop antigo --
     ver comentario no loop principal para quando usar cada um).
+
+    diagnostico: forca o loop fragmento-a-fragmento (independente de
+    modo_leitura) e loga progresso a cada 25 arquivos
+    (curate.leitura_progresso). Use quando um dia estiver demorando horas
+    e precisar saber se a leitura trava LINEARMENTE (todo arquivo custando
+    o mesmo -- suspeita de IO/antivirus) ou NUM ARQUIVO especifico (pulo
+    brusco de tempo entre dois checkpoints).
+
+    Os checkpoints curate.leitura_ok / conversao_pandas_ok / dedup_ok sao
+    SEMPRE emitidos, com ou sem diagnostico -- e' o que falta hoje: o log
+    padrao so' sai ao FIM do dia inteiro (leitura + pandas + dedup +
+    escrita), inutil quando o dia leva horas.
     """
     if modo_leitura not in ("lote", "sequencial", "fragmento"):
         raise ValueError(
@@ -133,7 +146,14 @@ def curar_trades(raiz_raw: Path, raiz_curated: Path,
         #                   09/09), mas e' o unico modo que ja' terminou de
         #                   verdade em producao -- garantia de progresso
         #                   quando os outros dois nao dao sinal de vida.
-        if modo_leitura == "fragmento":
+        # (2026-09-10b) --diagnostico: forca fragmento-a-fragmento com log de
+        # progresso a cada N arquivos. Pedido do operador apos 2 dias sem
+        # sinal de onde o tempo ia -- a instrumentacao anterior (so' o total
+        # ao FIM do dia) e' inutil quando o dia leva horas: nao ha' "fim" pra
+        # reportar. Isto diz se a leitura trava LINEARMENTE (todo arquivo
+        # custando o mesmo -- suspeita de IO/antivirus) ou NUM ARQUIVO
+        # especifico (um pulo brusco no tempo entre dois checkpoints).
+        if modo_leitura == "fragmento" or diagnostico:
             tabela = None
         else:
             try:
@@ -147,12 +167,22 @@ def curar_trades(raiz_raw: Path, raiz_curated: Path,
                 tabela = None
         if tabela is None:
             partes_ok = []
-            for frag in dataset.get_fragments():
+            t_frag0 = time.monotonic()
+            total_frag = len(arquivos_dia)
+            for i, frag in enumerate(dataset.get_fragments(), start=1):
                 try:
                     partes_ok.append(frag.to_table())
                 except Exception as exc2:
                     log.warning("curate.arquivo_pulado", dia=dia, arquivo=frag.path,
                                erro=f"{type(exc2).__name__}: {str(exc2)[:100]}")
+                if diagnostico and i % 25 == 0:
+                    log.info("curate.leitura_progresso", dia=dia,
+                            arquivos_lidos=i, arquivos_total=total_frag,
+                            segundos_decorridos=round(time.monotonic() - t_frag0, 1))
+            if diagnostico and total_frag % 25 != 0:
+                log.info("curate.leitura_progresso", dia=dia,
+                        arquivos_lidos=total_frag, arquivos_total=total_frag,
+                        segundos_decorridos=round(time.monotonic() - t_frag0, 1))
             if not partes_ok:
                 log.warning("curate.dia_sem_arquivo_legivel", dia=dia)
                 continue
@@ -160,7 +190,17 @@ def curar_trades(raiz_raw: Path, raiz_curated: Path,
         if tabela.num_rows == 0:
             continue
         t_leitura = time.monotonic() - t0
+        # (2026-09-10b) log ISOLADO da leitura, antes de qualquer coisa em
+        # pandas -- ate' agora o tempo de leitura so' aparecia dentro do
+        # curate.dia_ok, que so' sai no FIM do dia inteiro (leitura +
+        # to_pandas + sort/dedup + escrita). Um dia de horas nunca produzia
+        # ESTE numero isolado; agora produz, assim que a leitura termina.
+        log.info("curate.leitura_ok", dia=dia, arquivos=len(arquivos_dia),
+                 linhas=tabela.num_rows, segundos_leitura=round(t_leitura, 1))
+        t_pandas0 = time.monotonic()
         df = tabela.to_pandas()
+        log.info("curate.conversao_pandas_ok", dia=dia, linhas=len(df),
+                 segundos=round(time.monotonic() - t_pandas0, 1))
         totais["lidas"] += len(df)
 
         invalidos = int((df["ts_ns"] == 0).sum())
@@ -168,11 +208,15 @@ def curar_trades(raiz_raw: Path, raiz_curated: Path,
         df = df[df["ts_ns"] > 0]
 
         antes = len(df)
+        t_dedup0 = time.monotonic()
         df = (
             df.sort_values("ts_recv_ns")
               .drop_duplicates(subset=["symbol", "trade_id"], keep="last")
               .sort_values("ts_ns", kind="stable")
         )
+        log.info("curate.dedup_ok", dia=dia, linhas_antes=antes,
+                 linhas_depois=len(df), duplicatas=antes - len(df),
+                 segundos=round(time.monotonic() - t_dedup0, 1))
         totais["duplicatas"] += antes - len(df)
 
         for sym, grupo in df.groupby("symbol", observed=True):

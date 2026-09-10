@@ -861,3 +861,128 @@ def test_todos_os_tres_modos_dao_o_mesmo_resultado(tmp_raiz: Path) -> None:
         t = curar_trades(raiz, curated, modo_leitura=modo)
         resultados.append((t["gravadas"], t["duplicatas"], t["ts_invalido"]))
     assert resultados[0] == resultados[1] == resultados[2]
+
+
+def test_checkpoints_de_leitura_pandas_dedup_sao_sempre_emitidos(
+    tmp_raiz: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """
+    Pedido do operador apos 2 dias sem sinal de onde o tempo ia (2026-09-10):
+    o log padrao so' saia ao FIM do dia inteiro -- inutil quando um dia leva
+    horas. Estes tres SEMPRE aparecem, com ou sem --diagnostico, e SEMPRE
+    nesta ordem: leitura -> pandas -> dedup.
+    """
+    curated = tmp_raiz.parent / "curated"
+    _escrever_dia_trade(tmp_raiz, "2026-08-14", "WINFUT", n_arquivos=8)
+
+    curar_trades(tmp_raiz, curated)
+    out = capsys.readouterr().out
+
+    assert "curate.leitura_ok" in out
+    assert "curate.conversao_pandas_ok" in out
+    assert "curate.dedup_ok" in out
+    pos_leitura = out.index("curate.leitura_ok")
+    pos_pandas = out.index("curate.conversao_pandas_ok")
+    pos_dedup = out.index("curate.dedup_ok")
+    assert pos_leitura < pos_pandas < pos_dedup, (
+        "checkpoints fora de ordem -- leitura precisa vir antes de pandas, "
+        "que precisa vir antes de dedup")
+
+
+def test_leitura_ok_reporta_arquivos_e_linhas_corretos(
+    tmp_raiz: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    curated = tmp_raiz.parent / "curated"
+    _escrever_dia_trade(tmp_raiz, "2026-08-14", "WINFUT",
+                       n_arquivos=7, linhas_por_arquivo=4)
+
+    curar_trades(tmp_raiz, curated)
+    out = capsys.readouterr().out
+
+    import re
+    m = re.search(r"curate\.leitura_ok\s+.*?arquivos=(\d+).*?linhas=(\d+)", out)
+    assert m, f"campos nao encontrados:\n{out}"
+    assert int(m.group(1)) == 7
+    assert int(m.group(2)) == 28   # 7 arquivos x 4 linhas
+
+
+def test_diagnostico_forca_fragmento_e_loga_progresso(
+    tmp_raiz: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """--diagnostico precisa: (1) forcar o loop fragmento-a-fragmento mesmo
+    com modo_leitura='lote' (o default), (2) logar progresso a cada 25
+    arquivos, (3) logar o resto final mesmo quando o total nao e' multiplo
+    de 25."""
+    curated = tmp_raiz.parent / "curated"
+    _escrever_dia_trade(tmp_raiz, "2026-08-14", "WINFUT", n_arquivos=60)
+
+    totais = curar_trades(tmp_raiz, curated, modo_leitura="lote", diagnostico=True)
+    out = capsys.readouterr().out
+
+    assert "curate.leitura_progresso" in out
+    import re
+    marcas = re.findall(r"arquivos_lidos=(\d+)", out)
+    assert marcas == ["25", "50", "60"], (
+        f"esperava progresso em 25, 50 e o resto (60) -- veio {marcas}")
+    assert totais["gravadas"] == 120   # 60 arquivos x 2 linhas
+
+
+def test_diagnostico_forca_fragmento_mesmo_sem_pedir_modo_fragmento(
+    tmp_raiz: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """diagnostico=True com modo_leitura='lote' (o default) NAO pode chamar
+    dataset.to_table() em lote -- senao o progresso por fragmento nunca
+    apareceria no cenario real que motivou o pedido."""
+    curated = tmp_raiz.parent / "curated"
+    _escrever_dia_trade(tmp_raiz, "2026-08-14", "WINFUT", n_arquivos=10)
+
+    import profittape.tools.curate as curate_mod
+
+    chamadas: list[dict[str, object]] = []
+    original_fabrica = curate_mod.ds.dataset
+
+    def _fabrica_espia(*a: object, **k: object) -> object:
+        return _DatasetEspiao(original_fabrica(*a, **k), chamadas)
+
+    monkeypatch.setattr(curate_mod.ds, "dataset", _fabrica_espia)
+
+    curar_trades(tmp_raiz, curated, modo_leitura="lote", diagnostico=True)
+
+    assert chamadas == [], (
+        "dataset.to_table() foi chamado com diagnostico=True -- deveria "
+        "ter forcado o loop fragmento-a-fragmento")
+
+
+def test_progresso_conta_arquivos_pulados_tambem(
+    tmp_raiz: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Um arquivo corrompido no meio nao pode fazer a contagem de progresso
+    perder o passo -- 'arquivos_lidos' conta TENTATIVAS (i do enumerate),
+    nao so' sucessos, senao o total no ultimo log nao bateria com
+    arquivos_total."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    curated = tmp_raiz.parent / "curated"
+    _escrever_dia_trade(tmp_raiz, "2026-08-14", "WINFUT",
+                       n_arquivos=30, linhas_por_arquivo=2)
+
+    ruim = tmp_raiz / "trade" / "dt=2026-08-14" / "sym=WINFUT" / "part-9999.parquet"
+    cols = dict(ts_ns=[999000], ts_recv_ns=[999], symbol=["WINFUT"],
+                exchange=["F"], trade_id=[999], price=[9.0],
+                volume_financeiro=[1.0], quantidade=[1],
+                agente_comprador=[3], agente_vendedor=[85],
+                trade_type=[2], is_edit=[False])
+    pq.write_table(pa.table(cols), ruim)
+    b = bytearray(ruim.read_bytes())
+    for i in range(50, min(80, len(b) - 8)):
+        b[i] = 0xFF
+    ruim.write_bytes(bytes(b))
+
+    curar_trades(tmp_raiz, curated, diagnostico=True)
+    out = capsys.readouterr().out
+
+    import re
+    marcas = re.findall(r"arquivos_lidos=(\d+)", out)
+    assert marcas[-1] == "31"          # 30 boas + 1 podre = 31 tentativas
+    assert "curate.arquivo_pulado" in out
