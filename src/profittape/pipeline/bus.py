@@ -26,6 +26,7 @@ from __future__ import annotations
 import contextlib
 import queue
 import threading
+import time
 from typing import Any, NamedTuple
 
 from ..domain.enums import Stream
@@ -98,15 +99,45 @@ class EventBus:
     def drain(self, timeout: float, max_batch: int) -> list[Envelope]:
         """
         Retira um lote. Bloqueia ate `timeout` esperando o primeiro item, depois
-        raspa o que ja estiver disponivel sem esperar mais.
+        continua aceitando itens DENTRO DO MESMO ORCAMENTO DE TEMPO (nao mais
+        get_nowait() -- ver BUG abaixo) ate max_batch ou o tempo acabar.
 
         Lote grande e' o que torna a escrita eficiente: um row group Parquet por
         lote, em vez de uma chamada de escrita por evento.
+
+        BUG REAL, ativo desde o primeiro commit do projeto (2026-08-21) ate'
+        2026-09-10: a versao anterior usava `get_nowait()` (espera ZERO) para
+        todo item apos o primeiro, contradizendo o proprio docstring ("Lote
+        grande..."). Isso so' produz lote grande quando itens chegam em RAJADA
+        instantanea (varios ja' na fila no mesmo instante). Para um produtor de
+        alta frequencia mas CADENCIA REGULAR -- o padrao real de WINFUT, o
+        ativo mais liquido -- o consumidor "vencia a corrida" quase sempre:
+        acordava no primeiro item, checava get_nowait(), achava vazio (o
+        proximo evento ainda nao tinha chegado), devolvia lote de 1. Descoberto
+        via row groups por arquivo: WINFUT em 08/09 tinha ~15 linhas por row
+        group (34.525 row groups para 519.764 linhas) contra o esperado de
+        milhares de linhas por row group -- overhead de metadado por row group
+        multiplicado por dezenas de milhares fazia UM SIMBOLO levar 4h48min
+        pra ler (90 KB/s efetivo) onde deveria levar segundos. Nao e' bug
+        exclusivo de ontem: qualquer dia de producao com WINFUT tem o mesmo
+        padrao, ja que a causa e' estrutural na cadencia de escrita, nao no
+        teste do E1 nem em nada externo (antivirus, backup, disco -- todos
+        investigados e descartados antes de chegar aqui).
+
+        CORRECAO: apos o primeiro item, cada get() subsequente usa o TEMPO
+        RESTANTE do mesmo orcamento (nao zero) -- deixa o produtor ter a
+        MESMA janela de `timeout` pra empilhar itens que o primeiro item ja'
+        teve, em vez de dar zero chance pros seguintes. Numa fila QUIETA
+        (eventos esporadicos), o comportamento nao piora: se nada mais
+        chegar, o timeout estoura naturalmente e devolve o que tem, dentro do
+        mesmo limite de latencia de sempre -- so' que agora genuinamente ate'
+        o fim da janela, nao "ate' a fila parecer vazia num instante".
 
         Um `None` na fila e' a sentinela de encerramento — devolvemos o lote
         parcial acumulado ate ali e sinalizamos com lista vazia na proxima volta.
         """
         lote: list[Envelope] = []
+        prazo = time.monotonic() + timeout
         try:
             primeiro = self._q.get(timeout=timeout)
         except queue.Empty:
@@ -116,8 +147,11 @@ class EventBus:
         lote.append(primeiro)
 
         while len(lote) < max_batch:
+            restante = prazo - time.monotonic()
+            if restante <= 0:
+                break
             try:
-                item = self._q.get_nowait()
+                item = self._q.get(timeout=restante)
             except queue.Empty:
                 break
             if item is None:

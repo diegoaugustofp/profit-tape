@@ -78,3 +78,50 @@ inteiramente gerenciada pela DLL (nosso codigo nunca rechama
 toda a queda (caiu para False, voltou True sozinho quando a DLL avisou),
 validando ao vivo a regra de checar `corretora_pronta` no MOMENTO do
 envio de ordem, nao uma vez so' no inicio.
+
+
+## BUG REAL: row groups minusculos por cadencia de escrita (2026-08-21 a 2026-09-10)
+
+`EventBus.drain()` usava `get_nowait()` (espera ZERO) para todo item apos
+o primeiro, contradizendo o proprio docstring ("Lote grande e' o que
+torna a escrita eficiente"). Contra um produtor de CADENCIA REGULAR (nao
+rajada instantanea) -- o padrao real de um ativo de alta frequencia --
+o consumidor "vencia a corrida" quase sempre: acordava no primeiro item,
+checava `get_nowait()`, achava vazio porque o proximo ainda nao tinha
+chegado, devolvia lote de 1.
+
+**Efeito, medido em producao (WINFUT, dt=2026-09-08)**: 34.525 row groups
+para 519.764 linhas -- media de 15 linhas por row group. Cada row group
+carrega seu proprio metadado/dicionario/estatisticas; ter milhares deles
+para entregar poucas linhas cada e' overhead estrutural, nao volume de
+dado. Leitura desse UM simbolo: 4h48min (90 KB/s efetivo) onde deveria
+levar segundos.
+
+**NAO e' bug de um dia so'.** A causa e' estrutural na cadencia de
+escrita, presente desde o primeiro commit do projeto (2026-08-21).
+Qualquer dia de producao com WINFUT tem o mesmo padrao. Antivirus,
+disco, tarefa agendada, sessoes de teste do E1 -- todos investigados e
+descartados nesta sessao antes de chegar na causa real.
+
+**Diagnostico**: `pq.ParquetFile(caminho).metadata.num_row_groups` e'
+instantaneo (le so' o rodape) e detecta isto sem ler o arquivo inteiro.
+Um arquivo saudavel deveria ter poucas centenas a poucos milhares de
+linhas por row group, nao dezenas.
+
+**Correcao**: `bus.py` -- apos o primeiro item, `drain()` agora usa
+`get(timeout=restante)` (o tempo QUE SOBRA do orcamento original), nao
+mais `get_nowait()`. Uma fila continuamente ocupada agora acumula pelo
+orcamento de tempo inteiro antes de devolver; uma fila quieta continua
+devolvendo perto do timeout, sem espera extra.
+
+**Nao afeta a latencia do EA**: `on_trade_extra` (o callback do
+EABridge) roda direto no callback da DLL, ANTES do `bus.publish()` --
+nunca passou pelo `drain()`. Confirmado no codigo antes de fechar esta
+correcao.
+
+**Efeito esperado em producao, a partir do proximo dia gravado com esta
+versao**: arquivos de WINFUT/WDOFUT (e qualquer ativo de alta frequencia)
+com muito menos row groups, leitura ordens de grandeza mais rapida.
+Dados JA' gravados (todo dia ate' 2026-09-10) continuam com o padrao
+antigo -- esta correcao muda a escrita dai pra frente, nao reescreve o
+que ja existe.
