@@ -40,7 +40,9 @@ log = structlog.get_logger(__name__)
 
 def curar_trades(raiz_raw: Path, raiz_curated: Path,
                  modo_leitura: str = "lote",
-                 diagnostico: bool = False) -> dict[str, int | float]:
+                 diagnostico: bool = False,
+                 dia_filtro: str | None = None,
+                 simbolo_filtro: str | None = None) -> dict[str, int | float]:
     """
     Processa particao por particao de (dia, simbolo) — nunca o dataset
     inteiro em memoria, nem o dia inteiro com todos os simbolos misturados.
@@ -70,6 +72,12 @@ def curar_trades(raiz_raw: Path, raiz_curated: Path,
     Os checkpoints curate.leitura_ok / conversao_pandas_ok / dedup_ok /
     particao_ok sao SEMPRE emitidos, com ou sem diagnostico, um por
     (dia, simbolo).
+
+    dia_filtro / simbolo_filtro: restringe a UM dia (YYYY-MM-DD) e/ou UM
+    simbolo, combinaveis. None (default) processa tudo -- sempre por
+    simbolo, filtrado ou nao. Feito para isolar um simbolo suspeito (ex.:
+    WDOFUT com 10x mais volume que os outros, 2026-09-10) sem esperar o
+    dia inteiro para chegar nele.
     """
     if modo_leitura not in ("lote", "sequencial", "fragmento"):
         raise ValueError(
@@ -94,6 +102,10 @@ def curar_trades(raiz_raw: Path, raiz_curated: Path,
         )
 
     dias_totais = sorted(origem.glob("dt=*"))
+    if dia_filtro is not None:
+        dias_totais = [p for p in dias_totais if p.name == f"dt={dia_filtro}"]
+        if not dias_totais:
+            raise SystemExit(f"--dia {dia_filtro} nao encontrado em {origem}")
     # (2026-09-10c) GRANULARIDADE MUDOU DE DIA PARA (DIA, SIMBOLO). Motivo:
     # dois runs completos de --diagnostico no MESMO dia (318 arquivos)
     # travaram na MESMA posicao (arquivo ~200-225), e o SEGUNDO run foi
@@ -107,6 +119,16 @@ def curar_trades(raiz_raw: Path, raiz_curated: Path,
     # esse simbolo aparecer NOMEADO no log em vez de escondido num indice
     # numerico -- e' o proprio diagnostico, nao so' contorno do sintoma.
     #
+    # ATUALIZACAO (mesmo dia, depois de medir por simbolo): WDOFUT levou
+    # 53s para 414 mil linhas -- 7.788 linhas/s, MESMA ORDEM DE GRANDEZA
+    # das outras (5.943 a 14.608 linhas/s). Nao e' 20x mais lento por
+    # ARQUIVO; e' ~10x mais DADO (contrato futuro liquido vs acoes). A
+    # posicao fixa pode nunca ter sido um arquivo fisico ruim -- pode ser
+    # so' que WDOFUT/WINFUT, por ordem alfabetica, sempre caem por ultimo
+    # E sao os dois com mais volume por natureza. --simbolo isola isso sem
+    # mais teoria: roda so' WINFUT e ve se o tempo e' proporcional ao
+    # volume dele ou se ele trava de verdade.
+    #
     # Efeito colateral bom: nunca mais 318 arquivos na memoria de uma vez
     # (WorkingSet de 3,9 GB visto em producao) -- agora e' ~28-36 por vez,
     # o tamanho tipico de UM simbolo num pregao.
@@ -116,8 +138,15 @@ def curar_trades(raiz_raw: Path, raiz_curated: Path,
         simbolos = sorted(
             p.name.split("=", 1)[1] for p in pasta_dia.glob("sym=*") if p.is_dir()
         )
+        if simbolo_filtro is not None:
+            simbolos = [s for s in simbolos if s == simbolo_filtro]
         for simbolo in simbolos:
             trabalho.append((dia_nome, pasta_dia, simbolo))
+
+    if simbolo_filtro is not None and not trabalho:
+        raise SystemExit(
+            f"--simbolo {simbolo_filtro} nao encontrado "
+            f"{'em ' + dia_filtro if dia_filtro else 'em nenhum dia'}")
 
     log.info("curate.destino", raiz_raw=str(raiz_raw.resolve()),
              raiz_curated=str(raiz_curated.resolve()), dias_encontrados=len(dias_totais),

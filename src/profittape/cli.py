@@ -361,16 +361,23 @@ def curate(
              "LINEAR (todo arquivo custando igual, suspeita de IO/antivirus) "
              "ou concentrada NUM arquivo (pulo brusco entre checkpoints). "
              "Use quando um dia estiver demorando horas sem log nenhum."),
+    dia: str | None = typer.Option(
+        None, "--dia", help="Restringe a UM dt=YYYY-MM-DD. Combinavel com --simbolo."),
+    simbolo: str | None = typer.Option(
+        None, "--simbolo",
+        help="Restringe a UM simbolo (ex.: WINFUT). Combinavel com --dia. "
+             "Util pra isolar um simbolo suspeito de lentidao sem esperar "
+             "o dia inteiro chegar nele."),
 ) -> None:
     """
     Deduplica e ordena raw -> curated. Rode SEMPRE antes de calcular features.
 
-    Idempotente: reprocessar sobrescreve a mesma saida. Loga progresso por dia
-    (curate.processando / curate.dia_ok) e, desde 2026-09-10, tambem por
-    ETAPA dentro do dia (curate.leitura_ok / conversao_pandas_ok / dedup_ok,
-    mais curate.leitura_progresso com --diagnostico) — o log so' por dia
-    fica mudo por HORAS se um dia sozinho for grande, indistinguivel de
-    travado.
+    Idempotente: reprocessar sobrescreve a mesma saida. Loga progresso por
+    (dia, simbolo) -- curate.processando / curate.particao_ok -- e por ETAPA
+    dentro de cada particao (curate.leitura_ok / conversao_pandas_ok /
+    dedup_ok, mais curate.leitura_progresso com --diagnostico) — o log so'
+    ao fim ficaria mudo por horas se uma particao for grande, indistinguivel
+    de travado.
     """
     configurar(log_level, log_file)
     from .tools.curate import curar_trades, imprimir_relatorio
@@ -379,7 +386,8 @@ def curate(
         raise typer.BadParameter(
             "--modo-leitura precisa ser 'lote', 'sequencial' ou 'fragmento'")
     imprimir_relatorio(curar_trades(raw, curated, modo_leitura=modo_leitura,
-                                    diagnostico=diagnostico))
+                                    diagnostico=diagnostico,
+                                    dia_filtro=dia, simbolo_filtro=simbolo))
 
 
 @app.command()

@@ -1069,3 +1069,92 @@ def test_simbolo_corrompido_nao_contamina_outro_simbolo_saudavel(
     # WINFUT (saudavel) nunca deveria precisar do fallback lento
     linhas_winfut = [linha for linha in out.splitlines() if "symbol=WINFUT" in linha]
     assert not any("leitura_em_lote_falhou" in linha for linha in linhas_winfut)
+
+
+def test_filtro_por_simbolo_processa_so_o_pedido(tmp_raiz: Path) -> None:
+    """Pedido direto do operador (2026-09-10): isolar UM simbolo suspeito
+    sem esperar o dia inteiro (WINFUT/WDOFUT com 10x mais volume que os
+    outros -- o teste que decide se e' so' volume ou trava de verdade)."""
+    curated = tmp_raiz.parent / "curated"
+    _escrever_dia_trade(tmp_raiz, "2026-08-14", "WINFUT", n_arquivos=5)
+    _escrever_dia_trade(tmp_raiz, "2026-08-14", "PETR4", n_arquivos=3)
+
+    totais = curar_trades(tmp_raiz, curated, simbolo_filtro="WINFUT")
+
+    assert totais["particoes"] == 1
+    assert totais["gravadas"] == 10          # so' WINFUT: 5 arquivos x 2
+    assert not (curated / "trade" / "dt=2026-08-14" / "sym=PETR4").exists()
+    assert (curated / "trade" / "dt=2026-08-14" / "sym=WINFUT").exists()
+
+
+def test_filtro_por_dia_processa_so_o_pedido(tmp_raiz: Path) -> None:
+    curated = tmp_raiz.parent / "curated"
+    _escrever_dia_trade(tmp_raiz, "2026-08-14", "WINFUT", n_arquivos=3)
+    _escrever_dia_trade(tmp_raiz, "2026-08-15", "WINFUT", n_arquivos=4)
+
+    totais = curar_trades(tmp_raiz, curated, dia_filtro="2026-08-14")
+
+    assert totais["particoes"] == 1
+    assert totais["gravadas"] == 6           # so' 08-14: 3 arquivos x 2
+    assert not (curated / "trade" / "dt=2026-08-15").exists()
+
+
+def test_filtros_dia_e_simbolo_sao_combinaveis(tmp_raiz: Path) -> None:
+    curated = tmp_raiz.parent / "curated"
+    _escrever_dia_trade(tmp_raiz, "2026-08-14", "WINFUT", n_arquivos=3)
+    _escrever_dia_trade(tmp_raiz, "2026-08-14", "PETR4", n_arquivos=2)
+    _escrever_dia_trade(tmp_raiz, "2026-08-15", "WINFUT", n_arquivos=5)
+
+    totais = curar_trades(tmp_raiz, curated,
+                          dia_filtro="2026-08-14", simbolo_filtro="WINFUT")
+
+    assert totais["particoes"] == 1
+    assert totais["gravadas"] == 6           # so' (08-14, WINFUT): 3x2
+    assert not (curated / "trade" / "dt=2026-08-14" / "sym=PETR4").exists()
+    assert not (curated / "trade" / "dt=2026-08-15").exists()
+
+
+def test_sem_filtro_continua_processando_tudo(tmp_raiz: Path) -> None:
+    """None (default) nos dois filtros precisa continuar identico ao
+    comportamento de antes -- ninguem que nao usa a flag pode ser afetado."""
+    curated = tmp_raiz.parent / "curated"
+    _escrever_dia_trade(tmp_raiz, "2026-08-14", "WINFUT", n_arquivos=3)
+    _escrever_dia_trade(tmp_raiz, "2026-08-14", "PETR4", n_arquivos=2)
+    _escrever_dia_trade(tmp_raiz, "2026-08-15", "WINFUT", n_arquivos=4)
+
+    totais = curar_trades(tmp_raiz, curated)
+
+    assert totais["particoes"] == 3          # (14,WINFUT) (14,PETR4) (15,WINFUT)
+    assert totais["gravadas"] == 6 + 4 + 8
+
+
+def test_dia_filtro_inexistente_da_erro_claro(tmp_raiz: Path) -> None:
+    curated = tmp_raiz.parent / "curated"
+    _escrever_dia_trade(tmp_raiz, "2026-08-14", "WINFUT", n_arquivos=2)
+    with pytest.raises(SystemExit, match="2026-01-01"):
+        curar_trades(tmp_raiz, curated, dia_filtro="2026-01-01")
+
+
+def test_simbolo_filtro_inexistente_da_erro_claro(tmp_raiz: Path) -> None:
+    curated = tmp_raiz.parent / "curated"
+    _escrever_dia_trade(tmp_raiz, "2026-08-14", "WINFUT", n_arquivos=2)
+    with pytest.raises(SystemExit, match="XPTO99"):
+        curar_trades(tmp_raiz, curated, simbolo_filtro="XPTO99")
+
+
+def test_cli_curate_aceita_dia_e_simbolo(tmp_raiz: Path) -> None:
+    """Fecha a ponta CLI -- garante que --dia/--simbolo chegam de verdade
+    em curar_trades, nao so' existem em curar_trades sozinho."""
+    from typer.testing import CliRunner
+
+    from profittape.cli import app
+    _escrever_dia_trade(tmp_raiz, "2026-08-14", "WINFUT", n_arquivos=2)
+    _escrever_dia_trade(tmp_raiz, "2026-08-14", "PETR4", n_arquivos=2)
+    curated = tmp_raiz.parent / "curated"
+
+    r = CliRunner().invoke(app, ["curate", "--raw", str(tmp_raiz),
+                                "--curated", str(curated),
+                                "--simbolo", "WINFUT"])
+    assert r.exit_code == 0, r.output
+    assert (curated / "trade" / "dt=2026-08-14" / "sym=WINFUT").exists()
+    assert not (curated / "trade" / "dt=2026-08-14" / "sym=PETR4").exists()
