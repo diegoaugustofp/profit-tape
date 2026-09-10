@@ -36,19 +36,28 @@ próximo passo é de mecanismo, não de número.
 
     EFEITO     Resultado BINARIO por operacao na perna 1: alvo1 (+1
                stop) antes do stop (-1 stop), ordem intrabarra pelo
-               tape. Nula de lucro apos custo (11 pts) com stop mediano
-               62 pts: p1 = 0,59. Quero enxergar p1 >= 0,65 contra
-               p1 <= 0,55: meia-largura de 5 pp -> n = 370 operacoes.
-               Secundario, so' reportado: P&L total das 3 pernas em
-               pontos, por operacao e por pregao.
+               tape. Nula A CUSTO ZERO: p1 = 0,50 (barreira simetrica).
+               Quero enxergar p1 >= 0,56 contra p1 <= 0,50: meia-
+               largura de 3 pp -> n = 1.070 operacoes. Secundario, so'
+               reportado: P&L BRUTO das 3 pernas por operacao (IC95).
+               [corrigido 2026-09-11: a versao anterior embutia o custo
+               na nula (0,59/0,61). Custo e' condicao comercial, nao
+               propriedade da estrategia -- ver CUSTO MAXIMO.]
+
+    CUSTO      Borda bruta por contrato = P&L bruto / 3. E' o custo
+    MAXIMO     maximo (ida e volta, por contrato) que a estrategia
+               paga. Vira ALERTA no EA: se custo_pontos_estimado do
+               YAML > custo maximo suportado, o EA avisa e nao liga.
+               Nao e' criterio de veredito.
 
     HORIZONTE  n = 370 / (operacoes por pregao). A 20 por pregao, ~19
                pregoes (1 mes); a 10, ~37 (2 meses); a 5, ~74 (3,5
                meses). Todos < 6 meses. Numero final depois do replay.
 
-    CRITERIO   Ao atingir n = 370: p1 >= 0,65 favoravel; p1 <= 0,55
-               contra; entre os dois, inconclusivo (e o P&L secundario
-               nao promove um inconclusivo). IC de 95% reportado sempre.
+    CRITERIO   Ao atingir n = 1.070: p1 >= 0,56 favoravel (borda bruta
+               existe; ai' o custo maximo diz em que corretora); p1 <=
+               0,50 contra (nao ha' borda a custo nenhum); entre os
+               dois, inconclusivo. IC de 95% reportado sempre.
 
     PARADA     Olho em n = 185 (metade) so' para defeito de
                especificacao (barras marcadas, uma a uma), NAO para
@@ -314,9 +323,20 @@ bruto por operação é ≈ −6 pts; o custo de 33 é a perda. Em dinheiro,
 Com circuit breaker (o EA v1 como está): 3.253 dos 3.770 sinais
 bloqueados; 13,3 operações/pregão; p1 = 0,484; −35 pts/operação.
 
-**Critério da ficha: CONTRA.** O forward não é ligado — com n = 2.916
-na depuração ele não teria o que responder. Nenhum parâmetro foi
-tocado.
+**Critério da ficha (corrigido, em termos brutos): CONTRA.** p1 =
+0,486 com IC 0,467–0,504 não fica acima de 0,50 em ponto nenhum; o
+bruto é ≈ −6 pts por operação (−2 por contrato). O custo máximo que
+essa borda suporta é **negativo**: a R$ 1,00/contrato o líquido seria
+≈ −21 pts, a R$ 0,00 ≈ −6. O que trava não é a corretora, é a ausência
+de borda bruta. O forward não é ligado — com n = 2.916 na depuração ele
+não teria o que responder. Nenhum parâmetro foi tocado.
+
+Registro de 2026-09-11: o operador apontou que o custo não pode ser
+critério de veredito — é condição comercial (troca de corretora,
+negociação). Correto; a ficha foi corrigida (EFEITO, CUSTO MÁXIMO,
+CRITÉRIO) e o `bollinger-replay` passou a imprimir borda bruta com IC
+e custo máximo suportado por contrato. Neste caso a correção não muda
+o veredito, porque o bruto já é negativo.
 
 ## 5.6 Próximo passo proposto (mecanismo, não número)
 

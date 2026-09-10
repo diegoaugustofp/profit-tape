@@ -410,6 +410,14 @@ def _wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
     return (centro - meia, centro + meia)
 
 
+def _ic_media(x: pd.Series, z: float = 1.96) -> tuple[float, float]:
+    n = int(x.notna().sum())
+    if n < 2:
+        return (float("nan"), float("nan"))
+    m, se = float(x.mean()), float(x.std(ddof=1)) / math.sqrt(n)
+    return (round(m - z * se, 1), round(m + z * se, 1))
+
+
 def resumo(ops: pd.DataFrame, pregoes: int) -> dict[str, Any]:
     ex = ops[ops["executou"]] if "executou" in ops.columns else ops.iloc[0:0]
     out: dict[str, Any] = {
@@ -435,6 +443,19 @@ def resumo(ops: pd.DataFrame, pregoes: int) -> dict[str, Any]:
             "p1_nula_lucro": round(
                 float(((ex["stop_pts"] + CUSTO_POR_CONTRATO_PTS) / (2 * ex["stop_pts"])).median()),
                 3,
+            ),
+            # BORDA BRUTA e CUSTO MAXIMO SUPORTADO (2026-09-11, a pedido do
+            # operador): custo e' condicao comercial, nao propriedade da
+            # estrategia. O criterio e' o bruto; o custo maximo que a borda
+            # bruta paga vira ALERTA no EA (custo_pontos_estimado do YAML),
+            # nao trava. IC95 normal: n grande, media de somas de 3 pernas.
+            "pnl_bruto_medio_pts": round(float(ex["pnl_bruto_pts"].mean()), 1),
+            "pnl_bruto_ic95": _ic_media(ex["pnl_bruto_pts"]),
+            "custo_maximo_suportado_pts_por_contrato": round(
+                float(ex["pnl_bruto_pts"].mean()) / CONTRATOS, 1
+            ),
+            "custo_maximo_suportado_ic95": tuple(
+                round(v / CONTRATOS, 1) for v in _ic_media(ex["pnl_bruto_pts"])
             ),
             "abertura": int((ex["tipo_execucao"] == "abertura").sum()),
             "recuo": int((ex["tipo_execucao"] == "recuo").sum()),

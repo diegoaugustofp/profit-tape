@@ -1393,6 +1393,11 @@ def bollinger_replay(
         typer.echo(f"  compra {res['compra']} venda {res['venda']} | abertura {res['abertura']} "
                    f"recuo {res['recuo']} | stop mediano {res['stop_mediano_pts']} pts "
                    f"| duracao mediana {res['duracao_mediana_s']} s")
+        typer.echo(f"  BORDA BRUTA (antes de qualquer custo): {res['pnl_bruto_medio_pts']} "
+                   f"pts/operacao, IC95 {res['pnl_bruto_ic95']} | p1 vs nula a custo zero 0,50")
+        typer.echo(f"  CUSTO MAXIMO SUPORTADO: {res['custo_maximo_suportado_pts_por_contrato']} "
+                   f"pts por contrato (IC95 {res['custo_maximo_suportado_ic95']}) "
+                   f"| custo atual do YAML: {res.get('custo_por_contrato_pts', 11.0)}")
         typer.echo(f"  P&L liquido: {res['pnl_liquido_medio_pts']} pts/operacao, "
                    f"{res['pnl_liquido_por_pregao_pts']} pts/pregao (3 contratos, custo 33)")
         for i in (1, 2, 3):

@@ -1153,3 +1153,18 @@ real de leitura.
 - Proposto (5.6): medir conteudo direcional do sinal (retorno assinado
   e MFE/MAE em 1/4/16 barras vs. sem sinal) antes de qualquer variante.
   Variante de rompimento registrada como hipotese distinta.
+
+### Continuacao (2026-09-11) — custo nao e' criterio; ficha corrigida (v2.28)
+
+- Operador: a trava do forward pelo custo esta' errada -- custo e'
+  condicao comercial (corretora, negociacao); o que deve existir e' um
+  alerta de custo maximo. Correto. Ficha corrigida: nula a custo zero
+  (p1 = 0,50), criterio em termos brutos, linha CUSTO MAXIMO = borda
+  bruta por contrato, que vira alerta no EA contra custo_pontos_estimado.
+- `bollinger-replay` imprime BORDA BRUTA (IC95) e CUSTO MAXIMO
+  SUPORTADO por contrato. Teste novo. 628 testes, ruff e mypy limpos.
+- No caso da v1 o veredito nao muda: p1 = 0,486 (IC ate' 0,504) nao
+  supera 0,50; bruto = -6 pts/operacao; custo maximo suportado e'
+  NEGATIVO. Nao e' a corretora que trava.
+- Regra de edicao (assert count == 1) pegou um replace que nao casou
+  nos testes; corrigido por linha, conferido antes de rodar.

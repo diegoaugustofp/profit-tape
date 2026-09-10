@@ -174,6 +174,7 @@ def test_resumo_p1_e_intervalo() -> None:
                 stop_pts=60.0,
                 tipo_execucao="abertura",
                 pnl_liquido_pts=117.0,
+                pnl_bruto_pts=150.0,
                 duracao_s=50.0,
                 lado=1,
                 p1_motivo="alvo",
@@ -186,6 +187,7 @@ def test_resumo_p1_e_intervalo() -> None:
                 stop_pts=60.0,
                 tipo_execucao="recuo",
                 pnl_liquido_pts=-213.0,
+                pnl_bruto_pts=-180.0,
                 duracao_s=10.0,
                 lado=-1,
                 p1_motivo="stop",
@@ -238,6 +240,7 @@ def test_resumo_traz_cortes_pre_declarados_e_pernas() -> None:
                 stop_pts=60.0,
                 tipo_execucao="abertura",
                 pnl_liquido_pts=117.0,
+                pnl_bruto_pts=150.0,
                 duracao_s=50.0,
                 lado=1,
                 p1_motivo="alvo",
@@ -253,7 +256,7 @@ def test_resumo_traz_cortes_pre_declarados_e_pernas() -> None:
                 stop_pts=60.0,
                 tipo_execucao="recuo",
                 pnl_liquido_pts=-213.0,
-                duracao_s=10.0,
+                pnl_bruto_pts=-180.0,
                 lado=-1,
                 p1_motivo="stop",
                 p2_motivo="stop",
@@ -319,3 +322,33 @@ def test_cli_bollinger_replay_aceita_ignorar_circuit_breaker(tmp_path) -> None: 
     assert r.exit_code == 0, r.output
     assert "circuit breaker IGNORADO" in r.output
     assert "circuit_breaker" not in r.output.split("sem execucao")[1].split("\n")[0]
+
+
+def test_resumo_separa_borda_bruta_de_custo() -> None:
+    """Custo e' condicao comercial: a borda bruta e o custo maximo que ela
+    suporta saem separados, com IC. Duas operacoes com bruto +150 e -180:
+    media -15 por 3 contratos = -5 por contrato."""
+    base = dict(
+        executou=True,
+        stop_pts=60.0,
+        tipo_execucao="abertura",
+        duracao_s=10.0,
+        lado=1,
+        p1_motivo="alvo",
+        p2_motivo="stop",
+        p3_motivo="stop",
+        p1_pts=0.0,
+        p2_pts=0.0,
+        p3_pts=0.0,
+    )
+    ops = pd.DataFrame(
+        [
+            dict(base, p1_alvo=True, pnl_bruto_pts=150.0, pnl_liquido_pts=117.0),
+            dict(base, p1_alvo=False, pnl_bruto_pts=-180.0, pnl_liquido_pts=-213.0),
+        ]
+    )
+    r = br.resumo(ops, pregoes=1)
+    assert r["pnl_bruto_medio_pts"] == -15.0
+    assert r["custo_maximo_suportado_pts_por_contrato"] == -5.0
+    lo, hi = r["pnl_bruto_ic95"]
+    assert lo < -15.0 < hi
