@@ -1,9 +1,9 @@
 # Scalp de Bollinger modificada (15s) — hipótese em formalização
 
-Estado (2026-09-09): **ficha escrita (§0), v1 congelada**. Falta a
-depuração pelo tape (replay das três pernas) para preencher os dois
-campos "a medir" antes de ligar o forward. Nada aqui foi calibrado a
-resultado: os números são os do operador ou medidos em features.
+Estado (2026-09-10): **v1 CONTRA na depuração; forward NÃO ligado.**
+Replay pelo tape em 30 pregões, n = 2.916 operações: p1 = 0,486 (IC
+0,467–0,504) contra nula de lucro 0,61. Ver 5.5. Nada foi ajustado; o
+próximo passo é de mecanismo, não de número.
 
 ## 0. Ficha de seis linhas (v1, `entregue-v2.11`)
 
@@ -291,6 +291,43 @@ circuit-breaker` mede a regra inteira.
 e −1 stop no resto); custo de 33 pts por operação é a perda inteira.
 Rerodar com barras corrigidas, com e sem circuit breaker, antes da
 conversa de desenho.
+
+## 5.5 Veredito da depuração (2026-09-10, v2.26, barras corrigidas)
+
+Regra inteira (sem circuit breaker), 30 pregões, 3.770 sinais, 2.916
+operações (97 por pregão; 510 não atravessaram, 344 com posição aberta):
+
+| | n | p1 | IC95 | P&L líq. médio |
+|---|---|---|---|---|
+| todas | 2.916 | 0,486 | 0,467–0,504 | −39,0 pts |
+| abertura / recuo | 2.390 / 526 | 0,492 / 0,456 | | −37,7 / −44,8 |
+| compra / venda | 1.444 / 1.472 | 0,490 / 0,482 | | −37,7 / −40,2 |
+
+Pernas: 1 = 1.416 alvos / 1.500 stops (média −1,3); 2 = 47 / 2.869
+(−2,3); 3 = 2 / 2.914 (−2,3). Duração mediana 15 s. Stop mediano 50.
+
+Leitura: com barreira simétrica, p1 = 0,486 significa que 15 s depois
+do sinal o preço não tem direção preferida a 1 stop de distância. O
+bruto por operação é ≈ −6 pts; o custo de 33 é a perda. Em dinheiro,
+3 contratos: R$ 640/dia de custo, −R$ 758/dia de resultado.
+
+Com circuit breaker (o EA v1 como está): 3.253 dos 3.770 sinais
+bloqueados; 13,3 operações/pregão; p1 = 0,484; −35 pts/operação.
+
+**Critério da ficha: CONTRA.** O forward não é ligado — com n = 2.916
+na depuração ele não teria o que responder. Nenhum parâmetro foi
+tocado.
+
+## 5.6 Próximo passo proposto (mecanismo, não número)
+
+Antes de qualquer variante de saída: o sinal tem conteúdo direcional?
+Medição única, pré-declarada, sem regra de saída: retorno assinado na
+direção do sinal e excursão máxima favorável/adversa em 1, 4 e 16
+barras, contra o mesmo em instantes sem sinal. Um trial, amostra de
+depuração. Se não houver direção em horizonte nenhum, o sinal está
+morto e variantes de saída seriam trials queimados. Hipótese distinta
+registrada para depois: entrada por **rompimento** (a venda original da
+spec: stop na perda da mínima), não por retorno.
 
 ## 6. Dúvidas — fechadas em 2026-09-05, exceto as que o dump responde
 

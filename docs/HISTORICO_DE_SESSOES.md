@@ -1142,3 +1142,14 @@ real de leitura.
 - `--ignorar-circuit-breaker` no bollinger-replay (mesmo padrao do
   ea-replay-lote). 626 testes, ruff e mypy limpos.
 - 02 e 03/09 nao estao no curated (licenca do backfill; fora de escopo).
+
+### Continuacao (2026-09-10, noite) — veredito da depuracao: v1 CONTRA (v2.27, docs)
+
+- `--ignorar-circuit-breaker` de fato no binario (v2.26, com teste de
+  CLI). Replay da regra inteira: 2.916 operacoes em 30 pregoes, p1 =
+  0,486 (IC 0,467-0,504) contra nula 0,61; pernas 2/3 com 47 e 2 alvos
+  em ~2.900; -39 pts/operacao; R$ 640/dia so' de custo em 3 contratos.
+- Veredito pela ficha: CONTRA. Forward NAO ligado. Nada ajustado.
+- Proposto (5.6): medir conteudo direcional do sinal (retorno assinado
+  e MFE/MAE em 1/4/16 barras vs. sem sinal) antes de qualquer variante.
+  Variante de rompimento registrada como hipotese distinta.
