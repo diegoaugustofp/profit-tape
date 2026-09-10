@@ -9,7 +9,9 @@ alocacao grande. O feed fica parado enquanto o callback roda.
 from __future__ import annotations
 
 import time
+from collections import deque
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +25,27 @@ from .errors import LoginFailed, check
 from .timeparse import parse_ts_ns
 
 log = structlog.get_logger(__name__)
+
+
+@dataclass(frozen=True)
+class EventoOrdem:
+    """Um OrderChangeCallback, ja' convertido para tipos Python. Montado no
+    callback (so' conversao), lido pela thread principal."""
+
+    t_mono: float
+    profit_id: int
+    corretora: int
+    conta: str
+    ticker: str
+    qtd: int
+    executada: int
+    restante: int
+    lado: int
+    preco: float
+    preco_medio: float
+    status: str
+    texto: str
+    data: str
 
 
 class ProfitClient:
@@ -90,6 +113,13 @@ class ProfitClient:
         self.contadores_roteamento = {"ordem_mudanca": 0, "ordem_historico": 0,
                                       "conta": 0}
         self.contas_vistas: list[tuple[int, str]] = []   # (corretora, account_id)
+        # E2 (2026-09-11): o NOME da corretora, como a DLL o anuncia, por
+        # id. E' a base da trava "so' Simulador": a decisao de que uma conta
+        # e' de simulacao vem da DLL, nao do .env.
+        self.nomes_corretoras: dict[int, str] = {}
+        # E2: eventos do OrderChangeCallback, como tuplas cruas (sem I/O no
+        # callback -- regra do arquivo). Quem consome e' a thread principal.
+        self.ordens_eventos: deque[EventoOrdem] = deque(maxlen=10_000)
 
         # Referencias fortes aos callbacks. Sem isto o GC do Python coleta o
         # objeto enquanto a DLL ainda guarda o ponteiro, e o proximo evento
@@ -502,6 +532,8 @@ class ProfitClient:
         # sobe e as callbacks disparam.
         contadores = self.contadores_roteamento
         contas = self.contas_vistas
+        nomes = self.nomes_corretoras
+        eventos = self.ordens_eventos
 
         @b.TAccountCallback
         def _conta(corretora, nome_corretora, account_id, titular) -> None:
@@ -515,10 +547,22 @@ class ProfitClient:
             par = (int(corretora), str(account_id or ""))
             if par not in contas:
                 contas.append(par)
+            nomes[int(corretora)] = str(nome_corretora or "")
 
         @b.TOrderChangeCallback
-        def _ordem_mudanca(*_: object) -> None:
+        def _ordem_mudanca(ativo, corretora, qtd, traded, leaves, side, preco,
+                           stop, medio, profit_id, tipo, conta_id, titular,
+                           cl_ord_id, status, data, texto) -> None:
             contadores["ordem_mudanca"] += 1
+            # So' uma tupla de valores ja' convertidos. Nada de log aqui.
+            eventos.append(EventoOrdem(
+                t_mono=time.monotonic(), profit_id=int(profit_id),
+                corretora=int(corretora), conta=str(conta_id or ""),
+                ticker=str(getattr(ativo, "ticker", "") or ""),
+                qtd=int(qtd), executada=int(traded), restante=int(leaves),
+                lado=int(side), preco=float(preco), preco_medio=float(medio),
+                status=str(status or ""), texto=str(texto or ""),
+                data=str(data or "")))
 
         @b.THistoryCallback
         def _ordem_historico(*_: object) -> None:

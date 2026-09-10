@@ -46,6 +46,14 @@ def record(
         help="Ignora runtime.encerrar_em do yaml (roda ate' Ctrl+C). Para o "
              "teste A do E1 fora do pregao: o yaml de producao encerra as "
              "18:30, e o teste roda DEPOIS disso -- na v2.06 ele durou 4 s."),
+    ordem_teste_em: str | None = typer.Option(
+        None, "--ordem-teste-em",
+        help="E2 dentro do record (2026-09-11): no horario HH:MM (local), "
+             "envia 1 contrato WINFUT a mercado na conta de SIMULACAO -- "
+             "trava conferida contra o que a DLL anunciou (nome da "
+             "corretora contem 'Simul') -- confirma o callback de ordem e "
+             "zera. Exige login completo. Roda na conexao de producao, no "
+             "pregao, sem parar a captura."),
 ) -> None:
     """Grava tape e book ate o horario configurado ou ate Ctrl+C."""
     configurar(log_level, log_file)
@@ -66,13 +74,16 @@ def record(
             typer.echo(f"  EA integrado: --ea-config {ea_config}")
         modo = "COMPLETO (roteamento)" if cfg.runtime.login_completo else "market data"
         typer.echo(f"  login: {modo}")
+        if ordem_teste_em:
+            typer.echo(f"  E2: ordem de teste (1 WINFUT, SIMULACAO) as {ordem_teste_em}")
         typer.echo(f"  encerramento: {cfg.runtime.encerrar_em or 'so Ctrl+C'}")
         raise typer.Exit(0)
 
     cred.validar()
     from .recorder.service import RecorderService
 
-    raise typer.Exit(RecorderService(cfg, cred, ea_config_path=ea_config).run())
+    raise typer.Exit(RecorderService(cfg, cred, ea_config_path=ea_config,
+                                     ordem_teste_em=ordem_teste_em).run())
 
 
 @app.command()

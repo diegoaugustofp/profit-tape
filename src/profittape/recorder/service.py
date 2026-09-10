@@ -20,6 +20,7 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import structlog
 
@@ -31,6 +32,9 @@ from ..pipeline.writer import WriterThread
 from ..profitdll.client import ProfitClient
 from ..storage.parquet_sink import ParquetSink
 
+if TYPE_CHECKING:
+    from ..ea.ordem_teste import OrdemDeTeste
+
 log = structlog.get_logger(__name__)
 
 
@@ -41,9 +45,15 @@ class RecorderService:
         cred: Credenciais,
         dll_injetada: object | None = None,
         ea_config_path: Path | None = None,
+        ordem_teste_em: str | None = None,
     ) -> None:
         self.cfg = cfg
         self.cred = cred
+        # E2 dentro do record (2026-09-11): uma ordem de teste na conta de
+        # simulacao, no horario dado, ticada pela thread principal. Exige
+        # login_completo. Construida DEPOIS do client (precisa dele).
+        self._ordem_teste_em = ordem_teste_em
+        self.ordem_teste: OrdemDeTeste | None = None
         self.metrics = Metrics()
         # Alertas sao OPCIONAIS: sem config/alertas.yaml, self.alertas fica
         # None e enviar() vira no-op silencioso — o record roda igual, so'
@@ -108,6 +118,20 @@ class RecorderService:
                         nota="conexao sobe com DLLInitializeLogin (roteamento). "
                              "E1 da trilha de execucao -- confira o heartbeat: "
                              "corretora_pronta=True e contas>=1 devem aparecer.")
+        if ordem_teste_em is not None:
+            if not cfg.runtime.login_completo:
+                raise SystemExit(
+                    "--ordem-teste-em exige login completo (--login-completo "
+                    "ou runtime.login_completo: true): sem sessao de "
+                    "roteamento nao ha' onde enviar.")
+            from ..ea.config import RoteamentoConfig
+            from ..ea.ordem_teste import OrdemDeTeste
+
+            self.ordem_teste = OrdemDeTeste(self.client, RoteamentoConfig(),
+                                            horario_hhmm=ordem_teste_em)
+            log.warning("recorder.ordem_teste_agendada", horario=ordem_teste_em,
+                        nota="E2: 1 contrato WINFUT a mercado na conta de "
+                             "SIMULACAO (trava pela DLL) e zeragem em seguida.")
         self._parar = threading.Event()
 
     # ------------------------------------------------------------------
@@ -183,6 +207,8 @@ class RecorderService:
 
         while not self._parar.is_set():
             time.sleep(0.5)
+            if self.ordem_teste is not None and not self.ordem_teste.concluida:
+                self.ordem_teste.tick()      # thread principal, nunca callback
             if self._hora_de_encerrar():
                 log.info("recorder.encerramento_agendado", horario=self.cfg.runtime.encerrar_em)
                 break

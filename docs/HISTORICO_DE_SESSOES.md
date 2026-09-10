@@ -1168,3 +1168,25 @@ real de leitura.
   NEGATIVO. Nao e' a corretora que trava.
 - Regra de edicao (assert count == 1) pegou um replace que nao casou
   nos testes; corrigido por linha, conferido antes de rodar.
+
+### Continuacao (2026-09-11, tarde) — validacao por ordem real em demo; E2 dentro do record (v2.29)
+
+- Operador: a validacao visual passa a ser por ORDEM REAL na conta de
+  simulacao (ve ao vivo no grafico, audita pelo registro de ordens do
+  Profit), com trava no codigo. Confirmado o desenho: trava em duas
+  camadas conferidas contra o que a DLL anunciou (conta em
+  contas_vistas + nome da corretora contem "simul"); demo mede
+  mecanica e latencia, nao borda (simulador preenche no toque);
+  pregoes de demo vao a PERIODOS_DECLARADOS como validacao_execucao.
+- E2 ja' existia standalone (v2.22, nunca rodou na DLL real) mas so'
+  contava o callback e nao tinha a trava pela DLL. Entregue o E2 DENTRO
+  do record: `record --ordem-teste-em HH:MM`, `ea/ordem_teste.py`
+  (maquina de estados na thread principal), `exigir_simulador`,
+  client com nomes_corretoras e ordens_eventos, fake emitindo
+  Accepted -> Filled. 10 testes, incluindo os que REPROVAM (XP como
+  demo, conta nao anunciada, corretora nao pronta: zero Send*) e o
+  ponta a ponta no RecorderService. 638 testes, ruff e mypy limpos.
+
+**Pendente (Diego)**: rodar no pregao, `--ordem-teste-em` num horario
+liquido (ex. 10:30), mandar o log de `ea.ordem_teste.*` e o registro
+de ordens do Profit.

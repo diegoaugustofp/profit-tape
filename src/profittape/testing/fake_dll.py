@@ -48,7 +48,20 @@ class FakeProfitDLL:
         com_offer_v2: bool = True,
         com_login_completo: bool = True,
         contas: tuple[tuple[int, str, str], ...] = ((32006, "SIMULADOR", "DEMO-1"),),
+        preenche_ordens: bool = True,
+        preco_fill: float = 140000.0,
+        atraso_fill_s: float = 0.02,
     ) -> None:
+        # E2 (2026-09-11): a fake responde a cada Send* com dois
+        # OrderChangeCallback (aceita, depois executada), em thread, como a
+        # DLL real. preenche_ordens=False simula ordem aceita e nunca
+        # executada (caminho de timeout). ordens_enviadas guarda os
+        # argumentos de cada Send* -- a trava e' testada por AUSENCIA de
+        # entrada aqui.
+        self.preenche_ordens = preenche_ordens
+        self.preco_fill = preco_fill
+        self.atraso_fill_s = atraso_fill_s
+        self.ordens_enviadas: list[tuple[str, tuple[object, ...]]] = []
         self.com_offer_v2 = com_offer_v2
         # E1: com_login_completo=False remove o export DLLInitializeLogin
         # (simula DLL so-market-data) -- o client precisa falhar CEDO e
@@ -121,17 +134,39 @@ class FakeProfitDLL:
     # sem DLL real. So' devolve um ID crescente > 0 -- verificar CONTEUDO de
     # status/preenchimento e' assunto de quando o callback de ordem for
     # usado alem de contar (ver ea/execucao.py, "conteudo e' assunto do E2").
-    def SendMarketBuyOrder(self, *args: object) -> int:
+    def _ordem(self, nome: str, args: tuple[object, ...], lado: int) -> int:
         self._prox_ordem = getattr(self, "_prox_ordem", 1000) + 1
-        return self._prox_ordem
+        oid = self._prox_ordem
+        self.ordens_enviadas.append((nome, args))
+        cb = self._cb.get("ordem_mudanca")
+        if cb is not None:
+            conta, corretora = str(args[0]), int(str(args[1]))
+            ticker = str(args[3] if nome != "SendZeroPositionAtMarket" else args[2])
+
+            def _emitir() -> None:
+                time.sleep(self.atraso_fill_s / 2)
+                cb(_ativo(ticker, "F"), corretora, 1, 0, 1, lado, 0.0, 0.0, 0.0,
+                   oid, "Market", conta, "TITULAR", f"CL{oid}", "Accepted",
+                   "01/01/2026 10:00:00", "")
+                if self.preenche_ordens:
+                    time.sleep(self.atraso_fill_s / 2)
+                    cb(_ativo(ticker, "F"), corretora, 1, 1, 0, lado, self.preco_fill,
+                       0.0, self.preco_fill, oid, "Market", conta, "TITULAR",
+                       f"CL{oid}", "Filled", "01/01/2026 10:00:00", "")
+
+            t = threading.Thread(target=_emitir, daemon=True)
+            t.start()
+            self._threads.append(t)
+        return oid
+
+    def SendMarketBuyOrder(self, *args: object) -> int:
+        return self._ordem("SendMarketBuyOrder", args, 1)
 
     def SendMarketSellOrder(self, *args: object) -> int:
-        self._prox_ordem = getattr(self, "_prox_ordem", 1000) + 1
-        return self._prox_ordem
+        return self._ordem("SendMarketSellOrder", args, 2)
 
     def SendZeroPositionAtMarket(self, *args: object) -> int:
-        self._prox_ordem = getattr(self, "_prox_ordem", 1000) + 1
-        return self._prox_ordem
+        return self._ordem("SendZeroPositionAtMarket", args, 2)
 
     def __getattribute__(self, nome: str) -> object:
         # Simula a AUSENCIA do export: hasattr(dll, "DLLInitializeLogin")
