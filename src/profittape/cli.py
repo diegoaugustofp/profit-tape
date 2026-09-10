@@ -1350,6 +1350,9 @@ def bollinger_replay(
         help="Pasta com dumpAAAAMMDD.txt do grafico de 15s: compara tape x grafico nesses dias"),
     dias: str | None = typer.Option(
         None, "--dias", help="Lista 2026-09-01,2026-09-02 (default: todos)"),
+    ignorar_circuit_breaker: bool = typer.Option(
+        False, "--ignorar-circuit-breaker",
+        help="Mede a regra INTEIRA (o circuit breaker fecha o pregao na 3a perda seguida)"),
     log_level: str = typer.Option("INFO", "--log-level"),
 ) -> None:
     """
@@ -1373,8 +1376,11 @@ def bollinger_replay(
             if m:
                 mapa[f"{m.group(1)}-{m.group(2)}-{m.group(3)}"] = f
     lista = [d.strip() for d in dias.split(",")] if dias else None
-    r = rodar(curated, symbol.strip().upper(), saida, mapa, lista)
+    r = rodar(curated, symbol.strip().upper(), saida, mapa, lista,
+              ignorar_circuit_breaker=ignorar_circuit_breaker)
     res = r["resumo"]
+    if ignorar_circuit_breaker:
+        typer.echo("  [circuit breaker IGNORADO: taxa da regra inteira]")
     typer.echo("=" * 72)
     typer.echo("SCALP DE BOLLINGER v1 — replay pelo tape (DEPURACAO)")
     typer.echo("=" * 72)
@@ -1413,13 +1419,6 @@ def bollinger_replay(
                            f" | sinais compra tape/dump {c.get('sinal_compra_tape')}/"
                            f"{c.get('sinal_compra_dump')} venda {c.get('sinal_venda_tape')}/"
                            f"{c.get('sinal_venda_dump')}{buraco}")
-            campos = ("open", "high", "low", "close")
-            ohlc = "/".join(str(c.get(f"{k}_divergentes")) for k in campos)
-            typer.echo(f"  {dia}: comuns {c['comuns']} | so tape {c['so_tape']} "
-                       f"so dump {c['so_dump']} | OHLC divergentes o/h/l/c = {ohlc} "
-                       f"| sinais compra tape/dump {c.get('sinal_compra_tape')}/"
-                       f"{c.get('sinal_compra_dump')} venda {c.get('sinal_venda_tape')}/"
-                       f"{c.get('sinal_venda_dump')}")
     typer.echo(f"\n  saida: {saida}")
 
 

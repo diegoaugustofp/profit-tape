@@ -268,3 +268,54 @@ def test_resumo_traz_cortes_pre_declarados_e_pernas() -> None:
     assert r["p2_pts_medio"] == -7.5 and r["p3_pct_positiva"] == 50.0
     assert r["cortes_pre_declarados"]["abertura"]["p1"] == 1.0
     assert r["cortes_pre_declarados"]["venda"]["n"] == 1
+
+
+def test_cli_bollinger_replay_aceita_ignorar_circuit_breaker(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """A flag existe, chega em rodar() e a saida diz que o CB foi ignorado.
+    Na v2.25 a opcao ficou fora do binario porque a edicao da CLI nao
+    aconteceu e nenhum teste passava pela CLI."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+    from typer.testing import CliRunner
+
+    from profittape.cli import app
+
+    rng = np.random.default_rng(0)
+    n = 4000
+    ts = (_BASE + np.sort(rng.uniform(0, 3600, n))).astype(np.int64) * NS
+    px = 140000 + 5 * np.cumsum(rng.integers(-2, 3, n))
+    df = pd.DataFrame(
+        {
+            "ts_ns": ts,
+            "symbol": "WINFUT",
+            "exchange": "F",
+            "trade_id": np.arange(n),
+            "price": px.astype(float),
+            "volume_financeiro": 1.0,
+            "quantidade": rng.integers(1, 10, n),
+            "agente_comprador": 3,
+            "agente_vendedor": 85,
+            "trade_type": rng.choice([2, 3, 13], n, p=[0.45, 0.45, 0.1]),
+            "is_edit": False,
+        }
+    )
+    pasta = tmp_path / "curated" / "trade" / "dt=2026-09-01" / "sym=WINFUT"
+    pasta.mkdir(parents=True)
+    pq.write_table(pa.table(df), pasta / "part-0000.parquet")
+    r = CliRunner().invoke(
+        app,
+        [
+            "bollinger-replay",
+            "WINFUT",
+            "--curated",
+            str(tmp_path / "curated"),
+            "--saida",
+            str(tmp_path / "s"),
+            "--ignorar-circuit-breaker",
+            "--log-level",
+            "WARNING",
+        ],
+    )
+    assert r.exit_code == 0, r.output
+    assert "circuit breaker IGNORADO" in r.output
+    assert "circuit_breaker" not in r.output.split("sem execucao")[1].split("\n")[0]
