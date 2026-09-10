@@ -769,3 +769,95 @@ def test_curate_loga_quebra_leitura_x_processamento(
     total, leitura, proc = (float(x) for x in m.groups())
     assert proc >= 0.0             # nunca "processamento negativo" (-0.0)
     assert total >= leitura - 0.15  # folga por arredondamento
+
+
+def test_modo_leitura_invalido_e_rejeitado(tmp_raiz: Path) -> None:
+    curated = tmp_raiz.parent / "curated"
+    _escrever_dia_trade(tmp_raiz, "2026-08-14", "WINFUT", n_arquivos=2)
+    with pytest.raises(ValueError, match="modo_leitura invalido"):
+        curar_trades(tmp_raiz, curated, modo_leitura="turbo")
+
+
+class _DatasetEspiao:
+    """Envolve um pyarrow.dataset real para espionar to_table() -- Dataset e'
+    tipo de extensao IMUTAVEL (mesma limitacao de Fragment), entao o unico
+    ponto patcheavel e' a FABRICA `ds.dataset()`, que e' funcao Python comum."""
+    def __init__(self, real: object, chamadas: list[dict[str, object]]) -> None:
+        self._real = real
+        self._chamadas = chamadas
+
+    def to_table(self, *a: object, **k: object) -> object:
+        self._chamadas.append(dict(k))
+        return self._real.to_table(*a, **k)  # type: ignore[attr-defined]
+
+    def get_fragments(self, *a: object, **k: object) -> object:
+        return self._real.get_fragments(*a, **k)  # type: ignore[attr-defined]
+
+
+def test_modo_fragmento_nunca_chama_dataset_to_table(
+    tmp_raiz: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    O modo de ultimo recurso (2026-09-10, curadoria travada em producao com
+    'lote' mesmo apos exclusao do antivirus -- causa ainda desconhecida).
+    'fragmento' precisa pular O TO_TABLE EM LOTE INTEIRAMENTE, nao so' cair
+    nele e falhar -- se a suspeita for que dataset.to_table() TRAVA (nao so'
+    e' lento), CHAMA-LO e deixar ele levantar excecao nao ajuda; ele pode
+    nunca retornar. Prova via proxy em ds.dataset(): zero chamadas a
+    to_table() no modo fragmento, mesmo com dado saudavel.
+    """
+    curated = tmp_raiz.parent / "curated"
+    _escrever_dia_trade(tmp_raiz, "2026-08-14", "WINFUT", n_arquivos=15)
+
+    import profittape.tools.curate as curate_mod
+
+    chamadas: list[dict[str, object]] = []
+    original_fabrica = curate_mod.ds.dataset
+
+    def _fabrica_espia(*a: object, **k: object) -> object:
+        return _DatasetEspiao(original_fabrica(*a, **k), chamadas)
+
+    monkeypatch.setattr(curate_mod.ds, "dataset", _fabrica_espia)
+
+    totais = curar_trades(tmp_raiz, curated, modo_leitura="fragmento")
+
+    assert chamadas == [], (
+        "dataset.to_table() foi chamado no modo 'fragmento' -- exatamente "
+        "o que este modo existe para NUNCA fazer")
+    assert totais["gravadas"] == 30   # 15 arquivos x 2 linhas
+
+
+def test_modo_sequencial_le_sem_threads(
+    tmp_raiz: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """'sequencial' precisa chamar to_table com use_threads=False -- unica
+    forma de verificar isso e' espionar o kwarg recebido de verdade."""
+    curated = tmp_raiz.parent / "curated"
+    _escrever_dia_trade(tmp_raiz, "2026-08-14", "WINFUT", n_arquivos=5)
+
+    import profittape.tools.curate as curate_mod
+
+    chamadas: list[dict[str, object]] = []
+    original_fabrica = curate_mod.ds.dataset
+
+    def _fabrica_espia(*a: object, **k: object) -> object:
+        return _DatasetEspiao(original_fabrica(*a, **k), chamadas)
+
+    monkeypatch.setattr(curate_mod.ds, "dataset", _fabrica_espia)
+
+    curar_trades(tmp_raiz, curated, modo_leitura="sequencial")
+    assert len(chamadas) == 1
+    assert chamadas[0].get("use_threads") is False
+
+
+def test_todos_os_tres_modos_dao_o_mesmo_resultado(tmp_raiz: Path) -> None:
+    """Independente de como o dia e' lido, o dado curado final tem que ser
+    IDENTICO -- os modos sao so' estrategia de leitura, nunca de logica."""
+    resultados = []
+    for modo in ("lote", "sequencial", "fragmento"):
+        raiz = tmp_raiz.parent / f"raw_{modo}"
+        curated = tmp_raiz.parent / f"curated_{modo}"
+        _escrever_dia_trade(raiz, "2026-08-14", "WINFUT", n_arquivos=12)
+        t = curar_trades(raiz, curated, modo_leitura=modo)
+        resultados.append((t["gravadas"], t["duplicatas"], t["ts_invalido"]))
+    assert resultados[0] == resultados[1] == resultados[2]

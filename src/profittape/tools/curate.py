@@ -38,11 +38,20 @@ from ..storage.validacao import relatorio
 log = structlog.get_logger(__name__)
 
 
-def curar_trades(raiz_raw: Path, raiz_curated: Path) -> dict[str, int | float]:
+def curar_trades(raiz_raw: Path, raiz_curated: Path,
+                 modo_leitura: str = "lote") -> dict[str, int | float]:
     """
     Processa particao por particao de dia — nunca o dataset inteiro em memoria.
     Um mes de WINFUT nao cabe, e nao precisa caber.
+
+    modo_leitura: "lote" (default, paralelo), "sequencial" (lote sem
+    threads) ou "fragmento" (pula o lote, vai direto pro loop antigo --
+    ver comentario no loop principal para quando usar cada um).
     """
+    if modo_leitura not in ("lote", "sequencial", "fragmento"):
+        raise ValueError(
+            f"modo_leitura invalido: {modo_leitura!r} "
+            "(esperado 'lote', 'sequencial' ou 'fragmento')")
     # `to_pandas()` abaixo exige pandas, mas o erro nativo de import dentro do
     # pyarrow e' criptico. Checagem explicita com mensagem de correcao.
     if importlib.util.find_spec("pandas") is None:  # pragma: no cover
@@ -112,14 +121,31 @@ def curar_trades(raiz_raw: Path, raiz_curated: Path) -> dict[str, int | float]:
         # nao so' o arquivo ruim. Por isso o caminho rapido e' OTIMISTA: cai
         # para o loop antigo, byte a byte identico, so' quando ele falha --
         # o caso raro paga o preco, o caso comum (quase sempre) nao.
-        try:
-            tabela = dataset.to_table(use_threads=True)
-        except Exception as exc:
-            log.warning("curate.leitura_em_lote_falhou", dia=dia,
-                       erro=f"{type(exc).__name__}: {str(exc)[:150]}",
-                       nota="algum arquivo deste dia tem corrupcao interna -- "
-                            "isolando fragmento a fragmento (mais lento, "
-                            "identifica qual)")
+        # (2026-09-10) TRES MODOS, do mais rapido ao mais garantido:
+        #   "lote"       -- dataset.to_table(use_threads=True), o default.
+        #   "sequencial" -- dataset.to_table(use_threads=False). Tente se
+        #                   "lote" parecer travado -- threads lendo muitos
+        #                   arquivos ao mesmo tempo pode causar thrashing em
+        #                   HD mecanico/volume de rede em vez de ganho.
+        #   "fragmento"  -- pula o to_table() em lote INTEIRAMENTE, vai
+        #                   direto pro loop antigo (fragment.to_table() um
+        #                   por vez). Mais lento (55 min no dia real de
+        #                   09/09), mas e' o unico modo que ja' terminou de
+        #                   verdade em producao -- garantia de progresso
+        #                   quando os outros dois nao dao sinal de vida.
+        if modo_leitura == "fragmento":
+            tabela = None
+        else:
+            try:
+                tabela = dataset.to_table(use_threads=(modo_leitura == "lote"))
+            except Exception as exc:
+                log.warning("curate.leitura_em_lote_falhou", dia=dia,
+                           erro=f"{type(exc).__name__}: {str(exc)[:150]}",
+                           nota="algum arquivo deste dia tem corrupcao interna -- "
+                                "isolando fragmento a fragmento (mais lento, "
+                                "identifica qual)")
+                tabela = None
+        if tabela is None:
             partes_ok = []
             for frag in dataset.get_fragments():
                 try:
