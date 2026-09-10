@@ -1108,3 +1108,20 @@ p1 de depuracao da ficha; a comparacao tape x grafico valida as barras.
 logs\compact.jsonl` fora do horario de captura (ou durante -- o dia
 corrente e' pulado). Depois, `curate` no dia 08/09 para medir o ganho
 real de leitura.
+
+### Continuacao (2026-09-10) — primeiro replay: tape x grafico nao bateu (v2.24)
+
+- Replay em 30 pregoes: 398 operacoes (13,3/pregao), p1 = 0,49 (IC
+  0,44-0,54) contra nula 0,59; pernas 2 e 3 quase nunca chegam ao alvo
+  (8/390 e 0/398): o trailing a 0,25 stop atras da maxima esta' dentro
+  do ruido da barra de 15s. PRELIMINAR e nao ajustado.
+- Tape x grafico: open/close divergem em ~30% das barras, high/low em
+  ~4% -> padrao de RLP. `bollinger-replay --dumps` agora compara tres
+  conjuntos de negocios (agressao; +RLP; +RLP+leilao), ordena por
+  (ts_ns, trade_id), e reporta a faixa horaria das barras que so' o
+  grafico tem (buracos do tape: 94 em 04/09, 53 em 08/09).
+- Resumo com os cortes PRE-DECLARADOS (abertura x recuo; compra x
+  venda) e resultado por perna. 3 testes novos. 626 testes, ruff e
+  mypy limpos.
+- Perguntas ao operador: 02 e 03/09 nao estao no curated? Recorder
+  teve buraco em 04 e 08/09?

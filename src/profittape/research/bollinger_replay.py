@@ -53,6 +53,15 @@ _NS = 1_000_000_000
 _PERIODO_NS = bs.SEGUNDOS_BARRA * _NS
 TZ_OFFSET_H = -3
 TIPOS_OHLC_PADRAO = (2, 3)  # agressao; RLP (13) e leilao (4) fora
+# O grafico do Profit pode montar o OHLC com outro conjunto de negocios.
+# Medido em 2026-09-10 com (2, 3): high/low divergem em ~4% das barras,
+# open/close em ~30% -- padrao de RLP (imprime DENTRO do spread: nao
+# muda o extremo, muda o primeiro/ultimo negocio). Candidatos medidos:
+CANDIDATOS_OHLC: dict[str, tuple[int, ...]] = {
+    "agressao": (2, 3),
+    "agressao+rlp": (2, 3, 13),
+    "agressao+rlp+leilao": (2, 3, 4, 13),
+}
 CUSTO_POR_CONTRATO_PTS = 11.0
 CONTRATOS = 3
 HORA_ZERAGEM = 1730
@@ -79,7 +88,8 @@ def barras_15s_do_tape(
     t = trades[trades["trade_type"].isin(tipos_ohlc)]
     if t.empty:
         return pd.DataFrame()
-    t = t.sort_values("ts_ns", kind="stable")
+    chaves = ["ts_ns", "trade_id"] if "trade_id" in t.columns else ["ts_ns"]
+    t = t.sort_values(chaves, kind="stable")
     balde = (t["ts_ns"].to_numpy() // _PERIODO_NS).astype(np.int64)
     g = t.groupby(balde, sort=True)
     b = pd.DataFrame(
@@ -134,6 +144,11 @@ def comparar_com_dump(
         "so_tape": len(t.index.difference(d.index)),
         "so_dump": len(d.index.difference(t.index)),
     }
+    so_dump = d.index.difference(t.index)
+    if len(so_dump):
+        horas = sorted(int(h) for _, h in [(k[0], d.loc[k, "hora_int"]) for k in so_dump])
+        out["so_dump_de"] = horas[0]
+        out["so_dump_ate"] = horas[-1]
     if len(comuns) == 0:
         return out
     tt, dd = t.loc[comuns], d.loc[comuns]
@@ -407,6 +422,31 @@ def resumo(ops: pd.DataFrame, pregoes: int) -> dict[str, Any]:
     )
     for i in (1, 2, 3):
         out[f"p{i}_motivos"] = ex[f"p{i}_motivo"].value_counts().to_dict()
+        col = f"p{i}_pts"
+        if col in ex.columns:
+            out[f"p{i}_pts_medio"] = round(float(ex[col].mean()), 1)
+            out[f"p{i}_pct_positiva"] = round(100 * float((ex[col] > 0).mean()), 1)
+    # Cortes PRE-DECLARADOS (docs/BOLLINGER_SCALP.md §3 e §1): abertura x
+    # recuo sao regimes de preenchimento distintos; compra x venda testa
+    # o espelho. Nao sao busca -- sao conferencia de especificacao.
+    cortes: dict[str, Any] = {}
+    for nome, mask in (
+        ("abertura", ex["tipo_execucao"] == "abertura"),
+        ("recuo", ex["tipo_execucao"] == "recuo"),
+        ("compra", ex["lado"] == 1),
+        ("venda", ex["lado"] == -1),
+    ):
+        sub = ex[mask]
+        if len(sub):
+            kk = int(sub["p1_alvo"].sum())
+            lo, hi = _wilson(kk, len(sub))
+            cortes[nome] = {
+                "n": len(sub),
+                "p1": round(kk / len(sub), 3),
+                "ic95": (round(lo, 3), round(hi, 3)),
+                "pnl_liquido_medio_pts": round(float(sub["pnl_liquido_pts"].mean()), 1),
+            }
+    out["cortes_pre_declarados"] = cortes
     return out
 
 
@@ -441,7 +481,11 @@ def rodar(
         if dumps and dia in dumps:
             dump, _ = bs.carregar_log(dumps[dia])
             dump = bs.marcar_sinais(bs.indicadores(dump))
-            comparacoes[dia] = comparar_com_dump(sinais, dump)
+            comparacoes[dia] = {}
+            for nome, tipos in CANDIDATOS_OHLC.items():
+                b_c = barras_15s_do_tape(trades, dia, tipos)
+                s_c = indicadores_e_sinais_do_tape(b_c) if not b_c.empty else b_c
+                comparacoes[dia][nome] = comparar_com_dump(s_c, dump)
         ops = replay_pregao(sinais, trades, dia)
         todas_ops.extend(ops)
         n_ex = sum(1 for o in ops if o["executou"])

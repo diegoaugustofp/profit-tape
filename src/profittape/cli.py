@@ -1390,11 +1390,29 @@ def bollinger_replay(
         typer.echo(f"  P&L liquido: {res['pnl_liquido_medio_pts']} pts/operacao, "
                    f"{res['pnl_liquido_por_pregao_pts']} pts/pregao (3 contratos, custo 33)")
         for i in (1, 2, 3):
-            typer.echo(f"  perna {i}: {res[f'p{i}_motivos']}")
+            typer.echo(f"  perna {i}: {res[f'p{i}_motivos']} | media "
+                       f"{res.get(f'p{i}_pts_medio')} pts | positiva em "
+                       f"{res.get(f'p{i}_pct_positiva')}%")
+        typer.echo("  cortes pre-declarados (abertura x recuo; compra x venda):")
+        for nome, v in res["cortes_pre_declarados"].items():
+            typer.echo(f"    {nome:9} n={v['n']:4d} p1={v['p1']} IC95={v['ic95']} "
+                       f"P&L liq medio={v['pnl_liquido_medio_pts']} pts")
     comp = res.get("comparacoes_com_dump") or {}
     if comp:
-        typer.echo("\n--- TAPE x GRAFICO (mesmo dia; o replay ve os mesmos gatilhos?) ---")
-        for dia, c in comp.items():
+        typer.echo("\n--- TAPE x GRAFICO (mesmo dia; qual conjunto de negocios monta o OHLC "
+                   "do grafico?) ---")
+        for dia, por_conjunto in comp.items():
+            typer.echo(f"  {dia}:")
+            for conjunto, c in por_conjunto.items():
+                campos = ("open", "high", "low", "close")
+                ohlc = "/".join(str(c.get(f"{k}_divergentes")) for k in campos)
+                buraco = (f" | so dump {c['so_dump']} ({c.get('so_dump_de')}-"
+                          f"{c.get('so_dump_ate')})" if c.get("so_dump") else "")
+                typer.echo(f"    {conjunto:20} comuns {c['comuns']} | OHLC divergentes "
+                           f"o/h/l/c = {ohlc}"
+                           f" | sinais compra tape/dump {c.get('sinal_compra_tape')}/"
+                           f"{c.get('sinal_compra_dump')} venda {c.get('sinal_venda_tape')}/"
+                           f"{c.get('sinal_venda_dump')}{buraco}")
             campos = ("open", "high", "low", "close")
             ohlc = "/".join(str(c.get(f"{k}_divergentes")) for k in campos)
             typer.echo(f"  {dia}: comuns {c['comuns']} | so tape {c['so_tape']} "

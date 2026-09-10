@@ -194,3 +194,71 @@ def test_resumo_p1_e_intervalo() -> None:
     assert r["p1"] == 0.5 and r["p1_nula_lucro"] == pytest.approx((60 + 11) / 120, abs=1e-3)
     assert r["p1_ic95"][0] < 0.5 < r["p1_ic95"][1]
     assert np.isfinite(r["pnl_liquido_medio_pts"])
+
+
+def test_comparacao_com_rlp_muda_open_close_mas_nao_high_low() -> None:
+    """RLP no meio do spread: primeiro/ultimo negocio mudam, extremos nao."""
+    agr = _tape([(1, 100.0), (7, 103.0), (14, 99.0)])
+    rlp = _tape([(0, 101.0), (14, 100.0)], tipo=13)  # abre e fecha a barra
+    tape = pd.concat([agr, rlp], ignore_index=True)
+    so_agr = br.barras_15s_do_tape(tape, "2026-09-01", (2, 3))
+    com_rlp = br.barras_15s_do_tape(tape, "2026-09-01", (2, 3, 13))
+    assert (so_agr.loc[0, "open"], so_agr.loc[0, "close"]) == (100.0, 99.0)
+    assert (com_rlp.loc[0, "open"], com_rlp.loc[0, "close"]) == (101.0, 100.0)
+    assert (so_agr.loc[0, "high"], so_agr.loc[0, "low"]) == (
+        com_rlp.loc[0, "high"],
+        com_rlp.loc[0, "low"],
+    )
+    c = br.comparar_com_dump(so_agr, com_rlp)
+    assert c["open_divergentes"] == 1 and c["close_divergentes"] == 1
+    assert c["high_divergentes"] == 0 and c["low_divergentes"] == 0
+
+
+def test_comparacao_reporta_faixa_do_buraco_do_tape() -> None:
+    dump = br.barras_15s_do_tape(
+        _tape([(0, 100.0), (15, 101.0), (30, 102.0), (45, 103.0)]), "2026-09-01"
+    )
+    tape = dump.iloc[[0, 3]].copy()
+    c = br.comparar_com_dump(tape, dump)
+    assert c["so_dump"] == 2 and c["so_dump_de"] == 900 and c["so_dump_ate"] == 900
+
+
+def test_resumo_traz_cortes_pre_declarados_e_pernas() -> None:
+    ops = pd.DataFrame(
+        [
+            dict(
+                executou=True,
+                p1_alvo=True,
+                stop_pts=60.0,
+                tipo_execucao="abertura",
+                pnl_liquido_pts=117.0,
+                duracao_s=50.0,
+                lado=1,
+                p1_motivo="alvo",
+                p2_motivo="stop",
+                p3_motivo="stop",
+                p1_pts=60.0,
+                p2_pts=45.0,
+                p3_pts=45.0,
+            ),
+            dict(
+                executou=True,
+                p1_alvo=False,
+                stop_pts=60.0,
+                tipo_execucao="recuo",
+                pnl_liquido_pts=-213.0,
+                duracao_s=10.0,
+                lado=-1,
+                p1_motivo="stop",
+                p2_motivo="stop",
+                p3_motivo="stop",
+                p1_pts=-60.0,
+                p2_pts=-60.0,
+                p3_pts=-60.0,
+            ),
+        ]
+    )
+    r = br.resumo(ops, pregoes=1)
+    assert r["p2_pts_medio"] == -7.5 and r["p3_pct_positiva"] == 50.0
+    assert r["cortes_pre_declarados"]["abertura"]["p1"] == 1.0
+    assert r["cortes_pre_declarados"]["venda"]["n"] == 1

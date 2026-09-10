@@ -242,6 +242,25 @@ Assunções do replay, registradas: lote 3 inteiro; alvo no toque; stop
 no preço do stop (slippage zero); stop antes do alvo no mesmo negócio;
 custo 33 pts por operação (11 × 3).
 
+## 5.3 Primeiro replay (2026-09-10, 30 pregões) — PRELIMINAR
+
+Tape × gráfico **não bateu**: high/low divergem em ~4% das barras,
+open/close em ~30%. Padrão de RLP (imprime dentro do spread). A v2.24
+mede três conjuntos de negócios (agressão; +RLP; +RLP+leilão) e reporta
+qual reproduz o gráfico. Também: 94 barras faltando no tape em 04/09 e
+53 em 08/09 (buraco do recorder?), e 02–03/09 ausentes do curated.
+
+Com essa ressalva: 398 operações (13,3/pregão), **p1 = 0,49, IC 0,44–
+0,54** contra nula de lucro 0,59; P&L líquido −35 pts/operação. Pernas:
+1 = 195 alvos / 203 stops; 2 = 8 alvos / 390 stops; **3 = 0 alvos /
+398 stops**. Duração mediana 17 s. Leitura de mecanismo, não de número:
+o trailing (puxa para 0,25 stop após 0,625) coloca o stop a ~15 pts do
+preço num mercado de barra de 60; as pernas 2 e 3 morrem no ruído e a
+perna 3 nunca vê 2,5 stops. A entrada, com barreira simétrica, não se
+distingue de moeda nesta amostra. Nada foi ajustado: é amostra de
+depuração e o dado ainda não está limpo. Próximo: equivalência das
+barras fechada, rerodar, e só então conversa de desenho.
+
 ## 6. Dúvidas — fechadas em 2026-09-05, exceto as que o dump responde
 
 Fechadas: TR fora do v1; trailing atrás da máxima favorável, RP1
