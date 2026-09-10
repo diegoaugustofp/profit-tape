@@ -811,6 +811,15 @@ Fonte: artigo "Como requisitar trades historicos com a ProfitDLL"
 parar e' fragil: a DLL baixa primeiro -- progresso sobe ate' 99 e fica
 la' por minutos num dia cheio de WIN -- e entrega depois).
 
+Segunda camada (v2.32): a DLL 4.0.0.4x tambem exige `SubscribeTicker`
+ANTES do `GetHistoryTrades` -- sem assinar, o mesmo pedido com hora
+devolve progresso 100 imediato e zero (backfill de 10/09 as 20:22);
+assinado, entregou 6.148.231 negocios de 02/09 (diagnostico das 20:31).
+O backfill assina e, para nao gravar tempo real de HOJE se rodar dentro
+do pregao, o client em modo backfill descarta os trades em tempo real.
+Um `progresso 100` em menos de 1 s sai no log como
+`backfill.progresso_100_imediato`: e' a DLL dizendo "vazio", nao timeout.
+
 Desde a v2.31: `client.request_history` acrescenta 09:00:00/18:35:00
 quando a data vem sem hora; o backfill espera `historico_100` e so'
 entao o quiesce; um Ctrl+C remove a particao do dia interrompido

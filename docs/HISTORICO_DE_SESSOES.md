@@ -1213,3 +1213,17 @@ de ordens do Profit.
   interrompido; fake reproduz "so' data = vazio". 3 testes novos, 643
   passando, ruff e mypy limpos.
 - Backfill de 02 e 03/09 pode ser refeito (dentro dos 30 dias).
+
+### Continuacao (2026-09-10, 23h) — segunda camada: SubscribeTicker antes do historico (v2.32)
+
+- Com a data com hora (v2.31) o backfill AINDA veio vazio: progresso 100
+  em ~5 s, zero negocios. O diagnostico serializado, no mesmo dia e
+  formato, entregou 6.148.231 negocios de 02/09 (09:03 a 18:31) -- a
+  unica diferenca era o SubscribeTicker antes do pedido. Mecanica
+  medida: ~50 s em 99 % (download) + ~60 s de rajada ate' o 100.
+- Backfill assina cada ticker antes de pedir (nos dois caminhos);
+  client ganha `ignorar_tempo_real` (backfill nao grava tempo real de
+  hoje); `backfill.progresso_100_imediato` no log quando o 100 vem em
+  < 1 s. 2 testes novos (ordem sub -> hist; sem particao de hoje).
+  645 testes, ruff e mypy limpos.
+- DLL em producao agora 4.0.0.42 (operador atualizou).

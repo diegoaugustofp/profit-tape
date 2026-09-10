@@ -85,6 +85,7 @@ class ProfitClient:
         on_trade_extra: Callable[[Trade], None] | None = None,
         dll: Any | None = None,
         login_completo: bool = False,
+        ignorar_tempo_real: bool = False,
     ) -> None:
         self.dll_path = dll_path
         # E1 (2026-09-08): login COMPLETO (DLLInitializeLogin) em vez de
@@ -94,6 +95,12 @@ class ProfitClient:
         # padrao: todo caller existente (producao ha semanas) tem ZERO
         # mudanca. Ver docs/EA_ARQUITETURA.md, "Trilha de execucao".
         self.login_completo = login_completo
+        # Backfill: o SubscribeTicker (exigido pela DLL 4.0.0.4x antes do
+        # GetHistoryTrades, 2026-09-10) liga tambem o tempo real. Um backfill
+        # rodando dentro do pregao escreveria uma particao PARCIAL de hoje
+        # que pareceria capturada. Com isto, o callback de trade em tempo
+        # real descarta antes de montar o evento; o historico segue.
+        self.ignorar_tempo_real = ignorar_tempo_real
         self._key = activation_key
         self._user = user
         self._password = password
@@ -393,9 +400,12 @@ class ProfitClient:
                 self._on_state(tipo, valor)
 
         on_trade_extra = self._on_trade_extra
+        ignorar_tempo_real = self.ignorar_tempo_real
 
         @b.TNewTradeCallback
         def _trade(ativo, data, numero, preco, vol, qtd, comp, vend, tipo, edit) -> None:
+            if ignorar_tempo_real:
+                return
             evento = Trade(
                 ts_ns=parse_ts_ns(data, tz),
                 ts_recv_ns=time.time_ns(),

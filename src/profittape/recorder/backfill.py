@@ -100,9 +100,20 @@ def _aguardar_entrega(client: ProfitClient, bus: EventBus, base: int, quiesce_s:
     """
     t0 = time.monotonic()
     chegou = client.historico_100.wait(timeout_s)
+    ate_100_s = round(time.monotonic() - t0, 1)
     if not chegou:
         log.warning("backfill.progresso_nao_chegou_a_100", timeout_s=timeout_s,
                     progresso=dict(client.progresso_historico))
+    elif ate_100_s < 1.0:
+        # Medido 2026-09-10: dia cheio de WIN leva ~50 s em 99 % (download)
+        # e ~60 s de rajada ate' o 100. Um 100 em milissegundos e' a DLL
+        # dizendo "janela vazia" -- formato de data sem hora, ticker nao
+        # assinado, ou dia que o servidor nao tem. Nao e' feriado nem
+        # warmup: e' resposta imediata.
+        log.warning("backfill.progresso_100_imediato", ate_100_s=ate_100_s,
+                    nota="a DLL respondeu 'vazio' na hora; nao e' timeout")
+    else:
+        log.info("backfill.download_concluido", ate_100_s=ate_100_s)
     restante = max(timeout_s - (time.monotonic() - t0), quiesce_s * 3)
     eventos, estavel = _aguardar_quiesce(bus, base, quiesce_s, restante)
     return eventos, chegou and estavel
@@ -202,6 +213,7 @@ def executar_por_dia(
         tz_offset_horas=cfg.runtime.tz_offset_horas,
         on_state=lambda t, v: log.info("backfill_dia.estado", tipo=t, valor=v),
         dll=dll_injetada,
+        ignorar_tempo_real=True,   # so' historico entra no bus (ver client)
     )
 
     writer.start()
@@ -215,6 +227,18 @@ def executar_por_dia(
         client.connect()
         if settle_s > 0:
             time.sleep(settle_s)
+        # Assina cada ticker ANTES de pedir historico. Medido 2026-09-10 na
+        # DLL 4.0.0.41/42: mesma chamada, mesmo formato com hora -- quem
+        # assinou (diagnostico_historico.py) baixou 6,1 M negocios de
+        # 02/09; quem nao assinou (este backfill) recebeu progresso 100
+        # imediato e zero. Em agosto nao era preciso; a DLL mudou.
+        for a in cfg.ativos:
+            try:
+                client.subscribe_trades(a.ticker, a.bolsa)
+                log.info("backfill_dia.ticker_assinado", ticker=a.ticker)
+            except SubscriptionFailed as exc:
+                log.warning("backfill_dia.assinatura_falhou", ticker=a.ticker,
+                            detalhe=str(exc), nota="seguindo mesmo assim")
         for idx, dia in enumerate(pendentes, 1):
             dia_em_andamento = dia
             d = datetime.strptime(dia, "%Y-%m-%d")
@@ -424,6 +448,7 @@ def executar(
         user=cred.user, password=cred.password, bus=bus,
         tz_offset_horas=cfg.runtime.tz_offset_horas,
         on_state=_log_estado, dll=dll_injetada,
+        ignorar_tempo_real=True,
     )
 
     writer.start()
@@ -437,6 +462,9 @@ def executar(
             # inteiro de retry.
             log.info("backfill.settle", segundos=settle_s)
             time.sleep(settle_s)
+        for a in cfg.ativos:      # exigido antes do GetHistoryTrades (2026-09-10)
+            with suppress(SubscriptionFailed):
+                client.subscribe_trades(a.ticker, a.bolsa)
 
         pendentes = list(cfg.ativos)
         for rodada in range(1, tentativas + 1):
