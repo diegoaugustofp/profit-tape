@@ -768,3 +768,29 @@ captura.
 
 Log por particao: `compact.processando` e `compact.particao_ok` com
 `arquivos_antes/depois`, `row_groups_antes/depois`, `linhas`, `segundos`.
+
+## Atualizar a ProfitDLL (protocolo, 2026-09-11)
+
+A DLL nao exporta versao; o que existe e' a versao do ARQUIVO (Explorer >
+Propriedades > Detalhes, ou `(Get-Item C:\Profit\ProfitDLL64.dll).VersionInfo`).
+`profit-tape doctor` mostra `dll_versao`, e o record loga `dll_versao` em
+`profitdll.inicializado` -- a versao e' parte do carimbo de qualquer
+resultado (latencia de callback de ordem muda entre versoes: changelog
+da 4.0.0.42).
+
+1. Nunca com o record de producao ligado. Fora do pregao.
+2. Guardar a atual com a versao no nome: `ProfitDLL64_4.0.0.xx.dll`.
+3. Trocar o arquivo no caminho do `.env`.
+4. `profit-tape doctor`: `dll_versao` nova e EXECUCAO (E0) com 36/36.
+5. Teste A do E1 (2 min): `record --login-completo --sem-encerramento`
+   -- login 0/0, ROTEAMENTO em 5, contas anunciadas, tickers aceitos.
+   Qualquer divergencia: volta o arquivo antigo.
+6. Pregao seguinte: producao sobe na DLL nova; os primeiros 10 min do
+   heartbeat como no teste B (linhas crescendo, descartados=0).
+7. Registrar a versao em HISTORICO_DE_SESSOES.md.
+
+Changelog 4.0.0.42: atraso nas callbacks de ordem corrigido (afeta o
+E2), excecao em novo SubscribeOfferBook corrigida (afeta reconexao do
+record), PID corrigido. 4.0.0.41: watchdog `TSystemHealthState`
+(shsResponsive=0 / shsFrozen=1) e logs de performance -- candidatos ao
+E3 (um travamento interno da DLL hoje e' invisivel para nos).

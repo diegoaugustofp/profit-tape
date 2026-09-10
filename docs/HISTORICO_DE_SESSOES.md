@@ -1190,3 +1190,13 @@ real de leitura.
 **Pendente (Diego)**: rodar no pregao, `--ordem-teste-em` num horario
 liquido (ex. 10:30), mandar o log de `ea.ordem_teste.*` e o registro
 de ordens do Profit.
+
+### Continuacao (2026-09-11, noite) — versao da DLL no doctor e no log (v2.30)
+
+- Nelogica liberou a DLL 4.0.0.42 (callbacks de ordem sem atraso,
+  SubscribeOfferBook, PID) e 4.0.0.41 (watchdog TSystemHealthState).
+  Decisao: atualizar ANTES do E2, fora do pregao, pelo protocolo novo
+  em OPERACAO.md (backup com versao no nome, doctor, teste A, teste B).
+- `profitdll/versao.py`: versao do arquivo via VERSIONINFO (ctypes
+  puro); `doctor` mostra `dll_versao`; `profitdll.inicializado` loga.
+  640 testes, ruff e mypy limpos.

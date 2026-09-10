@@ -110,6 +110,10 @@ def doctor(
         ok &= preenchido
 
     typer.echo(f"  dll_path    {cred.dll_path}")
+    from .profitdll.versao import versao_arquivo
+
+    v = versao_arquivo(cred.dll_path)
+    typer.echo(f"  dll_versao  {v or 'desconhecida (fora do Windows ou sem VERSIONINFO)'}")
     if sys.platform == "win32":
         from .profitdll.bindings import check_exports, load_dll
 

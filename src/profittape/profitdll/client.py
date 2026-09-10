@@ -23,6 +23,7 @@ from ..pipeline.bus import EventBus
 from . import bindings as b
 from .errors import LoginFailed, check
 from .timeparse import parse_ts_ns
+from .versao import versao_arquivo
 
 log = structlog.get_logger(__name__)
 
@@ -193,7 +194,8 @@ class ProfitClient:
         if codigo < 0:
             raise LoginFailed(f"{nome_init} devolveu {codigo}")
         self._inicializado = True
-        log.info("profitdll.inicializado", modo=nome_init)
+        log.info("profitdll.inicializado", modo=nome_init,
+                 dll_versao=versao_arquivo(self.dll_path))
 
         # O offer book order-by-order (com agente e offer_id confiaveis em
         # Int64) so chega pelo setter V2 — o slot V1 do init ficou MUDO em
