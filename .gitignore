@@ -24,3 +24,4 @@ logs/
 _inprogress_orfaos/
 config/ea.yaml
 *.inprogress
+src/profittape/_version.py

@@ -1,10 +1,10 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
 name = "profit-tape"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Gravador de tape e book da B3 via ProfitDLL, com sink Parquet particionado."
 requires-python = ">=3.12"
 dependencies = [
@@ -35,6 +35,19 @@ profit-tape = "profittape.cli:app"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/profittape"]
+
+[tool.hatch.version]
+source = "vcs"
+# 2026-09-10: versao estatica "0.1.0" nunca mudava, e ja causou dois
+# incidentes reais -- backfill rodando codigo de dias atras sem ninguem
+# perceber (09/09), e uma verificacao minha dando falso "esta atualizado"
+# porque nao havia como distinguir instalacoes (10/09). Agora a versao
+# instalada e' literalmente a tag/commit do git: `pip show profittape`
+# ou `profit-tape doctor` denunciam desalinhamento na hora.
+fallback-version = "0.0.0+semversao"
+
+[tool.hatch.build.hooks.vcs]
+version-file = "src/profittape/_version.py"
 
 [tool.ruff]
 line-length = 100
