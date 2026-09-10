@@ -711,3 +711,60 @@ forward e' a tag da pasta RECORD, nao a do dev. Registre cada promocao no
 `HISTORICO_DE_SESSOES.md` ("record em vX.YY desde AAAA-MM-DD"). E "qual
 tag foi aplicada" agora tem duas respostas — `git describe --tags` em
 cada pasta.
+
+## `compact`: conserta os row groups minusculos do raw JA' gravado (2026-09-10, v2.23)
+
+Causa raiz em 72734a7: `drain()` com `get_nowait()` entregava lotes de
+poucos itens, cada `sink.write()` virava um `write_batch()`, e cada
+`write_batch()` e' um row group. part-0000 do WINFUT de 08/09: 519.764
+linhas em 34.525 row groups (15 por row group). O writer ja' nao grava
+mais assim -- mas os arquivos no disco continuam assim, e o curate
+continua lendo-os a 90 KB/s efetivos.
+
+```bash
+profit-tape compact --raw data/raw --log-file logs/compact.jsonl
+# ou so' uma particao suspeita:
+profit-tape compact --raw data/raw --dia 2026-09-08 --simbolo WINFUT
+```
+
+O que faz: le todos os `part-*.parquet` de uma particao (stream, dia,
+simbolo), grava a tabela inteira de uma vez com `row_group_size`
+explicito (1 Mi linhas, `--row-group-size`) e `max_rows_per_file`
+igual ao do sink (5 M, `--max-rows-per-file`), e so' entao remove os
+originais. O resultado e' 1-5 row groups por arquivo em vez de dezenas
+de milhares. Conteudo identico -- nao e' curadoria: nada de dedup,
+sort ou `ts_ns == 0`; isso segue exclusivo do `curate`.
+
+Regras que ele impoe sozinho:
+
+- **Dia corrente nunca** (dt >= hoje): o `record` pode abrir arquivo
+  novo ali a qualquer momento. Rode a qualquer hora do pregao; so' os
+  dias fechados sao tocados.
+- **Particao com `.inprogress` e' pulada**, nao o comando inteiro
+  (diferente do curate): `compact.particao_pulada_inprogress`. Trie a
+  sobra (`triagem-inprogress`) e rode de novo.
+- **Arquivo ilegivel FICA no disco** (sem footer, ou ZSTD podre por
+  dentro): `compact.arquivo_pulado`. Os sadios da mesma particao sao
+  compactados ao lado dele; mova-o para quarentena depois.
+- **Particao ja' compacta e' reconhecida e pulada**
+  (`compact.particao_ja_compacta`) -- reexecutar e' barato.
+
+Atomicidade, para quando o processo morrer no meio: os novos sao
+gravados como `part-NNNN.parquet.compacting` (nenhum leitor os ve;
+todos globam `*.parquet`), verificados (linhas batem, row groups
+cairam -- senao o comando FALHA em vez de trocar bom por ruim), e so'
+entao um `_compact.manifest.json` na particao lista o que sai e o que
+entra. Remocao dos originais e promocao dos novos vem depois do
+manifesto. Se morrer antes do manifesto: originais intactos, sobra
+`.compacting` e' lixo e a proxima rodada descarta. Se morrer depois: a
+proxima rodada le o manifesto e TERMINA o commit antes de qualquer
+outra coisa (`compact.retomando_commit`). Em nenhum ponto o curate ve
+uma linha duplicada ou perdida.
+
+Sufixo `.compacting` em vez de `.inprogress` de proposito: `.inprogress`
+pede "encerre a captura ou apague"; uma compactacao interrompida pede
+so' "rode compact de novo". Nao trate `.compacting` como sobra de
+captura.
+
+Log por particao: `compact.processando` e `compact.particao_ok` com
+`arquivos_antes/depois`, `row_groups_antes/depois`, `linhas`, `segundos`.

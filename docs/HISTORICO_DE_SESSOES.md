@@ -1073,3 +1073,38 @@ p1 de depuracao da ficha; a comparacao tape x grafico valida as barras.
 - Lacuna real de dado nos ~83 s, registrada em `INTEGRIDADE_DOS_DADOS.md`
   — não é bug, `descartados=0` mede só fila cheia, não conexão caída.
 - **E1 fechado.** Próximo passo: E2.
+
+### Continuação (2026-09-10) — `compact`: reescrita do raw fragmentado (v2.23)
+
+- Complemento do 72734a7 (causa raiz dos row groups de 15 linhas): o
+  writer parou de gerar, mas os arquivos ja' no disco continuavam com
+  34 mil row groups por arquivo. Novo comando `compact` e modulo
+  `tools/compact.py` reescrevem particoes FECHADAS com `write_table`
+  de tabela inteira, `row_group_size=1 Mi` explicito, zstd +
+  estatisticas, `max_rows_per_file=5 M` como o sink.
+- Conferencia empirica antes de codificar: `write_table` com
+  `row_group_size` consolida 2.000 chunks de 15 linhas em 1 row group
+  (e da' exatamente `ceil(linhas/rg)` -- virou o criterio da
+  verificacao pos-escrita, que faz o comando FALHAR se o novo arquivo
+  nao for melhor que o velho).
+- Atomicidade em duas fases com manifesto por particao (`.compacting`
+  invisivel aos leitores -> verificacao -> `_compact.manifest.json` ->
+  remove originais -> promove -> remove manifesto). Retomada automatica
+  na rodada seguinte. Detalhe em OPERACAO.md.
+- Dia corrente e particao com `.inprogress` pulados por particao (nao
+  aborta o comando, ao contrario do curate -- senao seria inutil em
+  dia de pregao). Arquivo ilegivel fica no disco; os sadios ao lado
+  sao compactados.
+- Um bug pego pelo teste de atomicidade: temporario so' entrava na
+  lista de limpeza DEPOIS da verificacao, entao falha entre gravar e
+  verificar deixava `.compacting` orfao. Registrar antes de gravar.
+- 16 testes novos (`tests/test_compact.py`): reducao de row groups com
+  conteudo byte-igual, `.inprogress`, dia corrente, ZSTD podre, sem
+  footer, falha antes do commit, verificacao rejeitando micro-lotes,
+  crash no meio do commit + retomada, orfao, idempotencia, todos os
+  streams, filtros, manifesto, CLI. 623 testes, ruff e mypy limpos.
+
+**Pendente (Diego)**: `profit-tape compact --raw data\raw --log-file
+logs\compact.jsonl` fora do horario de captura (ou durante -- o dia
+corrente e' pulado). Depois, `curate` no dia 08/09 para medir o ganho
+real de leitura.

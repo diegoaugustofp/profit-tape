@@ -391,6 +391,56 @@ def curate(
 
 
 @app.command()
+def compact(
+    raw: Path = typer.Option(Path("data/raw"), "--raw"),
+    log_level: str = typer.Option("INFO", "--log-level"),
+    log_file: Path | None = typer.Option(
+        None, "--log-file",
+        help="Grava o log em arquivo alem do console (compact.particao_ok por "
+             "particao, com row groups antes/depois)."),
+    row_group_size: int = typer.Option(
+        1_048_576, "--row-group-size",
+        help="Linhas por row group DENTRO de cada arquivo novo. Grande e "
+             "explicito de proposito -- e' o que desfaz os row groups de 15 "
+             "linhas do backfill antigo."),
+    max_rows_per_file: int = typer.Option(
+        5_000_000, "--max-rows-per-file",
+        help="Linhas por arquivo (mesmo limite do sink)."),
+    modo_leitura: str = typer.Option(
+        "lote", "--modo-leitura",
+        help="'lote' (default, paralelo) / 'sequencial' (sem threads) / "
+             "'fragmento' (arquivo a arquivo) -- mesma semantica do curate."),
+    dia: str | None = typer.Option(
+        None, "--dia", help="Restringe a UM dt=YYYY-MM-DD. Combinavel com --simbolo."),
+    simbolo: str | None = typer.Option(
+        None, "--simbolo", help="Restringe a UM simbolo. Combinavel com --dia."),
+) -> None:
+    """
+    Reescreve o raw de dias FECHADOS consolidando row groups minusculos.
+
+    Incidente 2026-09-10: backfill em micro-lotes deixou part-0000 do WINFUT
+    com 519.764 linhas em 34.525 row groups, o que fazia o curate levar
+    horas. O writer ja' foi corrigido; isto conserta o que ja' esta' no disco.
+    NAO e' curadoria (nada de dedup/sort) -- so' reorganizacao fisica, e o
+    dia corrente e particoes com .inprogress sao sempre pulados. Seguro
+    reexecutar: particao ja' compacta e' reconhecida e pulada; compactacao
+    interrompida e' concluida na rodada seguinte.
+    """
+    configurar(log_level, log_file)
+    from .tools.compact import compactar_raw, imprimir_relatorio
+
+    if modo_leitura not in ("lote", "sequencial", "fragmento"):
+        raise typer.BadParameter(
+            "--modo-leitura precisa ser 'lote', 'sequencial' ou 'fragmento'")
+    if row_group_size > max_rows_per_file:
+        raise typer.BadParameter("--row-group-size nao pode exceder --max-rows-per-file")
+    imprimir_relatorio(compactar_raw(raw, row_group_size=row_group_size,
+                                     max_rows_per_file=max_rows_per_file,
+                                     modo_leitura=modo_leitura,
+                                     dia_filtro=dia, simbolo_filtro=simbolo))
+
+
+@app.command()
 def features(
     symbol: str = typer.Argument(
         ..., help="Ex.: WINFUT — ou lista separada por virgula (WINFUT,WDOFUT,"
