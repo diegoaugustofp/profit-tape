@@ -8,6 +8,7 @@ alocacao grande. O feed fica parado enquanto o callback roda.
 
 from __future__ import annotations
 
+import threading
 import time
 from collections import deque
 from collections.abc import Callable
@@ -26,6 +27,23 @@ from .timeparse import parse_ts_ns
 from .versao import versao_arquivo
 
 log = structlog.get_logger(__name__)
+
+# GetHistoryTrades exige "DD/MM/YYYY HH:mm:SS" com horas validas para o
+# pregao. Medido em 2026-09-10 com a DLL 4.0.0.41: so' data ("31/08/2026")
+# e' aceito com retorno 0 e progresso 0 -> 100 em 15 ms, ZERO negocios --
+# a DLL le como janela de meia-noite a meia-noite. Com hora, o mesmo dia
+# entregou milhoes de negocios. Foi o "backfill quebrado" de setembro.
+# Fonte: artigo "Como requisitar trades historicos com a ProfitDLL"
+# (ajuda.nelogica.com.br), que tambem fixa: maximo 10 dias por chamada,
+# fim do download = progresso 100.
+HORA_INICIO_PREGAO = "09:00:00"
+HORA_FIM_PREGAO = "18:35:00"
+
+
+def _com_hora(data: str, hora: str) -> str:
+    """'DD/MM/YYYY' -> 'DD/MM/YYYY HH:mm:SS'; se ja' tem hora, nao mexe."""
+    d = data.strip()
+    return d if " " in d else f"{d} {hora}"
 
 
 @dataclass(frozen=True)
@@ -121,6 +139,12 @@ class ProfitClient:
         # E2: eventos do OrderChangeCallback, como tuplas cruas (sem I/O no
         # callback -- regra do arquivo). Quem consome e' a thread principal.
         self.ordens_eventos: deque[EventoOrdem] = deque(maxlen=10_000)
+        # Historico: progresso por ticker e o sinal de "chegou a 100". Sao
+        # a unica forma confiavel de saber que o download terminou (o
+        # artigo da Nelogica): esperar o fluxo parar e' fragil -- a DLL
+        # baixa primeiro (progresso sobe ate' 99 e fica) e entrega depois.
+        self.progresso_historico: dict[str, int] = {}
+        self.historico_100 = threading.Event()
 
         # Referencias fortes aos callbacks. Sem isto o GC do Python coleta o
         # objeto enquanto a DLL ainda guarda o ponteiro, e o proximo evento
@@ -304,13 +328,20 @@ class ProfitClient:
 
     def request_history(self, ticker: str, inicio: str, fim: str, bolsa: str = "B") -> None:
         """
-        Historico de negocios. Datas em "DD/MM/YYYY".
+        Historico de negocios. Datas em "DD/MM/YYYY" (recebem as horas do
+        pregao aqui) ou ja' em "DD/MM/YYYY HH:mm:SS". Limpa `historico_100`
+        antes de pedir: quem chama espera esse evento para saber que o
+        download terminou, e so' depois espera o fim da entrega.
 
         Lembrete: historico existe para TRADES. Book e' realtime puro — nao ha
         como pedir livro de ontem. Toda feature de fila depende de gravacao
         propria, e por isso o recorder precisa comecar a rodar cedo.
         """
         assert self._dll is not None, "connect() precisa ser chamado antes"
+        inicio = _com_hora(inicio, HORA_INICIO_PREGAO)
+        fim = _com_hora(fim, HORA_FIM_PREGAO)
+        self.historico_100.clear()
+        self.progresso_historico.pop(ticker, None)
         check(
             self._dll.GetHistoryTrades(ticker, bolsa, inicio, fim),
             f"GetHistoryTrades {ticker}",
@@ -523,9 +554,15 @@ class ProfitClient:
         def _daily(*_: object) -> None:
             return  # candle diario nao interessa ao recorder de fluxo
 
+        progresso = self.progresso_historico
+        hist_100 = self.historico_100
+
         @b.TProgressCallback
         def _progress(ativo, pct) -> None:
-            return
+            # so' guarda o inteiro e seta o evento -- sem log, sem I/O
+            progresso[str(getattr(ativo, "ticker", "") or "")] = int(pct)
+            if int(pct) >= 100:
+                hist_100.set()
 
         # ---- E1: callbacks da sessao de roteamento ------------------------
         # Mesma regra do arquivo: NADA alem de contar e guardar o minimo.

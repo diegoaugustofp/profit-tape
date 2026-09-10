@@ -264,8 +264,19 @@ class FakeProfitDLL:
     def _emitir_historico(self, ticker: str, bolsa: str, ini: str) -> None:
         ativo = _ativo(ticker, bolsa)
         preco = 30.0 + self.rng.random() * 10
-        base = datetime.strptime(ini, "%d/%m/%Y").replace(hour=10)
+        # Como a DLL 4.0.0.41 (medido 2026-09-10): SO' DATA e' aceito e vira
+        # janela vazia -- progresso 0 -> 100 na hora, zero negocios. Com
+        # hora, baixa (progresso ate' 99) e depois entrega.
+        prog = self._cb.get("prog")
+        if " " not in ini.strip():
+            if prog is not None:
+                prog(ativo, 0)
+                prog(ativo, 100)
+            return
+        base = datetime.strptime(ini.split(" ")[0], "%d/%m/%Y").replace(hour=10)
         time.sleep(0.05)  # a DLL real tambem demora a comecar a entregar
+        if prog is not None:
+            prog(ativo, 99)
         for i in range(self.eventos_por_ativo):
             if self._parar.is_set():
                 return
@@ -281,6 +292,10 @@ class FakeProfitDLL:
             )
             if self.intervalo_s:
                 time.sleep(self.intervalo_s)
+        # A DLL real: progresso 100 no fim do download; os ultimos negocios
+        # ainda podem chegar logo depois. Aqui vem depois de tudo.
+        if prog is not None:
+            prog(ativo, 100)
 
     def GetAgentNameByID(self, agent_id):
         # Nomes deterministas para teste; codigo 999 simula "desconhecido".

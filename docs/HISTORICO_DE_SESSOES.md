@@ -1200,3 +1200,16 @@ de ordens do Profit.
 - `profitdll/versao.py`: versao do arquivo via VERSIONINFO (ctypes
   puro); `doctor` mostra `dll_versao`; `profitdll.inicializado` loga.
   640 testes, ruff e mypy limpos.
+
+### Continuacao (2026-09-10, 22h) — backfill: a causa era o formato da data (v2.31)
+
+- Script autocontido `diagnostico_historico.py` (fora do repo, para a
+  Nelogica) provou na DLL 4.0.0.41: so' data = janela vazia (retorno 0,
+  progresso 0 -> 100 em 15 ms, zero negocios); data com hora entrega
+  (~17 milhoes de negocios recebidos na rodada). Artigo da Nelogica
+  confirma formato estrito, 10 dias por chamada, progresso 100 = fim.
+- Corrigido: `request_history` com hora; `_aguardar_entrega` espera
+  progresso 100 e so' depois o quiesce; Ctrl+C remove a particao do dia
+  interrompido; fake reproduz "so' data = vazio". 3 testes novos, 643
+  passando, ruff e mypy limpos.
+- Backfill de 02 e 03/09 pode ser refeito (dentro dos 30 dias).

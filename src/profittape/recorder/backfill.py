@@ -89,6 +89,25 @@ def _dia_ja_capturado(raiz: Path, dia: str, tickers: list[str]) -> bool:
     )
 
 
+def _aguardar_entrega(client: ProfitClient, bus: EventBus, base: int, quiesce_s: float,
+                      timeout_s: float) -> tuple[int, bool]:
+    """
+    Dois tempos, como a DLL trabalha: (1) espera `historico_100` -- o
+    download terminou (progresso sobe ate' 99 e fica la' por MINUTOS num
+    dia cheio de WIN; nesse periodo nao chega negocio nenhum, e um
+    quiesce puro desistiria); (2) so' entao espera o fluxo de eventos
+    estabilizar. Devolve (eventos, completou).
+    """
+    t0 = time.monotonic()
+    chegou = client.historico_100.wait(timeout_s)
+    if not chegou:
+        log.warning("backfill.progresso_nao_chegou_a_100", timeout_s=timeout_s,
+                    progresso=dict(client.progresso_historico))
+    restante = max(timeout_s - (time.monotonic() - t0), quiesce_s * 3)
+    eventos, estavel = _aguardar_quiesce(bus, base, quiesce_s, restante)
+    return eventos, chegou and estavel
+
+
 def _aguardar_quiesce(bus: EventBus, base: int, quiesce_s: float,
                       timeout_s: float) -> tuple[int, bool]:
     """Espera o total (relativo a `base`) estabilizar. Devolve (eventos, completou)."""
@@ -191,6 +210,7 @@ def executar_por_dia(
     capturados = 0
     interrompido = False
     dia_em_andamento: str | None = None
+    ativos_em_andamento: list[str] = []
     try:
         client.connect()
         if settle_s > 0:
@@ -198,8 +218,11 @@ def executar_por_dia(
         for idx, dia in enumerate(pendentes, 1):
             dia_em_andamento = dia
             d = datetime.strptime(dia, "%Y-%m-%d")
+            # Mesmo dia nas duas pontas; o client acrescenta 09:00:00 e
+            # 18:35:00. A versao anterior mandava D e D+1 SEM hora e, na
+            # DLL 4.0.0.41, isso vira janela vazia (2026-09-10).
             ini = d.strftime("%d/%m/%Y")
-            fim = (d + timedelta(days=1)).strftime("%d/%m/%Y")
+            fim = d.strftime("%d/%m/%Y")
             # So' pede os ativos que ESTE dia ainda nao tem — evita re-baixar
             # um simbolo ja capturado quando o dia so' ficou pendente por
             # causa de outro simbolo novo (ex.: WINFUT ja existe, WDOFUT nao).
@@ -208,8 +231,9 @@ def executar_por_dia(
                 a for a in cfg.ativos
                 if not any((pasta_dia / f"sym={a.ticker}").rglob("*.parquet"))
             ] or cfg.ativos   # fallback defensivo: nunca fica vazio
+            ativos_em_andamento = [a.ticker for a in ativos_do_dia]
             log.info("backfill_dia.solicitando", dia=dia, progresso=f"{idx}/{len(pendentes)}",
-                     ativos=[a.ticker for a in ativos_do_dia])
+                     ativos=ativos_em_andamento)
 
             # Padrao descoberto em producao (log de 2026-08-21): TODO dia
             # pedido logo apos um dia de milhoes de eventos voltava vazio com
@@ -232,7 +256,7 @@ def executar_por_dia(
                 if recusas == len(ativos_do_dia):
                     recusado = True
                     break
-                eventos, ok = _aguardar_quiesce(bus, base, quiesce_s, timeout_dia_s)
+                eventos, ok = _aguardar_entrega(client, bus, base, quiesce_s, timeout_dia_s)
                 if eventos > 0:
                     break
                 if tentativa < max_tentativas:
@@ -257,8 +281,10 @@ def executar_por_dia(
                     # chutamos a causa — incidente real: 'provavel feriado'
                     # em quarta e quinta uteis consecutivas era warmup do
                     # servidor de historico logo apos a conexao, nao feriado.
-                    "aceito mas nada chegou — candidatos: feriado, warmup do "
-                    "servidor pos-conexao, ou borda da janela de 30 dias"
+                    "aceito mas nada chegou (progresso "
+                    f"{dict(client.progresso_historico)}) — candidatos: feriado, "
+                    "warmup do servidor pos-conexao, borda da janela de 30 dias; "
+                    "formato de data ja' vai com hora (2026-09-10)"
                 )
                 log.info("backfill_dia.sem_entrega", dia=dia, nota=nota,
                          reacao="dia NAO e' marcado como capturado; o mesmo "
@@ -277,6 +303,7 @@ def executar_por_dia(
             else:
                 capturados += 1
                 log.info("backfill_dia.ok", dia=dia, eventos=eventos)
+            dia_em_andamento, ativos_em_andamento = None, []
     except KeyboardInterrupt:
         # BaseException, nao Exception: sem este bloco, o resumo final nunca
         # imprimia apos Ctrl+C. E o incidente real teve uma SEGUNDA camada,
@@ -308,6 +335,25 @@ def executar_por_dia(
         bus.close()
         writer.join(timeout=600)
         log.info("backfill_dia.arquivos_fechados")
+        # Dia interrompido: a particao pode ter ficado com dado PARCIAL e,
+        # como a retomada e' por existencia de particao, o proximo run a
+        # pularia como capturada. Remove o que este run escreveu para esse
+        # dia (so' os tickers pedidos nele). Desde 2026-09-10 a espera e'
+        # pelo progresso 100 e o dado costuma estar inteiro quando o Ctrl+C
+        # chega -- mas "costuma" nao e' garantia, e re-baixar um dia e'
+        # barato; usar um dia parcial como inteiro nao e'.
+        if interrompido and dia_em_andamento:
+            for ticker in ativos_em_andamento:
+                pasta = (Path(cfg.storage.raiz) / "trade" / f"dt={dia_em_andamento}"
+                         / f"sym={ticker}")
+                if pasta.exists():
+                    _sh.rmtree(pasta, ignore_errors=True)
+                    log.warning("backfill_dia.particao_do_dia_interrompido_removida",
+                                dia=dia_em_andamento, ticker=ticker, pasta=str(pasta),
+                                nota="sera re-pedida no proximo run")
+            pai = Path(cfg.storage.raiz) / "trade" / f"dt={dia_em_andamento}"
+            if pai.exists() and not any(pai.iterdir()):
+                pai.rmdir()
 
     st = bus.stats()
     log.info("backfill_dia.resumo",

@@ -794,3 +794,24 @@ E2), excecao em novo SubscribeOfferBook corrigida (afeta reconexao do
 record), PID corrigido. 4.0.0.41: watchdog `TSystemHealthState`
 (shsResponsive=0 / shsFrozen=1) e logs de performance -- candidatos ao
 E3 (um travamento interno da DLL hoje e' invisivel para nos).
+
+## Backfill: GetHistoryTrades exige data COM hora (2026-09-10)
+
+Sintoma (setembro/2026, DLL 4.0.0.41): `backfill` aceito (retorno 0),
+progresso 0 -> 100 em 15 ms, zero negocios, log "aceito mas nada
+chegou". Nao era licenca, nem feriado, nem warmup. Era o FORMATO da
+data: "31/08/2026" e' lido como janela de meia-noite a meia-noite. Com
+"31/08/2026 09:00:00" a "31/08/2026 18:35:00" o mesmo dia entregou
+milhoes de negocios (script `diagnostico_historico.py`, fora do repo,
+compartilhavel com a Nelogica).
+
+Fonte: artigo "Como requisitar trades historicos com a ProfitDLL"
+(ajuda.nelogica.com.br): formato estrito DD/MM/YYYY HH:mm:SS, maximo
+10 dias por chamada, fim do download = progresso 100 (esperar o fluxo
+parar e' fragil: a DLL baixa primeiro -- progresso sobe ate' 99 e fica
+la' por minutos num dia cheio de WIN -- e entrega depois).
+
+Desde a v2.31: `client.request_history` acrescenta 09:00:00/18:35:00
+quando a data vem sem hora; o backfill espera `historico_100` e so'
+entao o quiesce; um Ctrl+C remove a particao do dia interrompido
+(retomada honesta, nao por timing).
