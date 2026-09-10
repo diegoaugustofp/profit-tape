@@ -2739,6 +2739,95 @@ def risco_realizado(
         typer.echo(_tabela_var_es_fmt(tabela_h))
 
 
+@app.command("ea-ordem-teste")
+def ea_ordem_teste(
+    config: Path = typer.Option(Path("config/recorder.yaml"), "--config", "-c"),
+    ticker: str = typer.Option("WINFUT", "--ticker"),
+    bolsa: str = typer.Option("F", "--bolsa"),
+    quantidade: int = typer.Option(1, "--quantidade"),
+    zerar_em_seguida: bool = typer.Option(
+        True, "--zerar-em-seguida/--sem-zerar",
+        help="Zera a posicao logo apos comprar. Default True -- isto e' "
+             "teste de conectividade, nao estrategia."),
+    usar_conta_real: bool = typer.Option(
+        False, "--usar-conta-real",
+        help="PERIGO: envia para a conta REAL. Default False (demo). Exige "
+             "tambem ROTEAMENTO_ID_ACCOUNT_REAL/ID_CORRETORA_REAL no .env "
+             "(ver RoteamentoConfig)."),
+    timeout: float = typer.Option(15.0, "--timeout",
+                                  help="Segundos esperando conexao e corretora pronta."),
+    log_level: str = typer.Option("INFO", "--log-level"),
+) -> None:
+    """
+    E2 da trilha de execucao (2026-09-10): primeira ordem de teste real.
+    Compra a mercado (default 1 lote WINFUT demo) e zera em seguida.
+
+    RESTRICAO DE UMA CONEXAO SO' (documentada desde o E1): com uma unica
+    chave de ativacao, so' existe UMA conexao com a DLL possivel. Este
+    comando conecta sozinho, com login_completo=True -- NAO rode com o
+    `record` de producao ativo ao mesmo tempo. Pare o record primeiro.
+
+    Camadas de protecao ja' embutidas no ExecutorDeOrdens (ver
+    ea/execucao.py): conta real exige --usar-conta-real explicito E as
+    variaveis _REAL no .env; corretora e conta viajam sempre juntas
+    (conta_para()); construcao falha cedo sem ROTEAMENTO_SENHA_ROTEAMENTO.
+    """
+    configurar(log_level, None)
+    from .ea.config import RoteamentoConfig
+    from .ea.decisao import Acao, Decisao
+    from .ea.execucao import ExecutorDeOrdens
+    from .pipeline.bus import EventBus
+    from .profitdll.client import ProfitClient
+
+    cfg = RecorderConfig.from_yaml(config)
+    cred = Credenciais()
+    roteamento = RoteamentoConfig()
+
+    if usar_conta_real and not typer.confirm(
+        "Isto envia uma ordem REAL, com dinheiro de verdade. Confirma?"
+    ):
+        raise typer.Exit(1)
+
+    client = ProfitClient(
+        dll_path=cred.dll_path, activation_key=cred.activation_key,
+        user=cred.user, password=cred.password, bus=EventBus(),
+        tz_offset_horas=cfg.runtime.tz_offset_horas, login_completo=True,
+    )
+    typer.echo("Conectando (login completo)...")
+    client.connect(timeout_s=timeout)
+    if not client.conectado_market:
+        typer.echo("ERRO: mercado nao conectou no prazo.")
+        raise typer.Exit(1)
+    # A CHECAGEM QUE DECIDE (ver EA_ARQUITETURA.md, evento real de 09/09):
+    # corretora_pronta caiu e voltou sozinha durante uma queda de rede de
+    # ~83s -- e' o estado REAL no momento do envio que importa, nao "ja'
+    # vimos o 5 alguma vez". Se nao estiver pronta agora, nao envia.
+    if not client.corretora_pronta:
+        typer.echo("ERRO: corretora nao ficou pronta -- sem sessao de "
+                   "roteamento, nao envio ordem.")
+        client.disconnect()
+        raise typer.Exit(1)
+
+    executor = ExecutorDeOrdens(client._dll, roteamento, ticker=ticker,
+                                bolsa=bolsa, quantidade=quantidade,
+                                usar_conta_real=usar_conta_real)
+
+    typer.echo(f"Enviando compra a mercado: {quantidade}x {ticker} "
+              f"({'REAL' if usar_conta_real else 'DEMO'})")
+    r1 = executor.executar(Decisao(Acao.COMPRAR, "E2: teste manual de conectividade",
+                                   0.0, "manual"))
+    typer.echo(f"  enviada={r1.enviada} ordem_id={r1.ordem_id} motivo={r1.motivo}")
+
+    if r1.enviada and zerar_em_seguida:
+        time.sleep(2.0)   # da' tempo do fill chegar antes de zerar
+        typer.echo("Zerando posicao...")
+        r2 = executor.executar(Decisao(Acao.ZERAR, "E2: zeragem automatica do teste",
+                                       0.0, "manual"))
+        typer.echo(f"  enviada={r2.enviada} ordem_id={r2.ordem_id} motivo={r2.motivo}")
+
+    client.disconnect()
+
+
 @app.command()
 def ea_contas(
     timeout: float = typer.Option(15.0, "--timeout"),

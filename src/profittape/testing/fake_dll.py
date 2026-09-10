@@ -117,6 +117,22 @@ class FakeProfitDLL:
             self._cb["account"](corretora, nome, account_id, "TITULAR")
         return 0
 
+    # ---- E2 (2026-09-10): envio de ordem, minimo pra testar ea-ordem-teste
+    # sem DLL real. So' devolve um ID crescente > 0 -- verificar CONTEUDO de
+    # status/preenchimento e' assunto de quando o callback de ordem for
+    # usado alem de contar (ver ea/execucao.py, "conteudo e' assunto do E2").
+    def SendMarketBuyOrder(self, *args: object) -> int:
+        self._prox_ordem = getattr(self, "_prox_ordem", 1000) + 1
+        return self._prox_ordem
+
+    def SendMarketSellOrder(self, *args: object) -> int:
+        self._prox_ordem = getattr(self, "_prox_ordem", 1000) + 1
+        return self._prox_ordem
+
+    def SendZeroPositionAtMarket(self, *args: object) -> int:
+        self._prox_ordem = getattr(self, "_prox_ordem", 1000) + 1
+        return self._prox_ordem
+
     def __getattribute__(self, nome: str) -> object:
         # Simula a AUSENCIA do export: hasattr(dll, "DLLInitializeLogin")
         # precisa devolver False quando com_login_completo=False. Tem que
