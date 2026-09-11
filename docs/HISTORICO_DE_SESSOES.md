@@ -1424,3 +1424,30 @@ horario liquido.
 (esperado = posicao conferida manualmente no Profit ANTES), nao um
 horario onde zeragem automatica poderia disparar. Se bater, a struct
 esta' certa e da' para confiar na zeragem automatica dali em diante.
+
+### Continuacao (2026-09-11, noite) — 1a consulta real: layout errado, safety net funcionou (v2.43)
+
+- Primeira consulta real do E3 (19:45): `lado_bruto=-56` (impossivel --
+  so' existe 0/1/2). `plausivel=False` -> NAO zerou, so' alarmou. O
+  teste de plausibilidade fez exatamente o que devia: nenhum dano.
+- Investigado: o manual usa `packed record` explicitamente em OUTRAS
+  structs (TAssetIDRec, TAccountRec) -- a extracao do PDF preserva a
+  palavra quando presente. TConnectorTradingAccountPosition genuinamente
+  NAO e' marcada `packed` no texto. Ou seja, o alinhamento natural
+  (minha suposicao original) tem base textual -- e mesmo assim o valor
+  veio errado. Adivinhar de novo (tentar `_pack_=1` as cegas) seria o
+  mesmo erro ao contrario, sem medir nada.
+- Adicionado dump bruto: `PosicaoConsultada.bruto_hex` (so' quando
+  implausivel) + log `ea.reconciliacao.dump_bruto_para_depuracao`.
+  Tecnica: comparar os bytes de campos de ENTRADA que NOS escrevemos
+  (corretora=32006 -> bytes `06 7d 00 00` em little-endian) contra o
+  dump, para achar o offset REAL empiricamente em vez de supor. Testado
+  numa fake propria antes (auto-consistente, nao prova nada sobre a DLL
+  real, mas confirma que a tecnica de busca funciona). 672 testes, ruff
+  e mypy limpos.
+
+**Pendente (Diego)**: rodar `--reconciliar-em` de novo (mesmo comando).
+Vai vir `implausivel` de novo (esperado -- ainda nao corrigi o layout).
+Me manda o log `ea.reconciliacao.dump_bruto_para_depuracao` inteiro
+(bruto_hex). A partir dele eu reconstruo o offset real dos campos e
+corrijo a struct definitivamente -- sem mais um segundo palpite.

@@ -147,6 +147,17 @@ class ReconciliadorPosicao:
                      preco_medio=pos.preco_medio, lado_bruto=pos.lado_bruto,
                      plausivel=pos.plausivel, retorno_dll=pos.retorno)
             if not pos.plausivel:
+                # Dump bruto so' quando implausivel -- e' o caso em que
+                # precisamos reconstruir o layout real. `entrada_conhecida`
+                # sao os valores que NOS ESCREVEMOS antes da chamada: acham
+                # o proprio offset no dump procurando o byte pattern deles
+                # (ex.: corretora=32006 -> bytes "26 7d 00 00" em little-endian).
+                log.error("ea.reconciliacao.dump_bruto_para_depuracao",
+                         ticker=self._ticker, corretora=self._corretora,
+                         conta=self._conta, position_type=2,
+                         nota="procure os bytes da corretora/conta/ticker abaixo "
+                              "para reconstruir o offset real dos campos de saida",
+                         bruto_hex=pos.bruto_hex)
                 self._concluir(
                     "implausivel",
                     f"GetPositionV2 devolveu valores fora do esperado (lado={pos.lado_bruto}, "

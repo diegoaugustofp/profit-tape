@@ -12,7 +12,7 @@ import threading
 import time
 from collections import deque
 from collections.abc import Callable
-from ctypes import pointer
+from ctypes import addressof, pointer, sizeof, string_at
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -53,7 +53,12 @@ class PosicaoConsultada:
     """Resultado de `consultar_posicao` (GetPositionV2, E3). `quantidade_liquida`
     ja' vem com sinal (+comprada, -vendida). `plausivel=False` = layout de
     bytes suspeito -- ver docstring de `consultar_posicao`; NUNCA agir sobre
-    um resultado implausivel."""
+    um resultado implausivel.
+
+    `bruto_hex`: dump hexadecimal da struct inteira apos a chamada. So'
+    existe para DEPURAR o layout (medido 2026-09-11: 1a consulta real
+    devolveu open_side=-56, implausivel -- o layout assumido nao bate
+    com a DLL real). Remover quando o layout estiver confirmado."""
 
     retorno: int
     ticker: str
@@ -63,6 +68,7 @@ class PosicaoConsultada:
     preco_medio: float
     lado_bruto: int
     plausivel: bool
+    bruto_hex: str = ""
 
 
 @dataclass(frozen=True)
@@ -461,6 +467,8 @@ class ProfitClient:
         pos.asset_id.feed_type = 0
         pos.position_type = position_type
         ret = self._dll.GetPositionV2(pointer(pos))
+        bruto = string_at(addressof(pos), sizeof(pos))
+        bruto_hex = " ".join(f"{byte:02x}" for byte in bruto)
         limite = 1000  # WIN/WDO: um erro de layout tende a estourar isto por ordens de grandeza
         plausivel = (ret >= 0 and pos.open_side in (0, 1, 2)
                     and abs(pos.open_quantity) <= limite)
@@ -469,7 +477,7 @@ class ProfitClient:
             retorno=ret, ticker=ticker, corretora=int(corretora), conta=conta,
             quantidade_liquida=sinal * int(pos.open_quantity),
             preco_medio=float(pos.open_average_price), lado_bruto=int(pos.open_side),
-            plausivel=plausivel,
+            plausivel=plausivel, bruto_hex=bruto_hex,
         )
 
     def agent_name(self, agent_id: int, curto: bool = False) -> str | None:
