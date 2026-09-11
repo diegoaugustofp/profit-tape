@@ -1498,3 +1498,16 @@ para uma proxima rodada, quando fizer sentido.
 o dump real decodificado byte a byte (ontem) e o exemplo oficial da
 Nelogica (hoje). Confianca alta para posicao zerada; posicao aberta
 ainda sem teste real.
+
+### Continuacao (2026-09-11, noite) — confirmacao cruzada: TradeType bate com o oficial (v2.46)
+
+- Operador completou o conjunto de 3 exemplos oficiais da Nelogica
+  (main.py, profit_dll.py, profitTypes.py -- o ultimo ja' estava no
+  project knowledge, idem ao enviado). Aproveitado para conferir
+  `domain/enums.py:TradeType` (usado em TODO o projeto -- backfill,
+  curate, replay do scalp, perfil de volume) contra `TTradeType` do
+  arquivo oficial: os 22 codigos batem 1:1, nomes e valores, inclusive
+  RLP=13 -- que a sessao de 21/08 tinha corrigido por MEDICAO empirica
+  (25% de um pregao de WIN no codigo 13), nao por manual. Duas fontes
+  independentes convergindo no mesmo numero. So' comentario adicionado;
+  nenhum valor mudou. 674 testes, ruff e mypy limpos.

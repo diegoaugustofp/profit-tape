@@ -22,6 +22,13 @@ class TradeType(IntEnum):
     a primeira versao desta tabela chutava RLP=32; o dado real (25% de um
     pregao de WIN em codigo 13, a fatia tipica do RLP em minicontratos)
     derrubou o chute e o manual confirmou RLP=13 e UNKNOWN=32.
+
+    CONFIRMADO 2026-09-11 contra `TTradeType` do `profitTypes.py` oficial
+    da Nelogica (exemplo recebido do operador): os 22 codigos batem, um a
+    um, com o que essa tabela ja tinha -- inclusive o RLP=13 que a sessao
+    de 21/08 corrigiu por medicao empirica, nao por manual. Duas fontes
+    independentes (dado real e exemplo oficial) convergindo no mesmo
+    numero e' a confirmacao mais forte que este enum vai ter.
     """
 
     CROSS_TRADE = 1
