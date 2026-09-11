@@ -1273,6 +1273,10 @@ def fase2_score(
     permitir_queimado: bool = typer.Option(
         False, "--permitir-queimado",
         help="So' para o checklist (olhar barras de um dia ja' visto). NAO grava no livro"),
+    reconstruir_livro: bool = typer.Option(
+        False, "--reconstruir-livro",
+        help="Apaga forward_eventos.csv e regrava do zero com os dias escorados agora "
+             "(deterministico: mesmo modelo, mesmos labels). Use com --desde"),
     log_level: str = typer.Option("WARNING", "--log-level"),
 ) -> None:
     """
@@ -1353,6 +1357,14 @@ def fase2_score(
         typer.echo("\n  (dado queimado: nada gravado)")
         return
     livro = pasta_fase2 / "forward_eventos.csv"
+    if reconstruir_livro:
+        if desde is None:
+            raise SystemExit("--reconstruir-livro exige --desde (o primeiro dia forward)")
+        if livro.exists():
+            quando = f"{pd.Timestamp.now():%Y%m%d_%H%M%S}"
+            backup = livro.with_name(f"forward_eventos.antes_{quando}.csv")
+            livro.rename(backup)
+            typer.echo(f"  livro anterior guardado em {backup.name}")
     tudo = registrar_forward(ev, livro) if not ev.empty else (
         pd.read_csv(livro, dtype={"dia": str}) if livro.exists() else ev)
     p = placar(tudo, ficha)

@@ -250,3 +250,29 @@ def test_score_e_livro_forward(tmp_path) -> None:  # type: ignore[no-untyped-def
     assert verificar_lookahead(b[b["dia"].isin(forward)].reset_index(drop=True),
                                politica_modelo(tmp_path / "out" / "modelo_fase2.pkl"),
                                n_cortes=4)["ok"]
+
+
+def test_livro_usa_ts_open_e_nao_bar_id(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """Inserir um dia no meio desloca bar_id de todos os dias seguintes; a
+    chave do livro tem de ser (dia, ts_open). Bug real de 2026-09-11 (11
+    eventos duplicados)."""
+    from profittape.research.fase2 import registrar_forward
+
+    ev = pd.DataFrame({"dia": ["2026-09-04", "2026-09-04"], "bar_id": [2789, 2800],
+                       "ts_open": [_T0, _T0 + 60 * _NS], "acerto": [1, 0],
+                       "pnl_liquido_proxy": [1.0, -1.0]})
+    livro = tmp_path / "livro.csv"
+    registrar_forward(ev, livro)
+    deslocado = ev.assign(bar_id=ev["bar_id"] + 243)      # mesmo dia, mesma barra
+    tudo = registrar_forward(deslocado, livro)
+    assert len(tudo) == 2
+
+
+def test_livro_antigo_sem_ts_open_e_recusado(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    from profittape.research.fase2 import registrar_forward
+
+    livro = tmp_path / "livro.csv"
+    pd.DataFrame({"dia": ["2026-09-04"], "bar_id": [1], "acerto": [1]}).to_csv(livro, index=False)
+    ev = pd.DataFrame({"dia": ["2026-09-04"], "bar_id": [1], "ts_open": [_T0], "acerto": [1]})
+    with pytest.raises(SystemExit, match="reconstruir-livro"):
+        registrar_forward(ev, livro)

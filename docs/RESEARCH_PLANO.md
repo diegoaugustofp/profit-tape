@@ -5739,7 +5739,9 @@ O score: escora o dia com o modelo congelado, resolve o desfecho pelo
 label por dia (mesma regra do preparar, desempate pelo tape), grava
 uma linha por evento em `data/research/fase2/forward_eventos.csv`
 com carimbo (tag + sha256 do modelo + timestamp), sem duplicar
-(dia, bar_id) se re-escorar. Recusa dias <= 2026-08-27 (queimados);
+(dia, ts_open) se re-escorar — NAO bar_id, que se desloca quando um dia
+e' inserido no meio (v2.38; a chave por bar_id duplicou 11 eventos em
+2026-09-11). `--reconstruir-livro --desde <dia>` regrava do zero. Recusa dias <= 2026-08-27 (queimados);
 `--permitir-queimado` so' para olhar barras e NAO grava. O placar fica
 FECHADO ate' n = 50 (sanidade) e n = 150 (veredito) — o comando nao
 imprime acerto antes disso.

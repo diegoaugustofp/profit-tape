@@ -390,21 +390,33 @@ def escorar(b: pd.DataFrame, m: dict[str, Any], dias: list[str],
     ev["modelo_sha256"] = m["sha256"]
     ev["carimbo"] = _carimbo()
     ev["escorado_em"] = pd.Timestamp.now(tz="UTC").isoformat()
-    return ev.drop(columns=["ts_open"])
+    # ts_open FICA: e' a chave estavel do livro. bar_id e' continuo e se
+    # desloca quando um dia e' inserido no meio (02-03/09 recuperados em
+    # 2026-09-11 empurraram +243 e o livro duplicou 11 eventos).
+    return ev
+
+
+CHAVE_LIVRO = ("dia", "ts_open")
 
 
 def registrar_forward(ev: pd.DataFrame, arquivo: Path) -> pd.DataFrame:
-    """Anexa ao livro do forward, sem duplicar (dia, bar_id). Re-escorar um
-    dia nao conta duas vezes."""
+    """Anexa ao livro do forward, sem duplicar (dia, ts_open). Re-escorar um
+    dia nao conta duas vezes. Livro antigo sem ts_open (v2.04-v2.37,
+    chave bar_id, instavel) e' recusado: reconstrua com --reconstruir-livro."""
     if arquivo.exists():
         antigo = pd.read_csv(arquivo, dtype={"dia": str})
-        chaves = set(zip(antigo["dia"], antigo["bar_id"], strict=True))
-        novo = ev[[(d, int(bid)) not in chaves
-                   for d, bid in zip(ev["dia"], ev["bar_id"], strict=True)]]
+        if "ts_open" not in antigo.columns:
+            raise SystemExit(f"{arquivo} e' de versao anterior (sem ts_open; chave por bar_id, "
+                             "que se desloca ao inserir dias). Reconstrua: "
+                             "fase2-score --desde <primeiro dia forward> --reconstruir-livro")
+        chaves = set(zip(antigo["dia"], antigo["ts_open"].astype("int64"), strict=True))
+        novo = ev[[(d, int(t)) not in chaves
+                   for d, t in zip(ev["dia"], ev["ts_open"], strict=True)]]
         tudo = pd.concat([antigo, novo], ignore_index=True)
     else:
         arquivo.parent.mkdir(parents=True, exist_ok=True)
         tudo = ev.copy()
+    tudo = tudo.drop_duplicates(subset=list(CHAVE_LIVRO), keep="first")
     tudo.to_csv(arquivo, index=False)
     return tudo
 

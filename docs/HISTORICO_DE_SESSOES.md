@@ -1307,3 +1307,20 @@ ambas` nos pregoes reais.
 - A partir daqui: ritual diário `curate` → `features --agentes` →
   `fase2-score --dia`. Checkpoint de sanidade em n=50 (~6 pregões a
   partir de agora), veredito em n=150.
+
+### Continuação (2026-09-11) — livro do forward duplicava ao inserir dias (v2.38)
+
+- Operador recuperou 02 e 03/09 e re-escorou `--desde 2026-08-28`: o
+  `bar_id` contínuo de todos os dias seguintes deslocou +243 e o livro,
+  chaveado por (dia, bar_id), gravou **11 duplicatas** (43 em vez de
+  32). O checkpoint de n=50 teria aberto cedo.
+- v2.38: chave do livro = (dia, ts_open); livro antigo sem ts_open é
+  recusado com instrução; `--reconstruir-livro` (com `--desde`) guarda
+  o antigo como `forward_eventos.antes_<ts>.csv` e regrava do zero — o
+  score é determinístico, então os 32 voltam iguais.
+- Estado do forward após reconstrução: **32 eventos em 8 pregões com
+  evento** (28/08–10/09; 08/09 sem evento). 3,56 eventos/pregão contra
+  4,6 da ficha — com isso n=150 chega em ~42 pregões, ainda dentro do
+  teto de 60.
+- Lição de processo: chave de livro forward nunca pode depender de
+  índice acumulado; só de (dia, timestamp).
