@@ -1,9 +1,8 @@
 # Scalp de Bollinger modificada (15s) — hipótese em formalização
 
-Estado (2026-09-10): **v1 CONTRA na depuração; forward NÃO ligado.**
-Replay pelo tape em 30 pregões, n = 2.916 operações: p1 = 0,486 (IC
-0,467–0,504) contra nula de lucro 0,61. Ver 5.5. Nada foi ajustado; o
-próximo passo é de mecanismo, não de número.
+Estado (2026-09-11): **FECHADO. As duas variantes testadas (retorno e
+rompimento) são CONTRA.** Ver 5.8. Nenhum EA de scalp de Bollinger vai a
+produção com o desenho atual.
 
 ## 0. Ficha de seis linhas (v1, `entregue-v2.11`)
 
@@ -381,6 +380,38 @@ referência de entrada, para a comparação ser limpa.
 **Pendente**: rodar as duas ferramentas nos ~30 pregões capturados e
 decidir, com o número na mão, se a direção existe e se o rompimento
 muda o quadro da v1 (contra, 5.5).
+
+## 5.8 Fechamento (2026-09-11): as duas variantes, CONTRA
+
+32 pregões (24/07 a 08/09, incluindo 02–03/09 recuperados pelo priming),
+regra inteira com circuit breaker ativo — o que o EA realmente faria:
+
+| | n | p1 | IC95 | bruto pts/op | IC95 bruto | custo máx./contrato |
+|---|---|---|---|---|---|---|
+| retorno (v1) | 417 | 0,480 | 0,432–0,528 | −4,7 | −21,6 a 12,2 | −1,6 |
+| rompimento | 289 | 0,415 | 0,360–0,473 | −22,0 | −43,0 a −0,9 | −7,3 |
+
+**Retorno**: null. IC de p1 cruza 0,50; IC do bruto cruza zero. Consistente
+com a medição anterior sem circuit breaker (p1 = 0,486, IC 0,467–0,504,
+n = 2.916) — mais dado, mesma conclusão: sem borda em nenhuma direção.
+
+**Rompimento**: não é null, é **negativo**. Os dois intervalos (p1 e
+bruto) ficam inteiramente do lado ruim, sem tocar o neutro. Perna 1
+sozinha: −10,5 pts médios, quase o dobro do prejuízo da v1. Faz sentido
+de mecanismo: comprar o rompimento da máxima da própria barra de sinal
+num scalp de 15s é comprar o topo do impulso que acabou de acontecer —
+o inverso do que a entrada por retorno (recuo) tenta fazer.
+
+**Veredito**: as duas variantes são CONTRA pelo critério bruto da ficha.
+Nenhuma tem borda; uma tem borda do lado errado. O forward não é ligado
+para nenhuma. Fecha o capítulo do scalp de Bollinger neste desenho.
+
+**O que fica registrado para o futuro, não para agora**: a medição de
+conteúdo direcional puro (5.6, `bollinger-direcao`) ficou sem rodar —
+não foi necessária, porque já havia duas tentativas de entrada
+concretas reprovadas. Se um dia surgir uma terceira ideia de entrada
+sobre esta mesma banda/estocástico, essa ferramenta já existe e pode
+rodar antes de qualquer código novo de execução.
 
 ## 6. Dúvidas — fechadas em 2026-09-05, exceto as que o dump responde
 

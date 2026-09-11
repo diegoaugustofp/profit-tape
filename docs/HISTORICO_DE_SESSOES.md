@@ -1270,3 +1270,15 @@ de ordens do Profit.
 
 **Pendente**: rodar `bollinger-direcao` e `bollinger-replay --variante
 ambas` nos pregoes reais.
+
+### Continuacao (2026-09-11, noite) — FECHAMENTO: as duas variantes sao CONTRA
+
+- 32 pregoes (02-03/09 recuperados pelo priming). Retorno (v1): p1=0,480
+  IC(0,432-0,528), bruto -4,7 IC(-21,6 a 12,2) -- null, consistente com
+  a medicao anterior. Rompimento: p1=0,415 IC(0,360-0,473), bruto -22,0
+  IC(-43,0 a -0,9) -- NEGATIVO, os dois intervalos fora do neutro.
+- Veredito: FECHADO. As duas variantes sao CONTRA pelo criterio bruto.
+  Nenhum EA de scalp de Bollinger vai a producao com este desenho.
+  A medicao de direcao pura (5.6) nao foi necessaria -- ja havia duas
+  tentativas concretas reprovadas.
+- Nenhum codigo mudou nesta entrada; so' documentacao (5.8).
