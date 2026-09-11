@@ -1324,3 +1324,29 @@ ambas` nos pregoes reais.
   teto de 60.
 - Lição de processo: chave de livro forward nunca pode depender de
   índice acumulado; só de (dia, timestamp).
+
+### Continuacao (2026-09-11, pregao) — E2 rodou: 'Ordem invalida' com ticker WINFUT (v2.39)
+
+- E2 rodou pela 1a vez na DLL real, 10:30, conta 1000357256/Simulador
+  (32006) -- a TRAVA funcionou (contas_vistas mostrou XP 1003 tambem
+  presente e nao foi usada). Compra aceita pela DLL (ordem_id real),
+  callback devolveu `OrderNotCreated / "Ordem invalida."` em 671 ms.
+  Zeragem recusada em seguida (nao havia posicao para zerar -- esperado,
+  ja' que a compra nunca abriu). Nenhuma ordem apareceu no Profit,
+  coerente com "nunca existiu na bolsa".
+- Causa provavel: `OrdemDeTeste` usava ticker="WINFUT" (o alias do
+  Profit/Nelogica que resolve para o contrato vigente em DADO --
+  subscribe, GetHistoryTrades -- mas nao e' instrumento negociavel na
+  B3; a bolsa tem WINV26, WINZ26 etc., nao "WINFUT"). Operador levantou
+  hipotese alternativa ("cross order" desativado no Profit); busca nao
+  confirmou esse termo especifico -- fica registrada como hipotese nao
+  descartada, mas o log ja' explica a rejeicao sem precisar dela.
+- `--ordem-teste-ticker` no `record` (default ainda "WINFUT", com AVISO
+  explicito `recorder.ordem_teste_ticker_generico` quando usado assim).
+  `OrdemDeTeste` aceita ticker. 2 testes novos. 660 testes, ruff e mypy
+  limpos.
+
+**Pendente (Diego)**: rodar de novo com `--ordem-teste-ticker WINV26`
+(confirmar que ainda e' o contrato vigente) num horario liquido. Se
+ainda vier "Ordem invalida", a hipotese do "cross order" ganha forca e
+vale checar essa configuracao no Profit antes de mais uma rodada.

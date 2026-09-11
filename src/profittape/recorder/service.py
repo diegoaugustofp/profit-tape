@@ -46,6 +46,7 @@ class RecorderService:
         dll_injetada: object | None = None,
         ea_config_path: Path | None = None,
         ordem_teste_em: str | None = None,
+        ordem_teste_ticker: str = "WINFUT",
     ) -> None:
         self.cfg = cfg
         self.cred = cred
@@ -127,8 +128,18 @@ class RecorderService:
             from ..ea.config import RoteamentoConfig
             from ..ea.ordem_teste import OrdemDeTeste
 
+            if ordem_teste_ticker.upper() == "WINFUT":
+                log.warning(
+                    "recorder.ordem_teste_ticker_generico",
+                    ticker=ordem_teste_ticker,
+                    nota="'WINFUT' resolve para dado (subscribe, historico) "
+                         "mas NAO e' instrumento negociavel na B3 -- envio "
+                         "de ordem com esse alias volta 'Ordem invalida' "
+                         "(medido 2026-09-11). Use --ordem-teste-ticker com "
+                         "o contrato vigente (ex.: WINV26).")
             self.ordem_teste = OrdemDeTeste(self.client, RoteamentoConfig(),
-                                            horario_hhmm=ordem_teste_em)
+                                            horario_hhmm=ordem_teste_em,
+                                            ticker=ordem_teste_ticker)
             log.warning("recorder.ordem_teste_agendada", horario=ordem_teste_em,
                         nota="E2: 1 contrato WINFUT a mercado na conta de "
                              "SIMULACAO (trava pela DLL) e zeragem em seguida.")

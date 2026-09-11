@@ -231,3 +231,40 @@ def test_record_com_ordem_teste_envia_na_conexao_de_captura(tmp_path) -> None:  
         "SendZeroPositionAtMarket",
     ]
     assert svc.bus.stats().total_descartado == 0  # a captura nao sofreu
+
+
+def test_record_avisa_quando_ordem_teste_usa_ticker_generico(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """WINFUT resolve dado mas nao e' negociavel -- o record precisa avisar
+    isso na hora de agendar, nao so' deixar a ordem falhar (2026-09-11:
+    'Ordem invalida' porque o E2 usava WINFUT por default)."""
+    import structlog
+
+    from profittape.config import Credenciais, RecorderConfig
+    from profittape.recorder.service import RecorderService
+
+    yaml = tmp_path / "r.yaml"
+    yaml.write_text(
+        f"storage:\n  raiz: {tmp_path / 'raw'}\nativos:\n  - ticker: WINFUT\n    bolsa: F\n"
+        "    trades: true\nruntime:\n  login_completo: true\n",
+        encoding="utf-8",
+    )
+    cfg = RecorderConfig.from_yaml(yaml)
+    cred = Credenciais(dll_path="fake", activation_key="k", user="u", password="p")
+    fake = FakeProfitDLL(eventos_por_ativo=0)
+
+    with structlog.testing.capture_logs() as eventos:
+        svc = RecorderService(
+            cfg, cred, dll_injetada=fake, ordem_teste_em="10:00", ordem_teste_ticker="WINFUT"
+        )
+    assert svc.ordem_teste is not None and svc.ordem_teste._ticker == "WINFUT"
+    assert any(e.get("event") == "recorder.ordem_teste_ticker_generico" for e in eventos)
+
+
+def test_ordem_teste_aceita_ticker_especifico() -> None:
+    fake = FakeProfitDLL(eventos_por_ativo=0)
+    c = _client(fake)
+    try:
+        ot = OrdemDeTeste(c, RoteamentoConfig(), horario_hhmm="00:00", ticker="WINV26")
+        assert ot._ticker == "WINV26"
+    finally:
+        c.disconnect()

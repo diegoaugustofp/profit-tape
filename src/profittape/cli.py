@@ -49,11 +49,17 @@ def record(
     ordem_teste_em: str | None = typer.Option(
         None, "--ordem-teste-em",
         help="E2 dentro do record (2026-09-11): no horario HH:MM (local), "
-             "envia 1 contrato WINFUT a mercado na conta de SIMULACAO -- "
-             "trava conferida contra o que a DLL anunciou (nome da "
-             "corretora contem 'Simul') -- confirma o callback de ordem e "
-             "zera. Exige login completo. Roda na conexao de producao, no "
+             "envia 1 contrato a mercado na conta de SIMULACAO -- trava "
+             "conferida contra o que a DLL anunciou (nome da corretora "
+             "contem 'Simul') -- confirma o callback de ordem e zera. "
+             "Exige login completo. Roda na conexao de producao, no "
              "pregao, sem parar a captura."),
+    ordem_teste_ticker: str = typer.Option(
+        "WINFUT", "--ordem-teste-ticker",
+        help="Ticker do E2. 'WINFUT' resolve para dado (subscribe, "
+             "historico), mas NAO e' instrumento negociavel na B3 -- "
+             "envio de ordem com esse alias volta 'Ordem invalida' "
+             "(medido 2026-09-11). Use o contrato vigente, ex.: WINV26."),
 ) -> None:
     """Grava tape e book ate o horario configurado ou ate Ctrl+C."""
     configurar(log_level, log_file)
@@ -83,7 +89,8 @@ def record(
     from .recorder.service import RecorderService
 
     raise typer.Exit(RecorderService(cfg, cred, ea_config_path=ea_config,
-                                     ordem_teste_em=ordem_teste_em).run())
+                                     ordem_teste_em=ordem_teste_em,
+                                     ordem_teste_ticker=ordem_teste_ticker).run())
 
 
 @app.command()
