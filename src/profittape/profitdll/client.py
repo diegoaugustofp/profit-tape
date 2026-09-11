@@ -12,6 +12,7 @@ import threading
 import time
 from collections import deque
 from collections.abc import Callable
+from ctypes import pointer
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,7 @@ from ..pipeline.bus import EventBus
 from . import bindings as b
 from .errors import LoginFailed, check
 from .timeparse import parse_ts_ns
+from .types import TConnectorTradingAccountPosition
 from .versao import versao_arquivo
 
 log = structlog.get_logger(__name__)
@@ -44,6 +46,23 @@ def _com_hora(data: str, hora: str) -> str:
     """'DD/MM/YYYY' -> 'DD/MM/YYYY HH:mm:SS'; se ja' tem hora, nao mexe."""
     d = data.strip()
     return d if " " in d else f"{d} {hora}"
+
+
+@dataclass(frozen=True)
+class PosicaoConsultada:
+    """Resultado de `consultar_posicao` (GetPositionV2, E3). `quantidade_liquida`
+    ja' vem com sinal (+comprada, -vendida). `plausivel=False` = layout de
+    bytes suspeito -- ver docstring de `consultar_posicao`; NUNCA agir sobre
+    um resultado implausivel."""
+
+    retorno: int
+    ticker: str
+    corretora: int
+    conta: str
+    quantidade_liquida: int
+    preco_medio: float
+    lado_bruto: int
+    plausivel: bool
 
 
 @dataclass(frozen=True)
@@ -407,6 +426,51 @@ class ProfitClient:
                         nota="seguindo sem priming; a chamada real trata a falha")
         finally:
             self._descartar_historico = False
+
+    def consultar_posicao(self, corretora: str, conta: str, ticker: str, bolsa: str,
+                          position_type: int = 2) -> PosicaoConsultada:
+        """
+        GetPositionV2 (E3, 2026-09-11). Preenche a struct de ENTRADA
+        (conta, ativo, position_type) e deixa a DLL preencher o resto.
+
+        `position_type`: 1=DayTrade, 2=Consolidated (default -- posicao
+        liquida real, inclui o que veio carregado de pregoes anteriores;
+        WIN nao e' day-trade-only pela bolsa, so' pela pratica).
+
+        NAO VERIFICADO CONTRA A DLL REAL (ver nota em profitdll/types.py).
+        Por isso o resultado sai com `plausivel=False` se `open_side` nao
+        estiver em {0,1,2} ou se `abs(open_quantity)` passar de
+        `limite_quantidade_plausivel` -- sinal de layout de bytes errado,
+        nao de posicao real. Quem chama NUNCA deve agir (zerar, alarmar
+        como divergencia real) sobre um resultado implausivel; so' logar
+        e pedir conferencia manual no Profit.
+        """
+        assert self._dll is not None, "connect() precisa ser chamado antes"
+        if not hasattr(self._dll, "GetPositionV2"):
+            raise RuntimeError(
+                "GetPositionV2 nao existe nesta DLL (ver `doctor`, familia 'posicao')")
+        pos = TConnectorTradingAccountPosition()
+        pos.version = 1
+        pos.account_id.version = 0
+        pos.account_id.broker_id = int(corretora)
+        pos.account_id.account_id = conta
+        pos.account_id.sub_account_id = None
+        pos.asset_id.version = 0
+        pos.asset_id.ticker = ticker
+        pos.asset_id.exchange = bolsa
+        pos.asset_id.feed_type = 0
+        pos.position_type = position_type
+        ret = self._dll.GetPositionV2(pointer(pos))
+        limite = 1000  # WIN/WDO: um erro de layout tende a estourar isto por ordens de grandeza
+        plausivel = (ret >= 0 and pos.open_side in (0, 1, 2)
+                    and abs(pos.open_quantity) <= limite)
+        sinal = {0: 0, 1: 1, 2: -1}.get(pos.open_side, 0)
+        return PosicaoConsultada(
+            retorno=ret, ticker=ticker, corretora=int(corretora), conta=conta,
+            quantidade_liquida=sinal * int(pos.open_quantity),
+            preco_medio=float(pos.open_average_price), lado_bruto=int(pos.open_side),
+            plausivel=plausivel,
+        )
 
     def agent_name(self, agent_id: int, curto: bool = False) -> str | None:
         """

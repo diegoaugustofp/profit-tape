@@ -28,6 +28,7 @@ from __future__ import annotations
 import sys
 from ctypes import (
     CFUNCTYPE,
+    POINTER,
     c_char,
     c_double,
     c_int,
@@ -49,7 +50,10 @@ else:
     WINFUNCTYPE = CFUNCTYPE
 
 from .errors import DLLNotFound
-from .types import TAssetIDRec
+from .types import (
+    TAssetIDRec,
+    TConnectorTradingAccountPosition,
+)
 
 # --------------------------------------------------------------------------
 # Assinaturas de callback
@@ -312,6 +316,22 @@ def _declare(dll: Any) -> None:
     if hasattr(dll, "GetAccount"):
         dll.GetAccount.argtypes = []
         dll.GetAccount.restype = c_int
+
+    # ----------------------------------------------------------------------
+    # Posicao (E3, 2026-09-11) — GetPositionV2, NAO a legada GetPosition.
+    # Decisao invertida frente ao envio de ordem: la' a legada (argumentos
+    # planos) venceu por ser mais simples de verificar. Aqui e' o oposto: a
+    # legada devolve um PONTEIRO para uma struct de TAMANHO VARIAVEL com
+    # strings embutidas por tamanho (91+N+T+K bytes, parse manual de
+    # buffer) -- exatamente o tipo de layout fragil que se quer evitar. A
+    # V2 e' struct FIXA (`var` = passagem por referencia, um ctypes
+    # POINTER), o proprio manual marca a legada como obsoleta em favor
+    # desta. Por isso aqui a struct e' a escolha mais segura, nao a mais
+    # arriscada.
+    # ----------------------------------------------------------------------
+    if hasattr(dll, "GetPositionV2"):
+        dll.GetPositionV2.argtypes = [POINTER(TConnectorTradingAccountPosition)]
+        dll.GetPositionV2.restype = c_int
 
     # ----------------------------------------------------------------------
     # Envio de ordem (modulo ea/execucao.py) — funcoes LEGADAS planas.

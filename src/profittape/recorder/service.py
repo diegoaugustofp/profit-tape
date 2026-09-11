@@ -34,6 +34,7 @@ from ..storage.parquet_sink import ParquetSink
 
 if TYPE_CHECKING:
     from ..ea.ordem_teste import OrdemDeTeste
+    from ..ea.reconciliacao import ReconciliadorPosicao
 
 log = structlog.get_logger(__name__)
 
@@ -47,6 +48,9 @@ class RecorderService:
         ea_config_path: Path | None = None,
         ordem_teste_em: str | None = None,
         ordem_teste_ticker: str = "WINFUT",
+        reconciliar_em: str | None = None,
+        reconciliar_ticker: str = "WINFUT",
+        reconciliar_esperado: int = 0,
     ) -> None:
         self.cfg = cfg
         self.cred = cred
@@ -55,6 +59,12 @@ class RecorderService:
         # login_completo. Construida DEPOIS do client (precisa dele).
         self._ordem_teste_em = ordem_teste_em
         self.ordem_teste: OrdemDeTeste | None = None
+        # E3 dentro do record (2026-09-11): reconciliacao de posicao no
+        # horario dado -- consulta a corretora e zera se divergir do
+        # esperado. Mesmo padrao do E2: ticada pela thread principal,
+        # construida depois do client.
+        self._reconciliar_em = reconciliar_em
+        self.reconciliador: ReconciliadorPosicao | None = None
         self.metrics = Metrics()
         # Alertas sao OPCIONAIS: sem config/alertas.yaml, self.alertas fica
         # None e enviar() vira no-op silencioso — o record roda igual, so'
@@ -155,6 +165,39 @@ class RecorderService:
                 nota="E2: 1 contrato a mercado na conta de SIMULACAO "
                 "(trava pela DLL) e zeragem em seguida.",
             )
+        if reconciliar_em is not None:
+            if not cfg.runtime.login_completo:
+                raise SystemExit(
+                    "--reconciliar-em exige login completo (--login-completo "
+                    "ou runtime.login_completo: true): sem sessao de "
+                    "roteamento nao ha' onde consultar posicao."
+                )
+            from ..ea.config import RoteamentoConfig
+            from ..ea.ordem_teste import TickerAgregadorInvalido
+            from ..ea.reconciliacao import ReconciliadorPosicao
+
+            try:
+                self.reconciliador = ReconciliadorPosicao(
+                    self.client,
+                    RoteamentoConfig(),
+                    horario_hhmm=reconciliar_em,
+                    ticker=reconciliar_ticker,
+                    esperado=reconciliar_esperado,
+                )
+            except TickerAgregadorInvalido as exc:
+                raise SystemExit(
+                    f"{exc}\n--reconciliar-ticker recebeu {reconciliar_ticker!r}."
+                ) from exc
+            log.warning(
+                "recorder.reconciliacao_agendada",
+                horario=reconciliar_em,
+                ticker=reconciliar_ticker,
+                esperado=reconciliar_esperado,
+                nota="E3: consulta a posicao na corretora (GetPositionV2, "
+                "NAO VERIFICADO contra a DLL real -- ver profitdll/types.py) "
+                "e ZERA A MERCADO se divergir do esperado (trava: so' "
+                "Simulador).",
+            )
         self._parar = threading.Event()
 
     # ------------------------------------------------------------------
@@ -234,6 +277,8 @@ class RecorderService:
             time.sleep(0.5)
             if self.ordem_teste is not None and not self.ordem_teste.concluida:
                 self.ordem_teste.tick()  # thread principal, nunca callback
+            if self.reconciliador is not None and not self.reconciliador.concluida:
+                self.reconciliador.tick()  # thread principal, nunca callback
             if self._hora_de_encerrar():
                 log.info("recorder.encerramento_agendado", horario=self.cfg.runtime.encerrar_em)
                 break

@@ -1395,3 +1395,32 @@ horario liquido.
   representativos. 661 testes, ruff e mypy limpos.
 - **E2 fechado.** Latencia do simulador (fila vazia) e' otimista, nao
   e' a borda real de mercado -- isso continua para o E3/forward.
+
+### Continuacao (2026-09-11) — E3 entregue: reconciliacao de posicao (v2.42)
+
+- Operador pediu para fechar o E3 sem demora. Implementado:
+  `profitdll/types.py` (structs V2: TConnectorAccountIdentifier,
+  TConnectorAssetIdentifier, TConnectorTradingAccountPosition, a
+  partir do manual, extraido em sessao anterior); `bindings.py`
+  (GetPositionV2 vinculado); `client.py` (`consultar_posicao` +
+  `PosicaoConsultada`, com teste de plausibilidade); `ea/reconciliacao.py`
+  (`ReconciliadorPosicao`, maquina de estados no padrao do E2, reusa
+  `exigir_simulador`); gancho no record (`--reconciliar-em
+  --reconciliar-ticker --reconciliar-esperado`).
+- Decisao invertida frente ao E2: GetPositionV2 (struct fixa) em vez da
+  GetPosition legada (ponteiro variavel com strings embutidas, mais
+  fragil) -- o manual marca a legada como obsoleta a favor da V2.
+- NAO VERIFICADO contra a DLL real (sandbox Linux, sem DLL). Offsets
+  calculados pelo ctypes internamente consistentes (alinhamento natural
+  de 8 bytes) mas isso so' confirma coerencia, nao correspondencia.
+  `consultar_posicao` bloqueia acao sobre resultado implausivel (lado
+  fora de 0/1/2, quantidade absurda).
+- Conferido a mao com uma DLL minima manuscrita (vendida/comprada/
+  zerada/implausivel) antes dos testes formais. 11 testes novos, com
+  fake `GetPositionV2` (preenche a struct via ponteiro). 672 testes,
+  ruff e mypy limpos.
+
+**Pendente (Diego)**: primeira consulta REAL deve ser so' leitura
+(esperado = posicao conferida manualmente no Profit ANTES), nao um
+horario onde zeragem automatica poderia disparar. Se bater, a struct
+esta' certa e da' para confiar na zeragem automatica dali em diante.

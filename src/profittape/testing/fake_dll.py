@@ -83,6 +83,11 @@ class FakeProfitDLL:
         # Ver _emitir_historico: simula a truncagem da 1a chamada por
         # ticker (medido 2026-09-11).
         self._hist_primeira_ja_vista: set[str] = set()
+        # E3 (2026-09-11): posicao por (corretora, conta, ticker). Default
+        # vazio = zerado (open_quantity=0, open_side=0). Testes configuram
+        # via `fake.posicoes[(corretora, conta, ticker)] = (qtd, lado, preco)`.
+        self.posicoes: dict[tuple[int, str, str], tuple[int, int, float]] = {}
+        self.get_position_chamadas: list[tuple[int, str, str, str, int]] = []
         self._TRUNCA_N = max(1, eventos_por_ativo // 10)
         self._ultima_data_offer = "01/01/1970 00:00:00.000"  # buffer "obsoleto" inicial
         self._parar = threading.Event()
@@ -425,6 +430,20 @@ class FakeProfitDLL:
         # ainda podem chegar logo depois. Aqui vem depois de tudo.
         if prog is not None:
             prog(ativo, 100)
+
+    def GetPositionV2(self, ptr: object) -> int:
+        """`ptr` = ctypes.pointer(TConnectorTradingAccountPosition) -- os
+        campos de ENTRADA (account_id, asset_id, position_type) ja' vem
+        preenchidos por consultar_posicao(); aqui so' preenchemos os
+        campos de SAIDA, como a DLL real faria."""
+        pos = ptr.contents  # type: ignore[attr-defined]
+        chave = (pos.account_id.broker_id, pos.account_id.account_id, pos.asset_id.ticker)
+        self.get_position_chamadas.append((*chave, pos.asset_id.exchange, pos.position_type))
+        qtd, lado, preco = self.posicoes.get(chave, (0, 0, 0.0))
+        pos.open_quantity = qtd
+        pos.open_side = lado
+        pos.open_average_price = preco
+        return 0
 
     def GetAgentNameByID(self, agent_id):
         # Nomes deterministas para teste; codigo 999 simula "desconhecido".

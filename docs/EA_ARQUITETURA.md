@@ -170,6 +170,56 @@ ea/
   service.py     IMPLEMENTADO — EAService, forward-test via CLI `ea` — orquestracao (equivalente ao recorder/service.py)
 ```
 
+
+### E3 dentro do record — ENTREGUE (v2.42, 2026-09-11), NAO VERIFICADO contra a DLL real
+
+Reconciliacao de posicao EA x corretora: `GetPositionV2` (struct fixa,
+nao a `GetPosition` legada -- ver por que abaixo), compara com o
+esperado, e ZERA A MERCADO na divergencia (mesma familia
+`SendZeroPositionAtMarket` do E2).
+
+    profit-tape record -c config/recorder.yaml --reconciliar-em 14:00 \
+        --reconciliar-ticker WINV26 --reconciliar-esperado 0
+
+**Por que GetPositionV2, nao a legada.** Inversao da decisao do E2: la'
+a familia legada (argumentos planos) venceu por ser mais simples de
+verificar contra structs aninhadas. Aqui e' o oposto -- a `GetPosition`
+legada devolve um PONTEIRO para uma struct de TAMANHO VARIAVEL com
+strings embutidas por tamanho (91+N+T+K bytes, parse manual de buffer);
+a V2 e' struct FIXA. O proprio manual marca a legada como obsoleta em
+favor da V2. Aqui a struct e' a escolha mais segura, nao a mais
+arriscada.
+
+**NAO VERIFICADO CONTRA A DLL REAL.** As structs
+(`TConnectorAccountIdentifier`, `TConnectorAssetIdentifier`,
+`TConnectorTradingAccountPosition`, em `profitdll/types.py`) foram
+construidas a partir do manual, num sandbox Linux sem acesso a DLL
+real -- alinhamento assumido NATURAL (ctypes default, sem `_pack_`),
+que e' o padrao de record Delphi nao marcado `packed`. Os offsets
+calculados pelo ctypes sao internamente consistentes (8 bytes,
+compativel com record Delphi 64-bit nao-packed), mas isso so' confirma
+coerencia interna -- nao confirma correspondencia com a DLL real.
+
+Por isso `consultar_posicao()` faz um teste de PLAUSIBILIDADE: se
+`open_side` vier fora de {0,1,2} ou a quantidade for absurda, o
+resultado sai `plausivel=False` e o `ReconciliadorPosicao` NUNCA age
+sobre isso (nao zera, so' alarma `implausivel` e pede conferencia
+manual no Profit). Um layout de bytes errado tende a devolver lixo; agir
+sobre lixo e' pior que nao agir.
+
+**Antes da primeira consulta real**: rodar so' leitura (esperado = a
+posicao que voce sabe que tem, conferida no Profit antes), NÃO um
+horario onde a zeragem automatica poderia disparar sobre um resultado
+mal lido. Se `resultado=bate` e os numeros (quantidade, preco_medio)
+baterem com o que aparece no Profit, a struct esta' certa. So' depois
+disso confiar na zeragem automatica.
+
+A trava e' a MESMA do E2 (`exigir_simulador`, reaproveitada): so' passa
+se a DLL anunciou a conta nesta sessao e o nome da corretora contem
+"simul". 11 testes, incluindo os que REPROVAM (conta real, resultado
+implausivel, ticker agregador) -- todos contra a fake, que usa a MESMA
+struct ctypes, ou seja, provam auto-consistencia da logica, nao
+correspondencia com a DLL real.
 ### Por que decisao.py ja' tem logica real e o resto e' esboco
 
 decisao.py e' pura (sinal numerico -> acao), zero I/O, testavel sem DLL
@@ -821,7 +871,7 @@ precisa.
 | **E0** | `doctor` inventaria os exports de ordem/posicao/callbacks na DLL instalada, por familia (legada / V2), e diz qual caminho esta completo para o E2 | **nenhum**: puro hasattr no handle, sem DLLInitialize*. O conflito documentado e' na 2a CONEXAO, nao no carregamento (ea-contas ja carregou a DLL com o record ativo sem efeito). Roda a qualquer hora |
 | **E1** | record passa a conectar com `DLLInitializeLogin` (login completo) em vez de MarketLogin, para que a conexao unica possa rotear | **e' AQUI que o impacto mora**: muda o modo de login do processo de captura. Testar em record de TESTE (pasta separada) fora do pregao: captura identica? estabilidade? So' depois trocar o record de producao |
 | **E2** | comando `ea-ordem-teste`: 1 contrato, compra a mercado, confirma callback de ordem, zera. Conta DEMO obrigatoria, sem EA | roda DENTRO do record (mesma conexao), fora do pregao ou no simulador |
-| **E3** | reconciliacao posicao EA x corretora (GetPosition/callback), parada de emergencia na divergencia | o gestor guarda posicao em memoria e nunca confere com a DLL. Em execucao real e' a origem classica de desastre |
+| **E3** | reconciliacao posicao EA x corretora (GetPositionV2), parada de emergencia na divergencia | ENTREGUE v2.42, 2026-09-11 -- NAO VERIFICADO contra a DLL real ainda |
 | **E4** | forward em demo com ordens reais, EA atual, 1 contrato. **Mede slippage e latencia de verdade** | destrava a avaliacao do scalper |
 | **E5** | multi-EA | so' depois de um EA sozinho ser confiavel |
 

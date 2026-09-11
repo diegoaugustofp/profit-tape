@@ -73,6 +73,21 @@ def record(
         "escolha explicita em vez de silenciosamente nao funcionar "
         "no pregao (medido 2026-09-11).",
     ),
+    reconciliar_em: str | None = typer.Option(
+        None, "--reconciliar-em",
+        help="E3 dentro do record (2026-09-11): no horario HH:MM (local), "
+             "consulta a posicao na corretora (GetPositionV2 -- NAO "
+             "VERIFICADO contra a DLL real, ver profitdll/types.py) e "
+             "ZERA A MERCADO se divergir de --reconciliar-esperado. "
+             "Trava: so' Simulador. Exige login completo."),
+    reconciliar_ticker: str = typer.Option(
+        "WINFUT", "--reconciliar-ticker",
+        help="Ticker do E3, contrato ESPECIFICO (mesma regra do E2 -- "
+             "'WINFUT' falha alto de proposito)."),
+    reconciliar_esperado: int = typer.Option(
+        0, "--reconciliar-esperado",
+        help="Quantidade liquida esperada (positiva=comprada, "
+             "negativa=vendida, 0=zerado -- default)."),
 ) -> None:
     """Grava tape e book ate o horario configurado ou ate Ctrl+C."""
     configurar(log_level, log_file)
@@ -97,7 +112,11 @@ def record(
         modo = "COMPLETO (roteamento)" if cfg.runtime.login_completo else "market data"
         typer.echo(f"  login: {modo}")
         if ordem_teste_em:
-            typer.echo(f"  E2: ordem de teste (1 WINFUT, SIMULACAO) as {ordem_teste_em}")
+            typer.echo(f"  E2: ordem de teste (1 {ordem_teste_ticker}, SIMULACAO) "
+                       f"as {ordem_teste_em}")
+        if reconciliar_em:
+            typer.echo(f"  E3: reconciliacao ({reconciliar_ticker}, esperado="
+                       f"{reconciliar_esperado}) as {reconciliar_em}")
         typer.echo(f"  encerramento: {cfg.runtime.encerrar_em or 'so Ctrl+C'}")
         raise typer.Exit(0)
 
@@ -111,6 +130,9 @@ def record(
             ea_config_path=ea_config,
             ordem_teste_em=ordem_teste_em,
             ordem_teste_ticker=ordem_teste_ticker,
+            reconciliar_em=reconciliar_em,
+            reconciliar_ticker=reconciliar_ticker,
+            reconciliar_esperado=reconciliar_esperado,
         ).run()
     )
 
