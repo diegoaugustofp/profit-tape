@@ -1473,3 +1473,28 @@ corrijo a struct definitivamente -- sem mais um segundo palpite.
 `resultado=bate` desta vez (posicao zerada, layout confirmado). O teste
 com posicao ABERTA (comprar e reconciliar sem zerar antes) ainda fica
 para uma proxima rodada, quando fizer sentido.
+
+### Continuacao (2026-09-11, noite) — structs confirmadas contra o exemplo oficial da Nelogica (v2.45)
+
+- Operador trouxe `profitTypes.py` e `profit_dll.py`, exemplos oficiais
+  da Nelogica com uso real de GetPositionV2 (`printPosition()`).
+  Comparacao campo a campo: as tres structs V2 que eu tinha reconstruido
+  do manual em PDF sao IDENTICAS a`s oficiais -- confirma que a
+  reconstrucao anterior (e a decodificacao do dump de ontem) estava
+  certa em tudo, EXCETO um detalhe: os campos `Byte` (Version, OpenSide,
+  FeedType, PositionType) sao SEM SINAL (`c_ubyte`), eu tinha usado
+  `c_byte`. O byte 0xc8 da consulta das 20:00 e' 200 sem sinal, nao -56
+  -- nao mudou a conclusao de ontem (200 tambem invalido), mas corrige
+  um bug real que importaria para uma posicao aberta de verdade.
+- Corrigido em `types.py`. Offsets nao mudam (Byte tem 1 byte com ou
+  sem sinal); so' a INTERPRETACAO do valor muda para valores > 127.
+- Achados de bonus, registrados sem implementar agora:
+  `TConnectorZeroPosition` (zeragem V2 struct-based) e
+  `TSystemHealthState` (watchdog da DLL, `Responsive`/`Frozen`).
+- 674 testes (nenhum quebrou -- a mudanca so' afeta valores > 127, que
+  nenhum teste usava), ruff e mypy limpos.
+
+**As structs V2 agora tem duas fontes independentes de confirmacao**:
+o dump real decodificado byte a byte (ontem) e o exemplo oficial da
+Nelogica (hoje). Confianca alta para posicao zerada; posicao aberta
+ainda sem teste real.

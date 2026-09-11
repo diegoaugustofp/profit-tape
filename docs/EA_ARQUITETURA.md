@@ -171,7 +171,7 @@ ea/
 ```
 
 
-### E3 dentro do record — ENTREGUE (v2.44, 2026-09-11), layout confirmado (posicao zerada)
+### E3 dentro do record — ENTREGUE (v2.45, 2026-09-11), structs confirmadas contra exemplo oficial da Nelogica
 
 Reconciliacao de posicao EA x corretora: `GetPositionV2` (struct fixa,
 nao a `GetPosition` legada -- ver por que abaixo), compara com o
@@ -216,6 +216,24 @@ continua com o teste de plausibilidade (quantidade dentro de um limite
 razoavel; com quantidade != 0, lado tem que ser 1 ou 2) e o
 `ReconciliadorPosicao` NUNCA age sobre um resultado implausivel -- so'
 alarma e pede conferencia manual no Profit.
+
+**Confirmado byte-a-byte contra o exemplo oficial da Nelogica**
+(`profitTypes.py` + `profit_dll.py`, recebidos do operador em
+2026-09-11): as tres structs (`TConnectorAccountIdentifier`,
+`TConnectorAssetIdentifier`, `TConnectorTradingAccountPosition`) sao
+IDENTICAS, campo a campo e tipo a tipo, ao que a Nelogica usa no proprio
+exemplo. Um bug real apareceu nessa comparacao: os campos `Byte` do
+Delphi (Version, OpenSide, FeedType, PositionType) sao SEM SINAL --
+`c_ubyte`, e eu tinha usado `c_byte` (com sinal). O byte 0xc8 lido as
+20:00 e' 200 sem sinal, nao -56 -- a conclusao nao mudou (200 tambem
+esta' fora de {0,1,2}), mas o tipo estava errado e importaria para uma
+posicao aberta de verdade. Corrigido.
+
+Achados de bonus no exemplo oficial, registrados para o futuro:
+`TConnectorZeroPosition` (zeragem via struct V2, complementa o
+`SendZeroPositionAtMarket` legado que ja' usamos) e `TSystemHealthState`
+(`Responsive=0`, `Frozen=1` -- o watchdog da DLL 4.0.0.41, candidato a
+um health-check futuro do record).
 
 A trava e' a MESMA do E2 (`exigir_simulador`, reaproveitada): so' passa
 se a DLL anunciou a conta nesta sessao e o nome da corretora contem

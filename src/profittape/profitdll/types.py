@@ -8,7 +8,7 @@ dado errado.
 
 from __future__ import annotations
 
-from ctypes import Structure, c_byte, c_double, c_int, c_int32, c_int64, c_wchar_p
+from ctypes import Structure, c_double, c_int, c_int32, c_int64, c_ubyte, c_wchar_p
 
 
 class TAssetIDRec(Structure):
@@ -28,21 +28,24 @@ class TAssetIDRec(Structure):
 # ---------------------------------------------------------------------------
 # Familia V2 (structs), usada so' por GetPositionV2 (E3, 2026-09-11).
 #
-# NAO VERIFICADO CONTRA A DLL REAL -- construido a partir do manual
-# (Manual_ProfitDLL_pt_br.md, secoes "TConnectorAccountIdentifier",
-# "TConnectorAssetIdentifier", "TConnectorTradingAccountPosition",
-# "GetPositionV2"), no ambiente Linux deste sandbox, sem acesso a DLL real
-# para testar layout de bytes byte a byte. Alinhamento assumido NATURAL
-# (ctypes default, sem _pack_), que e' o padrao de record Delphi nao
-# marcado como `packed` -- o manual nao diz `packed`, entao esta e' a
-# leitura mais provavel, mas fica registrada como suposicao.
+# CONFIRMADO CONTRA `profitTypes.py` E `profit_dll.py`, exemplos oficiais
+# da Nelogica (recebidos do operador em 2026-09-11) -- campo a campo,
+# tipo a tipo, identico. Antes disso, tinha sido reconstruido so' a partir
+# do texto do manual (Manual_ProfitDLL_pt_br.md), sem acesso a DLL real
+# para conferir; a 1a consulta real (2026-09-11, 20:00) veio com
+# `open_side` fora do esperado, e a comparacao com o exemplo oficial
+# revelou a causa: os campos `Byte` do Delphi (Version, OpenSide,
+# FeedType, PositionType) sao SEM SINAL -- `c_ubyte`, nao `c_byte`. O byte
+# lido (0xc8) e' 200 sem sinal, nao -56; a leitura errada nao mudava a
+# conclusao (200 tambem esta' fora de {0,1,2}), mas o tipo estava errado
+# e importaria para uma posicao aberta de verdade.
 #
-# Por isso `consultar_posicao()` (client.py) FAZ um teste de sanidade nos
-# valores lidos (lado em {0,1,2}, quantidade num intervalo razoavel) antes
-# de qualquer decisao de reconciliacao -- se o layout estiver errado, os
-# numeros tendem a vir absurdos, e a checagem BARRA a acao em vez de agir
-# sobre lixo. Primeira consulta real deve ser so' leitura (sem auto-zerar)
-# para validar contra o que aparece no Profit.
+# Por isso `consultar_posicao()` (client.py) ainda FAZ um teste de
+# sanidade nos valores lidos (lado em {1,2} quando ha' posicao aberta,
+# quantidade num intervalo razoavel) antes de qualquer decisao de
+# reconciliacao -- confirmado para posicao ZERADA; posicao ABERTA
+# (open_side realmente valendo 1 ou 2) ainda nao foi testada contra a
+# DLL real.
 # ---------------------------------------------------------------------------
 class TConnectorAccountIdentifier(Structure):
     """BrokerID e' Integer (nao string) -- diferente do par (corretora,
@@ -50,7 +53,7 @@ class TConnectorAccountIdentifier(Structure):
     int(corretora) na hora de preencher."""
 
     _fields_ = (
-        ("version", c_byte),
+        ("version", c_ubyte),
         ("broker_id", c_int32),
         ("account_id", c_wchar_p),
         ("sub_account_id", c_wchar_p),
@@ -60,10 +63,10 @@ class TConnectorAccountIdentifier(Structure):
 
 class TConnectorAssetIdentifier(Structure):
     _fields_ = (
-        ("version", c_byte),
+        ("version", c_ubyte),
         ("ticker", c_wchar_p),
         ("exchange", c_wchar_p),
-        ("feed_type", c_byte),
+        ("feed_type", c_ubyte),
     )
 
 
@@ -77,12 +80,12 @@ class TConnectorTradingAccountPosition(Structure):
     """
 
     _fields_ = (
-        ("version", c_byte),
+        ("version", c_ubyte),
         ("account_id", TConnectorAccountIdentifier),
         ("asset_id", TConnectorAssetIdentifier),
         ("open_quantity", c_int64),
         ("open_average_price", c_double),
-        ("open_side", c_byte),               # 0=desconhecida 1=comprada 2=vendida
+        ("open_side", c_ubyte),               # 0=desconhecida 1=comprada 2=vendida
         ("daily_average_sell_price", c_double),
         ("daily_sell_quantity", c_int64),
         ("daily_average_buy_price", c_double),
@@ -96,6 +99,6 @@ class TConnectorTradingAccountPosition(Structure):
         ("daily_quantity_provision", c_int64),
         ("daily_quantity", c_int64),
         ("daily_quantity_available", c_int64),
-        ("position_type", c_byte),            # ENTRADA (ver docstring)
+        ("position_type", c_ubyte),            # ENTRADA (ver docstring)
         ("event_id", c_int64),
     )
