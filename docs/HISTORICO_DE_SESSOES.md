@@ -1377,3 +1377,21 @@ vale checar essa configuracao no Profit antes de mais uma rodada.
 **Pendente (Diego)**: rodar o E2 de novo com
 `--ordem-teste-ticker WINV26` (ou o contrato vigente na data) num
 horario liquido.
+
+### Continuacao (2026-09-11) — E2 FECHADO: resultado=ok na DLL real (v2.41)
+
+- Rodou com `--ordem-teste-ticker WINV26`, 12:30. `resultado=ok`.
+  Esteira real: compra `ClientCreated` (x2, "Enviando ordem ao
+  HadesProxy" / "Enviado ao servidor de ordens.") -> `HadesCreated`
+  ("Criação") -> `Filled` a 189370,0. Latencia: 19,6 ms ate' o 1o
+  callback, 72,6 ms ate' o fill. Zeragem: mesma esteira, fill a
+  189365,0 em 62,5 ms. Zero contratos em aberto no fim. Operacao
+  visivel no grafico do Profit -- os dois canais (log e Profit)
+  concordam.
+- A logica de `OrdemDeTeste` ja' era robusta a esteira (confere
+  `executada >= qtd`, nao faz match de string) -- nao precisou
+  mudar. A FAKE estava desatualizada (simulava so' Accepted ->
+  Filled); atualizada para a esteira real, para os testes continuarem
+  representativos. 661 testes, ruff e mypy limpos.
+- **E2 fechado.** Latencia do simulador (fila vazia) e' otimista, nao
+  e' a borda real de mercado -- isso continua para o E3/forward.

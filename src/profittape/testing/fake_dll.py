@@ -84,7 +84,7 @@ class FakeProfitDLL:
         # ticker (medido 2026-09-11).
         self._hist_primeira_ja_vista: set[str] = set()
         self._TRUNCA_N = max(1, eventos_por_ativo // 10)
-        self._ultima_data_offer = "01/01/1970 00:00:00.000"   # buffer "obsoleto" inicial
+        self._ultima_data_offer = "01/01/1970 00:00:00.000"  # buffer "obsoleto" inicial
         self._parar = threading.Event()
         self.finalizado = False
 
@@ -94,8 +94,14 @@ class FakeProfitDLL:
     ):
         self.modo_init = "market"
         self._cb = {
-            "state": state, "trade": trade, "daily": daily, "price": price,
-            "offer": offer, "hist": hist, "prog": prog, "tiny": tiny,
+            "state": state,
+            "trade": trade,
+            "daily": daily,
+            "price": price,
+            "offer": offer,
+            "hist": hist,
+            "prog": prog,
+            "tiny": tiny,
         }
         t = threading.Thread(target=self._login_assincrono, daemon=True)
         t.start()
@@ -104,7 +110,7 @@ class FakeProfitDLL:
 
     def _login_assincrono(self) -> None:
         time.sleep(self.atraso_login_s)
-        self._cb["state"](0, 0)   # login ok
+        self._cb["state"](0, 0)  # login ok
         if self.modo_init == "login":
             # Sequencia REAL observada no teste A de 08/09: a corretora
             # (tipo=1) passa por 1,2,4 e chega em 5 (BROKER_CONNECTED)
@@ -116,11 +122,11 @@ class FakeProfitDLL:
             self._cb["state"](1, 1)
             self._cb["state"](1, 2)
         time.sleep(self.atraso_login_s)
-        self._cb["state"](2, 4)   # market data conectado
+        self._cb["state"](2, 4)  # market data conectado
         if self.modo_init == "login":
             time.sleep(self.atraso_login_s)
             self._cb["state"](1, 4)
-            self._cb["state"](1, 5)   # corretora pronta -- so' agora GetAccount() vale
+            self._cb["state"](1, 5)  # corretora pronta -- so' agora GetAccount() vale
         self.roteamento_pronto = self.modo_init == "login"
 
     def GetAccount(self) -> int:
@@ -148,15 +154,94 @@ class FakeProfitDLL:
             ticker = str(args[3] if nome != "SendZeroPositionAtMarket" else args[2])
 
             def _emitir() -> None:
-                time.sleep(self.atraso_fill_s / 2)
-                cb(_ativo(ticker, "F"), corretora, 1, 0, 1, lado, 0.0, 0.0, 0.0,
-                   oid, "Market", conta, "TITULAR", f"CL{oid}", "Accepted",
-                   "01/01/2026 10:00:00", "")
+                # Esteira observada no E2 real, 2026-09-11, 12:30, ordem
+                # 26091112112953: ClientCreated (x2, texto diferente) ->
+                # HadesCreated -> Filled, 20-70 ms no simulador. A logica
+                # de OrdemDeTeste olha `executada >= qtd`, nao faz match
+                # de string -- ja' era robusta a isso; a fake que estava
+                # desatualizada (simulava so' Accepted -> Filled).
+                passo = self.atraso_fill_s / 4
+                time.sleep(passo)
+                cb(
+                    _ativo(ticker, "F"),
+                    corretora,
+                    1,
+                    0,
+                    1,
+                    lado,
+                    0.0,
+                    0.0,
+                    0.0,
+                    oid,
+                    "Market",
+                    conta,
+                    "TITULAR",
+                    f"CL{oid}",
+                    "ClientCreated",
+                    "01/01/2026 10:00:00",
+                    "Enviando ordem ao HadesProxy",
+                )
+                time.sleep(passo)
+                cb(
+                    _ativo(ticker, "F"),
+                    corretora,
+                    1,
+                    0,
+                    1,
+                    lado,
+                    0.0,
+                    0.0,
+                    0.0,
+                    oid,
+                    "Market",
+                    conta,
+                    "TITULAR",
+                    f"CL{oid}",
+                    "ClientCreated",
+                    "01/01/2026 10:00:00",
+                    "Enviado ao servidor de ordens.",
+                )
+                time.sleep(passo)
+                cb(
+                    _ativo(ticker, "F"),
+                    corretora,
+                    1,
+                    0,
+                    1,
+                    lado,
+                    0.0,
+                    0.0,
+                    0.0,
+                    oid,
+                    "Market",
+                    conta,
+                    "TITULAR",
+                    f"CL{oid}",
+                    "HadesCreated",
+                    "01/01/2026 10:00:00",
+                    "Criação",
+                )
                 if self.preenche_ordens:
-                    time.sleep(self.atraso_fill_s / 2)
-                    cb(_ativo(ticker, "F"), corretora, 1, 1, 0, lado, self.preco_fill,
-                       0.0, self.preco_fill, oid, "Market", conta, "TITULAR",
-                       f"CL{oid}", "Filled", "01/01/2026 10:00:00", "")
+                    time.sleep(passo)
+                    cb(
+                        _ativo(ticker, "F"),
+                        corretora,
+                        1,
+                        1,
+                        0,
+                        lado,
+                        self.preco_fill,
+                        0.0,
+                        self.preco_fill,
+                        oid,
+                        "Market",
+                        conta,
+                        "TITULAR",
+                        f"CL{oid}",
+                        "Filled",
+                        "01/01/2026 10:00:00",
+                        "",
+                    )
 
             t = threading.Thread(target=_emitir, daemon=True)
             t.start()
@@ -182,8 +267,21 @@ class FakeProfitDLL:
         return object.__getattribute__(self, nome)
 
     def DLLInitializeLogin(
-        self, key, user, password, state, hist_ordem, ordem_mudanca, account,
-        trade, daily, price, offer, hist, prog, tiny,
+        self,
+        key,
+        user,
+        password,
+        state,
+        hist_ordem,
+        ordem_mudanca,
+        account,
+        trade,
+        daily,
+        price,
+        offer,
+        hist,
+        prog,
+        tiny,
     ):
         """
         Mesma ordem de argumentos do manual/bindings: state, historico de
@@ -195,10 +293,17 @@ class FakeProfitDLL:
             raise AttributeError("DLLInitializeLogin")
         self.modo_init = "login"
         self._cb = {
-            "state": state, "hist_ordem": hist_ordem,
-            "ordem_mudanca": ordem_mudanca, "account": account,
-            "trade": trade, "daily": daily, "price": price,
-            "offer": offer, "hist": hist, "prog": prog, "tiny": tiny,
+            "state": state,
+            "hist_ordem": hist_ordem,
+            "ordem_mudanca": ordem_mudanca,
+            "account": account,
+            "trade": trade,
+            "daily": daily,
+            "price": price,
+            "offer": offer,
+            "hist": hist,
+            "prog": prog,
+            "tiny": tiny,
         }
         t = threading.Thread(target=self._login_assincrono, daemon=True)
         t.start()
@@ -284,8 +389,11 @@ class FakeProfitDLL:
         # ate' o priming existir.
         primeira_chamada = ticker not in self._hist_primeira_ja_vista
         self._hist_primeira_ja_vista.add(ticker)
-        n_eventos = min(self._TRUNCA_N, self.eventos_por_ativo) if primeira_chamada \
+        n_eventos = (
+            min(self._TRUNCA_N, self.eventos_por_ativo)
+            if primeira_chamada
             else self.eventos_por_ativo
+        )
         indice_inicial = self.eventos_por_ativo - n_eventos if primeira_chamada else 0
 
         base = datetime.strptime(ini.split(" ")[0], "%d/%m/%Y").replace(hour=10)
@@ -298,12 +406,18 @@ class FakeProfitDLL:
             momento = base + timedelta(milliseconds=i * 250)
             data = momento.strftime("%d/%m/%Y %H:%M:%S.") + f"{momento.microsecond // 1000:03d}"
             preco += (self.rng.random() - 0.5) * 0.05
-            tt = self.rng.choices([2, 3, 13, 4, 1, 32],
-                                  weights=[36, 36, 24, 2, 1, 1])[0]
+            tt = self.rng.choices([2, 3, 13, 4, 1, 32], weights=[36, 36, 24, 2, 1, 1])[0]
             qtd = self.rng.choice([100, 200, 300, 1000])
             self._cb["hist"](
-                ativo, data, i + 1, preco, preco * qtd, qtd,
-                self.rng.randint(1, 400), self.rng.randint(1, 400), tt,
+                ativo,
+                data,
+                i + 1,
+                preco,
+                preco * qtd,
+                qtd,
+                self.rng.randint(1, 400),
+                self.rng.randint(1, 400),
+                tt,
             )
             if self.intervalo_s:
                 time.sleep(self.intervalo_s)
@@ -329,7 +443,8 @@ class FakeProfitDLL:
     def _iniciar(self, ticker: str, bolsa: str, tipo: str) -> None:
         self._subscritos.append((ticker, bolsa, tipo))
         t = threading.Thread(
-            target=self._com_diagnostico, args=(self._emitir, ticker, bolsa, tipo),
+            target=self._com_diagnostico,
+            args=(self._emitir, ticker, bolsa, tipo),
             daemon=True,
         )
         t.start()
@@ -369,12 +484,19 @@ class FakeProfitDLL:
                 # Mistura proposital calcada no pregao real medido: agressao
                 # dominante, ~25% de RLP (13), leilao, cross e um UNKNOWN (32)
                 # raro. O pipeline preserva a distincao ate o disco.
-                tt = self.rng.choices([2, 3, 13, 4, 1, 32],
-                                      weights=[36, 36, 24, 2, 1, 1])[0]
+                tt = self.rng.choices([2, 3, 13, 4, 1, 32], weights=[36, 36, 24, 2, 1, 1])[0]
                 qtd = self.rng.choice([100, 200, 300, 1000, 5000])
                 self._cb["trade"](
-                    ativo, data, i + 1, preco, preco * qtd, qtd,
-                    self.rng.randint(1, 400), self.rng.randint(1, 400), tt, b"\x00",
+                    ativo,
+                    data,
+                    i + 1,
+                    preco,
+                    preco * qtd,
+                    qtd,
+                    self.rng.randint(1, 400),
+                    self.rng.randint(1, 400),
+                    tt,
+                    b"\x00",
                 )
             elif tipo == "offer":
                 # Fidelidade ao incidente real: o slot "offer" do init NUNCA e'
@@ -389,22 +511,38 @@ class FakeProfitDLL:
                 # (nao nulo!) — nesse caso mandamos uma data-lixo plausivel
                 # (de um evento anterior) para provar que o cliente ignora
                 # pwcDate quando has_date=False, em vez de confiar nela.
-                tem_data = self.rng.random() < 0.05    # ~5%: so' o snapshot inicial
+                tem_data = self.rng.random() < 0.05  # ~5%: so' o snapshot inicial
                 data_enviada = data if tem_data else self._ultima_data_offer
                 self._ultima_data_offer = data
                 destino(
-                    ativo, self.rng.choice([0, 1, 2]), self.rng.randint(0, 9),
-                    self.rng.choice([0, 1]), self.rng.choice([100, 500, 1000]),
-                    self.rng.randint(1, 400), 10_000_000 + i, preco,
-                    b"\x01", b"\x01",
+                    ativo,
+                    self.rng.choice([0, 1, 2]),
+                    self.rng.randint(0, 9),
+                    self.rng.choice([0, 1]),
+                    self.rng.choice([100, 500, 1000]),
+                    self.rng.randint(1, 400),
+                    10_000_000 + i,
+                    preco,
+                    b"\x01",
+                    b"\x01",
                     b"\x01" if tem_data else b"\x00",
-                    b"\x01", b"\x01", data_enviada, None, None,
+                    b"\x01",
+                    b"\x01",
+                    data_enviada,
+                    None,
+                    None,
                 )
             else:
                 self._cb["price"](
-                    ativo, self.rng.choice([0, 1, 2]), self.rng.randint(0, 9),
-                    self.rng.choice([0, 1]), self.rng.choice([100, 500, 1000]),
-                    self.rng.randint(1, 20), preco, None, None,
+                    ativo,
+                    self.rng.choice([0, 1, 2]),
+                    self.rng.randint(0, 9),
+                    self.rng.choice([0, 1]),
+                    self.rng.choice([100, 500, 1000]),
+                    self.rng.randint(1, 20),
+                    preco,
+                    None,
+                    None,
                 )
 
             if self.intervalo_s:

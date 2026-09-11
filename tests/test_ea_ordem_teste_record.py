@@ -113,8 +113,9 @@ def test_fluxo_completo_compra_fill_zeragem_fill() -> None:
             "SendMarketBuyOrder",
             "SendZeroPositionAtMarket",
         ]
-        assert r["status_compra"] == ["Accepted", "Filled"]
-        assert r["status_zeragem"] == ["Accepted", "Filled"]
+        # esteira real (2026-09-11, 12:30): ClientCreated x2, HadesCreated, Filled
+        assert r["status_compra"] == ["ClientCreated", "ClientCreated", "HadesCreated", "Filled"]
+        assert r["status_zeragem"] == ["ClientCreated", "ClientCreated", "HadesCreated", "Filled"]
         assert r["preco_medio_compra"] == 141000.0
         assert r["latencia_primeiro_callback_ms"] is not None
         assert r["latencia_fill_compra_ms"] >= r["latencia_primeiro_callback_ms"]
