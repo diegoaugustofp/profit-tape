@@ -171,7 +171,7 @@ ea/
 ```
 
 
-### E3 dentro do record — ENTREGUE (v2.42, 2026-09-11), NAO VERIFICADO contra a DLL real
+### E3 dentro do record — ENTREGUE (v2.44, 2026-09-11), layout confirmado (posicao zerada)
 
 Reconciliacao de posicao EA x corretora: `GetPositionV2` (struct fixa,
 nao a `GetPosition` legada -- ver por que abaixo), compara com o
@@ -190,29 +190,32 @@ a V2 e' struct FIXA. O proprio manual marca a legada como obsoleta em
 favor da V2. Aqui a struct e' a escolha mais segura, nao a mais
 arriscada.
 
-**NAO VERIFICADO CONTRA A DLL REAL.** As structs
-(`TConnectorAccountIdentifier`, `TConnectorAssetIdentifier`,
-`TConnectorTradingAccountPosition`, em `profitdll/types.py`) foram
-construidas a partir do manual, num sandbox Linux sem acesso a DLL
-real -- alinhamento assumido NATURAL (ctypes default, sem `_pack_`),
-que e' o padrao de record Delphi nao marcado `packed`. Os offsets
-calculados pelo ctypes sao internamente consistentes (8 bytes,
-compativel com record Delphi 64-bit nao-packed), mas isso so' confirma
-coerencia interna -- nao confirma correspondencia com a DLL real.
+**LAYOUT CONFIRMADO CONTRA A DLL REAL, para posicao ZERADA** (medido
+2026-09-11, 20:00, apos duas rodadas). A 1a consulta real veio
+`plausivel=False` (`open_side=-56`, impossivel) -- a trava funcionou,
+NADA foi zerado. Em vez de tentar um segundo palpite de alinhamento
+(cogitado: `_pack_=1` -- mas o manual usa `packed record` explicitamente
+em OUTRAS structs, entao a ausencia da palavra aqui nao e' erro de
+extracao), foi acrescentado um dump hexadecimal da struct inteira
+(`PosicaoConsultada.bruto_hex`) e decodificado byte a byte. Achado: os
+precos e quantidades diarias do E2 de hoje (compra 189370, venda 189365,
+1 contrato cada) apareceram EXATOS nos offsets que o layout assumido
+previa -- confirma que a struct inteira (entrada e saida) esta' correta.
+O unico byte "errado" era `open_side` (veio 0xc8=200), e so' porque a
+posicao estava ZERADA: a DLL nao escreve um valor limpo ali quando nao
+ha' posicao aberta (lado nao tem sentido para quantidade zero). Nao era
+bug de layout -- era o teste de plausibilidade rigido demais.
 
-Por isso `consultar_posicao()` faz um teste de PLAUSIBILIDADE: se
-`open_side` vier fora de {0,1,2} ou a quantidade for absurda, o
-resultado sai `plausivel=False` e o `ReconciliadorPosicao` NUNCA age
-sobre isso (nao zera, so' alarma `implausivel` e pede conferencia
-manual no Profit). Um layout de bytes errado tende a devolver lixo; agir
-sobre lixo e' pior que nao agir.
+Corrigido: `open_side` so' e' validado quando `open_quantity != 0`. Com
+quantidade zero, qualquer valor de lado e' aceito e o sinal sai 0.
 
-**Antes da primeira consulta real**: rodar so' leitura (esperado = a
-posicao que voce sabe que tem, conferida no Profit antes), NÃO um
-horario onde a zeragem automatica poderia disparar sobre um resultado
-mal lido. Se `resultado=bate` e os numeros (quantidade, preco_medio)
-baterem com o que aparece no Profit, a struct esta' certa. So' depois
-disso confiar na zeragem automatica.
+**AINDA NAO CONFIRMADO com posicao ABERTA** (`open_quantity != 0`,
+`open_side` precisando valer 1 ou 2 de verdade) -- so' um teste com
+posicao real aberta confirma essa parte. Ate' la', `consultar_posicao()`
+continua com o teste de plausibilidade (quantidade dentro de um limite
+razoavel; com quantidade != 0, lado tem que ser 1 ou 2) e o
+`ReconciliadorPosicao` NUNCA age sobre um resultado implausivel -- so'
+alarma e pede conferencia manual no Profit.
 
 A trava e' a MESMA do E2 (`exigir_simulador`, reaproveitada): so' passa
 se a DLL anunciou a conta nesta sessao e o nome da corretora contem

@@ -92,6 +92,54 @@ def test_encontrado_bate_com_esperado_nao_zero_e_nao_zera() -> None:
         c.disconnect()
 
 
+def test_zerado_com_lado_sujo_e_plausivel() -> None:
+    """Medido 2026-09-11, 20:00: com posicao flat de verdade, a DLL deixa
+    open_side sem valor limpo (veio 0xc8=200) -- o RESTO da struct (precos
+    e quantidades diarias do E2 de hoje) veio exato, confirmando que o
+    layout estava certo. Lado nao tem sentido para quantidade zero."""
+    fake = FakeProfitDLL(eventos_por_ativo=0)
+    c = _client(fake)
+    original = fake.GetPositionV2
+
+    def espiao(ptr: object) -> int:
+        ret = original(ptr)
+        ptr.contents.open_quantity = 0  # type: ignore[attr-defined]
+        ptr.contents.open_side = 200  # type: ignore[attr-defined] -- o 0xc8 medido
+        return ret
+
+    fake.GetPositionV2 = espiao  # type: ignore[method-assign]
+    try:
+        r = ReconciliadorPosicao(c, RoteamentoConfig(), horario_hhmm="00:00", ticker="WINV26")
+        _rodar(r)
+        assert r.rel.resultado == "bate" and r.rel.plausivel is True
+        assert r.rel.encontrado == 0
+    finally:
+        c.disconnect()
+
+
+def test_quantidade_nao_zero_com_lado_invalido_continua_implausivel() -> None:
+    """Diferente do caso zerado: com quantidade REAL aberta, o lado tem
+    que fazer sentido (1 ou 2). Combinacao impossivel continua barrada."""
+    fake = FakeProfitDLL(eventos_por_ativo=0)
+    c = _client(fake)
+    original = fake.GetPositionV2
+
+    def espiao(ptr: object) -> int:
+        ret = original(ptr)
+        ptr.contents.open_quantity = 3  # type: ignore[attr-defined]
+        ptr.contents.open_side = 0  # type: ignore[attr-defined] -- "desconhecida" com qtd != 0
+        return ret
+
+    fake.GetPositionV2 = espiao  # type: ignore[method-assign]
+    try:
+        r = ReconciliadorPosicao(c, RoteamentoConfig(), horario_hhmm="00:00", ticker="WINV26")
+        _rodar(r)
+        assert r.rel.resultado == "implausivel"
+        assert fake.ordens_enviadas == []
+    finally:
+        c.disconnect()
+
+
 def test_resultado_implausivel_nao_aciona_zeragem() -> None:
     """Layout de bytes suspeito (lado fora de 0/1/2) -- NUNCA agir sobre
     isto, so' alarmar e pedir conferencia manual."""

@@ -443,11 +443,22 @@ class ProfitClient:
         liquida real, inclui o que veio carregado de pregoes anteriores;
         WIN nao e' day-trade-only pela bolsa, so' pela pratica).
 
-        NAO VERIFICADO CONTRA A DLL REAL (ver nota em profitdll/types.py).
-        Por isso o resultado sai com `plausivel=False` se `open_side` nao
-        estiver em {0,1,2} ou se `abs(open_quantity)` passar de
-        `limite_quantidade_plausivel` -- sinal de layout de bytes errado,
-        nao de posicao real. Quem chama NUNCA deve agir (zerar, alarmar
+        LAYOUT CONFIRMADO CONTRA A DLL REAL para posicao ZERADA (medido
+        2026-09-11, 20:00): os precos e quantidades diarias do E2 de hoje
+        (compra 189370, venda 189365, 1 contrato cada) apareceram exatos
+        no dump bruto da struct, nos offsets calculados por
+        `profitdll/types.py` -- confirma que o layout inteiro (entrada e
+        saida) esta' certo. AINDA NAO CONFIRMADO com posicao ABERTA
+        (open_quantity != 0): nesse caso, `open_side` teria que valer
+        1 (comprada) ou 2 (vendida) de verdade, e isso so' um teste com
+        posicao real aberta confirma.
+
+        `open_side` NAO E' VALIDADO quando `open_quantity == 0`: medido
+        que a DLL deixa esse byte sem valor limpo quando nao ha posicao
+        (lado nao tem sentido para quantidade zero) -- veio 0xc8 (200)
+        no dump, fora de {0,1,2}, com o resto da struct correto. Com
+        quantidade != 0, `open_side` fora de {1,2} continua marcando
+        `plausivel=False` -- quem chama NUNCA deve agir (zerar, alarmar
         como divergencia real) sobre um resultado implausivel; so' logar
         e pedir conferencia manual no Profit.
         """
@@ -470,9 +481,18 @@ class ProfitClient:
         bruto = string_at(addressof(pos), sizeof(pos))
         bruto_hex = " ".join(f"{byte:02x}" for byte in bruto)
         limite = 1000  # WIN/WDO: um erro de layout tende a estourar isto por ordens de grandeza
-        plausivel = (ret >= 0 and pos.open_side in (0, 1, 2)
-                    and abs(pos.open_quantity) <= limite)
-        sinal = {0: 0, 1: 1, 2: -1}.get(pos.open_side, 0)
+        # `open_side` NAO E' VALIDADO quando open_quantity == 0 -- medido
+        # 2026-09-11, 20:00: com posicao flat (comprou 1 a 189370, vendeu 1
+        # a 189365 no E2 -- os DOIS precos e as duas quantidades diarias
+        # apareceram exatos no dump bruto, confirmando que o RESTO da
+        # struct estava correto), open_side veio 0xc8 (200), fora de
+        # {0,1,2}. A DLL simplesmente nao escreve um valor limpo ali
+        # quando nao ha posicao aberta -- lado nao tem sentido para
+        # quantidade zero. O layout da struct estava certo o tempo todo;
+        # a checagem de plausibilidade estava rigida demais.
+        plausivel = (ret >= 0 and abs(pos.open_quantity) <= limite
+                    and (pos.open_quantity == 0 or pos.open_side in (1, 2)))
+        sinal = {0: 0, 1: 1, 2: -1}.get(pos.open_side, 0) if pos.open_quantity != 0 else 0
         return PosicaoConsultada(
             retorno=ret, ticker=ticker, corretora=int(corretora), conta=conta,
             quantidade_liquida=sinal * int(pos.open_quantity),

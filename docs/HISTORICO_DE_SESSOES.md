@@ -1451,3 +1451,25 @@ Vai vir `implausivel` de novo (esperado -- ainda nao corrigi o layout).
 Me manda o log `ea.reconciliacao.dump_bruto_para_depuracao` inteiro
 (bruto_hex). A partir dele eu reconstruo o offset real dos campos e
 corrijo a struct definitivamente -- sem mais um segundo palpite.
+
+### Continuacao (2026-09-11, noite) — layout confirmado: era a plausibilidade, nao a struct (v2.44)
+
+- Decodificado o dump bruto da consulta das 20:00, byte a byte (blocos
+  de 8, como int64/double). Achado decisivo: offsets 96/104/112/120
+  reproduziram EXATOS os precos e quantidades do E2 de hoje (189365.0/1,
+  189370.0/1) -- e offset 200 ecoou position_type=2, que EU tinha
+  escrito. Toda a struct (entrada e saida) estava correta desde o
+  inicio; so' `open_side` (offset 88) veio 0xc8=200, fora de {0,1,2},
+  e so' porque a posicao estava ZERADA -- lado nao tem sentido para
+  quantidade zero, e a DLL nao escreve nada limpo ali nesse caso.
+- Corrigido: `open_side` so' e' validado quando `open_quantity != 0`.
+  Docstring de `consultar_posicao` atualizada para refletir o que esta'
+  confirmado (posicao zerada) e o que ainda nao (posicao aberta).
+- 2 testes novos (zerado com lado sujo = plausivel; quantidade != 0 com
+  lado invalido = continua implausivel). 674 testes, ruff e mypy
+  limpos.
+
+**Pendente (Diego)**: rodar `--reconciliar-em` de novo. Deve vir
+`resultado=bate` desta vez (posicao zerada, layout confirmado). O teste
+com posicao ABERTA (comprar e reconciliar sem zerar antes) ainda fica
+para uma proxima rodada, quando fizer sentido.
