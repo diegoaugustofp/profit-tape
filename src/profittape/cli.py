@@ -1356,6 +1356,57 @@ def fase2_score(
 
 
 @app.command()
+def bollinger_direcao(
+    symbol: str = typer.Argument("WINFUT"),
+    curated: Path = typer.Option(Path("data/curated"), "--curated"),
+    dias: str | None = typer.Option(None, "--dias", help="Lista 2026-09-01,2026-09-02"),
+    saida: Path = typer.Option(Path("data/research/bollinger_direcao"), "--saida"),
+    seed: int = typer.Option(0, "--seed"),
+    log_level: str = typer.Option("WARNING", "--log-level"),
+) -> None:
+    """
+    Scalp de Bollinger: conteudo direcional do sinal (5.6), SEM regra de
+    saida. Retorno assinado e MFE/MAE em 1/4/16 barras, sinal x controle
+    (pareado por faixa de 30 min). Responde: vale desenhar uma variante de
+    saida, ou o sinal nao tem direcao nenhuma? Categoria features.
+    """
+    configurar(log_level)
+    from .features.pipeline import _carregar_dia, _dias_do_symbol
+    from .research import bollinger_replay as br
+    from .research import direcao_sinal as ds
+
+    origem = curated / "trade"
+    pastas = _dias_do_symbol(origem, symbol.strip().upper())
+    if dias:
+        alvo = {d.strip() for d in dias.split(",")}
+        pastas = [p for p in pastas if p.name.split("=", 1)[1] in alvo]
+    if not pastas:
+        raise typer.BadParameter(f"nenhum pregao de {symbol} em {origem}")
+    partes = []
+    for pasta in pastas:
+        dia = pasta.name.split("=", 1)[1]
+        trades = _carregar_dia(pasta, symbol.strip().upper())
+        barras = br.barras_15s_do_tape(trades, dia)
+        if barras.empty:
+            continue
+        partes.append(br.indicadores_e_sinais_do_tape(barras))
+    if not partes:
+        raise typer.BadParameter("nenhuma barra montada")
+    import pandas as pd
+    todas = pd.concat(partes, ignore_index=True)
+    medidas = ds.medir(todas, seed=seed)
+    resumo = ds.resumir(medidas)
+    saida.mkdir(parents=True, exist_ok=True)
+    medidas.to_parquet(saida / "medidas.parquet", index=False)
+    resumo.to_csv(saida / "resumo.csv", index=False)
+    typer.echo("=" * 72)
+    typer.echo(f"CONTEUDO DIRECIONAL DO SINAL — {len(pastas)} pregoes")
+    typer.echo("=" * 72)
+    typer.echo(resumo.to_string(index=False))
+    typer.echo(f"\n  saida: {saida}")
+
+
+@app.command()
 def bollinger_replay(
     symbol: str = typer.Argument("WINFUT"),
     curated: Path = typer.Option(Path("data/curated"), "--curated"),
@@ -1368,21 +1419,29 @@ def bollinger_replay(
     ignorar_circuit_breaker: bool = typer.Option(
         False, "--ignorar-circuit-breaker",
         help="Mede a regra INTEIRA (o circuit breaker fecha o pregao na 3a perda seguida)"),
+    variante: str = typer.Option(
+        "retorno", "--variante",
+        help="retorno (v1: limitada no extremo de t-2) | rompimento (limitada "
+             "no extremo de t-1, fiel a' spec original) | ambas (roda as duas "
+             "e compara lado a lado)"),
     log_level: str = typer.Option("INFO", "--log-level"),
 ) -> None:
     """
-    Scalp de Bollinger v1: replay das tres pernas pelo TAPE (depuracao).
+    Scalp de Bollinger: replay das tres pernas pelo TAPE (depuracao).
 
-    Barras de 15s montadas do tape, regra v1 (docs/BOLLINGER_SCALP.md
-    secao 0), limitada em t, tres pernas, trailing e zeragem executados
-    negocio a negocio. Preenche os dois campos "a medir" da ficha:
-    OPERACOES por pregao e um p1 de depuracao. Nao e' o forward.
+    Barras de 15s montadas do tape, regra da variante escolhida
+    (docs/BOLLINGER_SCALP.md secao 0 e 5.7), limitada em t, tres pernas,
+    trailing e zeragem executados negocio a negocio. Preenche os dois
+    campos "a medir" da ficha: OPERACOES por pregao e um p1 de depuracao.
+    Nao e' o forward.
     """
     configurar(log_level)
     import re
 
     from .research.bollinger_replay import rodar
 
+    if variante not in ("retorno", "rompimento", "ambas"):
+        raise typer.BadParameter("--variante deve ser retorno, rompimento ou ambas")
     mapa: dict[str, Path] | None = None
     if dumps is not None:
         mapa = {}
@@ -1391,13 +1450,37 @@ def bollinger_replay(
             if m:
                 mapa[f"{m.group(1)}-{m.group(2)}-{m.group(3)}"] = f
     lista = [d.strip() for d in dias.split(",")] if dias else None
-    r = rodar(curated, symbol.strip().upper(), saida, mapa, lista,
-              ignorar_circuit_breaker=ignorar_circuit_breaker)
-    res = r["resumo"]
+    variantes = ("retorno", "rompimento") if variante == "ambas" else (variante,)
+    resultados: dict[str, dict[str, Any]] = {}
+    for v in variantes:
+        r = rodar(curated, symbol.strip().upper(), saida / v if variante == "ambas" else saida,
+                  mapa, lista, ignorar_circuit_breaker=ignorar_circuit_breaker,
+                  variante_entrada=v)
+        resultados[v] = r["resumo"]
+        _imprimir_resumo_bollinger_replay(r["resumo"], v, ignorar_circuit_breaker, saida)
+    if variante == "ambas":
+        typer.echo("\n" + "=" * 72)
+        typer.echo("COMPARACAO retorno x rompimento")
+        typer.echo("=" * 72)
+        for v in variantes:
+            res = resultados[v]
+            if "p1" not in res:
+                typer.echo(f"  {v:11} sem operacoes")
+                continue
+            typer.echo(f"  {v:11} p1={res['p1']:.3f} IC95={res['p1_ic95']} "
+                       f"| bruto={res['pnl_bruto_medio_pts']:+.1f} pts/op "
+                       f"IC95={res['pnl_bruto_ic95']} "
+                       f"| custo_max={res['custo_maximo_suportado_pts_por_contrato']:+.1f} "
+                       f"pts/contrato "
+                       f"| {res['operacoes_por_pregao']} op/pregao")
+
+
+def _imprimir_resumo_bollinger_replay(res: dict[str, Any], variante: str,
+                                      ignorar_circuit_breaker: bool, saida: Path) -> None:
     if ignorar_circuit_breaker:
         typer.echo("  [circuit breaker IGNORADO: taxa da regra inteira]")
     typer.echo("=" * 72)
-    typer.echo("SCALP DE BOLLINGER v1 — replay pelo tape (DEPURACAO)")
+    typer.echo(f"SCALP DE BOLLINGER — variante '{variante}' — replay pelo tape (DEPURACAO)")
     typer.echo("=" * 72)
     typer.echo(f"  pregoes {res['pregoes']} | sinais {res['sinais']} | operacoes "
                f"{res['operacoes']} ({res['operacoes_por_pregao']} por pregao) "

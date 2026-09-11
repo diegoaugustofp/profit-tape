@@ -285,18 +285,36 @@ def equivalencia(d: pd.DataFrame, tolerancia: float = 0.5) -> dict[str, Any]:
 # ---------------------------------------------------------------------
 # 4. Regra de entrada consolidada (2026-09-04, os dois lados espelhados)
 # ---------------------------------------------------------------------
+VARIANTES_ENTRADA = ("retorno", "rompimento")
+
+
 def marcar_sinais(d: pd.DataFrame, col_sup: str = "bb_sup_ntsl",
                   col_inf: str = "bb_inf_ntsl",
                   col_est: str = "est_ntsl",
                   usar_estocastico: bool = USAR_ESTOCASTICO_V1,
-                  col_atr: str = "atr_ntsl") -> pd.DataFrame:
+                  col_atr: str = "atr_ntsl",
+                  variante_entrada: str = "retorno") -> pd.DataFrame:
     """
-    Barra t e' a de ENTRADA. Compra:
+    Barra t e' a de ENTRADA. Clausula de sinal (igual nas duas variantes):
         t-2  vermelha (close<open)  e close > banda superior
         t-1  branca   (close>open)  e close > banda superior
              [e estocastico(t-1) < 20 -- so' se usar_estocastico]
-        t    ordem LIMITADA de compra em high(t-2), valida so' em t
-    Venda e' o espelho (banda inferior, [> 80], limitada em low(t-2)).
+    Venda e' o espelho (banda inferior, [> 80]).
+
+    O que MUDA entre variantes e' so' a referencia de preco da limitada
+    (confirmado pelo operador, 2026-09-11 -- fiel a' spec original, que so'
+    descrevia o rompimento para a venda; aqui espelhado para a compra):
+
+        "retorno"     (v1): limitada no extremo de t-2 (a correcao) --
+                       compra em high(t-2), venda em low(t-2).
+        "rompimento"  : limitada no extremo de t-1 (a propria barra de
+                       sinal) -- compra em high(t-1), venda em low(t-1).
+                       E' a entrada de continuacao/breakout.
+
+    O resto (janela, aquecimento, stop = K_ATR x ATR21, geometria de
+    alvo/trailing, cancelamento se nao executar em t) e' IDENTICO nas
+    duas -- so' a variavel em teste muda, para a comparacao ser limpa.
+
     Doji nao e' vermelho nem branco. As tres barras no mesmo dia e no
     mesmo bloco contiguo. Sem entrada nas primeiras AQUECIMENTO_BARRAS
     do pregao nem a partir de HORA_ULTIMA_ENTRADA.
@@ -312,6 +330,9 @@ def marcar_sinais(d: pd.DataFrame, col_sup: str = "bb_sup_ntsl",
     executa como mercado) ou "recuo" (o preco teve que voltar ate' ele).
     Sao dois regimes de preenchimento diferentes e sao contados separados.
     """
+    if variante_entrada not in VARIANTES_ENTRADA:
+        raise ValueError(f"variante_entrada deve ser {VARIANTES_ENTRADA}, "
+                        f"recebi {variante_entrada!r}")
     x = d.copy()
     vermelha = x["close"] < x["open"]
     branca = x["close"] > x["open"]
@@ -347,8 +368,12 @@ def marcar_sinais(d: pd.DataFrame, col_sup: str = "bb_sup_ntsl",
                         & est_v & mesmo_dia & janela).astype(bool)
 
     x["preco_limite"] = np.nan
-    x.loc[x["sinal_compra"], "preco_limite"] = lag(x["high"], 2)[x["sinal_compra"]]
-    x.loc[x["sinal_venda"], "preco_limite"] = lag(x["low"], 2)[x["sinal_venda"]]
+    # "retorno": extremo de t-2 (a correcao). "rompimento": extremo de t-1
+    # (a propria barra de sinal) -- ver docstring.
+    ref_compra = lag(x["high"], 2) if variante_entrada == "retorno" else lag(x["high"], 1)
+    ref_venda = lag(x["low"], 2) if variante_entrada == "retorno" else lag(x["low"], 1)
+    x.loc[x["sinal_compra"], "preco_limite"] = ref_compra[x["sinal_compra"]]
+    x.loc[x["sinal_venda"], "preco_limite"] = ref_venda[x["sinal_venda"]]
 
     sinal = x["sinal_compra"] | x["sinal_venda"]
     atr1 = lag(x[col_atr], 1) if col_atr in x.columns else pd.Series(np.nan, index=x.index)

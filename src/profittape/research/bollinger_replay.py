@@ -121,12 +121,14 @@ def barras_15s_do_tape(
     return b.reset_index(drop=True)
 
 
-def indicadores_e_sinais_do_tape(barras: pd.DataFrame) -> pd.DataFrame:
+def indicadores_e_sinais_do_tape(barras: pd.DataFrame,
+                                 variante_entrada: str = "retorno") -> pd.DataFrame:
     """Indicadores Python (as variantes que BATEM com o Profit: ddof=0,
-    %K lento, SMA do TR) e a regra v1."""
+    %K lento, SMA do TR) e a regra v1 (ou a variante de rompimento)."""
     d = bs.indicadores(barras)
     return bs.marcar_sinais(
-        d, col_sup="bb_sup_ddof0", col_inf="bb_inf_ddof0", col_est="k_lento", col_atr="atr_sma"
+        d, col_sup="bb_sup_ddof0", col_inf="bb_inf_ddof0", col_est="k_lento",
+        col_atr="atr_sma", variante_entrada=variante_entrada
     )
 
 
@@ -510,6 +512,7 @@ def rodar(
     dias: list[str] | None = None,
     ignorar_circuit_breaker: bool = False,
     tipos_ohlc: tuple[int, ...] = TIPOS_OHLC_GRAFICO,
+    variante_entrada: str = "retorno",
 ) -> dict[str, Any]:
     origem = curated / "trade"
     pastas = _dias_do_symbol(origem, symbol)
@@ -527,15 +530,16 @@ def rodar(
         if barras.empty:
             log.warning("bollinger_replay.sem_barras", dia=dia)
             continue
-        sinais = indicadores_e_sinais_do_tape(barras)
+        sinais = indicadores_e_sinais_do_tape(barras, variante_entrada)
         barras_por_dia.append(sinais)
         if dumps and dia in dumps:
             dump, _ = bs.carregar_log(dumps[dia])
-            dump = bs.marcar_sinais(bs.indicadores(dump))
+            dump = bs.marcar_sinais(bs.indicadores(dump), variante_entrada=variante_entrada)
             comparacoes[dia] = {}
             for nome, tipos in CANDIDATOS_OHLC.items():
                 b_c = barras_15s_do_tape(trades, dia, tipos)
-                s_c = indicadores_e_sinais_do_tape(b_c) if not b_c.empty else b_c
+                s_c = (indicadores_e_sinais_do_tape(b_c, variante_entrada)
+                      if not b_c.empty else b_c)
                 comparacoes[dia][nome] = comparar_com_dump(s_c, dump)
         ops = replay_pregao(sinais, trades, dia, ignorar_circuit_breaker=ignorar_circuit_breaker)
         todas_ops.extend(ops)

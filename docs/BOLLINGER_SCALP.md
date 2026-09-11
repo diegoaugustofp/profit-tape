@@ -349,6 +349,39 @@ morto e variantes de saída seriam trials queimados. Hipótese distinta
 registrada para depois: entrada por **rompimento** (a venda original da
 spec: stop na perda da mínima), não por retorno.
 
+## 5.7 Fechamento (2026-09-11): direção do sinal + variante de rompimento
+
+Operador decidiu (2026-09-11, tarde): fechar a v1 (contra, 5.5) e medir
+duas coisas antes de qualquer nova decisão de desenho.
+
+**5.6 — conteúdo direcional** (`profit-tape bollinger-direcao`, categoria
+`features`, zero regra de saída): retorno assinado e MFE/MAE em 1/4/16
+barras a partir do fechamento de t−1 (a última barra do padrão), sinal
+vs. controle pareado por faixa de 30 min. Não decide sozinho — mostra
+se existe alguma coisa para desenhar, e em que horizonte, antes de
+gastar um trial em variante de saída.
+
+**Variante de rompimento** (`--variante rompimento` no `bollinger-replay`,
+ou `ambas` para comparar lado a lado): fiel à spec original, que descrevia
+o rompimento só para a venda — aqui espelhado para a compra (confirmado
+pelo operador). Único ponto que muda frente à v1: a referência de preço
+da limitada.
+
+| | retorno (v1) | rompimento |
+|---|---|---|
+| compra | limitada em `high(t−2)` | limitada em `high(t−1)` |
+| venda | limitada em `low(t−2)` | limitada em `low(t−1)` |
+| resto (janela, aquecimento, stop 0,7×ATR21, geometria de alvo/trailing) | igual | igual |
+
+`marcar_sinais(..., variante_entrada="retorno"|"rompimento")`;
+`ValueError` alto para qualquer outro valor. As duas rodam sobre o
+mesmo período, mesma regra de risco — a única variável isolada é a
+referência de entrada, para a comparação ser limpa.
+
+**Pendente**: rodar as duas ferramentas nos ~30 pregões capturados e
+decidir, com o número na mão, se a direção existe e se o rompimento
+muda o quadro da v1 (contra, 5.5).
+
 ## 6. Dúvidas — fechadas em 2026-09-05, exceto as que o dump responde
 
 Fechadas: TR fora do v1; trailing atrás da máxima favorável, RP1

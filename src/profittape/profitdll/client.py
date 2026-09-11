@@ -398,7 +398,7 @@ class ProfitClient:
                     log.info("profitdll.priming_concluido", ticker=ticker,
                              tentativa=tentativa)
                     return
-                except Exception as exc:  # noqa: BLE001 -- priming e' best-effort
+                except Exception as exc:
                     log.warning("profitdll.priming_falhou", ticker=ticker,
                                 tentativa=tentativa, detalhe=repr(exc))
                     if tentativa < tentativas:

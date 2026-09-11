@@ -292,6 +292,27 @@ def test_venda_e_o_espelho_exato() -> None:
     assert not x["sinal_compra"].any()
 
 
+def test_variante_rompimento_usa_o_extremo_de_t_menos_1() -> None:
+    """'retorno' (v1) usa high/low(t-2, a correcao); 'rompimento' usa
+    high/low(t-1, a propria barra de sinal) -- confirmado pelo operador
+    em 2026-09-11, fiel a' spec original. t3: high(t-2)=high(t-1)=107 no
+    fixture (coincidencia) -> as duas variantes coincidem. t5: high(t-2)
+    da barra 3 = 106, high(t-1) da barra 4 = 104 -- aqui divergem, e essa
+    divergencia e' o que confirma que a variante certa foi lida."""
+    df = _sequencia()
+    x_retorno = marcar_sinais(df, variante_entrada="retorno")
+    x_rompimento = marcar_sinais(df, variante_entrada="rompimento")
+    assert list(x_retorno["sinal_compra"]) == list(x_rompimento["sinal_compra"])
+    assert x_retorno["preco_limite"][3] == x_rompimento["preco_limite"][3] == 107.0
+    assert x_retorno["preco_limite"][5] == 106.0
+    assert x_rompimento["preco_limite"][5] == 104.0
+
+
+def test_variante_invalida_falha_alto() -> None:
+    with pytest.raises(ValueError, match="variante_entrada"):
+        marcar_sinais(_sequencia(), variante_entrada="qualquercoisa")
+
+
 def test_execucao_no_recuo_e_nao_tocada() -> None:
     df = _sequencia()
     df.loc[3, ["open", "low"]] = [108.0, 106.5]   # abre acima do limite, recua ate' ele

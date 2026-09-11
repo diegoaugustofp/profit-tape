@@ -1249,3 +1249,24 @@ de ordens do Profit.
 - **Nao verificado**: se a truncagem e' por ticker (uma vez basta) ou
   por dia (cada dia precisaria de priming). O backfill de 02-03/09 e'
   o teste: se 03/09 vier inteiro sem re-primar, a hipotese se confirma.
+
+### Continuacao (2026-09-11) — fechando a v1: direcao do sinal + rompimento (v2.35)
+
+- Operador fechou a v1 (CONTRA, 5.5) e pediu as duas medicoes que
+  ficaram em aberto: conteudo direcional (5.6) e a variante de
+  rompimento (fiel a' spec original, espelhada para a compra).
+- `research/direcao_sinal.py` + comando `bollinger-direcao`: retorno
+  assinado e MFE/MAE em 1/4/16 barras a partir do fechamento de t-1,
+  sinal x controle pareado por faixa de 30 min (sem reusar a propria
+  barra de sinal como controle). Conferido a mao (retorno, mfe, mae
+  nos dois lados) antes dos testes. 7 testes.
+- `marcar_sinais(..., variante_entrada=)`: "retorno" (v1, extremo de
+  t-2) ou "rompimento" (extremo de t-1, fiel a spec original). So' a
+  referencia de entrada muda; resto identico. `bollinger-replay
+  --variante retorno|rompimento|ambas` (ambas roda as duas e imprime
+  comparacao lado a lado). 3 testes novos.
+- Smoke de ponta a ponta dos dois comandos em curated sintetico. 656
+  testes, ruff e mypy limpos.
+
+**Pendente**: rodar `bollinger-direcao` e `bollinger-replay --variante
+ambas` nos pregoes reais.
