@@ -239,6 +239,18 @@ def executar_por_dia(
             except SubscriptionFailed as exc:
                 log.warning("backfill_dia.assinatura_falhou", ticker=a.ticker,
                             detalhe=str(exc), nota="seguindo mesmo assim")
+        # Priming (2026-09-11): a 1a chamada de historico de cada ticker na
+        # sessao vem truncada -- ver client.primar_historico. Uma chamada
+        # descartada, com a janela do 1o dia pendente, antes de qualquer
+        # dia entrar no laco real.
+        if pendentes:
+            d0 = datetime.strptime(pendentes[0], "%Y-%m-%d")
+            ini0, fim0 = d0.strftime("%d/%m/%Y"), d0.strftime("%d/%m/%Y")
+            for a in cfg.ativos:
+                client.primar_historico(
+                    a.ticker, a.bolsa, ini0, fim0,
+                    lambda c: _aguardar_entrega(c, bus, bus.stats().total_recebido,
+                                               quiesce_s, timeout_dia_s))
         for idx, dia in enumerate(pendentes, 1):
             dia_em_andamento = dia
             d = datetime.strptime(dia, "%Y-%m-%d")
@@ -465,6 +477,18 @@ def executar(
         for a in cfg.ativos:      # exigido antes do GetHistoryTrades (2026-09-10)
             with suppress(SubscriptionFailed):
                 client.subscribe_trades(a.ticker, a.bolsa)
+        # Priming (2026-09-11): ver client.primar_historico. Aqui o pedido
+        # real cobre o periodo inteiro numa chamada so' -- ainda nao
+        # verificado se a truncagem tambem afeta pedidos de VARIOS dias
+        # (so' testamos 1 dia no experimento). Primar do mesmo jeito, com
+        # o primeiro dia do intervalo, e' a aposta mais conservadora.
+        d0 = datetime.strptime(inicio_iso, "%Y-%m-%d")
+        ini0 = fim0 = d0.strftime("%d/%m/%Y")
+        for a in cfg.ativos:
+            client.primar_historico(
+                a.ticker, a.bolsa, ini0, fim0,
+                lambda c: _aguardar_entrega(c, bus, bus.stats().total_recebido,
+                                           quiesce_s, min(timeout_s, 180.0)))
 
         pendentes = list(cfg.ativos)
         for rodada in range(1, tentativas + 1):

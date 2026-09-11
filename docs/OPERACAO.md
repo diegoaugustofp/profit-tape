@@ -820,6 +820,26 @@ do pregao, o client em modo backfill descarta os trades em tempo real.
 Um `progresso 100` em menos de 1 s sai no log como
 `backfill.progresso_100_imediato`: e' a DLL dizendo "vazio", nao timeout.
 
+Terceira camada (v2.33): mesmo assinado e com hora, o backfill AINDA
+vinha vazio -- porque cada tentativa repetia a MESMA chamada, e um
+experimento controlado (duas chamadas identicas seguidas, 2026-09-11)
+mostrou o padrao real: a 1a chamada de historico de um ticker NA SESSAO
+entrega so' a CAUDA do periodo (medido: 102.400 negocios de 17:29 as
+18:31, de um dia com 6,1 milhoes); a 2a chamada, identica, entrega o
+dia INTEIRO (6.148.231 negocios, de 09:03 as 18:31). Nao e' cache: se
+fosse, a 2a viria vazia ou repetida, nao maior.
+
+Correcao: `client.primar_historico` faz essa 1a chamada sozinho, com a
+janela do primeiro dia pedido, e DESCARTA o resultado (nunca chega no
+bus/parquet) -- uma vez por ticker por sessao. So' depois disso o
+backfill entra no laco real. Recusa transitoria durante o priming tenta
+de novo (o mesmo padrao ja' existente para a chamada real). Ainda nao
+verificado: se a truncagem tambem afeta o SEGUNDO dia pedido na mesma
+sessao (so' testamos o 1o); o proximo backfill de 02-03/09 e' o teste
+disso -- se 03/09 vier completo sem re-primar, a hipotese "por ticker,
+nao por dia" se confirma.
+
+
 Desde a v2.31: `client.request_history` acrescenta 09:00:00/18:35:00
 quando a data vem sem hora; o backfill espera `historico_100` e so'
 entao o quiesce; um Ctrl+C remove a particao do dia interrompido

@@ -152,6 +152,17 @@ class ProfitClient:
         # baixa primeiro (progresso sobe ate' 99 e fica) e entrega depois.
         self.progresso_historico: dict[str, int] = {}
         self.historico_100 = threading.Event()
+        # Descarte de PRIMING (2026-09-11): a PRIMEIRA chamada de
+        # GetHistoryTrades para um ticker na sessao vem TRUNCADA -- so' a
+        # cauda do dia. Medido 2x: 1a chamada de 02/09 devolveu 102.400
+        # negocios so' de 17:29 a 18:31; a MESMA chamada repetida devolveu
+        # 6.148.231, de 09:03 a 18:31 (o dia inteiro). `request_history`
+        # faz essa chamada de priming sozinho e a descarta -- ela nunca
+        # chega no bus. `tickers_primados` e' o que evita re-primar.
+        self.tickers_primados: set[str] = set()
+        self._descartar_historico = False
+        self.primeiro_trade_historico: str | None = None
+        self.negocios_historico_ultima_chamada = 0
 
         # Referencias fortes aos callbacks. Sem isto o GC do Python coleta o
         # objeto enquanto a DLL ainda guarda o ponteiro, e o proximo evento
@@ -349,10 +360,53 @@ class ProfitClient:
         fim = _com_hora(fim, HORA_FIM_PREGAO)
         self.historico_100.clear()
         self.progresso_historico.pop(ticker, None)
+        self.primeiro_trade_historico = None
+        self.negocios_historico_ultima_chamada = 0
         check(
             self._dll.GetHistoryTrades(ticker, bolsa, inicio, fim),
             f"GetHistoryTrades {ticker}",
         )
+
+    def primar_historico(self, ticker: str, bolsa: str, inicio: str, fim: str,
+                         esperar_conclusao: Any, tentativas: int = 3,
+                         intervalo_s: float = 2.0) -> None:
+        """
+        Uma chamada de GetHistoryTrades DESCARTADA -- prepara o canal de
+        historico do ticker para a sessao. So' precisa rodar uma vez por
+        ticker. `esperar_conclusao(client)` e' quem sabe esperar
+        historico_100 + o fim da entrega (o backfill ja' tem essa funcao);
+        injetado para nao duplicar a logica de espera aqui.
+
+        Recusa transitoria ("servidor de historico ainda nao pronto",
+        padrao ja' visto em producao) tenta de novo, como a chamada real
+        ja' faz -- senao o ticket fica sem priming justamente nos dias em
+        que o servidor demora a acordar, que e' quando mais precisa.
+        Esgotadas as tentativas, desiste sem propagar: a chamada REAL,
+        com seu proprio retry ja' existente, segue normalmente.
+        """
+        if ticker in self.tickers_primados:
+            return
+        log.info("profitdll.priming_historico", ticker=ticker,
+                 nota="1a chamada de historico truncada por design; descartando")
+        self._descartar_historico = True
+        try:
+            for tentativa in range(1, tentativas + 1):
+                try:
+                    self.request_history(ticker, inicio, fim, bolsa)
+                    esperar_conclusao(self)
+                    self.tickers_primados.add(ticker)
+                    log.info("profitdll.priming_concluido", ticker=ticker,
+                             tentativa=tentativa)
+                    return
+                except Exception as exc:  # noqa: BLE001 -- priming e' best-effort
+                    log.warning("profitdll.priming_falhou", ticker=ticker,
+                                tentativa=tentativa, detalhe=repr(exc))
+                    if tentativa < tentativas:
+                        time.sleep(intervalo_s)
+            log.warning("profitdll.priming_desistiu", ticker=ticker,
+                        nota="seguindo sem priming; a chamada real trata a falha")
+        finally:
+            self._descartar_historico = False
 
     def agent_name(self, agent_id: int, curto: bool = False) -> str | None:
         """
@@ -542,6 +596,11 @@ class ProfitClient:
 
         @b.THistoryTradeCallback
         def _history(ativo, data, numero, preco, vol, qtd, comp, vend, tipo) -> None:
+            if self._descartar_historico:
+                return
+            if self.primeiro_trade_historico is None:
+                self.primeiro_trade_historico = str(data or "")
+            self.negocios_historico_ultima_chamada += 1
             publish(
                 Stream.TRADE,
                 Trade(

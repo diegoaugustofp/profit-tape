@@ -1227,3 +1227,25 @@ de ordens do Profit.
   < 1 s. 2 testes novos (ordem sub -> hist; sem particao de hoje).
   645 testes, ruff e mypy limpos.
 - DLL em producao agora 4.0.0.42 (operador atualizou).
+
+### Continuacao (2026-09-11, madrugada) — a causa real: 1a chamada de historico vem truncada (v2.33)
+
+- Mesmo com data+hora e SubscribeTicker (v2.31/v2.32), o backfill ainda
+  vinha vazio em 0,1s. Experimento decisivo: duas chamadas IDENTICAS
+  seguidas para 02/09. A 1a devolveu 102.400 negocios, so' de 17:29 a
+  18:31 (a cauda do dia). A 2a, identica, devolveu 6.148.231, o dia
+  inteiro (09:03-18:31). Nao e' cache -- e' a 1a chamada de historico
+  de um ticker NA SESSAO vindo truncada, ponto.
+- `client.primar_historico`: uma chamada de priming, descartada (nunca
+  chega no bus), uma vez por ticker por sessao, ANTES do laco real do
+  backfill (nos dois caminhos, por-dia e por-periodo). Retry proprio se
+  a recusa transitoria acontecer durante o priming.
+- Fake atualizada para reproduzir a assimetria exata (1a chamada de um
+  ticker trunca para a cauda; da 2a em diante, inteira) -- sem isso o
+  teste do priming nao provaria nada.
+- 3 testes ajustados (contagem de chamadas mudou com o priming
+  entrando no meio) + 3 novos (formato+truncagem, priming resolve,
+  ponta a ponta pelo executar_por_dia). 647 testes, ruff e mypy limpos.
+- **Nao verificado**: se a truncagem e' por ticker (uma vez basta) ou
+  por dia (cada dia precisaria de priming). O backfill de 02-03/09 e'
+  o teste: se 03/09 vier inteiro sem re-primar, a hipotese se confirma.

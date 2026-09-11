@@ -80,6 +80,10 @@ class FakeProfitDLL:
         self._threads: list[threading.Thread] = []
         self.erros: list[BaseException] = []
         self._hist_chamadas: dict[str, int] = {}
+        # Ver _emitir_historico: simula a truncagem da 1a chamada por
+        # ticker (medido 2026-09-11).
+        self._hist_primeira_ja_vista: set[str] = set()
+        self._TRUNCA_N = max(1, eventos_por_ativo // 10)
         self._ultima_data_offer = "01/01/1970 00:00:00.000"   # buffer "obsoleto" inicial
         self._parar = threading.Event()
         self.finalizado = False
@@ -273,11 +277,22 @@ class FakeProfitDLL:
                 prog(ativo, 0)
                 prog(ativo, 100)
             return
+        # Truncagem da 1a chamada por ticker (medido 2026-09-11): a 1a
+        # chamada de historico de um ticker na sessao so' entrega a CAUDA
+        # do periodo pedido (as ultimas `_TRUNCA_N` barras simuladas), a
+        # 2a em diante entrega tudo. E' o que fez o backfill vir vazio
+        # ate' o priming existir.
+        primeira_chamada = ticker not in self._hist_primeira_ja_vista
+        self._hist_primeira_ja_vista.add(ticker)
+        n_eventos = min(self._TRUNCA_N, self.eventos_por_ativo) if primeira_chamada \
+            else self.eventos_por_ativo
+        indice_inicial = self.eventos_por_ativo - n_eventos if primeira_chamada else 0
+
         base = datetime.strptime(ini.split(" ")[0], "%d/%m/%Y").replace(hour=10)
         time.sleep(0.05)  # a DLL real tambem demora a comecar a entregar
         if prog is not None:
             prog(ativo, 99)
-        for i in range(self.eventos_por_ativo):
+        for i in range(indice_inicial, self.eventos_por_ativo):
             if self._parar.is_set():
                 return
             momento = base + timedelta(milliseconds=i * 250)

@@ -180,7 +180,11 @@ def test_retry_recupera_servidor_nao_pronto(tmp_raiz: Path) -> None:
                   settle_s=0.0, tentativas=3, intervalo_retry_s=0.2,
                   dll_injetada=fake)
     assert rc == 0
-    assert fake._hist_chamadas["FLAKYHIST_PETR4"] == 2  # recusou, retry aceitou
+    # 3, nao 2: o priming (2026-09-11) tambem chama GetHistoryTrades e usa
+    # o mesmo contador da fake -- 1a recusada, 2a e' o priming bem
+    # sucedido; a chamada REAL vem depois e ja' encontra o servidor
+    # pronto. O que importa esta' abaixo: os 80 eventos chegaram inteiros.
+    assert fake._hist_chamadas["FLAKYHIST_PETR4"] == 3
 
     tabela = ds.dataset(tmp_raiz / "trade", format="parquet", partitioning="hive").to_table()
     assert tabela.num_rows == 80
@@ -324,7 +328,11 @@ def test_por_dia_interrompido_ainda_reporta_resumo_e_e_retomavel(tmp_raiz: Path)
 
     def _quiesce_que_interrompe(bus, base, quiesce_s, timeout_s):
         chamadas["n"] += 1
-        if chamadas["n"] == 2:          # interrompe no 2o dia
+        # 3, nao 2: o priming (2026-09-11) faz sua PROPRIA chamada de
+        # quiesce (via _aguardar_entrega) antes do laco de dias comecar.
+        # Contagem: 1=priming, 2=dia 1 (08-17), 3=dia 2 (08-18) -- e' esta
+        # que precisa interromper, como o teste sempre pretendeu.
+        if chamadas["n"] == 3:
             raise KeyboardInterrupt
         return original(bus, base, quiesce_s, timeout_s)
 
