@@ -1329,12 +1329,26 @@ def fase2_score(
     typer.echo(f"FASE 2 — SCORE {symbol.upper()} — {dias[0]}..{dias[-1]} — "
                f"modelo {m['sha256'][:12]} — {modo}")
     typer.echo(sep)
+    # Modo forward: SO' o que a linha PARADA da ficha permite ver antes de
+    # n = 50 — o evento em si, nao o desfecho. label/acerto/pnl vao para o
+    # CSV e aparecem no placar nos checkpoints. (v2.37: a v2.04 imprimia
+    # tudo e o "placar fechado" era decorativo.)
     if ev.empty:
         typer.echo("  nenhum evento (conf < p* em todas as barras validas)")
-    else:
+    elif permitir_queimado:
         cols = ["dia", "bar_id", "hora_utc", "close", "lado_previsto", "conf", "barreira_pts",
                 "label", "t_evento", "label_desempatada_tape", "acerto", "pnl_liquido_proxy"]
         typer.echo(ev[cols].round(3).to_string(index=False))
+    else:
+        cols = ["dia", "bar_id", "hora_utc", "close", "lado_previsto", "conf", "barreira_pts"]
+        typer.echo(ev[cols].round(3).to_string(index=False))
+    com_evento = set(ev["dia"]) if not ev.empty else set()
+    sem_evento = [d for d in dias if d not in com_evento]
+    if sem_evento:
+        typer.echo(f"  dias escorados SEM evento: {', '.join(sem_evento)}")
+    typer.echo(f"  dias escorados: {len(dias)}   eventos: {len(ev)}   "
+               f"({len(ev) / len(dias):.2f}/pregao; TAXA da ficha "
+               f"{float(ficha['MEDIDO_taxa_eventos_por_pregao']):.2f})")
     if permitir_queimado:
         typer.echo("\n  (dado queimado: nada gravado)")
         return
@@ -1343,7 +1357,8 @@ def fase2_score(
         pd.read_csv(livro, dtype={"dia": str}) if livro.exists() else ev)
     p = placar(tudo, ficha)
     typer.echo("")
-    typer.echo(f"  livro: {livro}   eventos acumulados: {p['n']} em {p['pregoes']} pregoes")
+    typer.echo(f"  livro: {livro}   eventos acumulados: {p['n']} em {p['pregoes']} pregoes "
+               "com evento")
     if p["n"] < p["checkpoint_sanidade"]:
         typer.echo(f"  placar fechado ate' n = {p['checkpoint_sanidade']} (sanidade) e "
                    f"n = {p['n_para_veredito']} (veredito). Nao olhe antes.")

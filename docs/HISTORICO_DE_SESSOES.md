@@ -1282,3 +1282,28 @@ ambas` nos pregoes reais.
   A medicao de direcao pura (5.6) nao foi necessaria -- ja havia duas
   tentativas concretas reprovadas.
 - Nenhum codigo mudou nesta entrada; so' documentacao (5.8).
+## Sessão 2026-09-11 — forward da Fase 2 LIGADO; score deixa de mostrar desfecho (v2.37)
+
+- Checklist fechado em 08/09: `--permitir-queimado` em 27/08 mostrou 7
+  eventos com horas, barreiras (249–344 pts) e lados coerentes. 7/7 ali
+  é o modelo retreinado recitando um dia que viu — tubulação, não
+  evidência.
+- Primeiro `score` forward: `--desde 2026-08-28`, 23 eventos gravados
+  em `forward_eventos.csv` (28/08, 31/08, 01/09, 04/09, 09/09, 10/09).
+  02/09, 03/09 e 08/09 sem linha — a v2.04 não distinguia "sem evento"
+  de "sem dia"; a v2.05 lista os dias escorados sem evento.
+- **Defeito de disciplina corrigido**: a v2.04 imprimia label/acerto/pnl
+  por evento no modo forward, tornando o "placar fechado até n=50"
+  decorativo. v2.05: forward mostra só dia/hora/lado/conf/barreira; os
+  desfechos ficam no CSV e aparecem nos checkpoints. `--permitir-queimado`
+  continua mostrando tudo (é para inspecionar).
+- Observação estrutural registrada sem ação: 15/23 eventos são venda; o
+  modelo treinou com −1 dominante e o forward começou numa alta
+  (178k→190k). A PARADA da ficha não autoriza reagir a isso.
+- Esta entrega foi originalmente carimbada v2.05 numa sessão paralela à
+  do `doctor` (que ficou com a tag v2.05 real) e NUNCA foi aplicada; o
+  `fase2-score` da v2.36 ainda imprimia o desfecho. Reaplicada sobre a
+  v2.36 como v2.37 (2026-09-11).
+- A partir daqui: ritual diário `curate` → `features --agentes` →
+  `fase2-score --dia`. Checkpoint de sanidade em n=50 (~6 pregões a
+  partir de agora), veredito em n=150.

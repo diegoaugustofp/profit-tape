@@ -5749,11 +5749,17 @@ imprime acerto antes disso.
 - [x] Ficha com TAXA medida (4,6) e HORIZONTE < 6 meses (33 pregoes).
 - [x] Medi quantos eventos cada clausula deixa passar (escolha_k.csv,
       eventos_validacao.csv).
-- [ ] **Um pregao rodado e as barras-evento olhadas uma a uma**:
-      `fase2-score WINFUT --dia 2026-08-27 --permitir-queimado` e
-      conferir, evento a evento: hora, lado previsto, barreiras em
-      pontos, qual bateu, se o tape desempatou. E' o item que mais pega
-      defeito neste projeto. Operador.
+- [x] Um pregao rodado e as barras-evento olhadas uma a uma (27/08,
+      2026-09-08): horas 10:28–15:56 BRT, barreiras 249–344 pts, lados e
+      contabilidade coerentes. 7/7 = modelo retreinado recitando dia
+      visto; tubulacao OK, nao evidencia.
+
+**FORWARD LIGADO em 2026-09-11** com `--desde 2026-08-28` (primeiro dia
+nao visto pelo modelo). Carimbo: entregue-v2.04 no primeiro score,
+v2.37+ nos seguintes; modelo 5c5b0d7c... Livro:
+`data/research/fase2/forward_eventos.csv`. O placar so' abre em n=50 e
+n=150 — e a partir da v2.37 o comando nao mostra desfecho por evento no
+modo forward.
 - [x] Verificador de look-ahead com a politica do modelo (teste).
 - [x] Carimbo em cada observacao (score).
 - [x] Sei o que reinicia a contagem: retreinar, mudar p*, k, h,

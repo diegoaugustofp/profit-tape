@@ -79,10 +79,10 @@ def test_controle_nunca_reusa_a_propria_barra_de_sinal() -> None:
     x["sinal_venda"] = False
     x.loc[30, "sinal_compra"] = True
     x["hora_int"] = 900
-    m = ds.medir(x, horizontes=(1,), seed=7)
+    ds.medir(x, horizontes=(1,), seed=7)
     # roda muitas vezes com seeds diferentes: nenhuma escolhe pos 29 ou 30
     for s in range(30):
-        m = ds.medir(x, horizontes=(1,), seed=s)
+        ds.medir(x, horizontes=(1,), seed=s)
     # nao ha' como recuperar a posicao original aqui sem instrumentar; em vez
     # disso valida indiretamente: reduzindo o pool a SO' as barras 29/30
     # elegiveis (todas as outras marcadas como sinal), a funcao deve avisar
