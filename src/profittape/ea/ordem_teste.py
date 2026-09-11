@@ -23,6 +23,25 @@ texto de config:
 A trava roda na construcao E imediatamente antes de cada Send*. Sem
 opcao de desligar aqui: este modulo nao envia para conta real, ponto.
 
+TICKER AGREGADOR NAO E' NEGOCIAVEL (medido + confirmado, 2026-09-11)
+---------------------------------------------------------------------
+"WINFUT" resolve para dado (SubscribeTicker, GetHistoryTrades) porque o
+Profit faz a troca de contrato sozinho -- mas so' DENTRO do grafico. Na
+API a troca nao acontece: o E2 mandou `SendMarketBuyOrder("WINFUT",...)`
+as 10:30, a DLL aceitou (ordem_id real) e o callback voltou
+`OrderNotCreated / "Ordem invalida."` -- nenhuma ordem chegou a existir
+na B3. Confirmado pelo manual da Nelogica ("Como rotear ordens com a
+ProfitDLL", ajuda.nelogica.com.br/hc/pt-br/articles/13312468554651):
+
+    "A ProfitDLL nao faz substituicao automatica (cross-order) para o
+    contrato corrente, entao tickers agregadores nao sao aceitos no
+    envio de ordens."
+
+Por isso `AGREGADORES_CONHECIDOS` abaixo e' bloqueio de CONSTRUCAO, nao
+aviso: um ticker agregador aqui nunca teria chance de dar certo, e' o
+mesmo tipo de garantia que a trava de conta -- a diferenca e' que aqui
+a DLL nao avisa antes (aceita a ordem e so' rejeita segundos depois).
+
 O QUE O E2 PROVA
 ----------------
 - a familia legada (SendMarketBuyOrder / SendZeroPositionAtMarket)
@@ -47,6 +66,33 @@ from ..profitdll.client import EventoOrdem
 from .config import RoteamentoConfig
 
 log = structlog.get_logger(__name__)
+
+
+class TickerAgregadorInvalido(ValueError):
+    """Ticker agregador (WINFUT, WDOFUT, INDFUT...) nao e' negociavel via
+    ProfitDLL -- so' resolve para dado. Ver 'TICKER AGREGADOR NAO E'
+    NEGOCIAVEL' no topo do arquivo."""
+
+
+# Os agregadores documentados pela Nelogica para os contratos mais comuns
+# do mercado brasileiro. Lista de PREFIXOS: um ticker especifico sempre
+# tem o mes+ano depois (WINM26, WDOK26); um agregador e' so' a raiz.
+AGREGADORES_CONHECIDOS = ("WINFUT", "WDOFUT", "INDFUT", "DOLFUT", "BGIFUT")
+
+
+def exigir_ticker_especifico(ticker: str) -> None:
+    """Levanta TickerAgregadorInvalido se `ticker` for um agregador
+    conhecido. Nao valida que o contrato especifico esteja EM VIGOR
+    (isso muda a cada 2 meses e a lista ficaria desatualizada) -- so'
+    barra o erro que a DLL aceita e rejeita so' depois, silenciosamente."""
+    if ticker.strip().upper() in AGREGADORES_CONHECIDOS:
+        raise TickerAgregadorInvalido(
+            f"'{ticker}' e' ticker agregador -- a ProfitDLL nao faz "
+            "substituicao automatica para o contrato vigente no envio de "
+            "ordens (manual Nelogica, 'Como rotear ordens com a "
+            "ProfitDLL'). Use o contrato especifico em vigor na data da "
+            "operacao (ex.: WINM26, WDOK26)."
+        )
 
 
 class TravaSimulacao(RuntimeError):
@@ -148,7 +194,7 @@ class OrdemDeTeste:
         client: _ClientRoteamento,
         roteamento: RoteamentoConfig,
         horario_hhmm: str,
-        ticker: str = "WINFUT",
+        ticker: str,
         bolsa: str = "F",
         quantidade: int = 1,
         timeout_fill_s: float = 10.0,
@@ -156,6 +202,7 @@ class OrdemDeTeste:
     ) -> None:
         if quantidade != 1:
             raise ValueError("E2 e' UM contrato. Quantidade maior e' outro degrau.")
+        exigir_ticker_especifico(ticker)
         self._client = client
         self._rot = roteamento
         self._horario = horario_hhmm

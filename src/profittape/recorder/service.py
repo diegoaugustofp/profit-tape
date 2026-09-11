@@ -99,8 +99,11 @@ class RecorderService:
                     "ver EA_ARQUITETURA.md)."
                 )
             self.ea_bridge = EABridge(EAService(ea_cfg))
-            log.info("recorder.ea_integrado", symbol=ea_cfg.symbol,
-                     sinais=[s.feature for s in ea_cfg.sinais])
+            log.info(
+                "recorder.ea_integrado",
+                symbol=ea_cfg.symbol,
+                sinais=[s.feature for s in ea_cfg.sinais],
+            )
 
         self.client = ProfitClient(
             dll_path=cred.dll_path,
@@ -115,34 +118,43 @@ class RecorderService:
             login_completo=cfg.runtime.login_completo,
         )
         if cfg.runtime.login_completo:
-            log.warning("recorder.login_completo",
-                        nota="conexao sobe com DLLInitializeLogin (roteamento). "
-                             "E1 da trilha de execucao -- confira o heartbeat: "
-                             "corretora_pronta=True e contas>=1 devem aparecer.")
+            log.warning(
+                "recorder.login_completo",
+                nota="conexao sobe com DLLInitializeLogin (roteamento). "
+                "E1 da trilha de execucao -- confira o heartbeat: "
+                "corretora_pronta=True e contas>=1 devem aparecer.",
+            )
         if ordem_teste_em is not None:
             if not cfg.runtime.login_completo:
                 raise SystemExit(
                     "--ordem-teste-em exige login completo (--login-completo "
                     "ou runtime.login_completo: true): sem sessao de "
-                    "roteamento nao ha' onde enviar.")
+                    "roteamento nao ha' onde enviar."
+                )
             from ..ea.config import RoteamentoConfig
-            from ..ea.ordem_teste import OrdemDeTeste
+            from ..ea.ordem_teste import OrdemDeTeste, TickerAgregadorInvalido
 
-            if ordem_teste_ticker.upper() == "WINFUT":
-                log.warning(
-                    "recorder.ordem_teste_ticker_generico",
+            try:
+                self.ordem_teste = OrdemDeTeste(
+                    self.client,
+                    RoteamentoConfig(),
+                    horario_hhmm=ordem_teste_em,
                     ticker=ordem_teste_ticker,
-                    nota="'WINFUT' resolve para dado (subscribe, historico) "
-                         "mas NAO e' instrumento negociavel na B3 -- envio "
-                         "de ordem com esse alias volta 'Ordem invalida' "
-                         "(medido 2026-09-11). Use --ordem-teste-ticker com "
-                         "o contrato vigente (ex.: WINV26).")
-            self.ordem_teste = OrdemDeTeste(self.client, RoteamentoConfig(),
-                                            horario_hhmm=ordem_teste_em,
-                                            ticker=ordem_teste_ticker)
-            log.warning("recorder.ordem_teste_agendada", horario=ordem_teste_em,
-                        nota="E2: 1 contrato WINFUT a mercado na conta de "
-                             "SIMULACAO (trava pela DLL) e zeragem em seguida.")
+                )
+            except TickerAgregadorInvalido as exc:
+                # Falha AQUI, no startup, antes de qualquer conexao -- nao
+                # 10 minutos depois, no pregao, com "Ordem invalida" vindo
+                # da B3 (e' o que aconteceu em 2026-09-11 com WINFUT).
+                raise SystemExit(
+                    f"{exc}\n--ordem-teste-ticker recebeu {ordem_teste_ticker!r}."
+                ) from exc
+            log.warning(
+                "recorder.ordem_teste_agendada",
+                horario=ordem_teste_em,
+                ticker=ordem_teste_ticker,
+                nota="E2: 1 contrato a mercado na conta de SIMULACAO "
+                "(trava pela DLL) e zeragem em seguida.",
+            )
         self._parar = threading.Event()
 
     # ------------------------------------------------------------------
@@ -157,9 +169,11 @@ class RecorderService:
                 # apertar de novo, ou matar o processo — que ai sim perde a
                 # cauda). O handler customizado ja' impede que o sinal vire
                 # KeyboardInterrupt, entao aqui e' so' comunicacao.
-                log.warning("recorder.ENCERRAMENTO_JA_EM_ANDAMENTO",
-                            nota="aguarde — fila sendo drenada e arquivos "
-                                 "sendo fechados; nao e' preciso pressionar de novo")
+                log.warning(
+                    "recorder.ENCERRAMENTO_JA_EM_ANDAMENTO",
+                    nota="aguarde — fila sendo drenada e arquivos "
+                    "sendo fechados; nao e' preciso pressionar de novo",
+                )
                 return
             log.info("recorder.sinal_recebido", sinal=signum)
             self._parar.set()
@@ -219,7 +233,7 @@ class RecorderService:
         while not self._parar.is_set():
             time.sleep(0.5)
             if self.ordem_teste is not None and not self.ordem_teste.concluida:
-                self.ordem_teste.tick()      # thread principal, nunca callback
+                self.ordem_teste.tick()  # thread principal, nunca callback
             if self._hora_de_encerrar():
                 log.info("recorder.encerramento_agendado", horario=self.cfg.runtime.encerrar_em)
                 break
@@ -232,11 +246,14 @@ class RecorderService:
 
             st = self.bus.stats()
             snap = self.metrics.snapshot(
-                st.profundidade_atual, st.profundidade_maxima,
-                st.total_descartado, st.total_recebido,
+                st.profundidade_atual,
+                st.profundidade_maxima,
+                st.total_descartado,
+                st.total_recebido,
             )
-            vazao = (int(snap.linhas_escritas / snap.escrita_s_total)
-                     if snap.escrita_s_total > 0 else 0)
+            vazao = (
+                int(snap.linhas_escritas / snap.escrita_s_total) if snap.escrita_s_total > 0 else 0
+            )
             log.info(
                 "recorder.heartbeat",
                 uptime_min=round(snap.uptime_s / 60, 1),
@@ -264,21 +281,27 @@ class RecorderService:
             # decide o "14 contas" do teste A: duplicata ou entrada real.
             contas_agora = list(self.client.contas_vistas)
             if contas_agora != contas_logadas:
-                log.info("profitdll.contas",
-                         pares=[f"{c}:{a}" for c, a in contas_agora],
-                         unicas=len(contas_agora),
-                         callbacks=self.client.contadores_roteamento["conta"])
+                log.info(
+                    "profitdll.contas",
+                    pares=[f"{c}:{a}" for c, a in contas_agora],
+                    unicas=len(contas_agora),
+                    callbacks=self.client.contadores_roteamento["conta"],
+                )
                 contas_logadas = contas_agora
             nivel = nivel_ocupacao(st.profundidade_atual, self.bus.maxsize)
             if nivel == "atencao":
-                log.warning("recorder.fila_subindo",
-                            ocupacao=f"{st.profundidade_atual / self.bus.maxsize:.0%}",
-                            causa_tipica="disco lento segurando o writer",
-                            mitigacao="ver OPERACAO.md secao 'Disco lento'")
+                log.warning(
+                    "recorder.fila_subindo",
+                    ocupacao=f"{st.profundidade_atual / self.bus.maxsize:.0%}",
+                    causa_tipica="disco lento segurando o writer",
+                    mitigacao="ver OPERACAO.md secao 'Disco lento'",
+                )
             elif nivel == "critico":
-                log.error("recorder.fila_critica",
-                          ocupacao=f"{st.profundidade_atual / self.bus.maxsize:.0%}",
-                          aviso="descarte iminente se a tendencia continuar")
+                log.error(
+                    "recorder.fila_critica",
+                    ocupacao=f"{st.profundidade_atual / self.bus.maxsize:.0%}",
+                    aviso="descarte iminente se a tendencia continuar",
+                )
                 enviar(
                     f"🟠 fila CRITICA ({st.profundidade_atual / self.bus.maxsize:.0%}) "
                     f"— descarte iminente. Ver OPERACAO.md 'Disco lento'.",
@@ -290,7 +313,7 @@ class RecorderService:
                     taxa=round(st.taxa_descarte, 6),
                     descartados=st.total_descartado,
                     acao="aumente fila_maxsize, reduza ativos com offer_book, "
-                         "ou mova data/raw para disco mais rapido",
+                    "ou mova data/raw para disco mais rapido",
                 )
 
     def _hora_de_encerrar(self) -> bool:
@@ -303,15 +326,15 @@ class RecorderService:
     # ------------------------------------------------------------------
     def _encerrar(self) -> None:
         log.info("recorder.encerrando")
-        self.client.disconnect()      # 1: para de entrar evento novo
+        self.client.disconnect()  # 1: para de entrar evento novo
         if self.ea_bridge is not None:
             # ANTES do bus.close() -- protegido internamente (try/except em
             # torno de encerrar_dia(), ver bridge.py); um erro aqui nunca
             # pode impedir o restante do encerramento do record (footer,
             # verificacao, alerta), que e' sempre prioridade.
             self.ea_bridge.parar()
-        self.bus.close()              # 2: sentinela
-        self.writer.join(timeout=120) # 3: drena o que sobrou
+        self.bus.close()  # 2: sentinela
+        self.writer.join(timeout=120)  # 3: drena o que sobrou
         if self.writer.is_alive():
             log.error("recorder.writer_nao_encerrou", acao="forcando parada")
             self.writer.parar()
@@ -319,8 +342,10 @@ class RecorderService:
 
         st = self.bus.stats()
         snap = self.metrics.snapshot(
-            st.profundidade_atual, st.profundidade_maxima,
-            st.total_descartado, st.total_recebido,
+            st.profundidade_atual,
+            st.profundidade_maxima,
+            st.total_descartado,
+            st.total_recebido,
         )
         log.info(
             "recorder.resumo",
@@ -336,10 +361,12 @@ class RecorderService:
             raiz=str(Path(self.cfg.storage.raiz).resolve()),
         )
         if self.writer.sink.falhas_verificacao:
-            log.error("recorder.ARQUIVOS_NAO_CONFIAVEIS",
-                      arquivos=self.writer.sink.falhas_verificacao,
-                      acao="permanecem .inprogress; investigue o volume antes "
-                           "de confiar em qualquer dado desta sessao")
+            log.error(
+                "recorder.ARQUIVOS_NAO_CONFIAVEIS",
+                arquivos=self.writer.sink.falhas_verificacao,
+                acao="permanecem .inprogress; investigue o volume antes "
+                "de confiar em qualquer dado desta sessao",
+            )
             enviar(
                 f"🔴 {len(self.writer.sink.falhas_verificacao)} arquivo(s) NAO "
                 f"verificado(s) (footer nao confirmado) — investigue o disco "
@@ -351,15 +378,18 @@ class RecorderService:
                 "recorder.DADO_PERDIDO",
                 eventos=st.total_descartado,
                 aviso="as particoes deste dia tem buraco. Registre isso antes de "
-                      "usar o dado em backtest.",
+                "usar o dado em backtest.",
             )
 
         # Alerta de encerramento SEMPRE dispara (graceful ou nao) — e' o que
         # confirma remotamente que o dia foi capturado, sem precisar abrir o
         # notebook a noite. status separado do alerta de erro do run(): aqui
         # e' sempre o ultimo aviso da sessao, com os numeros que importam.
-        status = "⚠️ com PROBLEMAS" if (self.writer.sink.falhas_verificacao
-                                       or st.total_descartado) else "✅ OK"
+        status = (
+            "⚠️ com PROBLEMAS"
+            if (self.writer.sink.falhas_verificacao or st.total_descartado)
+            else "✅ OK"
+        )
         enviar(
             f"{status} record encerrado — {snap.linhas_escritas:,} linhas, "
             f"{st.total_descartado} descartado(s), fila_pico={st.profundidade_maxima}, "

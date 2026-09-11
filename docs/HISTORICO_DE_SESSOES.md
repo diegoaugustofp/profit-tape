@@ -1350,3 +1350,30 @@ ambas` nos pregoes reais.
 (confirmar que ainda e' o contrato vigente) num horario liquido. Se
 ainda vier "Ordem invalida", a hipotese do "cross order" ganha forca e
 vale checar essa configuracao no Profit antes de mais uma rodada.
+
+### Continuacao (2026-09-11) — confirmado: ticker agregador nunca funciona no envio (v2.40)
+
+- Operador trouxe a fonte primaria: manual da Nelogica, "Como rotear
+  ordens com a ProfitDLL" (ajuda.nelogica.com.br/hc/pt-br/articles/
+  13312468554651). Citacao literal: "A ProfitDLL nao faz substituicao
+  automatica (cross-order) para o contrato corrente, entao tickers
+  agregadores nao sao aceitos no envio de ordens." O "cross order" que
+  o operador via no Profit e' real -- so' funciona DENTRO do grafico,
+  nunca na API. Minha hipotese de v2.39 (ticker generico e' a causa)
+  fica confirmada pela fonte, nao so' por inferencia do log.
+- v2.39 tinha isso como AVISO (`--ordem-teste-ticker`, default WINFUT
+  com warning). Promovido para BLOQUEIO: `exigir_ticker_especifico` em
+  `ea/ordem_teste.py` levanta `TickerAgregadorInvalido` na construcao
+  de `OrdemDeTeste` para WINFUT/WDOFUT/INDFUT/DOLFUT/BGIFUT (lista de
+  agregadores conhecidos, prefixo). `ticker` deixou de ter default
+  inseguro -- agora e' obrigatorio. O record converte a excecao em
+  SystemExit no STARTUP, antes de qualquer conexao -- nao 10 minutos
+  depois, no pregao, com "Ordem invalida" vindo da B3 (foi exatamente
+  isso que aconteceu as 10:30 de hoje).
+- 2 testes reescritos (o antigo testava so' o aviso; agora testa o
+  SystemExit) + todos os que criavam OrdemDeTeste passaram a usar
+  WINV26 explicito. 661 testes, ruff e mypy limpos.
+
+**Pendente (Diego)**: rodar o E2 de novo com
+`--ordem-teste-ticker WINV26` (ou o contrato vigente na data) num
+horario liquido.

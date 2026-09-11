@@ -28,38 +28,51 @@ def record(
     log_file: Path | None = typer.Option(None, "--log-file"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Valida config e sai."),
     ea_config: Path | None = typer.Option(
-        None, "--ea-config",
+        None,
+        "--ea-config",
         help="OPCIONAL (2026-08-27, decisao de arquitetura de longo "
-             "prazo): roda o EA DENTRO deste processo, mesma conexao -- "
-             "licenca Nelogica so' permite UMA chave de ativacao. Sempre "
-             "dry_run=True nesta fase -- so' loga decisoes, nunca envia "
-             "ordem. Sem este parametro, comportamento identico a sempre."),
+        "prazo): roda o EA DENTRO deste processo, mesma conexao -- "
+        "licenca Nelogica so' permite UMA chave de ativacao. Sempre "
+        "dry_run=True nesta fase -- so' loga decisoes, nunca envia "
+        "ordem. Sem este parametro, comportamento identico a sempre.",
+    ),
     login_completo: bool = typer.Option(
-        False, "--login-completo",
+        False,
+        "--login-completo",
         help="E1 da trilha de execucao (2026-09-08): sobe a conexao com "
-             "DLLInitializeLogin (sessao com roteamento) em vez de "
-             "MarketLogin. Sobrescreve runtime.login_completo do yaml. Use "
-             "num record de TESTE (pasta separada, fora do pregao) antes "
-             "de ligar no yaml de producao -- ver docs/EA_ARQUITETURA.md."),
+        "DLLInitializeLogin (sessao com roteamento) em vez de "
+        "MarketLogin. Sobrescreve runtime.login_completo do yaml. Use "
+        "num record de TESTE (pasta separada, fora do pregao) antes "
+        "de ligar no yaml de producao -- ver docs/EA_ARQUITETURA.md.",
+    ),
     sem_encerramento: bool = typer.Option(
-        False, "--sem-encerramento",
+        False,
+        "--sem-encerramento",
         help="Ignora runtime.encerrar_em do yaml (roda ate' Ctrl+C). Para o "
-             "teste A do E1 fora do pregao: o yaml de producao encerra as "
-             "18:30, e o teste roda DEPOIS disso -- na v2.06 ele durou 4 s."),
+        "teste A do E1 fora do pregao: o yaml de producao encerra as "
+        "18:30, e o teste roda DEPOIS disso -- na v2.06 ele durou 4 s.",
+    ),
     ordem_teste_em: str | None = typer.Option(
-        None, "--ordem-teste-em",
+        None,
+        "--ordem-teste-em",
         help="E2 dentro do record (2026-09-11): no horario HH:MM (local), "
-             "envia 1 contrato a mercado na conta de SIMULACAO -- trava "
-             "conferida contra o que a DLL anunciou (nome da corretora "
-             "contem 'Simul') -- confirma o callback de ordem e zera. "
-             "Exige login completo. Roda na conexao de producao, no "
-             "pregao, sem parar a captura."),
+        "envia 1 contrato a mercado na conta de SIMULACAO -- trava "
+        "conferida contra o que a DLL anunciou (nome da corretora "
+        "contem 'Simul') -- confirma o callback de ordem e zera. "
+        "Exige login completo. Roda na conexao de producao, no "
+        "pregao, sem parar a captura.",
+    ),
     ordem_teste_ticker: str = typer.Option(
-        "WINFUT", "--ordem-teste-ticker",
-        help="Ticker do E2. 'WINFUT' resolve para dado (subscribe, "
-             "historico), mas NAO e' instrumento negociavel na B3 -- "
-             "envio de ordem com esse alias volta 'Ordem invalida' "
-             "(medido 2026-09-11). Use o contrato vigente, ex.: WINV26."),
+        "WINFUT",
+        "--ordem-teste-ticker",
+        help="Ticker do E2, o contrato ESPECIFICO em vigor (ex.: WINM26, "
+        "nunca 'WINFUT'). A ProfitDLL nao substitui agregador pelo "
+        "contrato corrente no envio de ordens -- manual Nelogica, "
+        "'Como rotear ordens com a ProfitDLL'. O default 'WINFUT' "
+        "falha alto de proposito (SystemExit), para forcar a "
+        "escolha explicita em vez de silenciosamente nao funcionar "
+        "no pregao (medido 2026-09-11).",
+    ),
 ) -> None:
     """Grava tape e book ate o horario configurado ou ate Ctrl+C."""
     configurar(log_level, log_file)
@@ -73,8 +86,11 @@ def record(
     if dry_run:
         typer.echo(f"Config valida: {len(cfg.ativos)} ativos, raiz={cfg.storage.raiz}")
         for a in cfg.ativos:
-            flags = [n for n, v in
-                     (("trades", a.trades), ("offer", a.offer_book), ("price", a.price_book)) if v]
+            flags = [
+                n
+                for n, v in (("trades", a.trades), ("offer", a.offer_book), ("price", a.price_book))
+                if v
+            ]
             typer.echo(f"  {a.ticker:<10} {a.bolsa}  {'+'.join(flags)}")
         if ea_config:
             typer.echo(f"  EA integrado: --ea-config {ea_config}")
@@ -88,9 +104,15 @@ def record(
     cred.validar()
     from .recorder.service import RecorderService
 
-    raise typer.Exit(RecorderService(cfg, cred, ea_config_path=ea_config,
-                                     ordem_teste_em=ordem_teste_em,
-                                     ordem_teste_ticker=ordem_teste_ticker).run())
+    raise typer.Exit(
+        RecorderService(
+            cfg,
+            cred,
+            ea_config_path=ea_config,
+            ordem_teste_em=ordem_teste_em,
+            ordem_teste_ticker=ordem_teste_ticker,
+        ).run()
+    )
 
 
 @app.command()
@@ -144,6 +166,7 @@ def doctor(
             # mexe em `ok`, porque o doctor gateia o RECORD, e o record
             # nao precisa de funcao de ordem. Puro hasattr, nao conecta.
             from .profitdll.bindings import inventario_exports_execucao
+
             inv = inventario_exports_execucao(dll)
             typer.echo("\n  EXECUCAO (E0) — exports de ordem/posicao nesta DLL:")
             for familia, r in inv["familias"].items():
@@ -191,15 +214,20 @@ def inspect(
     caminho: Path = typer.Argument(..., help="Diretorio ou arquivo Parquet."),
     stream: str = typer.Option("trade", "--stream"),
     dia: str | None = typer.Option(
-        None, "--dia", help="Auditoria completa de UM dt=YYYY-MM-DD apenas."),
+        None, "--dia", help="Auditoria completa de UM dt=YYYY-MM-DD apenas."
+    ),
     completo: bool = typer.Option(
-        False, "--completo",
+        False,
+        "--completo",
         help="Forca a auditoria completa da arvore inteira mesmo se for grande "
-             "(carrega tudo em memoria; horas em HDD/USB)."),
+        "(carrega tudo em memoria; horas em HDD/USB).",
+    ),
     contagem: bool = typer.Option(
-        False, "--contagem",
+        False,
+        "--contagem",
         help="So' a contagem por dia via metadados (segundos). E' o que "
-             "responde 'e' a mesma populacao?'."),
+        "responde 'e' a mesma populacao?'.",
+    ),
 ) -> None:
     """
     Resumo do que foi gravado. SEMPRE comeca pela contagem por dia lida dos
@@ -231,43 +259,52 @@ def duplicatas(
 @app.command()
 def backfill(
     inicio: str = typer.Option(..., "--inicio", help="YYYY-MM-DD"),
-    fim: str = typer.Option(..., "--fim",
-                            help="YYYY-MM-DD. EXCLUSIVO (observado em producao): "
-                                 "para incluir o dia X, informe X+1."),
+    fim: str = typer.Option(
+        ...,
+        "--fim",
+        help="YYYY-MM-DD. EXCLUSIVO (observado em producao): para incluir o dia X, informe X+1.",
+    ),
     config: Path = typer.Option(Path("config/recorder.yaml"), "--config", "-c"),
     quiesce: float = typer.Option(15.0, "--quiesce", help="Segundos sem evento novo = fim."),
     timeout: float = typer.Option(3600.0, "--timeout"),
-    settle: float = typer.Option(5.0, "--settle",
-                                 help="Respiro apos conectar; historico pode nao estar pronto."),
+    settle: float = typer.Option(
+        5.0, "--settle", help="Respiro apos conectar; historico pode nao estar pronto."
+    ),
     tentativas: int = typer.Option(3, "--tentativas"),
     intervalo: float = typer.Option(15.0, "--intervalo", help="Segundos entre tentativas."),
     ticker: list[str] = typer.Option(
-        [], "--ticker",
+        [],
+        "--ticker",
         help="Sobrepoe os ativos do config. Formato TICKER ou TICKER:BOLSA. Repetivel.",
     ),
     por_dia: bool = typer.Option(
-        False, "--por-dia",
+        False,
+        "--por-dia",
         help="Um request por pregao, RETOMAVEL (pula dt= ja capturados). "
-             "Use para intervalos longos; aqui --fim e' INCLUSIVO.",
+        "Use para intervalos longos; aqui --fim e' INCLUSIVO.",
     ),
-    timeout_dia: float = typer.Option(900.0, "--timeout-dia",
-                                      help="Timeout por pregao no modo --por-dia."),
+    timeout_dia: float = typer.Option(
+        900.0, "--timeout-dia", help="Timeout por pregao no modo --por-dia."
+    ),
     tentativas_vazio: int = typer.Option(
-        3, "--tentativas-vazio",
+        3,
+        "--tentativas-vazio",
         help="Modo --por-dia: quantas vezes repetir um dia que voltou vazio "
-             "estando DENTRO da janela de 30 dias (servidor ocupado do dia "
-             "anterior devolve vazio; repetir costuma resolver).",
+        "estando DENTRO da janela de 30 dias (servidor ocupado do dia "
+        "anterior devolve vazio; repetir costuma resolver).",
     ),
     pausa_retry_vazio: float = typer.Option(
-        20.0, "--pausa-retry-vazio",
+        20.0,
+        "--pausa-retry-vazio",
         help="Segundos de pausa entre tentativas de um dia vazio.",
     ),
     log_level: str = typer.Option("INFO", "--log-level"),
     log_file: Path | None = typer.Option(
-        None, "--log-file",
+        None,
+        "--log-file",
         help="Grava o log em arquivo alem do console — permite acompanhar com "
-             "Get-Content -Wait sem tocar na janela do processo (QuickEdit "
-             "pausa processo que escreve no console selecionado).",
+        "Get-Content -Wait sem tocar na janela do processo (QuickEdit "
+        "pausa processo que escreve no console selecionado).",
     ),
 ) -> None:
     """
@@ -292,48 +329,78 @@ def backfill(
     if por_dia:
         from .recorder.backfill import executar_por_dia
 
-        raise typer.Exit(executar_por_dia(cfg, cred, inicio, fim,
-                                          quiesce_s=quiesce, timeout_dia_s=timeout_dia,
-                                          settle_s=settle,
-                                          tentativas_vazio=tentativas_vazio,
-                                          pausa_retry_vazio=pausa_retry_vazio))
+        raise typer.Exit(
+            executar_por_dia(
+                cfg,
+                cred,
+                inicio,
+                fim,
+                quiesce_s=quiesce,
+                timeout_dia_s=timeout_dia,
+                settle_s=settle,
+                tentativas_vazio=tentativas_vazio,
+                pausa_retry_vazio=pausa_retry_vazio,
+            )
+        )
     from .recorder.backfill import executar
 
-    raise typer.Exit(executar(cfg, cred, inicio, fim, quiesce_s=quiesce, timeout_s=timeout,
-                              settle_s=settle, tentativas=tentativas,
-                              intervalo_retry_s=intervalo))
+    raise typer.Exit(
+        executar(
+            cfg,
+            cred,
+            inicio,
+            fim,
+            quiesce_s=quiesce,
+            timeout_s=timeout,
+            settle_s=settle,
+            tentativas=tentativas,
+            intervalo_retry_s=intervalo,
+        )
+    )
 
 
 @app.command()
 def quarentena(
     raiz: Path = typer.Argument(..., help="Raiz dos dados (ex.: G:\\data\\raw)."),
     remover: bool = typer.Option(
-        False, "--remover",
+        False,
+        "--remover",
         help="Apaga os arquivos sem footer. Sem esta flag, apenas LISTA (dry-run).",
     ),
     profundo: bool = typer.Option(
-        False, "--profundo",
+        False,
+        "--profundo",
         help="Tambem descomprime cada arquivo para pegar corrupcao INTERNA "
-             "(ZSTD failed) que o footer intacto esconde. Mais lento, mas pega "
-             "o que derruba o curate.",
+        "(ZSTD failed) que o footer intacto esconde. Mais lento, mas pega "
+        "o que derruba o curate.",
     ),
     desde: str | None = typer.Option(
-        None, "--desde", help="YYYY-MM-DD -- so' valida dt= a partir desta "
+        None,
+        "--desde",
+        help="YYYY-MM-DD -- so' valida dt= a partir desta "
         "data (inclusive). Sem isso, varre TODO o historico (comportamento "
         "de sempre) -- pedido real: revarrer tudo a cada backup incremental "
-        "fica inviavel com semanas/meses acumulados."),
+        "fica inviavel com semanas/meses acumulados.",
+    ),
     ate: str | None = typer.Option(
-        None, "--ate", help="YYYY-MM-DD -- so' valida dt= ate esta data "
-        "(inclusive). Combina com --desde para um intervalo."),
+        None,
+        "--ate",
+        help="YYYY-MM-DD -- so' valida dt= ate esta data "
+        "(inclusive). Combina com --desde para um intervalo.",
+    ),
     dia: str | None = typer.Option(
-        None, "--dia", help="YYYY-MM-DD -- atalho para --desde X --ate X "
-        "(valida so' um dia). Nao combina com --desde/--ate."),
+        None,
+        "--dia",
+        help="YYYY-MM-DD -- atalho para --desde X --ate X "
+        "(valida so' um dia). Nao combina com --desde/--ate.",
+    ),
     log_level: str = typer.Option("INFO", "--log-level"),
     log_file: Path | None = typer.Option(
-        None, "--log-file",
+        None,
+        "--log-file",
         help="Grava o log em arquivo alem do console — util pra acompanhar "
-             "com Get-Content -Wait numa varredura longa (--profundo em "
-             "milhares de arquivos pode levar horas).",
+        "com Get-Content -Wait numa varredura longa (--profundo em "
+        "milhares de arquivos pode levar horas).",
     ),
 ) -> None:
     """
@@ -363,33 +430,41 @@ def curate(
     curated: Path = typer.Option(Path("data/curated"), "--curated"),
     log_level: str = typer.Option("INFO", "--log-level"),
     log_file: Path | None = typer.Option(
-        None, "--log-file",
+        None,
+        "--log-file",
         help="Grava o log em arquivo alem do console — util pra acompanhar "
-             "com Get-Content -Wait numa curadoria longa (muitos dias/simbolos).",
+        "com Get-Content -Wait numa curadoria longa (muitos dias/simbolos).",
     ),
     modo_leitura: str = typer.Option(
-        "lote", "--modo-leitura",
+        "lote",
+        "--modo-leitura",
         help="'lote' (default, paralelo) / 'sequencial' (lote sem threads -- "
-             "tente se 'lote' parecer travado; leitura paralela de centenas "
-             "de arquivos pode causar thrashing em HD mecanico ou volume de "
-             "rede) / 'fragmento' (pula o lote inteiramente, volta ao loop "
-             "antigo arquivo-a-arquivo -- mais lento mas e' o unico modo que "
-             "ja terminou de verdade em producao; use se 'sequencial' "
-             "tambem nao der sinal de vida)."),
+        "tente se 'lote' parecer travado; leitura paralela de centenas "
+        "de arquivos pode causar thrashing em HD mecanico ou volume de "
+        "rede) / 'fragmento' (pula o lote inteiramente, volta ao loop "
+        "antigo arquivo-a-arquivo -- mais lento mas e' o unico modo que "
+        "ja terminou de verdade em producao; use se 'sequencial' "
+        "tambem nao der sinal de vida).",
+    ),
     diagnostico: bool = typer.Option(
-        False, "--diagnostico",
+        False,
+        "--diagnostico",
         help="Forca leitura fragmento-a-fragmento e loga progresso a cada 25 "
-             "arquivos (curate.leitura_progresso) -- diz se a lentidao e' "
-             "LINEAR (todo arquivo custando igual, suspeita de IO/antivirus) "
-             "ou concentrada NUM arquivo (pulo brusco entre checkpoints). "
-             "Use quando um dia estiver demorando horas sem log nenhum."),
+        "arquivos (curate.leitura_progresso) -- diz se a lentidao e' "
+        "LINEAR (todo arquivo custando igual, suspeita de IO/antivirus) "
+        "ou concentrada NUM arquivo (pulo brusco entre checkpoints). "
+        "Use quando um dia estiver demorando horas sem log nenhum.",
+    ),
     dia: str | None = typer.Option(
-        None, "--dia", help="Restringe a UM dt=YYYY-MM-DD. Combinavel com --simbolo."),
+        None, "--dia", help="Restringe a UM dt=YYYY-MM-DD. Combinavel com --simbolo."
+    ),
     simbolo: str | None = typer.Option(
-        None, "--simbolo",
+        None,
+        "--simbolo",
         help="Restringe a UM simbolo (ex.: WINFUT). Combinavel com --dia. "
-             "Util pra isolar um simbolo suspeito de lentidao sem esperar "
-             "o dia inteiro chegar nele."),
+        "Util pra isolar um simbolo suspeito de lentidao sem esperar "
+        "o dia inteiro chegar nele.",
+    ),
 ) -> None:
     """
     Deduplica e ordena raw -> curated. Rode SEMPRE antes de calcular features.
@@ -405,11 +480,17 @@ def curate(
     from .tools.curate import curar_trades, imprimir_relatorio
 
     if modo_leitura not in ("lote", "sequencial", "fragmento"):
-        raise typer.BadParameter(
-            "--modo-leitura precisa ser 'lote', 'sequencial' ou 'fragmento'")
-    imprimir_relatorio(curar_trades(raw, curated, modo_leitura=modo_leitura,
-                                    diagnostico=diagnostico,
-                                    dia_filtro=dia, simbolo_filtro=simbolo))
+        raise typer.BadParameter("--modo-leitura precisa ser 'lote', 'sequencial' ou 'fragmento'")
+    imprimir_relatorio(
+        curar_trades(
+            raw,
+            curated,
+            modo_leitura=modo_leitura,
+            diagnostico=diagnostico,
+            dia_filtro=dia,
+            simbolo_filtro=simbolo,
+        )
+    )
 
 
 @app.command()
@@ -417,25 +498,33 @@ def compact(
     raw: Path = typer.Option(Path("data/raw"), "--raw"),
     log_level: str = typer.Option("INFO", "--log-level"),
     log_file: Path | None = typer.Option(
-        None, "--log-file",
+        None,
+        "--log-file",
         help="Grava o log em arquivo alem do console (compact.particao_ok por "
-             "particao, com row groups antes/depois)."),
+        "particao, com row groups antes/depois).",
+    ),
     row_group_size: int = typer.Option(
-        1_048_576, "--row-group-size",
+        1_048_576,
+        "--row-group-size",
         help="Linhas por row group DENTRO de cada arquivo novo. Grande e "
-             "explicito de proposito -- e' o que desfaz os row groups de 15 "
-             "linhas do backfill antigo."),
+        "explicito de proposito -- e' o que desfaz os row groups de 15 "
+        "linhas do backfill antigo.",
+    ),
     max_rows_per_file: int = typer.Option(
-        5_000_000, "--max-rows-per-file",
-        help="Linhas por arquivo (mesmo limite do sink)."),
+        5_000_000, "--max-rows-per-file", help="Linhas por arquivo (mesmo limite do sink)."
+    ),
     modo_leitura: str = typer.Option(
-        "lote", "--modo-leitura",
+        "lote",
+        "--modo-leitura",
         help="'lote' (default, paralelo) / 'sequencial' (sem threads) / "
-             "'fragmento' (arquivo a arquivo) -- mesma semantica do curate."),
+        "'fragmento' (arquivo a arquivo) -- mesma semantica do curate.",
+    ),
     dia: str | None = typer.Option(
-        None, "--dia", help="Restringe a UM dt=YYYY-MM-DD. Combinavel com --simbolo."),
+        None, "--dia", help="Restringe a UM dt=YYYY-MM-DD. Combinavel com --simbolo."
+    ),
     simbolo: str | None = typer.Option(
-        None, "--simbolo", help="Restringe a UM simbolo. Combinavel com --dia."),
+        None, "--simbolo", help="Restringe a UM simbolo. Combinavel com --dia."
+    ),
 ) -> None:
     """
     Reescreve o raw de dias FECHADOS consolidando row groups minusculos.
@@ -452,39 +541,50 @@ def compact(
     from .tools.compact import compactar_raw, imprimir_relatorio
 
     if modo_leitura not in ("lote", "sequencial", "fragmento"):
-        raise typer.BadParameter(
-            "--modo-leitura precisa ser 'lote', 'sequencial' ou 'fragmento'")
+        raise typer.BadParameter("--modo-leitura precisa ser 'lote', 'sequencial' ou 'fragmento'")
     if row_group_size > max_rows_per_file:
         raise typer.BadParameter("--row-group-size nao pode exceder --max-rows-per-file")
-    imprimir_relatorio(compactar_raw(raw, row_group_size=row_group_size,
-                                     max_rows_per_file=max_rows_per_file,
-                                     modo_leitura=modo_leitura,
-                                     dia_filtro=dia, simbolo_filtro=simbolo))
+    imprimir_relatorio(
+        compactar_raw(
+            raw,
+            row_group_size=row_group_size,
+            max_rows_per_file=max_rows_per_file,
+            modo_leitura=modo_leitura,
+            dia_filtro=dia,
+            simbolo_filtro=simbolo,
+        )
+    )
 
 
 @app.command()
 def features(
     symbol: str = typer.Argument(
-        ..., help="Ex.: WINFUT — ou lista separada por virgula (WINFUT,WDOFUT,"
-                   "PETR4) ou 'todos' para processar cada sym= presente no "
-                   "curated. QoL para nao repetir o comando 9x manualmente."),
+        ...,
+        help="Ex.: WINFUT — ou lista separada por virgula (WINFUT,WDOFUT,"
+        "PETR4) ou 'todos' para processar cada sym= presente no "
+        "curated. QoL para nao repetir o comando 9x manualmente.",
+    ),
     curated: Path = typer.Option(Path("data/curated"), "--curated"),
     saida: Path = typer.Option(Path("data/features"), "--saida"),
-    volume_barra: int | None = typer.Option(None, "--volume-barra",
-                                            help="Fixo; omita para sugerir pela mediana."),
+    volume_barra: int | None = typer.Option(
+        None, "--volume-barra", help="Fixo; omita para sugerir pela mediana."
+    ),
     barras_por_dia: int = typer.Option(100, "--barras-por-dia"),
     top_agentes: int = typer.Option(10, "--top-agentes"),
     agentes: str | None = typer.Option(
-        None, "--agentes",
+        None,
+        "--agentes",
         help="Lista FIXA de agentes para agf_* (ex.: 3,8,39). Forward da Fase 2: "
-             "o top-N muda com o historico; o modelo congelado precisa das mesmas colunas"),
+        "o top-N muda com o historico; o modelo congelado precisa das mesmas colunas",
+    ),
     janela_z: int = typer.Option(50, "--janela-z"),
     label_k: float = typer.Option(2.0, "--label-k"),
     label_h: int = typer.Option(10, "--label-h"),
     perfis: Path | None = typer.Option(
-        Path("data/ref/agentes.csv"), "--perfis",
+        Path("data/ref/agentes.csv"),
+        "--perfis",
         help="CSV classificado (agents); adiciona fluxo_nacional se existir "
-             "e tiver algum agente rotulado NACIONAL. Passe vazio para omitir.",
+        "e tiver algum agente rotulado NACIONAL. Passe vazio para omitir.",
     ),
 ) -> None:
     """
@@ -495,10 +595,7 @@ def features(
     from .features.pipeline import gerar
 
     if symbol.strip().lower() == "todos":
-        simbolos = sorted({
-            p.name.split("=", 1)[1]
-            for p in (curated / "trade").glob("dt=*/sym=*")
-        })
+        simbolos = sorted({p.name.split("=", 1)[1] for p in (curated / "trade").glob("dt=*/sym=*")})
         if not simbolos:
             raise SystemExit(f"nenhum symbol encontrado em {curated / 'trade'}")
     else:
@@ -509,9 +606,19 @@ def features(
         typer.echo(f"\n[{i}/{len(simbolos)}] {sym}")
         try:
             fixos = [int(a) for a in agentes.split(",")] if agentes else None
-            r = gerar(curated, saida, sym, volume_barra, barras_por_dia,
-                      top_agentes, janela_z, label_k, label_h, perfis,
-                      agentes_fixos=fixos)
+            r = gerar(
+                curated,
+                saida,
+                sym,
+                volume_barra,
+                barras_por_dia,
+                top_agentes,
+                janela_z,
+                label_k,
+                label_h,
+                perfis,
+                agentes_fixos=fixos,
+            )
         except SystemExit as exc:
             # Simbolo com pouco dado (ex.: MGLU3 com 200 trades/dia nao
             # forma barra alguma) nao pode derrubar o lote inteiro — os
@@ -519,25 +626,29 @@ def features(
             typer.echo(f"  PULADO: {exc}")
             falhas.append(sym)
             continue
-        typer.echo(f"  barras={r['barras']} volume_barra={r['volume_barra']} "
-                   f"tick={r['tick_inferido']} arquivo={r['arquivo']}")
+        typer.echo(
+            f"  barras={r['barras']} volume_barra={r['volume_barra']} "
+            f"tick={r['tick_inferido']} arquivo={r['arquivo']}"
+        )
     if falhas:
-        typer.echo(f"\n{len(falhas)} simbolo(s) pulado(s) (dado insuficiente): "
-                   f"{falhas}")
+        typer.echo(f"\n{len(falhas)} simbolo(s) pulado(s) (dado insuficiente): {falhas}")
 
 
 @app.command()
 def features_tempo(
     symbol: str = typer.Argument("WINFUT", help="Ex.: WINFUT"),
-    segundos: int = typer.Option(300, "--segundos",
-                                 help="60 (1m) ou 300 (5m) — so' esses dois "
-                                      "estao no pre-registro de 2026-08-29e."),
+    segundos: int = typer.Option(
+        300,
+        "--segundos",
+        help="60 (1m) ou 300 (5m) — so' esses dois estao no pre-registro de 2026-08-29e.",
+    ),
     curated: Path = typer.Option(Path("data/curated"), "--curated"),
     saida: Path = typer.Option(Path("data/features_tempo"), "--saida"),
     janela_minutos: int = typer.Option(
-        250, "--janela-minutos",
-        help="Janela do z-score em MINUTOS (nao em barras): casa a "
-             "normalizacao entre 1m e 5m."),
+        250,
+        "--janela-minutos",
+        help="Janela do z-score em MINUTOS (nao em barras): casa a normalizacao entre 1m e 5m.",
+    ),
     log_file: Path | None = typer.Option(None, "--log-file"),
     log_level: str = typer.Option("WARNING", "--log-level"),
 ) -> None:
@@ -555,27 +666,36 @@ def features_tempo(
     configurar(log_level, arquivo=log_file, nivel_arquivo="INFO")
     from .features.pipeline_tempo import gerar_tempo
 
-    r = gerar_tempo(curated, saida, symbol.strip().upper(), segundos,
-                    janela_minutos)
+    r = gerar_tempo(curated, saida, symbol.strip().upper(), segundos, janela_minutos)
     typer.echo("=" * 62)
     typer.echo(f"FEATURES EM BARRA DE TEMPO — {r['symbol']} {r['tf']}")
     typer.echo("=" * 62)
-    for k in ("dias", "trades", "barras", "barras_finais_descartadas",
-              "buracos", "range_ticks_mediano", "tick_inferido",
-              "janela_z_barras", "janela_z_minutos", "colunas_z", "arquivo"):
+    for k in (
+        "dias",
+        "trades",
+        "barras",
+        "barras_finais_descartadas",
+        "buracos",
+        "range_ticks_mediano",
+        "tick_inferido",
+        "janela_z_barras",
+        "janela_z_minutos",
+        "colunas_z",
+        "arquivo",
+    ):
         typer.echo(f"  {k:26}: {r[k]}")
 
 
 @app.command()
 def portao_absorcao(
-    trials: Path = typer.Option(Path("data/research/trials.json"), "--trials",
-                                help="Para usar o MESMO limiar que o teste "
-                                     "real vai enfrentar."),
-    semeaduras: int = typer.Option(20, "--semeaduras",
-                                   help="Tapes de ruido para o nulo empirico."),
+    trials: Path = typer.Option(
+        Path("data/research/trials.json"),
+        "--trials",
+        help="Para usar o MESMO limiar que o teste real vai enfrentar.",
+    ),
+    semeaduras: int = typer.Option(20, "--semeaduras", help="Tapes de ruido para o nulo empirico."),
     dias: int = typer.Option(25, "--dias"),
-    saida: Path | None = typer.Option(None, "--saida",
-                                      help="CSV opcional com as duas tabelas."),
+    saida: Path | None = typer.Option(None, "--saida", help="CSV opcional com as duas tabelas."),
     log_file: Path | None = typer.Option(None, "--log-file"),
     log_level: str = typer.Option("INFO", "--log-level"),
 ) -> None:
@@ -590,18 +710,22 @@ def portao_absorcao(
     configurar(log_level, arquivo=log_file, nivel_arquivo="INFO")
     from .research.portao_absorcao import rodar_portao
 
-    r = rodar_portao(trials_json=str(trials), n_semeaduras=semeaduras,
-                     n_dias=dias)
+    r = rodar_portao(trials_json=str(trials), n_semeaduras=semeaduras, n_dias=dias)
     typer.echo("=" * 62)
     typer.echo("PORTAO DE HONESTIDADE — absorcao direcional (2026-08-29e)")
     typer.echo("=" * 62)
-    typer.echo(f"  limiar_z usado      : {r['limiar_z']:.3f} "
-               f"(trials {r['trials_base']} + {r['trials_extra']})")
+    typer.echo(
+        f"  limiar_z usado      : {r['limiar_z']:.3f} "
+        f"(trials {r['trials_base']} + {r['trials_extra']})"
+    )
     typer.echo(f"  vereditos           : {r['vereditos']}")
     typer.echo(f"  PASSOU              : {r['passou']}")
     typer.echo("\n--- rodada congelada ---")
-    typer.echo(r["tabela"][["tf", "feature", "horizonte", "ic_medio", "t_stat",
-                            "consistencia_sinal", "veredito"]].to_string(index=False))
+    typer.echo(
+        r["tabela"][
+            ["tf", "feature", "horizonte", "ic_medio", "t_stat", "consistencia_sinal", "veredito"]
+        ].to_string(index=False)
+    )
     typer.echo(f"\n--- nulo empirico ({r['n_semeaduras']} tapes) ---")
     typer.echo(r["nulo_empirico"].round(5).to_string(index=False))
     if saida:
@@ -614,21 +738,23 @@ def portao_absorcao(
 
 @app.command()
 def ntsl_equivalencia(
-    log: Path = typer.Option(..., "--log",
-                             help="Dump do console do Profit com as linhas ABSDIR|."),
-    features: Path = typer.Option(..., "--features",
-                                  help="Parquet de data/features_tempo/."),
+    log: Path = typer.Option(..., "--log", help="Dump do console do Profit com as linhas ABSDIR|."),
+    features: Path = typer.Option(..., "--features", help="Parquet de data/features_tempo/."),
     segundos: int = typer.Option(300, "--segundos", help="60 ou 300."),
     hora_bolsa: bool = typer.Option(
-        False, "--hora-bolsa",
+        False,
+        "--hora-bolsa",
         help="Usa TimeExchange no lugar de Time. Se NENHUMA barra casar "
-             "com o default, o grafico esta em fuso diferente do da bolsa "
-             "e e' esta a flag que resolve."),
+        "com o default, o grafico esta em fuso diferente do da bolsa "
+        "e e' esta a flag que resolve.",
+    ),
     janela_z: int = typer.Option(
-        50, "--janela-z",
+        50,
+        "--janela-z",
         help="Janela do z-score, em barras. Usada para avisar quando as "
-             "barras casadas caem no inicio do parquet, onde o z NAO e' "
-             "comparavel por construcao."),
+        "barras casadas caem no inicio do parquet, onde o z NAO e' "
+        "comparavel por construcao.",
+    ),
     tolerancia: float = typer.Option(1e-6, "--tolerancia"),
     log_level: str = typer.Option("INFO", "--log-level"),
 ) -> None:
@@ -645,14 +771,28 @@ def ntsl_equivalencia(
     configurar(log_level)
     from .tools.ntsl_equivalencia import comparar
 
-    r = comparar(log, features, segundos, usar_hora_bolsa=hora_bolsa,
-                 janela_z=janela_z, tolerancia=tolerancia)
+    r = comparar(
+        log,
+        features,
+        segundos,
+        usar_hora_bolsa=hora_bolsa,
+        janela_z=janela_z,
+        tolerancia=tolerancia,
+    )
     typer.echo("=" * 62)
     typer.echo("EQUIVALENCIA NTSL <-> profit-tape")
     typer.echo("=" * 62)
-    for k in ("linhas_com_prefixo", "malformadas", "duplicadas", "barras",
-              "barras_python", "barras_casadas", "sem_par_no_python",
-              "coluna_hora_usada", "tolerancia"):
+    for k in (
+        "linhas_com_prefixo",
+        "malformadas",
+        "duplicadas",
+        "barras",
+        "barras_python",
+        "barras_casadas",
+        "sem_par_no_python",
+        "coluna_hora_usada",
+        "tolerancia",
+    ):
         typer.echo(f"  {k:22}: {r[k]}")
     typer.echo("")
     if r["tabela"].empty:
@@ -666,38 +806,52 @@ def ntsl_equivalencia(
     if "barras_so_numerador_difere" in atrib:
         typer.echo("\n--- de onde vem a divergencia de desloc_norm ---")
         typer.echo("    desloc_norm = (close - open) / (high - low)")
-        typer.echo(f"  tick estimado {atrib['tick_estimado']} | "
-                   f"fatores k distintos: {atrib['k_distintos']}")
+        typer.echo(
+            f"  tick estimado {atrib['tick_estimado']} | "
+            f"fatores k distintos: {atrib['k_distintos']}"
+        )
         if atrib["k_distintos"] > 1:
             typer.echo("    ATENCAO: houve ROLAGEM dentro da amostra. k por pregao:")
             for dia, kv in sorted(atrib["k_por_pregao"].items()):
                 typer.echo(f"      {dia}: {kv}")
-        typer.echo(f"  so' o NUMERADOR (close-open) difere : "
-                   f"{atrib['barras_so_numerador_difere']} de {atrib['n']}")
-        typer.echo(f"  so' o DENOMINADOR (high-low) difere : "
-                   f"{atrib['barras_so_denominador_difere']}")
-        typer.echo(f"  os dois diferem                     : "
-                   f"{atrib['barras_ambos_diferem']}")
-        typer.echo(f"  nenhum difere                       : "
-                   f"{atrib['barras_nada_difere']}"
-                   f"  (erro mediano {atrib['erro_mediano_nada_difere']})")
-        typer.echo(f"  diferenca mediana do numerador   : "
-                   f"{atrib['dif_numerador_mediana_ticks']} ticks")
-        typer.echo(f"  diferenca mediana do denominador : "
-                   f"{atrib['dif_denominador_mediana_ticks']} ticks")
+        typer.echo(
+            f"  so' o NUMERADOR (close-open) difere : "
+            f"{atrib['barras_so_numerador_difere']} de {atrib['n']}"
+        )
+        typer.echo(
+            f"  so' o DENOMINADOR (high-low) difere : {atrib['barras_so_denominador_difere']}"
+        )
+        typer.echo(f"  os dois diferem                     : {atrib['barras_ambos_diferem']}")
+        typer.echo(
+            f"  nenhum difere                       : "
+            f"{atrib['barras_nada_difere']}"
+            f"  (erro mediano {atrib['erro_mediano_nada_difere']})"
+        )
+        typer.echo(
+            f"  diferenca mediana do numerador   : {atrib['dif_numerador_mediana_ticks']} ticks"
+        )
+        typer.echo(
+            f"  diferenca mediana do denominador : {atrib['dif_denominador_mediana_ticks']} ticks"
+        )
         typer.echo("\n  qual ponta do numerador diverge (open e close sao o")
         typer.echo("  primeiro e o ultimo negocio da barra):")
-        typer.echo(f"    so' open  : {atrib['barras_so_open']}"
-                   f"   |  so' close : {atrib['barras_so_close']}"
-                   f"   |  os dois : {atrib['barras_open_e_close']}")
-        typer.echo(f"    dif mediana open  : "
-                   f"{atrib['dif_open_mediana_ticks']} ticks  |  close : "
-                   f"{atrib['dif_close_mediana_ticks']} ticks")
+        typer.echo(
+            f"    so' open  : {atrib['barras_so_open']}"
+            f"   |  so' close : {atrib['barras_so_close']}"
+            f"   |  os dois : {atrib['barras_open_e_close']}"
+        )
+        typer.echo(
+            f"    dif mediana open  : "
+            f"{atrib['dif_open_mediana_ticks']} ticks  |  close : "
+            f"{atrib['dif_close_mediana_ticks']} ticks"
+        )
     elif atrib.get("situacao"):
         typer.echo(f"\n  atribuicao nao calculada: {atrib['situacao']}")
     if r["barras_casadas"] == 0:
-        typer.echo("\n  NENHUMA barra casou. Tente --hora-bolsa, ou confira "
-                   "se o --segundos bate com o timeframe do grafico.")
+        typer.echo(
+            "\n  NENHUMA barra casou. Tente --hora-bolsa, ou confira "
+            "se o --segundos bate com o timeframe do grafico."
+        )
 
 
 @app.command()
@@ -707,16 +861,20 @@ def rota_b_remanescente(
     curated: Path = typer.Option(Path("data/curated"), "--curated"),
     saida: Path = typer.Option(Path("data/research"), "--saida"),
     volume_barra: int | None = typer.Option(
-        None, "--volume-barra",
+        None,
+        "--volume-barra",
         help="O MESMO usado ao gerar as features. Se omitido, e' lido do "
-             "resumo.json ao lado do parquet ou, na falta dele, inferido "
-             "de min(vol_agr). O portao monta barras de ruido com esta "
-             "granularidade; errar aqui compara geometrias diferentes."),
+        "resumo.json ao lado do parquet ou, na falta dele, inferido "
+        "de min(vol_agr). O portao monta barras de ruido com esta "
+        "granularidade; errar aqui compara geometrias diferentes.",
+    ),
     so_agressao: bool = typer.Option(
-        True, "--so-agressao/--com-rlp",
+        True,
+        "--so-agressao/--com-rlp",
         help="Quais negocios disparam o stop. Default True (RLP nao "
-             "consome liquidez do livro). Rode os dois: se a conclusao "
-             "mudar, e achado de microestrutura e tem que aparecer."),
+        "consome liquidez do livro). Rode os dois: se a conclusao "
+        "mudar, e achado de microestrutura e tem que aparecer.",
+    ),
     dias_ruido: int = typer.Option(100, "--dias-ruido"),
     log_file: Path | None = typer.Option(None, "--log-file"),
     log_level: str = typer.Option("INFO", "--log-level"),
@@ -736,28 +894,45 @@ def rota_b_remanescente(
     if not arquivo.exists():
         raise SystemExit(f"nao achei {arquivo} — rode `profit-tape features`")
 
-    r = rodar(arquivo, curated, symbol.strip().upper(), saida,
-              volume_barra=volume_barra, so_agressao=so_agressao,
-              n_dias_ruido=dias_ruido)
+    r = rodar(
+        arquivo,
+        curated,
+        symbol.strip().upper(),
+        saida,
+        volume_barra=volume_barra,
+        so_agressao=so_agressao,
+        n_dias_ruido=dias_ruido,
+    )
 
     typer.echo("=" * 66)
     typer.echo("ROTA B — remanescente a partir do toque (pre-registro 2026-08-30d)")
     typer.echo("=" * 66)
-    typer.echo(f"\n  volume_barra: {r['volume_barra']}  "
-               f"({r['volume_barra_origem']})")
+    typer.echo(f"\n  volume_barra: {r['volume_barra']}  ({r['volume_barra_origem']})")
     typer.echo("\n--- 1. CHECAGEM DE PRE-VOO (bloqueante) ---")
     for k, v in r["prevoo"].items():
         typer.echo(f"  {k:22}: {v}")
     typer.echo("\n--- 2. PORTAO SOBRE RUIDO (bloqueante) ---")
-    typer.echo(f"  veredito: {r['portao']['veredito']}  |  passou: "
-               f"{r['portao']['passou']}")
+    typer.echo(f"  veredito: {r['portao']['veredito']}  |  passou: {r['portao']['passou']}")
     typer.echo("\n--- 3. DADO REAL ---")
-    typer.echo(f"  limiar deflacionado (7 comparacoes): "
-               f"{r['limiar_deflacionado']}")
+    typer.echo(f"  limiar deflacionado (7 comparacoes): {r['limiar_deflacionado']}")
     typer.echo(f"  so_agressao: {r['so_agressao']}")
-    typer.echo(r["tabela"][["x", "n", "n_suficiente", "media", "t",
-                            "ic95_baixo", "ic95_alto", "overshoot_medio",
-                            "sig"]].round(3).to_string(index=False))
+    typer.echo(
+        r["tabela"][
+            [
+                "x",
+                "n",
+                "n_suficiente",
+                "media",
+                "t",
+                "ic95_baixo",
+                "ic95_alto",
+                "overshoot_medio",
+                "sig",
+            ]
+        ]
+        .round(3)
+        .to_string(index=False)
+    )
     typer.echo(f"\n  VEREDITO: {r['veredito']}")
     typer.echo(f"  {r['motivo']}")
 
@@ -785,23 +960,21 @@ def absorcao_diagnostico(
     configurar(log_level)
     from .research.absorcao_diagnostico import rodar
 
-    arquivo = (features / f"sym={symbol.upper()}" / f"tf={tf}"
-               / "features.parquet")
+    arquivo = features / f"sym={symbol.upper()}" / f"tf={tf}" / "features.parquet"
     if not arquivo.exists():
-        raise SystemExit(
-            f"nao achei {arquivo} — rode `profit-tape features-tempo`")
+        raise SystemExit(f"nao achei {arquivo} — rode `profit-tape features-tempo`")
 
     r = rodar(arquivo, tick=tick, limiar=limiar, limiar_imb=limiar_imb)
     typer.echo("=" * 70)
     typer.echo(f"DIAGNOSTICO DE ABSORCAO — {symbol.upper()} {tf}")
     typer.echo("=" * 70)
-    typer.echo(f"  barras: {r['barras']}  |  amplitude zero (esforco "
-               f"indefinido): {r['amplitude_zero']}")
+    typer.echo(
+        f"  barras: {r['barras']}  |  amplitude zero (esforco indefinido): {r['amplitude_zero']}"
+    )
     typer.echo("\n--- ESFORCO = vol_agr / amplitude_em_ticks ---")
     for k, v in r["esforco_geral"].items():
         typer.echo(f"  {k:>4}: {v:>12,.1f} contratos por tick")
-    typer.echo("\n--- POR LEITURA (limiar "
-               f"{limiar} / limiar_imb {limiar_imb}) ---")
+    typer.echo(f"\n--- POR LEITURA (limiar {limiar} / limiar_imb {limiar_imb}) ---")
     tabela = pd.DataFrame(r["por_leitura"])
     typer.echo(tabela.to_string(index=False))
     typer.echo("\n  A_* = agressao empurrou e o preco foi para o outro lado")
@@ -812,25 +985,29 @@ def absorcao_diagnostico(
 def triagem(
     coluna: str = typer.Argument(..., help="Feature candidata a triar."),
     features: Path = typer.Option(
-        Path("data/features_tempo/sym=WINFUT/tf=5m/features.parquet"),
-        "--features"),
+        Path("data/features_tempo/sym=WINFUT/tf=5m/features.parquet"), "--features"
+    ),
     contra: str | None = typer.Option(
-        None, "--contra",
+        None,
+        "--contra",
         help="Features existentes, separadas por virgula. Sem isto, "
-             "compara com TODAS as numericas do parquet."),
+        "compara com TODAS as numericas do parquet.",
+    ),
     expr: str | None = typer.Option(
-        None, "--expr",
+        None,
+        "--expr",
         help="Expressao que DEFINE a candidata, quando ela ainda nao esta "
-             "no parquet. Ex.: --expr \"vol_agr / ((high-low)/5)\". Sem "
-             "isto, `coluna` e' lida do parquet."),
-    numerador: str | None = typer.Option(
-        None, "--numerador",
-        help="Nome de coluna OU expressao."),
+        'no parquet. Ex.: --expr "vol_agr / ((high-low)/5)". Sem '
+        "isto, `coluna` e' lida do parquet.",
+    ),
+    numerador: str | None = typer.Option(None, "--numerador", help="Nome de coluna OU expressao."),
     denominador: str | None = typer.Option(
-        None, "--denominador",
+        None,
+        "--denominador",
         help="Nome de coluna OU expressao. Se a candidata e' uma razao, "
-             "declare as partes: razao entre quantidades que andam juntas "
-             "e' quase constante por construcao."),
+        "declare as partes: razao entre quantidades que andam juntas "
+        "e' quase constante por construcao.",
+    ),
     log_level: str = typer.Option("INFO", "--log-level"),
 ) -> None:
     """
@@ -847,9 +1024,9 @@ def triagem(
 
     if not features.exists():
         raise SystemExit(f"nao achei {features}")
-    r = triar_parquet(features, coluna,
-                      contra.split(",") if contra else None,
-                      numerador, denominador, expr)
+    r = triar_parquet(
+        features, coluna, contra.split(",") if contra else None, numerador, denominador, expr
+    )
 
     typer.echo("=" * 64)
     typer.echo(f"TRIAGEM DE `{coluna}`  ->  {r['veredito']}")
@@ -869,23 +1046,27 @@ def triagem(
     c = r["cauda"]
     if "pct_acima_de_2_5_sd" in c:
         typer.echo("\n--- CAUDA ---")
-        typer.echo(f"  {c['pct_acima_de_2_5_sd']}% acima de 2,5 desvios "
-                   f"| normal: {c['pct_esperado_sob_normal']}% "
-                   f"| razao: {c['razao_com_a_normal']}x")
+        typer.echo(
+            f"  {c['pct_acima_de_2_5_sd']}% acima de 2,5 desvios "
+            f"| normal: {c['pct_esperado_sob_normal']}% "
+            f"| razao: {c['razao_com_a_normal']}x"
+        )
         typer.echo(f"  faixa observada: [{c['min']}, {c['max']}]")
 
     if "correlacao_numerador_denominador" in r["razao"]:
         typer.echo("\n--- RAZAO ---")
-        typer.echo(f"  corr(numerador, denominador) = "
-                   f"{r['razao']['correlacao_numerador_denominador']:+.4f}")
+        typer.echo(
+            f"  corr(numerador, denominador) = "
+            f"{r['razao']['correlacao_numerador_denominador']:+.4f}"
+        )
         typer.echo(f"  {r['razao']['nota']}")
 
 
 @app.command()
 def absorcao_barra(
     features: Path = typer.Option(
-        Path("data/features_tempo/sym=WINFUT/tf=5m/features.parquet"),
-        "--features"),
+        Path("data/features_tempo/sym=WINFUT/tf=5m/features.parquet"), "--features"
+    ),
     saida: Path = typer.Option(Path("data/research"), "--saida"),
     dias_ruido: int = typer.Option(900, "--dias-ruido"),
     log_level: str = typer.Option("INFO", "--log-level"),
@@ -901,25 +1082,23 @@ def absorcao_barra(
     from .research.absorcao_barra import rodar
 
     if not features.exists():
-        raise SystemExit(
-            f"nao achei {features} — rode `profit-tape features-tempo`")
+        raise SystemExit(f"nao achei {features} — rode `profit-tape features-tempo`")
     r = rodar(features, saida, n_dias_ruido=dias_ruido)
 
     typer.echo("=" * 72)
     typer.echo("ABSORCAO DE BARRA (pre-registro 2026-08-31)")
     typer.echo("=" * 72)
-    typer.echo(f"  portao sobre ruido: {r['portao']['veredito']} "
-               f"(passou: {r['portao']['passou']})")
+    typer.echo(f"  portao sobre ruido: {r['portao']['veredito']} (passou: {r['portao']['passou']})")
     typer.echo(f"  barras: {r['barras']}  |  eventos: {r['eventos']}")
-    typer.echo(f"  limiar deflacionado (2 comparacoes): "
-               f"{r['limiar_deflacionado']}\n")
-    typer.echo(r["tabela"][["grupo", "n", "n_suficiente", "media", "t",
-                            "ic95_baixo", "ic95_alto", "sig"]]
-               .round(3).to_string(index=False))
+    typer.echo(f"  limiar deflacionado (2 comparacoes): {r['limiar_deflacionado']}\n")
+    typer.echo(
+        r["tabela"][["grupo", "n", "n_suficiente", "media", "t", "ic95_baixo", "ic95_alto", "sig"]]
+        .round(3)
+        .to_string(index=False)
+    )
     typer.echo(f"\n  VEREDITO: {r['veredito']}")
     typer.echo(f"  {r['motivo']}")
-    typer.echo("\n  CONTROLE = diagnostico, nao criterio: responde se a "
-               "conjuncao acrescenta algo.")
+    typer.echo("\n  CONTROLE = diagnostico, nao criterio: responde se a conjuncao acrescenta algo.")
 
 
 @app.command()
@@ -944,21 +1123,24 @@ def absorcao_grafico(
     typer.echo("ABSORCAO DE BARRA — amostra do GRAFICO (independente)")
     typer.echo("=" * 72)
     d = r["log"]
-    typer.echo(f"  {d['barras']} barras | {d['pregoes']} pregoes | "
-               f"{d['inicio']} a {d['fim']}")
+    typer.echo(f"  {d['barras']} barras | {d['pregoes']} pregoes | {d['inicio']} a {d['fim']}")
     typer.echo(f"  portao sobre ruido: {r['portao']}")
     typer.echo(f"  eventos: {r['eventos']}\n")
     typer.echo("--- CONFERENCIA Python vs .ntsl (divergencia = os dois nao")
     typer.echo("    sao a mesma coisa) ---")
     for campo, v in r["conferencia_ntsl"].items():
         if v.get("comparaveis"):
-            typer.echo(f"  {campo:16} n={v['comparaveis']:5d} "
-                       f"dif_mediana={v['dif_mediana']} "
-                       f"dif_max={v['dif_max']}")
+            typer.echo(
+                f"  {campo:16} n={v['comparaveis']:5d} "
+                f"dif_mediana={v['dif_mediana']} "
+                f"dif_max={v['dif_max']}"
+            )
     typer.echo("")
-    typer.echo(r["tabela"][["grupo", "n", "n_suficiente", "media", "t",
-                            "ic95_baixo", "ic95_alto", "sig"]]
-               .round(3).to_string(index=False))
+    typer.echo(
+        r["tabela"][["grupo", "n", "n_suficiente", "media", "t", "ic95_baixo", "ic95_alto", "sig"]]
+        .round(3)
+        .to_string(index=False)
+    )
     typer.echo(f"\n  VEREDITO: {r['veredito']}")
     typer.echo(f"  {r['motivo']}")
 
@@ -968,8 +1150,10 @@ def bollinger_scalp(
     log: Path = typer.Argument(..., help="Dump do console com linhas BBSBARRA| (grafico de 15s)"),
     saida: Path = typer.Option(Path("data/research/bollinger_scalp"), "--saida"),
     tolerancia: float = typer.Option(
-        0.5, "--tolerancia",
-        help="Diferenca maxima Python x Profit para considerar a variante equivalente"),
+        0.5,
+        "--tolerancia",
+        help="Diferenca maxima Python x Profit para considerar a variante equivalente",
+    ),
     log_level: str = typer.Option("INFO", "--log-level"),
 ) -> None:
     """
@@ -990,9 +1174,11 @@ def bollinger_scalp(
     typer.echo("=" * 72)
     typer.echo("SCALP DE BOLLINGER — dump do grafico de 15s")
     typer.echo("=" * 72)
-    typer.echo(f"  {m['barras']} barras | {m['pregoes']} pregoes | {m['blocos']} bloco(s) "
-               f"contiguo(s) | {m['inicio']} a {m['fim']} | Time com segundos: "
-               f"{m['time_com_segundos']}")
+    typer.echo(
+        f"  {m['barras']} barras | {m['pregoes']} pregoes | {m['blocos']} bloco(s) "
+        f"contiguo(s) | {m['inicio']} a {m['fim']} | Time com segundos: "
+        f"{m['time_com_segundos']}"
+    )
     typer.echo("\n--- EQUIVALENCIA Python x Profit (a variante que bate e' a que o")
     typer.echo("    operador ve no grafico; a que nao bate e' formula diferente) ---")
     for campo, v in r["equivalencia"].items():
@@ -1000,23 +1186,31 @@ def bollinger_scalp(
         typer.echo(f"  {campo:12} melhor={v['melhor']!s:12} {marca}")
         for var, det in v["detalhe"].items():
             if det.get("comparaveis"):
-                typer.echo(f"      {var:12} n={det['comparaveis']:5d} "
-                           f"dif_max={det['dif_max']} dif_mediana={det['dif_mediana']}")
+                typer.echo(
+                    f"      {var:12} n={det['comparaveis']:5d} "
+                    f"dif_max={det['dif_max']} dif_mediana={det['dif_mediana']}"
+                )
     if r["largura_banda"]:
         lb = r["largura_banda"]
-        typer.echo(f"\n  Meia-largura da banda 0,38: p10={lb['meia_largura_p10_pts']} "
-                   f"p50={lb['meia_largura_p50_pts']} p90={lb['meia_largura_p90_pts']} pts "
-                   f"(p50 = {lb['meia_largura_p50_ticks']} ticks)")
+        typer.echo(
+            f"\n  Meia-largura da banda 0,38: p10={lb['meia_largura_p10_pts']} "
+            f"p50={lb['meia_largura_p50_pts']} p90={lb['meia_largura_p90_pts']} pts "
+            f"(p50 = {lb['meia_largura_p50_ticks']} ticks)"
+        )
     if r["atr"]:
-        typer.echo(f"  ATR21: p50={r['atr']['atr21_p50_pts']} p90={r['atr']['atr21_p90_pts']} "
-                   f"pts (stop da hipotese = 40 pts)")
+        typer.echo(
+            f"  ATR21: p50={r['atr']['atr21_p50_pts']} p90={r['atr']['atr21_p90_pts']} "
+            f"pts (stop da hipotese = 40 pts)"
+        )
     cob = r["cobertura"]
     typer.echo("\n--- COBERTURA POR PREGAO (o funil so' conta os inteiros) ---")
     typer.echo(cob.to_string(index=False))
     n_int = int(cob["inteiro"].sum())
     if n_int < len(cob):
-        typer.echo(f"  AVISO: {len(cob) - n_int} pregao(oes) incompleto(s) fora do funil. "
-                   "Regra pratica: um pregao por dump.")
+        typer.echo(
+            f"  AVISO: {len(cob) - n_int} pregao(oes) incompleto(s) fora do funil. "
+            "Regra pratica: um pregao por dump."
+        )
     typer.echo(f"\n--- FUNIL DA REGRA (7.4) -- por_pregao = / {n_int} pregao(oes) inteiro(s) ---")
     typer.echo(r["funil"].to_string(index=False))
     dg = r["diagnostico"]
@@ -1024,15 +1218,21 @@ def bollinger_scalp(
     for lado in ("compra", "venda"):
         v = dg.get(lado, {})
         if v.get("candidatos"):
-            typer.echo(f"  {lado}: {v['candidatos']} candidatos (banda em t-2 e t-1). "
-                       f"Est(t-1) quantis 5/25/50/75/95 = {v['est_t1_quantis_5_25_50_75_95']}")
-            typer.echo(f"      Est(t-1) <20: {v['est_t1_abaixo_20']}  >80: {v['est_t1_acima_80']}"
-                       f"  <50: {v['est_t1_abaixo_50']}  >50: {v['est_t1_acima_50']}"
-                       f"  | Est(t-2) <20: {v['est_t2_abaixo_20']}  >80: {v['est_t2_acima_80']}")
+            typer.echo(
+                f"  {lado}: {v['candidatos']} candidatos (banda em t-2 e t-1). "
+                f"Est(t-1) quantis 5/25/50/75/95 = {v['est_t1_quantis_5_25_50_75_95']}"
+            )
+            typer.echo(
+                f"      Est(t-1) <20: {v['est_t1_abaixo_20']}  >80: {v['est_t1_acima_80']}"
+                f"  <50: {v['est_t1_abaixo_50']}  >50: {v['est_t1_acima_50']}"
+                f"  | Est(t-2) <20: {v['est_t2_abaixo_20']}  >80: {v['est_t2_acima_80']}"
+            )
     if "tr" in dg:
         t = dg["tr"]
-        typer.echo(f"  TR da barra de 15s: p50={t['tr_p50_pts']} pts | barras com TR >= stop(40): "
-                   f"{t['pct_barras_tr_ge_stop']}% | TR >= 80: {t['pct_barras_tr_ge_2x_stop']}%")
+        typer.echo(
+            f"  TR da barra de 15s: p50={t['tr_p50_pts']} pts | barras com TR >= stop(40): "
+            f"{t['pct_barras_tr_ge_stop']}% | TR >= 80: {t['pct_barras_tr_ge_2x_stop']}%"
+        )
     typer.echo(f"\n  saida: {saida}")
 
 
@@ -1059,8 +1259,10 @@ def perfil_volume_horario(
     r["por_dia"].to_parquet(saida / "por_dia.parquet", index=False)
     r["mediana"].to_csv(saida / "mediana.csv", index=False)
     typer.echo("=" * 72)
-    typer.echo(f"PERFIL DE VOLUME POR FAIXA DE {minutos} MIN — {r['symbol']} — "
-               f"mediana de {r['pregoes']} pregoes")
+    typer.echo(
+        f"PERFIL DE VOLUME POR FAIXA DE {minutos} MIN — {r['symbol']} — "
+        f"mediana de {r['pregoes']} pregoes"
+    )
     typer.echo("=" * 72)
     m = r["mediana"].copy()
     m["pct_do_dia"] = (100 * m["pct_do_dia"]).round(1)
@@ -1078,13 +1280,19 @@ def perfil_volume_horario(
 def inventario_deepscalper(
     symbol: str = typer.Argument("WINFUT"),
     curated: Path = typer.Option(Path("data/curated"), "--curated"),
-    raw: Path = typer.Option(Path("data/raw"), "--raw",
-                             help="Raiz do raw (book_offer/book_price/tiny_book nao sao curados)"),
-    volume_barra: int = typer.Option(120_000, "--volume-barra",
-                                     help="CONGELADO do EA (config/ea.yaml)"),
+    raw: Path = typer.Option(
+        Path("data/raw"),
+        "--raw",
+        help="Raiz do raw (book_offer/book_price/tiny_book nao sao curados)",
+    ),
+    volume_barra: int = typer.Option(
+        120_000, "--volume-barra", help="CONGELADO do EA (config/ea.yaml)"
+    ),
     data_book_confiavel: str = typer.Option(
-        "2026-08-26", "--data-book-confiavel",
-        help="Primeiro dia com book_offer confiavel (v0.55, INTEGRIDADE_DOS_DADOS.md)"),
+        "2026-08-26",
+        "--data-book-confiavel",
+        help="Primeiro dia com book_offer confiavel (v0.55, INTEGRIDADE_DOS_DADOS.md)",
+    ),
     saida: Path = typer.Option(Path("data/research/inventario_deepscalper"), "--saida"),
     log_level: str = typer.Option("WARNING", "--log-level"),
 ) -> None:
@@ -1097,28 +1305,37 @@ def inventario_deepscalper(
     configurar(log_level)
     from .research.inventario_deepscalper import PORTAO_FASE_3, gravar, inventario
 
-    r = inventario(curated, raw, symbol.strip().upper(), volume_barra,
-                   data_book_confiavel)
+    r = inventario(curated, raw, symbol.strip().upper(), volume_barra, data_book_confiavel)
     gravar(r, saida)
     s = r["resumo"]
     typer.echo("=" * 72)
-    typer.echo(f"INVENTARIO DEEPSCALPER (Fase 0) — {s['symbol']} — "
-               f"barra de {s['volume_barra']:,} contratos")
+    typer.echo(
+        f"INVENTARIO DEEPSCALPER (Fase 0) — {s['symbol']} — "
+        f"barra de {s['volume_barra']:,} contratos"
+    )
     typer.echo("=" * 72)
     typer.echo(f"  pregoes com trade curated        : {s['pregoes_trade']}")
-    typer.echo(f"  pregoes com book INTEGRO         : {s['pregoes_book_integro']}"
-               f"   (>= {s['data_book_confiavel']}, offer+price presentes)")
-    typer.echo(f"  faltam para o portao da Fase 3   : {s['faltam_para_portao_fase3']}"
-               f"   (portao = {PORTAO_FASE_3})")
-    typer.echo(f"  barras por pregao (mediana)      : {s['barras_por_pregao_mediana']:.0f}"
-               "   <- TAXA da ficha forward")
+    typer.echo(
+        f"  pregoes com book INTEGRO         : {s['pregoes_book_integro']}"
+        f"   (>= {s['data_book_confiavel']}, offer+price presentes)"
+    )
+    typer.echo(
+        f"  faltam para o portao da Fase 3   : {s['faltam_para_portao_fase3']}"
+        f"   (portao = {PORTAO_FASE_3})"
+    )
+    typer.echo(
+        f"  barras por pregao (mediana)      : {s['barras_por_pregao_mediana']:.0f}"
+        "   <- TAXA da ficha forward"
+    )
     typer.echo(f"  horas por pregao (mediana)       : {s['horas_por_pregao_mediana']:.2f}")
     typer.echo(f"  barras por hora (mediana)        : {s['barras_por_hora_mediana']:.2f}")
     typer.echo(f"  h (barras que cobrem 120 min)    : {s['h_120min']}")
     typer.echo(f"  tick (mediana)                   : {s['tick_mediana']:.1f}")
-    typer.echo(f"  spread mediana / p90 (ticks)     : {s['spread_mediana_ticks']:.2f} / "
-               f"{s['spread_p90_ticks']:.2f}   "
-               f"em {s['pregoes_com_tiny_book']} pregoes com tiny_book")
+    typer.echo(
+        f"  spread mediana / p90 (ticks)     : {s['spread_mediana_ticks']:.2f} / "
+        f"{s['spread_p90_ticks']:.2f}   "
+        f"em {s['pregoes_com_tiny_book']} pregoes com tiny_book"
+    )
     typer.echo(f"  fracao do tempo-evento em 1 tick : {s['spread_frac_1tick']:.2f}")
     typer.echo("\n  spread ponderado por EVENTO de tiny_book, nao por tempo; <= 0 excluido")
     typer.echo(f"  saida: {saida}  (por_dia.csv, por_dia.parquet, resumo.json)")
@@ -1126,15 +1343,18 @@ def inventario_deepscalper(
 
 @app.command()
 def simulador_conferir(
-    features: Path = typer.Option(Path("data/features/sym=WINFUT/features.parquet"),
-                                  "--features"),
+    features: Path = typer.Option(Path("data/features/sym=WINFUT/features.parquet"), "--features"),
     ea_config: Path = typer.Option(Path("config/ea.yaml"), "--ea-config"),
-    operacoes_replay: Path = typer.Option(Path("data/research/operacoes_replay.parquet"),
-                                          "--operacoes-replay",
-                                          help="Saida do ea-replay-lote"),
+    operacoes_replay: Path = typer.Option(
+        Path("data/research/operacoes_replay.parquet"),
+        "--operacoes-replay",
+        help="Saida do ea-replay-lote",
+    ),
     z_continuo: bool = typer.Option(
-        False, "--z-continuo",
-        help="NAO recalcular z por dia (o EA recalcula; so' para medir a diferenca)"),
+        False,
+        "--z-continuo",
+        help="NAO recalcular z por dia (o EA recalcula; so' para medir a diferenca)",
+    ),
     sem_circuit_breaker: bool = typer.Option(False, "--sem-circuit-breaker"),
     saida: Path = typer.Option(Path("data/research/simulador_conferencia"), "--saida"),
     log_level: str = typer.Option("WARNING", "--log-level"),
@@ -1155,23 +1375,34 @@ def simulador_conferir(
         politica_ea,
         preparar,
     )
+
     configurar(log_level)
     cfg = EAConfig.from_yaml(ea_config)
     barras = pd.read_parquet(features)
     cols_z = None if z_continuo else [f"agf_{s.agent_id}" for s in cfg.sinais]
     b = preparar(barras, z_por_dia=cols_z, janela_z=cfg.janela_z)
-    sim = Simulador(b, Regras(custo_pontos=cfg.custo_pontos_estimado, risco=cfg.risco,
-                              circuit_breaker=not sem_circuit_breaker))
+    sim = Simulador(
+        b,
+        Regras(
+            custo_pontos=cfg.custo_pontos_estimado,
+            risco=cfg.risco,
+            circuit_breaker=not sem_circuit_breaker,
+        ),
+    )
     r = sim.rodar(politica_ea(cfg.sinais, cfg.janela_z))
     saida.mkdir(parents=True, exist_ok=True)
     r["operacoes"].to_parquet(saida / "operacoes_simulador.parquet", index=False)
     r["por_dia"].to_csv(saida / "por_dia_simulador.csv", index=False)
     typer.echo("=" * 72)
-    typer.echo(f"SIMULADOR x EA-REPLAY — {cfg.symbol} — z {'continuo' if z_continuo else 'por dia'}"
-               f" — circuit breaker {'OFF' if sem_circuit_breaker else 'ON'}")
+    typer.echo(
+        f"SIMULADOR x EA-REPLAY — {cfg.symbol} — z {'continuo' if z_continuo else 'por dia'}"
+        f" — circuit breaker {'OFF' if sem_circuit_breaker else 'ON'}"
+    )
     typer.echo("=" * 72)
-    typer.echo(f"  simulador: {len(r['operacoes'])} operacoes, {r['pnl_total']:+.1f} pts "
-               f"em {len(r['por_dia'])} pregoes")
+    typer.echo(
+        f"  simulador: {len(r['operacoes'])} operacoes, {r['pnl_total']:+.1f} pts "
+        f"em {len(r['por_dia'])} pregoes"
+    )
     if not operacoes_replay.exists():
         typer.echo(f"  (sem {operacoes_replay}: rode ea-replay-lote antes para conferir)")
         return
@@ -1179,31 +1410,42 @@ def simulador_conferir(
     c = conferir_com_replay(r["operacoes"], ea_ops)
     c["por_dia"].to_csv(saida / "conferencia_por_dia.csv", index=False)
     typer.echo(f"  ea-replay : {c['n_ea']} operacoes, {c['pnl_ea']:+.1f} pts")
-    typer.echo(f"  casadas (dia, barra, lado): {c['casadas']}   so' sim: {c['so_sim']}   "
-               f"so' EA: {c['so_ea']}")
-    typer.echo(f"  casadas com |dif pnl| > 0.5 pt: {c['casadas_fora_da_tolerancia']}   "
-               f"(max {c['max_dif_pnl_casadas']:.1f})")
+    typer.echo(
+        f"  casadas (dia, barra, lado): {c['casadas']}   so' sim: {c['so_sim']}   "
+        f"so' EA: {c['so_ea']}"
+    )
+    typer.echo(
+        f"  casadas com |dif pnl| > 0.5 pt: {c['casadas_fora_da_tolerancia']}   "
+        f"(max {c['max_dif_pnl_casadas']:.1f})"
+    )
     if c["so_sim"] or c["so_ea"]:
         typer.echo("\n  nao casadas (primeiras 40):")
         typer.echo(c["nao_casadas"].to_string(index=False))
-    veredito = ("BATE" if c["so_sim"] == 0 and c["so_ea"] == 0
-                and c["casadas_fora_da_tolerancia"] == 0 else "NAO BATE")
-    typer.echo(f"\n  VEREDITO: {veredito}. Se NAO BATE, o simulador esta' errado ou a "
-               "barra/z difere — nao a regra.")
+    veredito = (
+        "BATE"
+        if c["so_sim"] == 0 and c["so_ea"] == 0 and c["casadas_fora_da_tolerancia"] == 0
+        else "NAO BATE"
+    )
+    typer.echo(
+        f"\n  VEREDITO: {veredito}. Se NAO BATE, o simulador esta' errado ou a "
+        "barra/z difere — nao a regra."
+    )
     typer.echo(f"  saida: {saida}")
 
 
 @app.command()
 def fase2_preparar(
     symbol: str = typer.Argument("WINFUT"),
-    features: Path = typer.Option(Path("data/features/sym=WINFUT/features.parquet"),
-                                  "--features"),
+    features: Path = typer.Option(Path("data/features/sym=WINFUT/features.parquet"), "--features"),
     curated: Path | None = typer.Option(
-        None, "--curated",
-        help="Raiz do curated para desempatar toque ambiguo pelo TAPE (recomendado)"),
+        None,
+        "--curated",
+        help="Raiz do curated para desempatar toque ambiguo pelo TAPE (recomendado)",
+    ),
     h: int = typer.Option(3, "--h", help="CONGELADO na ficha: horizonte do sinal validado"),
-    custo: float = typer.Option(11.0, "--custo",
-                                help="custo_pontos_estimado do EA (spread dentro)"),
+    custo: float = typer.Option(
+        11.0, "--custo", help="custo_pontos_estimado do EA (spread dentro)"
+    ),
     janela_z: int = typer.Option(50, "--janela-z"),
     saida: Path = typer.Option(Path("data/research/fase2"), "--saida"),
     log_level: str = typer.Option("WARNING", "--log-level"),
@@ -1218,8 +1460,15 @@ def fase2_preparar(
     configurar(log_level)
     from .research.fase2 import preparar_fase2
 
-    r = preparar_fase2(features, saida, symbol.strip().upper(), h=h, custo=custo,
-                       janela_z=janela_z, curated=curated)
+    r = preparar_fase2(
+        features,
+        saida,
+        symbol.strip().upper(),
+        h=h,
+        custo=custo,
+        janela_z=janela_z,
+        curated=curated,
+    )
     f = r["ficha"]
     sep = "=" * 72
     typer.echo(sep)
@@ -1238,15 +1487,19 @@ def fase2_preparar(
     tape = "SIM" if f["desempate_pelo_tape"] else "NAO (ambiguo conta 0)"
     typer.echo(f"    desempate pelo tape: {tape}")
     typer.echo("")
-    typer.echo(f"  split temporal: treino {f['dias_treino'][0]}..{f['dias_treino'][1]} "
-               f"(n={f['n_treino']})  validacao {f['dias_validacao'][0]}.."
-               f"{f['dias_validacao'][1]} (n={f['n_validacao']})")
+    typer.echo(
+        f"  split temporal: treino {f['dias_treino'][0]}..{f['dias_treino'][1]} "
+        f"(n={f['n_treino']})  validacao {f['dias_validacao'][0]}.."
+        f"{f['dias_validacao'][1]} (n={f['n_validacao']})"
+    )
     typer.echo(f"  classes no treino: {f['classes_treino']}")
     typer.echo("")
     typer.echo("  [MEDIR] da ficha, preenchidos:")
     typer.echo(f"    p*                       : {f['MEDIDO_p_star']:.3f}")
-    typer.echo(f"    nula (resolvidas/2)      : {f['MEDIDO_nula']:.3f}   "
-               f"(resolvidas {f['MEDIDO_frac_resolvidas']:.3f})")
+    typer.echo(
+        f"    nula (resolvidas/2)      : {f['MEDIDO_nula']:.3f}   "
+        f"(resolvidas {f['MEDIDO_frac_resolvidas']:.3f})"
+    )
     typer.echo(f"    TAXA (eventos/pregao)    : {f['MEDIDO_taxa_eventos_por_pregao']:.2f}")
     hz = f["horizonte_pregoes_para_150"]
     if hz:
@@ -1255,9 +1508,11 @@ def fase2_preparar(
         typer.echo("    HORIZONTE p/ n=150       : indefinido (taxa 0)")
     typer.echo("")
     typer.echo("  DEPURACAO (validacao queimada; NAO e' evidencia):")
-    typer.echo(f"    eventos {f['DEPURACAO_n_eventos_validacao']}  acerto "
-               f"{(f['DEPURACAO_acerto_validacao'] or 0):.3f}  pnl proxy/op "
-               f"{(f['DEPURACAO_pnl_proxy_por_op'] or 0):+.1f}")
+    typer.echo(
+        f"    eventos {f['DEPURACAO_n_eventos_validacao']}  acerto "
+        f"{(f['DEPURACAO_acerto_validacao'] or 0):.3f}  pnl proxy/op "
+        f"{(f['DEPURACAO_pnl_proxy_por_op'] or 0):+.1f}"
+    )
     typer.echo("")
     typer.echo(f"  modelo: {f['modelo_arquivo']}  sha256 {f['modelo_sha256'][:16]}...")
     typer.echo(f"  ficha : {saida / 'ficha_fase2.json'}  sha256 {f['ficha_sha256'][:16]}...")
@@ -1271,19 +1526,26 @@ def fase2_score(
     symbol: str = typer.Argument("WINFUT"),
     dia: str | None = typer.Option(None, "--dia", help="Um pregao (2026-09-09)"),
     desde: str | None = typer.Option(None, "--desde", help="Todos os pregoes >= esta data"),
-    features: Path = typer.Option(Path("data/features/sym=WINFUT/features.parquet"),
-                                  "--features"),
-    curated: Path | None = typer.Option(Path("data/curated"), "--curated",
-                                        help="Desempate pelo tape (mesma regra do preparar)"),
-    pasta_fase2: Path = typer.Option(Path("data/research/fase2"), "--pasta-fase2",
-                                     help="Onde estao ficha_fase2.json e modelo_fase2.pkl"),
+    features: Path = typer.Option(Path("data/features/sym=WINFUT/features.parquet"), "--features"),
+    curated: Path | None = typer.Option(
+        Path("data/curated"), "--curated", help="Desempate pelo tape (mesma regra do preparar)"
+    ),
+    pasta_fase2: Path = typer.Option(
+        Path("data/research/fase2"),
+        "--pasta-fase2",
+        help="Onde estao ficha_fase2.json e modelo_fase2.pkl",
+    ),
     permitir_queimado: bool = typer.Option(
-        False, "--permitir-queimado",
-        help="So' para o checklist (olhar barras de um dia ja' visto). NAO grava no livro"),
+        False,
+        "--permitir-queimado",
+        help="So' para o checklist (olhar barras de um dia ja' visto). NAO grava no livro",
+    ),
     reconstruir_livro: bool = typer.Option(
-        False, "--reconstruir-livro",
+        False,
+        "--reconstruir-livro",
         help="Apaga forward_eventos.csv e regrava do zero com os dias escorados agora "
-             "(deterministico: mesmo modelo, mesmos labels). Use com --desde"),
+        "(deterministico: mesmo modelo, mesmos labels). Use com --desde",
+    ),
     log_level: str = typer.Option("WARNING", "--log-level"),
 ) -> None:
     """
@@ -1306,16 +1568,22 @@ def fase2_score(
         registrar_forward,
     )
     from .research.simulador import preparar
+
     configurar(log_level)
     if (dia is None) == (desde is None):
         raise SystemExit("informe --dia OU --desde")
     with open(pasta_fase2 / "ficha_fase2.json", encoding="utf-8") as f:
         ficha = json.load(f)
-    m = carregar_modelo(Path(ficha["modelo_arquivo"]) if Path(ficha["modelo_arquivo"]).exists()
-                        else pasta_fase2 / "modelo_fase2.pkl")
+    m = carregar_modelo(
+        Path(ficha["modelo_arquivo"])
+        if Path(ficha["modelo_arquivo"]).exists()
+        else pasta_fase2 / "modelo_fase2.pkl"
+    )
     if m["sha256"] != ficha["modelo_sha256"]:
-        raise SystemExit("modelo_fase2.pkl NAO bate com o sha256 da ficha — carimbo quebrado; "
-                         "nao escoro com modelo diferente do congelado")
+        raise SystemExit(
+            "modelo_fase2.pkl NAO bate com o sha256 da ficha — carimbo quebrado; "
+            "nao escoro com modelo diferente do congelado"
+        )
     barras = pd.read_parquet(features)
     b = preparar(barras, z_por_dia=colunas_tier1(barras), janela_z=int(ficha["janela_z"]))
     todos = sorted(b["dia"].unique())
@@ -1323,12 +1591,16 @@ def fase2_score(
     ultimo_queimado = ficha["dias_validacao"][1]
     queimados = [d for d in dias if d <= ultimo_queimado]
     if queimados and not permitir_queimado:
-        raise SystemExit(f"dias {queimados} sao dado queimado (<= {ultimo_queimado}). "
-                         "Use --permitir-queimado so' para olhar barras; nao entra no livro.")
+        raise SystemExit(
+            f"dias {queimados} sao dado queimado (<= {ultimo_queimado}). "
+            "Use --permitir-queimado so' para olhar barras; nao entra no livro."
+        )
     faltando = [d for d in dias if d not in todos]
     if faltando:
-        typer.echo(f"  (sem barras no features.parquet para {faltando}; "
-                   "rode `profit-tape features` com --agentes da ficha)")
+        typer.echo(
+            f"  (sem barras no features.parquet para {faltando}; "
+            "rode `profit-tape features` com --agentes da ficha)"
+        )
     dias = [d for d in dias if d in todos]
     if not dias:
         raise SystemExit("nenhum pregao para escorar")
@@ -1337,8 +1609,10 @@ def fase2_score(
     sep = "=" * 72
     typer.echo(sep)
     modo = "QUEIMADO (nao grava)" if permitir_queimado else "forward"
-    typer.echo(f"FASE 2 — SCORE {symbol.upper()} — {dias[0]}..{dias[-1]} — "
-               f"modelo {m['sha256'][:12]} — {modo}")
+    typer.echo(
+        f"FASE 2 — SCORE {symbol.upper()} — {dias[0]}..{dias[-1]} — "
+        f"modelo {m['sha256'][:12]} — {modo}"
+    )
     typer.echo(sep)
     # Modo forward: SO' o que a linha PARADA da ficha permite ver antes de
     # n = 50 — o evento em si, nao o desfecho. label/acerto/pnl vao para o
@@ -1347,8 +1621,20 @@ def fase2_score(
     if ev.empty:
         typer.echo("  nenhum evento (conf < p* em todas as barras validas)")
     elif permitir_queimado:
-        cols = ["dia", "bar_id", "hora_utc", "close", "lado_previsto", "conf", "barreira_pts",
-                "label", "t_evento", "label_desempatada_tape", "acerto", "pnl_liquido_proxy"]
+        cols = [
+            "dia",
+            "bar_id",
+            "hora_utc",
+            "close",
+            "lado_previsto",
+            "conf",
+            "barreira_pts",
+            "label",
+            "t_evento",
+            "label_desempatada_tape",
+            "acerto",
+            "pnl_liquido_proxy",
+        ]
         typer.echo(ev[cols].round(3).to_string(index=False))
     else:
         cols = ["dia", "bar_id", "hora_utc", "close", "lado_previsto", "conf", "barreira_pts"]
@@ -1357,9 +1643,11 @@ def fase2_score(
     sem_evento = [d for d in dias if d not in com_evento]
     if sem_evento:
         typer.echo(f"  dias escorados SEM evento: {', '.join(sem_evento)}")
-    typer.echo(f"  dias escorados: {len(dias)}   eventos: {len(ev)}   "
-               f"({len(ev) / len(dias):.2f}/pregao; TAXA da ficha "
-               f"{float(ficha['MEDIDO_taxa_eventos_por_pregao']):.2f})")
+    typer.echo(
+        f"  dias escorados: {len(dias)}   eventos: {len(ev)}   "
+        f"({len(ev) / len(dias):.2f}/pregao; TAXA da ficha "
+        f"{float(ficha['MEDIDO_taxa_eventos_por_pregao']):.2f})"
+    )
     if permitir_queimado:
         typer.echo("\n  (dado queimado: nada gravado)")
         return
@@ -1372,21 +1660,30 @@ def fase2_score(
             backup = livro.with_name(f"forward_eventos.antes_{quando}.csv")
             livro.rename(backup)
             typer.echo(f"  livro anterior guardado em {backup.name}")
-    tudo = registrar_forward(ev, livro) if not ev.empty else (
-        pd.read_csv(livro, dtype={"dia": str}) if livro.exists() else ev)
+    tudo = (
+        registrar_forward(ev, livro)
+        if not ev.empty
+        else (pd.read_csv(livro, dtype={"dia": str}) if livro.exists() else ev)
+    )
     p = placar(tudo, ficha)
     typer.echo("")
-    typer.echo(f"  livro: {livro}   eventos acumulados: {p['n']} em {p['pregoes']} pregoes "
-               "com evento")
+    typer.echo(
+        f"  livro: {livro}   eventos acumulados: {p['n']} em {p['pregoes']} pregoes com evento"
+    )
     if p["n"] < p["checkpoint_sanidade"]:
-        typer.echo(f"  placar fechado ate' n = {p['checkpoint_sanidade']} (sanidade) e "
-                   f"n = {p['n_para_veredito']} (veredito). Nao olhe antes.")
+        typer.echo(
+            f"  placar fechado ate' n = {p['checkpoint_sanidade']} (sanidade) e "
+            f"n = {p['n_para_veredito']} (veredito). Nao olhe antes."
+        )
     else:
-        typer.echo(f"  acerto {p['acerto']:.3f}  (nula {p['nula']:.3f}, favoravel >= "
-                   f"{p['alvo_favoravel']:.3f})   pts/op {p['pts_por_op']:+.1f}")
+        typer.echo(
+            f"  acerto {p['acerto']:.3f}  (nula {p['nula']:.3f}, favoravel >= "
+            f"{p['alvo_favoravel']:.3f})   pts/op {p['pts_por_op']:+.1f}"
+        )
         if p["n"] < p["n_para_veredito"]:
-            typer.echo(f"  checkpoint de SANIDADE, nao veredito: veredito em n = "
-                       f"{p['n_para_veredito']}")
+            typer.echo(
+                f"  checkpoint de SANIDADE, nao veredito: veredito em n = {p['n_para_veredito']}"
+            )
 
 
 @app.command()
@@ -1427,6 +1724,7 @@ def bollinger_direcao(
     if not partes:
         raise typer.BadParameter("nenhuma barra montada")
     import pandas as pd
+
     todas = pd.concat(partes, ignore_index=True)
     medidas = ds.medir(todas, seed=seed)
     resumo = ds.resumir(medidas)
@@ -1446,18 +1744,25 @@ def bollinger_replay(
     curated: Path = typer.Option(Path("data/curated"), "--curated"),
     saida: Path = typer.Option(Path("data/research/bollinger_replay"), "--saida"),
     dumps: Path | None = typer.Option(
-        None, "--dumps",
-        help="Pasta com dumpAAAAMMDD.txt do grafico de 15s: compara tape x grafico nesses dias"),
+        None,
+        "--dumps",
+        help="Pasta com dumpAAAAMMDD.txt do grafico de 15s: compara tape x grafico nesses dias",
+    ),
     dias: str | None = typer.Option(
-        None, "--dias", help="Lista 2026-09-01,2026-09-02 (default: todos)"),
+        None, "--dias", help="Lista 2026-09-01,2026-09-02 (default: todos)"
+    ),
     ignorar_circuit_breaker: bool = typer.Option(
-        False, "--ignorar-circuit-breaker",
-        help="Mede a regra INTEIRA (o circuit breaker fecha o pregao na 3a perda seguida)"),
+        False,
+        "--ignorar-circuit-breaker",
+        help="Mede a regra INTEIRA (o circuit breaker fecha o pregao na 3a perda seguida)",
+    ),
     variante: str = typer.Option(
-        "retorno", "--variante",
+        "retorno",
+        "--variante",
         help="retorno (v1: limitada no extremo de t-2) | rompimento (limitada "
-             "no extremo de t-1, fiel a' spec original) | ambas (roda as duas "
-             "e compara lado a lado)"),
+        "no extremo de t-1, fiel a' spec original) | ambas (roda as duas "
+        "e compara lado a lado)",
+    ),
     log_level: str = typer.Option("INFO", "--log-level"),
 ) -> None:
     """
@@ -1487,9 +1792,15 @@ def bollinger_replay(
     variantes = ("retorno", "rompimento") if variante == "ambas" else (variante,)
     resultados: dict[str, dict[str, Any]] = {}
     for v in variantes:
-        r = rodar(curated, symbol.strip().upper(), saida / v if variante == "ambas" else saida,
-                  mapa, lista, ignorar_circuit_breaker=ignorar_circuit_breaker,
-                  variante_entrada=v)
+        r = rodar(
+            curated,
+            symbol.strip().upper(),
+            saida / v if variante == "ambas" else saida,
+            mapa,
+            lista,
+            ignorar_circuit_breaker=ignorar_circuit_breaker,
+            variante_entrada=v,
+        )
         resultados[v] = r["resumo"]
         _imprimir_resumo_bollinger_replay(r["resumo"], v, ignorar_circuit_breaker, saida)
     if variante == "ambas":
@@ -1501,61 +1812,87 @@ def bollinger_replay(
             if "p1" not in res:
                 typer.echo(f"  {v:11} sem operacoes")
                 continue
-            typer.echo(f"  {v:11} p1={res['p1']:.3f} IC95={res['p1_ic95']} "
-                       f"| bruto={res['pnl_bruto_medio_pts']:+.1f} pts/op "
-                       f"IC95={res['pnl_bruto_ic95']} "
-                       f"| custo_max={res['custo_maximo_suportado_pts_por_contrato']:+.1f} "
-                       f"pts/contrato "
-                       f"| {res['operacoes_por_pregao']} op/pregao")
+            typer.echo(
+                f"  {v:11} p1={res['p1']:.3f} IC95={res['p1_ic95']} "
+                f"| bruto={res['pnl_bruto_medio_pts']:+.1f} pts/op "
+                f"IC95={res['pnl_bruto_ic95']} "
+                f"| custo_max={res['custo_maximo_suportado_pts_por_contrato']:+.1f} "
+                f"pts/contrato "
+                f"| {res['operacoes_por_pregao']} op/pregao"
+            )
 
 
-def _imprimir_resumo_bollinger_replay(res: dict[str, Any], variante: str,
-                                      ignorar_circuit_breaker: bool, saida: Path) -> None:
+def _imprimir_resumo_bollinger_replay(
+    res: dict[str, Any], variante: str, ignorar_circuit_breaker: bool, saida: Path
+) -> None:
     if ignorar_circuit_breaker:
         typer.echo("  [circuit breaker IGNORADO: taxa da regra inteira]")
     typer.echo("=" * 72)
     typer.echo(f"SCALP DE BOLLINGER — variante '{variante}' — replay pelo tape (DEPURACAO)")
     typer.echo("=" * 72)
-    typer.echo(f"  pregoes {res['pregoes']} | sinais {res['sinais']} | operacoes "
-               f"{res['operacoes']} ({res['operacoes_por_pregao']} por pregao) "
-               f"| sem execucao {res['sinais_sem_execucao']} {res['nao_exec_por_motivo']}")
+    typer.echo(
+        f"  pregoes {res['pregoes']} | sinais {res['sinais']} | operacoes "
+        f"{res['operacoes']} ({res['operacoes_por_pregao']} por pregao) "
+        f"| sem execucao {res['sinais_sem_execucao']} {res['nao_exec_por_motivo']}"
+    )
     if "p1" in res:
-        typer.echo(f"  p1 (alvo1 antes do stop) = {res['p1']}  IC95 {res['p1_ic95']}  "
-                   f"| nula de lucro apos custo = {res['p1_nula_lucro']}")
-        typer.echo(f"  compra {res['compra']} venda {res['venda']} | abertura {res['abertura']} "
-                   f"recuo {res['recuo']} | stop mediano {res['stop_mediano_pts']} pts "
-                   f"| duracao mediana {res['duracao_mediana_s']} s")
-        typer.echo(f"  BORDA BRUTA (antes de qualquer custo): {res['pnl_bruto_medio_pts']} "
-                   f"pts/operacao, IC95 {res['pnl_bruto_ic95']} | p1 vs nula a custo zero 0,50")
-        typer.echo(f"  CUSTO MAXIMO SUPORTADO: {res['custo_maximo_suportado_pts_por_contrato']} "
-                   f"pts por contrato (IC95 {res['custo_maximo_suportado_ic95']}) "
-                   f"| custo atual do YAML: {res.get('custo_por_contrato_pts', 11.0)}")
-        typer.echo(f"  P&L liquido: {res['pnl_liquido_medio_pts']} pts/operacao, "
-                   f"{res['pnl_liquido_por_pregao_pts']} pts/pregao (3 contratos, custo 33)")
+        typer.echo(
+            f"  p1 (alvo1 antes do stop) = {res['p1']}  IC95 {res['p1_ic95']}  "
+            f"| nula de lucro apos custo = {res['p1_nula_lucro']}"
+        )
+        typer.echo(
+            f"  compra {res['compra']} venda {res['venda']} | abertura {res['abertura']} "
+            f"recuo {res['recuo']} | stop mediano {res['stop_mediano_pts']} pts "
+            f"| duracao mediana {res['duracao_mediana_s']} s"
+        )
+        typer.echo(
+            f"  BORDA BRUTA (antes de qualquer custo): {res['pnl_bruto_medio_pts']} "
+            f"pts/operacao, IC95 {res['pnl_bruto_ic95']} | p1 vs nula a custo zero 0,50"
+        )
+        typer.echo(
+            f"  CUSTO MAXIMO SUPORTADO: {res['custo_maximo_suportado_pts_por_contrato']} "
+            f"pts por contrato (IC95 {res['custo_maximo_suportado_ic95']}) "
+            f"| custo atual do YAML: {res.get('custo_por_contrato_pts', 11.0)}"
+        )
+        typer.echo(
+            f"  P&L liquido: {res['pnl_liquido_medio_pts']} pts/operacao, "
+            f"{res['pnl_liquido_por_pregao_pts']} pts/pregao (3 contratos, custo 33)"
+        )
         for i in (1, 2, 3):
-            typer.echo(f"  perna {i}: {res[f'p{i}_motivos']} | media "
-                       f"{res.get(f'p{i}_pts_medio')} pts | positiva em "
-                       f"{res.get(f'p{i}_pct_positiva')}%")
+            typer.echo(
+                f"  perna {i}: {res[f'p{i}_motivos']} | media "
+                f"{res.get(f'p{i}_pts_medio')} pts | positiva em "
+                f"{res.get(f'p{i}_pct_positiva')}%"
+            )
         typer.echo("  cortes pre-declarados (abertura x recuo; compra x venda):")
         for nome, v in res["cortes_pre_declarados"].items():
-            typer.echo(f"    {nome:9} n={v['n']:4d} p1={v['p1']} IC95={v['ic95']} "
-                       f"P&L liq medio={v['pnl_liquido_medio_pts']} pts")
+            typer.echo(
+                f"    {nome:9} n={v['n']:4d} p1={v['p1']} IC95={v['ic95']} "
+                f"P&L liq medio={v['pnl_liquido_medio_pts']} pts"
+            )
     comp = res.get("comparacoes_com_dump") or {}
     if comp:
-        typer.echo("\n--- TAPE x GRAFICO (mesmo dia; qual conjunto de negocios monta o OHLC "
-                   "do grafico?) ---")
+        typer.echo(
+            "\n--- TAPE x GRAFICO (mesmo dia; qual conjunto de negocios monta o OHLC "
+            "do grafico?) ---"
+        )
         for dia, por_conjunto in comp.items():
             typer.echo(f"  {dia}:")
             for conjunto, c in por_conjunto.items():
                 campos = ("open", "high", "low", "close")
                 ohlc = "/".join(str(c.get(f"{k}_divergentes")) for k in campos)
-                buraco = (f" | so dump {c['so_dump']} ({c.get('so_dump_de')}-"
-                          f"{c.get('so_dump_ate')})" if c.get("so_dump") else "")
-                typer.echo(f"    {conjunto:20} comuns {c['comuns']} | OHLC divergentes "
-                           f"o/h/l/c = {ohlc}"
-                           f" | sinais compra tape/dump {c.get('sinal_compra_tape')}/"
-                           f"{c.get('sinal_compra_dump')} venda {c.get('sinal_venda_tape')}/"
-                           f"{c.get('sinal_venda_dump')}{buraco}")
+                buraco = (
+                    f" | so dump {c['so_dump']} ({c.get('so_dump_de')}-{c.get('so_dump_ate')})"
+                    if c.get("so_dump")
+                    else ""
+                )
+                typer.echo(
+                    f"    {conjunto:20} comuns {c['comuns']} | OHLC divergentes "
+                    f"o/h/l/c = {ohlc}"
+                    f" | sinais compra tape/dump {c.get('sinal_compra_tape')}/"
+                    f"{c.get('sinal_compra_dump')} venda {c.get('sinal_venda_tape')}/"
+                    f"{c.get('sinal_venda_dump')}{buraco}"
+                )
     typer.echo(f"\n  saida: {saida}")
 
 
@@ -1564,9 +1901,10 @@ def absorcao_inspecionar(
     dia: str = typer.Argument(..., help="Data no formato 2026-08-27"),
     origem: Path = typer.Option(
         Path("data/features_tempo/sym=WINFUT/tf=5m/features.parquet"),
-        "--origem", help="Parquet de features OU dump ABSBARRA| do grafico"),
-    so_falhas: bool = typer.Option(
-        False, "--so-falhas", help="Esconde as barras que marcaram"),
+        "--origem",
+        help="Parquet de features OU dump ABSBARRA| do grafico",
+    ),
+    so_falhas: bool = typer.Option(False, "--so-falhas", help="Esconde as barras que marcaram"),
     log_level: str = typer.Option("WARNING", "--log-level"),
 ) -> None:
     """
@@ -1590,13 +1928,14 @@ def absorcao_inspecionar(
     typer.echo("=" * 78)
     typer.echo(f"INSPECAO DE {dia}")
     typer.echo("=" * 78)
-    typer.echo("  cortes: " + " | ".join(f"{k} {v}"
-                                          for k, v in r["cortes"].items()))
+    typer.echo("  cortes: " + " | ".join(f"{k} {v}" for k, v in r["cortes"].items()))
     s = r["resumo"]
     typer.echo(f"  {s['barras']} barras, {s['marcaram']} marcaram")
-    typer.echo(f"  reprovaram por: resultado {s['falhou_resultado']} | "
-               f"alcance {s['falhou_alcance']} | esforco {s['falhou_esforco']} "
-               f"| contexto {s['falhou_contexto']}")
+    typer.echo(
+        f"  reprovaram por: resultado {s['falhou_resultado']} | "
+        f"alcance {s['falhou_alcance']} | esforco {s['falhou_esforco']} "
+        f"| contexto {s['falhou_contexto']}"
+    )
     typer.echo("")
     tab = r["tabela"]
     if so_falhas:
@@ -1608,8 +1947,8 @@ def absorcao_inspecionar(
 def desenho2_emd(
     log: Path = typer.Argument(..., help="Dump ABSBARRA| da amostra de DEPURACAO"),
     unidade: float = typer.Option(
-        244.0, "--unidade",
-        help="Amplitude media da barra, para o EMD ficar interpretavel."),
+        244.0, "--unidade", help="Amplitude media da barra, para o EMD ficar interpretavel."
+    ),
     log_level: str = typer.Option("WARNING", "--log-level"),
 ) -> None:
     """
@@ -1643,18 +1982,20 @@ def desenho2_emd(
     typer.echo("=" * 72)
     typer.echo("DESENHO 2 — EMD sobre a amostra de DEPURACAO")
     typer.echo("=" * 72)
-    typer.echo(f"  {diag['pregoes']} pregoes | {len(ops)} eventos | "
-               f"{e['operacoes']} operadas | {e['nao_operou']} descartadas "
-               f"(stop > 500)")
+    typer.echo(
+        f"  {diag['pregoes']} pregoes | {len(ops)} eventos | "
+        f"{e['operacoes']} operadas | {e['nao_operou']} descartadas "
+        f"(stop > 500)"
+    )
     typer.echo("\n--- EMD (so variancia e n; a media NAO entra) ---")
     typer.echo(pd.DataFrame(e["por_lado"]).to_string(index=False))
     op = ops[ops["saida"] != "nao_operou"]
     if len(op) >= 2:
         from .research.triagem_poder import avaliar_desenho
+
         junto = avaliar_desenho(op["resultado"], unidade, "AMBOS OS LADOS")
         typer.echo(pd.DataFrame([junto]).to_string(index=False))
-    typer.echo("\n  referencia: DESENHO 1 no trial 2026 -> desvio 319, "
-               "EMD 107 pts, 0,44 unidades")
+    typer.echo("\n  referencia: DESENHO 1 no trial 2026 -> desvio 319, EMD 107 pts, 0,44 unidades")
     typer.echo("\n--- DIAGNOSTICO (nunca criterio) ---")
     for k, v in diagnostico(ops).items():
         typer.echo(f"  {k}: {v}")
@@ -1699,11 +2040,13 @@ def curva_poder(
     typer.echo("CURVA DE PODER — EMD por limiar de contexto")
     typer.echo("=" * 72)
     typer.echo(f"  {diag['pregoes']} pregoes | {len(d)} barras")
-    typer.echo(f"  absorcao (as 3 condicoes): {n_ev} barras = "
-               f"{n_ev / diag['pregoes']:.1f} por pregao")
+    typer.echo(
+        f"  absorcao (as 3 condicoes): {n_ev} barras = {n_ev / diag['pregoes']:.1f} por pregao"
+    )
     typer.echo("")
-    typer.echo(curva_de_poder(d, (0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0),
-                              unidade).to_string(index=False))
+    typer.echo(
+        curva_de_poder(d, (0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0), unidade).to_string(index=False)
+    )
     typer.echo("\n  O que vale e' o PIOR lado: o veredito precisa dos dois.")
     typer.echo("  Baixar K NAO tira a direcao (sign(mov6) existe sempre),")
     typer.echo("  mas ENFRAQUECE a hipotese: 'apos movimento forte' vira")
@@ -1714,8 +2057,8 @@ def curva_poder(
 def decompor_efeito(
     log: Path = typer.Argument(..., help="Dump ABSBARRA| de amostra QUEIMADA"),
     grupo: str = typer.Option(
-        "controle", "--grupo",
-        help="controle (contexto sem evento) | evento (evento+contexto)"),
+        "controle", "--grupo", help="controle (contexto sem evento) | evento (evento+contexto)"
+    ),
     log_level: str = typer.Option("WARNING", "--log-level"),
 ) -> None:
     """
@@ -1752,19 +2095,22 @@ def decompor_efeito(
     typer.echo(f"  {diag['pregoes']} pregoes | {len(r)} observacoes\n")
 
     tabelas = {}
-    for por, rotulo in (("tipo", "FORMA DO DIA (deslocamento / range)"),
-                        ("tamanho", "TAMANHO DO DIA (range)")):
+    for por, rotulo in (
+        ("tipo", "FORMA DO DIA (deslocamento / range)"),
+        ("tamanho", "TAMANHO DO DIA (range)"),
+    ):
         tabelas[por] = decompor(r, dias, por)
         typer.echo(f"--- {rotulo} ---")
         typer.echo(tabelas[por].to_string(index=False))
         typer.echo("")
 
     s = resumir(tabelas)
-    typer.echo(f"  {s['celulas']} celulas olhadas | "
-               f"{s['celulas_extremas']} com |t| >= 1,96 | "
-               f"{s['esperadas_por_acaso']} esperadas por acaso")
-    typer.echo(f"  chance de ao menos uma extrema sob H0: "
-               f"{s['chance_de_ao_menos_uma']}")
+    typer.echo(
+        f"  {s['celulas']} celulas olhadas | "
+        f"{s['celulas_extremas']} com |t| >= 1,96 | "
+        f"{s['esperadas_por_acaso']} esperadas por acaso"
+    )
+    typer.echo(f"  chance de ao menos uma extrema sob H0: {s['chance_de_ao_menos_uma']}")
     typer.echo(f"  -> {s['leitura']}")
     typer.echo("\n  Os tercis sao do PROPRIO periodo: nao sao limiares")
     typer.echo("  transferiveis. E a forma do dia usa o dia INTEIRO, entao")
@@ -1776,7 +2122,8 @@ def decompor_efeito(
 @app.command()
 def agents(
     dados: Path = typer.Option(
-        Path("data/curated"), "--dados",
+        Path("data/curated"),
+        "--dados",
         help="Arvore Parquet de onde extrair os codigos de agente observados.",
     ),
     saida: Path = typer.Option(Path("data/ref/agentes.csv"), "--saida"),
@@ -1798,8 +2145,9 @@ def agents(
     from .profitdll.client import ProfitClient
 
     origem = dados / "trade" if (dados / "trade").exists() else dados
-    tabela = ds.dataset(origem, format="parquet", partitioning="hive",
-                        exclude_invalid_files=True).to_table()
+    tabela = ds.dataset(
+        origem, format="parquet", partitioning="hive", exclude_invalid_files=True
+    ).to_table()
     ids = sorted(
         set(pc.unique(tabela["agente_comprador"]).to_pylist())
         | set(pc.unique(tabela["agente_vendedor"]).to_pylist())
@@ -1809,15 +2157,16 @@ def agents(
     cred = Credenciais()
     cred.validar()
     client = ProfitClient(
-        dll_path=cred.dll_path, activation_key=cred.activation_key,
-        user=cred.user, password=cred.password, bus=EventBus(maxsize=16),
+        dll_path=cred.dll_path,
+        activation_key=cred.activation_key,
+        user=cred.user,
+        password=cred.password,
+        bus=EventBus(maxsize=16),
     )
     client.connect()
     try:
         linhas = [
-            (i, client.agent_name(i, curto=True) or "",
-             client.agent_name(i) or "")
-            for i in ids
+            (i, client.agent_name(i, curto=True) or "", client.agent_name(i) or "") for i in ids
         ]
     finally:
         client.disconnect()
@@ -1846,32 +2195,40 @@ def research(
     treino_min: int = typer.Option(3, "--treino-min", help="Dias minimos de treino."),
     teste_dias: int = typer.Option(2, "--teste-dias", help="Dias por bloco de teste."),
     arquivo: Path | None = typer.Option(
-        None, "--arquivo",
+        None,
+        "--arquivo",
         help="Parquet de features direto, no lugar do caminho derivado de "
-             "--features/--symbol. Existe para a barra de TEMPO, que vive em "
-             "data/features_tempo/sym=X/tf=Nm/ e nao pode ser alcancada pelo "
-             "caminho de barra de volume."),
+        "--features/--symbol. Existe para a barra de TEMPO, que vive em "
+        "data/features_tempo/sym=X/tf=Nm/ e nao pode ser alcancada pelo "
+        "caminho de barra de volume.",
+    ),
     horizontes: str | None = typer.Option(
-        None, "--horizontes",
+        None,
+        "--horizontes",
         help="Lista separada por virgula (ex.: 1,3 para 5m; 5,15 para 1m). "
-             "Omitido usa o padrao 1,3,10. ATENCAO: cada feature x horizonte "
-             "e um TRIAL — mudar isto muda o custo estatistico da rodada."),
+        "Omitido usa o padrao 1,3,10. ATENCAO: cada feature x horizonte "
+        "e um TRIAL — mudar isto muda o custo estatistico da rodada.",
+    ),
     trials_previstos: int | None = typer.Option(
-        None, "--trials-previstos",
+        None,
+        "--trials-previstos",
         help="Total contra o qual DEFLACIONAR, para uma hipotese que se "
-             "resolve em mais de uma invocacao (ex.: o pre-registro de "
-             "2026-08-29e gasta 6 trials no 5m e 6 no 1m, arquivos "
-             "separados). Sem isto a rodada que correr primeiro e julgada "
-             "contra um total menor. So' endurece: se for menor que o "
-             "total real, o real prevalece."),
+        "resolve em mais de uma invocacao (ex.: o pre-registro de "
+        "2026-08-29e gasta 6 trials no 5m e 6 no 1m, arquivos "
+        "separados). Sem isto a rodada que correr primeiro e julgada "
+        "contra um total menor. So' endurece: se for menor que o "
+        "total real, o real prevalece.",
+    ),
     promover_por_poder: bool = typer.Option(
-        False, "--promover-por-poder",
+        False,
+        "--promover-por-poder",
         help="PRE-REGISTRO 3 (2026-08-29i): celula que passa em MAGNITUDE e "
-             "falha SO em ESTABILIDADE, com consistencia de sinal >= 0.85, "
-             "sai `inconclusivo` em vez de `descarta` — falhar so na unica "
-             "barra que depende do numero de folds e afirmacao sobre PODER, "
-             "nao sobre ausencia de efeito. OPT-IN: sem a flag, o veredito e "
-             "o classico, identico a todo o historico ja registrado."),
+        "falha SO em ESTABILIDADE, com consistencia de sinal >= 0.85, "
+        "sai `inconclusivo` em vez de `descarta` — falhar so na unica "
+        "barra que depende do numero de folds e afirmacao sobre PODER, "
+        "nao sobre ausencia de efeito. OPT-IN: sem a flag, o veredito e "
+        "o classico, identico a todo o historico ja registrado.",
+    ),
 ) -> None:
     """
     IC walk-forward das features com veredito deflacionado por trials
@@ -1884,15 +2241,30 @@ def research(
     if not arquivo.exists():
         raise SystemExit(f"nao achei {arquivo} — rode `profit-tape features` antes")
     hs = [int(x) for x in horizontes.split(",")] if horizontes else None
-    r = rodar(arquivo, saida, horizontes=hs, treino_min=treino_min,
-              teste_dias=teste_dias, trials_previstos=trials_previstos,
-              promover_por_poder=promover_por_poder)
+    r = rodar(
+        arquivo,
+        saida,
+        horizontes=hs,
+        treino_min=treino_min,
+        teste_dias=teste_dias,
+        trials_previstos=trials_previstos,
+        promover_por_poder=promover_por_poder,
+    )
     typer.echo("=" * 62)
     typer.echo("RESEARCH — IC walk-forward")
     typer.echo("=" * 62)
-    for k in ("dias", "folds", "features", "trials_rodada", "trials_acumulados",
-              "limiar_deflacionado", "promover_por_poder",
-              "segue", "descarta", "inconclusivo"):
+    for k in (
+        "dias",
+        "folds",
+        "features",
+        "trials_rodada",
+        "trials_acumulados",
+        "limiar_deflacionado",
+        "promover_por_poder",
+        "segue",
+        "descarta",
+        "inconclusivo",
+    ):
         typer.echo(f"  {k:20}: {r[k]}")
     typer.echo(f"  relatorio           : {r['relatorio']}")
 
@@ -1903,7 +2275,8 @@ def perfil_validar(
     symbol: str = typer.Option("WINFUT", "--symbol"),
     agentes_csv: Path = typer.Option(Path("data/ref/agentes.csv"), "--agentes"),
     referencia: Path = typer.Option(
-        Path("data/ref/fluxo_participantes_b3_oficial.csv"), "--referencia"),
+        Path("data/ref/fluxo_participantes_b3_oficial.csv"), "--referencia"
+    ),
 ) -> None:
     """
     Valida a classificacao de corretoras contra a serie oficial da B3 —
@@ -1919,8 +2292,7 @@ def perfil_validar(
     typer.echo("=" * 62)
     typer.echo(f"VALIDACAO DE PERFIL x SERIE OFICIAL ({r['dias_em_comum']} dias)")
     typer.echo("=" * 62)
-    typer.echo(r["tabela"].to_string(index=False,
-               float_format=lambda v: f"{v:.3f}"))
+    typer.echo(r["tabela"].to_string(index=False, float_format=lambda v: f"{v:.3f}"))
     typer.echo("-" * 62)
     typer.echo("Ressalva pre-registrada: oficial = mercado a vista; nosso = WIN.")
     typer.echo("Proxy contra proxy — pearson >= 0.4 valida a DIRECAO.")
@@ -1929,13 +2301,17 @@ def perfil_validar(
 @app.command()
 def quintis(
     pares: str = typer.Argument(
-        ..., help='Pares "feature:h" separados por virgula, ex.: '
-                   '"z_agf_3:3,z_agf_4090:1" (os vereditos \'segue\' do research).'),
+        ...,
+        help='Pares "feature:h" separados por virgula, ex.: '
+        "\"z_agf_3:3,z_agf_4090:1\" (os vereditos 'segue' do research).",
+    ),
     custo_pontos: float = typer.Option(
-        5.0, "--custo-pontos",
+        5.0,
+        "--custo-pontos",
         help="Custo de ida-e-volta em PONTOS de indice (spread+corretagem+"
-             "slippage). AJUSTE para o custo real do seu book — o default "
-             "e' um placeholder, nao uma estimativa real."),
+        "slippage). AJUSTE para o custo real do seu book — o default "
+        "e' um placeholder, nao uma estimativa real.",
+    ),
     features: Path = typer.Option(Path("data/features"), "--features"),
     symbol: str = typer.Option("WINFUT", "--symbol"),
     saida: Path = typer.Option(Path("data/research"), "--saida"),
@@ -1957,12 +2333,16 @@ def quintis(
     arquivo = features / f"sym={symbol.upper()}" / "features.parquet"
     if not arquivo.exists():
         raise SystemExit(f"nao achei {arquivo} — rode `profit-tape features` antes")
-    r = avaliar_pares(arquivo, lista, saida, custo_pontos,
-                      treino_min=treino_min, teste_dias=teste_dias)
+    r = avaliar_pares(
+        arquivo, lista, saida, custo_pontos, treino_min=treino_min, teste_dias=teste_dias
+    )
     from .research.quintis import _fmt
+
     typer.echo("=" * 62)
-    typer.echo(f"QUINTIS — custo assumido {_fmt(custo_pontos)} pts, "
-               f"{r['dias_out_of_sample']} dias out-of-sample")
+    typer.echo(
+        f"QUINTIS — custo assumido {_fmt(custo_pontos)} pts, "
+        f"{r['dias_out_of_sample']} dias out-of-sample"
+    )
     typer.echo("=" * 62)
     for (feat, h), tabela in r["tabelas"].items():
         typer.echo(f"\n{feat} @ h={h}")
@@ -1989,18 +2369,23 @@ def alertas_testar(
 
     cfg = ConfigAlertas.carregar(alertas)
     if cfg is None:
-        typer.echo(f"SEM CONFIG: {alertas} nao existe ou esta incompleto "
-                   f"(precisa de telegram.bot_token e telegram.chat_id).")
+        typer.echo(
+            f"SEM CONFIG: {alertas} nao existe ou esta incompleto "
+            f"(precisa de telegram.bot_token e telegram.chat_id)."
+        )
         raise typer.Exit(1)
 
-    ok = enviar("🧪 teste do profit-tape — se voce recebeu isso, "
-               "bot_token e chat_id estao corretos.", cfg)
+    ok = enviar(
+        "🧪 teste do profit-tape — se voce recebeu isso, bot_token e chat_id estao corretos.", cfg
+    )
     if ok:
         typer.echo("Enviado. Confira o Telegram.")
     else:
-        typer.echo("FALHOU ao enviar — o motivo apareceu na linha acima "
-                   "(alertas.envio_falhou). Confira bot_token, chat_id, e se "
-                   "a rede alcanca api.telegram.org.")
+        typer.echo(
+            "FALHOU ao enviar — o motivo apareceu na linha acima "
+            "(alertas.envio_falhou). Confira bot_token, chat_id, e se "
+            "a rede alcanca api.telegram.org."
+        )
         raise typer.Exit(1)
 
 
@@ -2010,11 +2395,13 @@ def vigia(
     alertas: Path = typer.Option(Path("config/alertas.yaml"), "--alertas"),
     estado: Path = typer.Option(Path("logs/vigia_estado.json"), "--estado"),
     abertura: str = typer.Option(
-        "09:05", "--abertura",
-        help="Apos este horario local, exige que o record ja tenha iniciado."),
+        "09:05", "--abertura", help="Apos este horario local, exige que o record ja tenha iniciado."
+    ),
     fechamento: str = typer.Option(
-        "18:35", "--fechamento",
-        help="Apos este horario, o vigia nao verifica mais (pregao encerrado)."),
+        "18:35",
+        "--fechamento",
+        help="Apos este horario, o vigia nao verifica mais (pregao encerrado).",
+    ),
     limite_parado_min: float = typer.Option(6.0, "--limite-parado-min"),
 ) -> None:
     """
@@ -2032,11 +2419,13 @@ def vigia(
 def ea(
     config: Path = typer.Option(Path("config/ea.yaml"), "-c", "--config"),
     encerrar_em: str = typer.Option(
-        "17:30", "--encerrar-em",
+        "17:30",
+        "--encerrar-em",
         help="HH:MM local para zerar e parar. Default 17:30: folga de "
-             "seguranca sobre a zeragem automatica da XP, que ocorre 15min "
-             "antes do fechamento do BMF (18:00, ou 17:45 em dia de "
-             "vencimento de serie) -- ver docs/EA_ARQUITETURA.md."),
+        "seguranca sobre a zeragem automatica da XP, que ocorre 15min "
+        "antes do fechamento do BMF (18:00, ou 17:45 em dia de "
+        "vencimento de serie) -- ver docs/EA_ARQUITETURA.md.",
+    ),
     bolsa: str = typer.Option("F", "--bolsa"),
     heartbeat_s: int = typer.Option(30, "--heartbeat-s"),
     log_file: Path | None = typer.Option(None, "--log-file"),
@@ -2058,8 +2447,7 @@ def ea(
     from .ea.service import EAService
 
     if not config.exists():
-        raise SystemExit(f"nao achei {config} -- crie a partir de "
-                         f"config/ea.exemplo.yaml")
+        raise SystemExit(f"nao achei {config} -- crie a partir de config/ea.exemplo.yaml")
     ea_cfg = EAConfig.from_yaml(config)
     if not ea_cfg.dry_run:
         raise SystemExit(
@@ -2071,11 +2459,12 @@ def ea(
     cred = Credenciais()
     cred.validar()
 
-    typer.echo(f"EA forward-test: {ea_cfg.symbol} dry_run={ea_cfg.dry_run} "
-               f"sinais={[s.feature for s in ea_cfg.sinais]}")
+    typer.echo(
+        f"EA forward-test: {ea_cfg.symbol} dry_run={ea_cfg.dry_run} "
+        f"sinais={[s.feature for s in ea_cfg.sinais]}"
+    )
     svc = EAService(ea_cfg)
-    svc.rodar(cred, bolsa=bolsa, encerrar_em=encerrar_em,
-              heartbeat_s=heartbeat_s)
+    svc.rodar(cred, bolsa=bolsa, encerrar_em=encerrar_em, heartbeat_s=heartbeat_s)
 
 
 @app.command()
@@ -2102,66 +2491,82 @@ def ea_replay(
     from .ea.service import EAService
 
     if not config.exists():
-        raise SystemExit(f"nao achei {config} -- crie a partir de "
-                         f"config/ea.exemplo.yaml")
+        raise SystemExit(f"nao achei {config} -- crie a partir de config/ea.exemplo.yaml")
     ea_cfg = EAConfig.from_yaml(config)
     caminho = raiz_raw / "trade" / f"dt={dia}" / f"sym={ea_cfg.symbol}"
     if not caminho.exists():
         raise SystemExit(f"nao achei {caminho} -- o record capturou esse dia?")
 
-    typer.echo(f"EA replay: {ea_cfg.symbol} dia={dia} dry_run={ea_cfg.dry_run} "
-               f"sinais={[s.feature for s in ea_cfg.sinais]}")
+    typer.echo(
+        f"EA replay: {ea_cfg.symbol} dia={dia} dry_run={ea_cfg.dry_run} "
+        f"sinais={[s.feature for s in ea_cfg.sinais]}"
+    )
     svc = EAService(ea_cfg)
     svc.rodar_replay(caminho)
-    typer.echo(f"trades={svc.stats.trades} barras={svc.stats.barras} "
-               f"decisoes={svc.stats.decisoes} "
-               f"pnl_dia_pontos={round(svc.gestor.pnl_dia_pontos, 1)} "
-               f"perdas_seguidas={svc.gestor.perdas_consecutivas} "
-               f"bloqueado={svc.gestor.bloqueado}")
+    typer.echo(
+        f"trades={svc.stats.trades} barras={svc.stats.barras} "
+        f"decisoes={svc.stats.decisoes} "
+        f"pnl_dia_pontos={round(svc.gestor.pnl_dia_pontos, 1)} "
+        f"perdas_seguidas={svc.gestor.perdas_consecutivas} "
+        f"bloqueado={svc.gestor.bloqueado}"
+    )
 
 
 @app.command()
 def ea_replay_lote(
     config: Path = typer.Option(Path("config/ea.yaml"), "-c", "--config"),
     raiz_raw: Path = typer.Option(
-        Path("data/curated"), "--raiz-raw",
+        Path("data/curated"),
+        "--raiz-raw",
         help="Arvore trade/dt=/sym= a percorrer. Default data/curated "
-             "(2026-08-31, decisao do operador): e' a unica arvore que e' ao "
-             "mesmo tempo COMPLETA e LIMPA no fluxo real -- data/raw local so' "
-             "tem o ultimo dia, e o backup bruto tem backfills entregues duas "
-             "vezes (12 de 25 dias com ~2x os negocios; replay sobre ele deu "
-             "+3883 contra +6356 no curated, com os 13 dias limpos identicos)."),
+        "(2026-08-31, decisao do operador): e' a unica arvore que e' ao "
+        "mesmo tempo COMPLETA e LIMPA no fluxo real -- data/raw local so' "
+        "tem o ultimo dia, e o backup bruto tem backfills entregues duas "
+        "vezes (12 de 25 dias com ~2x os negocios; replay sobre ele deu "
+        "+3883 contra +6356 no curated, com os 13 dias limpos identicos).",
+    ),
     saida_operacoes: Path = typer.Option(
-        Path("data/research/operacoes_replay.parquet"), "--saida-operacoes",
+        Path("data/research/operacoes_replay.parquet"),
+        "--saida-operacoes",
         help="Onde persistir TODAS as operacoes do lote, uma linha por "
-             "operacao, em ordem cronologica. Input da decomposicao de "
-             "drawdown (2026-08-30). Antes disto o replay so' imprimia o "
-             "resumo e a lista morria com o processo."),
+        "operacao, em ordem cronologica. Input da decomposicao de "
+        "drawdown (2026-08-30). Antes disto o replay so' imprimia o "
+        "resumo e a lista morria com o processo.",
+    ),
     ignorar_circuit_breaker: bool = typer.Option(
-        False, "--ignorar-circuit-breaker",
+        False,
+        "--ignorar-circuit-breaker",
         help="SO' PARA ANALISE: nao interrompe apos 3 perdas seguidas, "
-             "para ver o comportamento do dia inteiro. NUNCA usar isso "
-             "como configuracao de producao -- e' flag explicita de "
-             "diagnostico, nao vem do ea.yaml."),
+        "para ver o comportamento do dia inteiro. NUNCA usar isso "
+        "como configuracao de producao -- e' flag explicita de "
+        "diagnostico, nao vem do ea.yaml.",
+    ),
     comparar_circuit_breaker: bool = typer.Option(
-        False, "--comparar-circuit-breaker",
+        False,
+        "--comparar-circuit-breaker",
         help="Para todo dia em que o circuit breaker disparar de "
-             "verdade, roda TAMBEM sem ele (mesmo dado ja' carregado, "
-             "SEM reler o parquet duas vezes) e mostra os dois "
-             "resultados lado a lado. Responde 'o freio ajudou ou "
-             "atrapalhou NESTE dia' sem precisar rodar o comando duas "
-             "vezes manualmente. Nao combina com --ignorar-circuit-breaker."),
+        "verdade, roda TAMBEM sem ele (mesmo dado ja' carregado, "
+        "SEM reler o parquet duas vezes) e mostra os dois "
+        "resultados lado a lado. Responde 'o freio ajudou ou "
+        "atrapalhou NESTE dia' sem precisar rodar o comando duas "
+        "vezes manualmente. Nao combina com --ignorar-circuit-breaker.",
+    ),
     saida: Path = typer.Option(Path("data/research"), "--saida"),
     log_file: Path | None = typer.Option(
-        None, "--log-file",
+        None,
+        "--log-file",
         help="Grava o log DETALHADO (cada barra/decisao de TODOS os "
-             "dias) neste arquivo -- sem isso, so' o resumo final vai "
-             "para data/research/*.md; o detalhe por decisao se perde."),
-    log_level: str = typer.Option("WARNING", "--log-level",
-                                  help="WARNING p/ nao afogar o console "
-                                       "com o log de cada barra de cada dia. "
-                                       "Vale so' para a TELA -- o --log-file "
-                                       "sempre grava tudo em INFO."),
+        "dias) neste arquivo -- sem isso, so' o resumo final vai "
+        "para data/research/*.md; o detalhe por decisao se perde.",
+    ),
+    log_level: str = typer.Option(
+        "WARNING",
+        "--log-level",
+        help="WARNING p/ nao afogar o console "
+        "com o log de cada barra de cada dia. "
+        "Vale so' para a TELA -- o --log-file "
+        "sempre grava tudo em INFO.",
+    ),
 ) -> None:
     """
     Roda ea-replay em TODOS os dias ja' capturados (uma instancia NOVA de
@@ -2179,9 +2584,11 @@ def ea_replay_lote(
     import statistics as stats
 
     if comparar_circuit_breaker and ignorar_circuit_breaker:
-        raise SystemExit("--comparar-circuit-breaker nao combina com "
-                         "--ignorar-circuit-breaker -- sao dois modos "
-                         "de diagnostico diferentes, use um ou outro.")
+        raise SystemExit(
+            "--comparar-circuit-breaker nao combina com "
+            "--ignorar-circuit-breaker -- sao dois modos "
+            "de diagnostico diferentes, use um ou outro."
+        )
 
     from .ea.config import EAConfig
     from .ea.service import EAService, carregar_trades_do_dia
@@ -2189,14 +2596,18 @@ def ea_replay_lote(
     configurar(log_level, log_file, nivel_arquivo="INFO")
     ea_cfg = EAConfig.from_yaml(config)
     raiz_symbol = raiz_raw / "trade"
-    dias = sorted(p.name.removeprefix("dt=") for p in raiz_symbol.glob("dt=*")
-                 if (p / f"sym={ea_cfg.symbol}").exists())
+    dias = sorted(
+        p.name.removeprefix("dt=")
+        for p in raiz_symbol.glob("dt=*")
+        if (p / f"sym={ea_cfg.symbol}").exists()
+    )
     if not dias:
-        raise SystemExit(f"nenhum dia encontrado em {raiz_symbol} para "
-                         f"symbol={ea_cfg.symbol}")
+        raise SystemExit(f"nenhum dia encontrado em {raiz_symbol} para symbol={ea_cfg.symbol}")
 
-    typer.echo(f"EA replay em lote: {ea_cfg.symbol}, {len(dias)} dia(s), "
-               f"ignorar_circuit_breaker={ignorar_circuit_breaker}")
+    typer.echo(
+        f"EA replay em lote: {ea_cfg.symbol}, {len(dias)} dia(s), "
+        f"ignorar_circuit_breaker={ignorar_circuit_breaker}"
+    )
 
     por_dia: list[dict[str, Any]] = []
     todas_operacoes: list[float] = []
@@ -2240,29 +2651,42 @@ def ea_replay_lote(
             svc_sem_freio.processar_trades_carregados(trades)
             pnl_sem_freio = round(svc_sem_freio.gestor.pnl_dia_pontos, 1)
             delta = round(pnl_sem_freio - svc.gestor.pnl_dia_pontos, 1)
-            typer.echo(f"    [circuit breaker disparou] com freio: "
-                      f"{svc.gestor.pnl_dia_pontos:+.1f} pts  |  "
-                      f"sem freio: {pnl_sem_freio:+.1f} pts  |  "
-                      f"delta: {delta:+.1f} pts")
+            typer.echo(
+                f"    [circuit breaker disparou] com freio: "
+                f"{svc.gestor.pnl_dia_pontos:+.1f} pts  |  "
+                f"sem freio: {pnl_sem_freio:+.1f} pts  |  "
+                f"delta: {delta:+.1f} pts"
+            )
 
-        por_dia.append({
-            "dia": dia, "trades": svc.stats.trades, "barras": svc.stats.barras,
-            "decisoes": dict(svc.stats.decisoes),
-            "pnl_dia": round(svc.gestor.pnl_dia_pontos, 1),
-            "n_operacoes": len(svc.gestor.historico_pnl),
-            "perdas_seguidas_final": svc.gestor.perdas_consecutivas,
-            "bloqueado": svc.gestor.bloqueado,
-            "pnl_sem_freio": pnl_sem_freio,
-        })
+        por_dia.append(
+            {
+                "dia": dia,
+                "trades": svc.stats.trades,
+                "barras": svc.stats.barras,
+                "decisoes": dict(svc.stats.decisoes),
+                "pnl_dia": round(svc.gestor.pnl_dia_pontos, 1),
+                "n_operacoes": len(svc.gestor.historico_pnl),
+                "perdas_seguidas_final": svc.gestor.perdas_consecutivas,
+                "bloqueado": svc.gestor.bloqueado,
+                "pnl_sem_freio": pnl_sem_freio,
+            }
+        )
         todas_operacoes.extend(svc.gestor.historico_pnl)
         todas_operacoes_com_lado.extend(svc.gestor.historico_operacoes)
         for seq, op in enumerate(svc.gestor.historico_detalhado, start=1):
-            registros_operacoes.append({
-                "dia": dia, "seq_no_dia": seq, "lado": op.lado,
-                "preco_entrada": op.preco_entrada, "preco_saida": op.preco_saida,
-                "bar_id_entrada": op.bar_id_entrada, "bar_id_saida": op.bar_id_saida,
-                "pnl_liquido": op.pnl_liquido, "motivo": op.motivo,
-            })
+            registros_operacoes.append(
+                {
+                    "dia": dia,
+                    "seq_no_dia": seq,
+                    "lado": op.lado,
+                    "preco_entrada": op.preco_entrada,
+                    "preco_saida": op.preco_saida,
+                    "bar_id_entrada": op.bar_id_entrada,
+                    "bar_id_saida": op.bar_id_saida,
+                    "pnl_liquido": op.pnl_liquido,
+                    "motivo": op.motivo,
+                }
+            )
         if comparar_circuit_breaker:
             # svc_sem_freio existe so' quando o freio disparou neste dia;
             # senao, com/sem freio sao identicos -- reusa svc mesmo.
@@ -2273,16 +2697,25 @@ def ea_replay_lote(
         decorrido_s = time.monotonic() - t0_lote
         media_por_dia_s = decorrido_s / i
         eta_s = media_por_dia_s * (len(dias) - i)
-        log.info("ea.replay_lote_dia_concluido", dia=dia, numero=i, de=len(dias),
-                 pnl_dia=por_dia[-1]["pnl_dia"], operacoes=por_dia[-1]["n_operacoes"],
-                 bloqueado=por_dia[-1]["bloqueado"],
-                 decorrido_s=round(decorrido_s, 1), eta_s=round(eta_s, 1))
-        typer.echo(f"[{i}/{len(dias)}] {dia} concluido: "
-                   f"pnl={por_dia[-1]['pnl_dia']:+.1f} pts  "
-                   f"operacoes={por_dia[-1]['n_operacoes']}  "
-                   f"bloqueado={por_dia[-1]['bloqueado']}  "
-                   f"(decorrido={decorrido_s / 60:.1f}min  "
-                   f"restante~={eta_s / 60:.1f}min)")
+        log.info(
+            "ea.replay_lote_dia_concluido",
+            dia=dia,
+            numero=i,
+            de=len(dias),
+            pnl_dia=por_dia[-1]["pnl_dia"],
+            operacoes=por_dia[-1]["n_operacoes"],
+            bloqueado=por_dia[-1]["bloqueado"],
+            decorrido_s=round(decorrido_s, 1),
+            eta_s=round(eta_s, 1),
+        )
+        typer.echo(
+            f"[{i}/{len(dias)}] {dia} concluido: "
+            f"pnl={por_dia[-1]['pnl_dia']:+.1f} pts  "
+            f"operacoes={por_dia[-1]['n_operacoes']}  "
+            f"bloqueado={por_dia[-1]['bloqueado']}  "
+            f"(decorrido={decorrido_s / 60:.1f}min  "
+            f"restante~={eta_s / 60:.1f}min)"
+        )
 
     ganhos = [p for p in todas_operacoes if p > 0]
     perdas = [p for p in todas_operacoes if p <= 0]
@@ -2291,12 +2724,17 @@ def ea_replay_lote(
 
     if registros_operacoes:
         import pandas as pd
+
         saida_operacoes.parent.mkdir(parents=True, exist_ok=True)
         pd.DataFrame(registros_operacoes).to_parquet(saida_operacoes, index=False)
-        log.info("ea.replay_lote_operacoes_persistidas",
-                 arquivo=str(saida_operacoes), n=len(registros_operacoes))
-        typer.echo(f"\noperacoes persistidas: {saida_operacoes} "
-                   f"({len(registros_operacoes)} linhas)")
+        log.info(
+            "ea.replay_lote_operacoes_persistidas",
+            arquivo=str(saida_operacoes),
+            n=len(registros_operacoes),
+        )
+        typer.echo(
+            f"\noperacoes persistidas: {saida_operacoes} ({len(registros_operacoes)} linhas)"
+        )
 
     typer.echo("\n" + "=" * 62)
     typer.echo("RESUMO DO LOTE")
@@ -2304,10 +2742,16 @@ def ea_replay_lote(
     typer.echo(f"  dias                 : {len(dias)}")
     typer.echo(f"  operacoes totais     : {len(todas_operacoes)}")
     typer.echo(f"  pnl total (pts)      : {pnl_total:+.1f}")
-    typer.echo(f"  pnl medio/operacao   : {pnl_total / len(todas_operacoes):+.2f}"
-               if todas_operacoes else "  pnl medio/operacao   : n/a")
-    typer.echo(f"  taxa de acerto       : {len(ganhos) / len(todas_operacoes):.1%}"
-               if todas_operacoes else "  taxa de acerto       : n/a")
+    typer.echo(
+        f"  pnl medio/operacao   : {pnl_total / len(todas_operacoes):+.2f}"
+        if todas_operacoes
+        else "  pnl medio/operacao   : n/a"
+    )
+    typer.echo(
+        f"  taxa de acerto       : {len(ganhos) / len(todas_operacoes):.1%}"
+        if todas_operacoes
+        else "  taxa de acerto       : n/a"
+    )
     if ganhos:
         typer.echo(f"  ganho medio          : {stats.mean(ganhos):+.1f}")
     else:
@@ -2334,22 +2778,34 @@ def ea_replay_lote(
     curva = None
     if todas_operacoes:
         from .research.curva_patrimonio import calcular_curva_patrimonio
+
         curva = calcular_curva_patrimonio(
-            todas_operacoes, capital_inicial=ea_cfg.risco.capital,
-            valor_ponto_reais=ea_cfg.risco.valor_ponto_reais)
-        typer.echo("\n  curva de patrimonio (capital inicial "
-                   f"R${ea_cfg.risco.capital:.2f}, so' ruina por P&L -- "
-                   "NAO cobre zeragem por garantia):")
-        typer.echo(f"    saldo final          : R${curva.saldo_final:,.2f}  "
-                   f"({curva.retorno_total_pct:+.1%})")
-        typer.echo(f"    drawdown maximo      : R${curva.drawdown_maximo_reais:,.2f}  "
-                   f"({curva.drawdown_maximo_pct:.1%} do pico de R${curva.saldo_no_pico:,.2f})")
-        typer.echo(f"    capital minimo sugerido (1.5x o dd): "
-                   f"R${curva.capital_minimo_sugerido:,.2f}")
+            todas_operacoes,
+            capital_inicial=ea_cfg.risco.capital,
+            valor_ponto_reais=ea_cfg.risco.valor_ponto_reais,
+        )
+        typer.echo(
+            "\n  curva de patrimonio (capital inicial "
+            f"R${ea_cfg.risco.capital:.2f}, so' ruina por P&L -- "
+            "NAO cobre zeragem por garantia):"
+        )
+        typer.echo(
+            f"    saldo final          : R${curva.saldo_final:,.2f}  "
+            f"({curva.retorno_total_pct:+.1%})"
+        )
+        typer.echo(
+            f"    drawdown maximo      : R${curva.drawdown_maximo_reais:,.2f}  "
+            f"({curva.drawdown_maximo_pct:.1%} do pico de R${curva.saldo_no_pico:,.2f})"
+        )
+        typer.echo(
+            f"    capital minimo sugerido (1.5x o dd): R${curva.capital_minimo_sugerido:,.2f}"
+        )
         typer.echo(f"    calmar ratio (retorno/dd): {curva.calmar_ratio:.2f}")
         if curva.ficou_negativo_ou_zero:
-            typer.echo("    ATENCAO: com este capital inicial, o saldo "
-                      "chegou a zero ou negativo em algum ponto da amostra.")
+            typer.echo(
+                "    ATENCAO: com este capital inicial, o saldo "
+                "chegou a zero ou negativo em algum ponto da amostra."
+            )
 
     # Quebra por lado (2026-08-27, mesma pergunta que mae.py ja' respondia
     # de forma independente: as perdas do EA simulado estao concentradas
@@ -2359,15 +2815,19 @@ def ea_replay_lote(
     op_venda = [pnl for lado, pnl in todas_operacoes_com_lado if lado == -1]
     typer.echo("\n  por lado (pnl LIQUIDO, ja' descontado o custo):")
     if op_compra:
-        typer.echo(f"    compra: n={len(op_compra)}  "
-                   f"pnl_liquido_medio={stats.mean(op_compra):+.1f}  "
-                   f"pnl_liquido_total={sum(op_compra):+.1f}")
+        typer.echo(
+            f"    compra: n={len(op_compra)}  "
+            f"pnl_liquido_medio={stats.mean(op_compra):+.1f}  "
+            f"pnl_liquido_total={sum(op_compra):+.1f}"
+        )
     else:
         typer.echo("    compra: n=0")
     if op_venda:
-        typer.echo(f"    venda : n={len(op_venda)}  "
-                   f"pnl_liquido_medio={stats.mean(op_venda):+.1f}  "
-                   f"pnl_liquido_total={sum(op_venda):+.1f}")
+        typer.echo(
+            f"    venda : n={len(op_venda)}  "
+            f"pnl_liquido_medio={stats.mean(op_venda):+.1f}  "
+            f"pnl_liquido_total={sum(op_venda):+.1f}"
+        )
     else:
         typer.echo("    venda : n=0")
 
@@ -2382,20 +2842,25 @@ def ea_replay_lote(
         op_venda_sf = [pnl for lado, pnl in todas_operacoes_com_lado_sem_freio if lado == -1]
         typer.echo("\n  por lado SEM o circuit breaker (para comparacao):")
         if op_compra_sf:
-            typer.echo(f"    compra: n={len(op_compra_sf)}  "
-                       f"pnl_liquido_medio={stats.mean(op_compra_sf):+.1f}  "
-                       f"pnl_liquido_total={sum(op_compra_sf):+.1f}")
+            typer.echo(
+                f"    compra: n={len(op_compra_sf)}  "
+                f"pnl_liquido_medio={stats.mean(op_compra_sf):+.1f}  "
+                f"pnl_liquido_total={sum(op_compra_sf):+.1f}"
+            )
         else:
             typer.echo("    compra: n=0")
         if op_venda_sf:
-            typer.echo(f"    venda : n={len(op_venda_sf)}  "
-                       f"pnl_liquido_medio={stats.mean(op_venda_sf):+.1f}  "
-                       f"pnl_liquido_total={sum(op_venda_sf):+.1f}")
+            typer.echo(
+                f"    venda : n={len(op_venda_sf)}  "
+                f"pnl_liquido_medio={stats.mean(op_venda_sf):+.1f}  "
+                f"pnl_liquido_total={sum(op_venda_sf):+.1f}"
+            )
         else:
             typer.echo("    venda : n=0")
 
     saida.mkdir(parents=True, exist_ok=True)
     from datetime import UTC, datetime
+
     arq = saida / f"ea_replay_lote_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.md"
     linhas = [
         "# EA replay em lote\n",
@@ -2420,43 +2885,59 @@ def ea_replay_lote(
             "pendencia separada em docs/EA_ARQUITETURA.md.\n"
         )
         linhas.append(f"- capital inicial: R${ea_cfg.risco.capital:,.2f}")
-        linhas.append(f"- saldo final: R${curva.saldo_final:,.2f} "
-                      f"({curva.retorno_total_pct:+.1%})")
-        linhas.append(f"- drawdown maximo: R${curva.drawdown_maximo_reais:,.2f} "
-                      f"({curva.drawdown_maximo_pct:.1%} do pico de "
-                      f"R${curva.saldo_no_pico:,.2f})")
-        linhas.append(f"- capital minimo sugerido (1.5x o drawdown maximo): "
-                      f"R${curva.capital_minimo_sugerido:,.2f}")
-        linhas.append(f"- calmar ratio (retorno total / drawdown maximo): "
-                      f"{curva.calmar_ratio:.2f}")
+        linhas.append(f"- saldo final: R${curva.saldo_final:,.2f} ({curva.retorno_total_pct:+.1%})")
+        linhas.append(
+            f"- drawdown maximo: R${curva.drawdown_maximo_reais:,.2f} "
+            f"({curva.drawdown_maximo_pct:.1%} do pico de "
+            f"R${curva.saldo_no_pico:,.2f})"
+        )
+        linhas.append(
+            f"- capital minimo sugerido (1.5x o drawdown maximo): "
+            f"R${curva.capital_minimo_sugerido:,.2f}"
+        )
+        linhas.append(f"- calmar ratio (retorno total / drawdown maximo): {curva.calmar_ratio:.2f}")
         if curva.ficou_negativo_ou_zero:
-            linhas.append("- **ATENCAO**: com este capital inicial, o saldo "
-                          "chegou a zero ou negativo em algum ponto da amostra.")
+            linhas.append(
+                "- **ATENCAO**: com este capital inicial, o saldo "
+                "chegou a zero ou negativo em algum ponto da amostra."
+            )
     linhas.append("\n## Por dia\n")
-    linhas.extend([
-        (
-            "| dia | pnl (com freio) | pnl (sem freio) | delta | operacoes | "
-            "perdas seguidas (final) | bloqueado |"
-            if comparar_circuit_breaker else
-            "| dia | pnl | operacoes | perdas seguidas (final) | bloqueado |"
-        ),
-        ("|---|---|---|---|---|---|---|" if comparar_circuit_breaker else "|---|---|---|---|---|"),
-    ])
+    linhas.extend(
+        [
+            (
+                "| dia | pnl (com freio) | pnl (sem freio) | delta | operacoes | "
+                "perdas seguidas (final) | bloqueado |"
+                if comparar_circuit_breaker
+                else "| dia | pnl | operacoes | perdas seguidas (final) | bloqueado |"
+            ),
+            (
+                "|---|---|---|---|---|---|---|"
+                if comparar_circuit_breaker
+                else "|---|---|---|---|---|"
+            ),
+        ]
+    )
     for d in por_dia:
         if comparar_circuit_breaker:
             if d["pnl_sem_freio"] is not None:
                 delta = d["pnl_sem_freio"] - d["pnl_dia"]
-                linhas.append(f"| {d['dia']} | {d['pnl_dia']:+.1f} | "
-                              f"{d['pnl_sem_freio']:+.1f} | {delta:+.1f} | "
-                              f"{d['n_operacoes']} | {d['perdas_seguidas_final']} | "
-                              f"{d['bloqueado']} |")
+                linhas.append(
+                    f"| {d['dia']} | {d['pnl_dia']:+.1f} | "
+                    f"{d['pnl_sem_freio']:+.1f} | {delta:+.1f} | "
+                    f"{d['n_operacoes']} | {d['perdas_seguidas_final']} | "
+                    f"{d['bloqueado']} |"
+                )
             else:
-                linhas.append(f"| {d['dia']} | {d['pnl_dia']:+.1f} | - | - | "
-                              f"{d['n_operacoes']} | {d['perdas_seguidas_final']} | "
-                              f"{d['bloqueado']} |")
+                linhas.append(
+                    f"| {d['dia']} | {d['pnl_dia']:+.1f} | - | - | "
+                    f"{d['n_operacoes']} | {d['perdas_seguidas_final']} | "
+                    f"{d['bloqueado']} |"
+                )
         else:
-            linhas.append(f"| {d['dia']} | {d['pnl_dia']:+.1f} | {d['n_operacoes']} | "
-                          f"{d['perdas_seguidas_final']} | {d['bloqueado']} |")
+            linhas.append(
+                f"| {d['dia']} | {d['pnl_dia']:+.1f} | {d['n_operacoes']} | "
+                f"{d['perdas_seguidas_final']} | {d['bloqueado']} |"
+            )
     if comparar_circuit_breaker:
         linhas.append(
             "\nATENCAO NA LEITURA: cada linha acima e' UM dia -- nao decida "
@@ -2468,18 +2949,24 @@ def ea_replay_lote(
             "freio disparou, respondem isso de verdade."
         )
     linhas.append("\n## Por lado (pnl LIQUIDO, ja' descontado o custo)\n")
-    linhas.append("Mesma pergunta que mae.py ja' respondia de forma independente: "
-                  "as perdas estao concentradas no lado de compra (sem edge segundo "
-                  "o MAE), ou distribuidas nos dois? Dado REAL do proprio EA "
-                  "replay, nao mais inferencia.\n")
+    linhas.append(
+        "Mesma pergunta que mae.py ja' respondia de forma independente: "
+        "as perdas estao concentradas no lado de compra (sem edge segundo "
+        "o MAE), ou distribuidas nos dois? Dado REAL do proprio EA "
+        "replay, nao mais inferencia.\n"
+    )
     linhas.append("| lado | n | pnl liquido medio | pnl liquido total |")
     linhas.append("|---|---|---|---|")
-    linhas.append(f"| compra | {len(op_compra)} | "
-                  f"{stats.mean(op_compra):+.1f} | {sum(op_compra):+.1f} |"
-                  if op_compra else "| compra | 0 | - | - |")
-    linhas.append(f"| venda | {len(op_venda)} | "
-                  f"{stats.mean(op_venda):+.1f} | {sum(op_venda):+.1f} |"
-                  if op_venda else "| venda | 0 | - | - |")
+    linhas.append(
+        f"| compra | {len(op_compra)} | {stats.mean(op_compra):+.1f} | {sum(op_compra):+.1f} |"
+        if op_compra
+        else "| compra | 0 | - | - |"
+    )
+    linhas.append(
+        f"| venda | {len(op_venda)} | {stats.mean(op_venda):+.1f} | {sum(op_venda):+.1f} |"
+        if op_venda
+        else "| venda | 0 | - | - |"
+    )
     if comparar_circuit_breaker:
         linhas.append("\n## Por lado SEM o circuit breaker (para comparacao)\n")
         linhas.append(
@@ -2493,12 +2980,18 @@ def ea_replay_lote(
         )
         linhas.append("| lado | n | pnl liquido medio | pnl liquido total |")
         linhas.append("|---|---|---|---|")
-        linhas.append(f"| compra | {len(op_compra_sf)} | "
-                      f"{stats.mean(op_compra_sf):+.1f} | {sum(op_compra_sf):+.1f} |"
-                      if op_compra_sf else "| compra | 0 | - | - |")
-        linhas.append(f"| venda | {len(op_venda_sf)} | "
-                      f"{stats.mean(op_venda_sf):+.1f} | {sum(op_venda_sf):+.1f} |"
-                      if op_venda_sf else "| venda | 0 | - | - |")
+        linhas.append(
+            f"| compra | {len(op_compra_sf)} | "
+            f"{stats.mean(op_compra_sf):+.1f} | {sum(op_compra_sf):+.1f} |"
+            if op_compra_sf
+            else "| compra | 0 | - | - |"
+        )
+        linhas.append(
+            f"| venda | {len(op_venda_sf)} | "
+            f"{stats.mean(op_venda_sf):+.1f} | {sum(op_venda_sf):+.1f} |"
+            if op_venda_sf
+            else "| venda | 0 | - | - |"
+        )
     linhas.append("\n## Todas as operacoes (pnl liquido, pontos)\n")
     linhas.append(", ".join(f"{p:+.1f}" for p in todas_operacoes))
     arq.write_text("\n".join(linhas), encoding="utf-8")
@@ -2514,17 +3007,21 @@ def mae_analise(
     threshold_entrada: float = typer.Option(..., "--threshold-entrada"),
     direcao: str = typer.Option("contrarian", "--direcao"),
     stop_catastrofico_pontos: float = typer.Option(
-        500.0, "--stop-catastrofico-pontos",
+        500.0,
+        "--stop-catastrofico-pontos",
         help="Deve bater com RiscoConfig.stop_catastrofico_pontos do "
-             "ea.yaml (derivado de capital x risco_max_pct / valor_ponto)."),
+        "ea.yaml (derivado de capital x risco_max_pct / valor_ponto).",
+    ),
     saida: Path = typer.Option(Path("data/research"), "--saida"),
     treino_min: int = typer.Option(
-        3, "--treino-min",
+        3,
+        "--treino-min",
         help="Mesma semantica de walk-forward do `research`/`quintis`: dias "
-             "minimos de treino antes do primeiro bloco de teste. A analise "
-             "roda SO' sobre o pool out-of-sample (uniao dos blocos de "
-             "teste) -- nunca sobre a amostra inteira, para nao misturar "
-             "dia que 'treinou' com dia de avaliacao real."),
+        "minimos de treino antes do primeiro bloco de teste. A analise "
+        "roda SO' sobre o pool out-of-sample (uniao dos blocos de "
+        "teste) -- nunca sobre a amostra inteira, para nao misturar "
+        "dia que 'treinou' com dia de avaliacao real.",
+    ),
     teste_dias: int = typer.Option(2, "--teste-dias"),
 ) -> None:
     """
@@ -2541,63 +3038,87 @@ def mae_analise(
     if not arquivo.exists():
         raise SystemExit(f"nao achei {arquivo} — rode `profit-tape features` antes")
 
-    r = analisar_mae(arquivo, feature, horizonte, threshold_entrada, direcao,
-                     stop_catastrofico_pontos, saida,
-                     treino_min=treino_min, teste_dias=teste_dias)
+    r = analisar_mae(
+        arquivo,
+        feature,
+        horizonte,
+        threshold_entrada,
+        direcao,
+        stop_catastrofico_pontos,
+        saida,
+        treino_min=treino_min,
+        teste_dias=teste_dias,
+    )
     typer.echo("=" * 62)
-    typer.echo(f"MAE — {feature}@h{horizonte}  stop={stop_catastrofico_pontos:.0f}pts  "
-               f"n={r['n_triggers']}")
+    typer.echo(
+        f"MAE — {feature}@h{horizonte}  stop={stop_catastrofico_pontos:.0f}pts  n={r['n_triggers']}"
+    )
     typer.echo("=" * 62)
-    typer.echo(f"  MAE_close   media={r['mae_close_media']:.1f}  "
-               f"mediana={r['mae_close_mediana']:.1f}  p90={r['mae_close_p90']:.1f}  "
-               f"p99={r['mae_close_p99']:.1f}  max={r['mae_close_max']:.1f}")
-    typer.echo(f"  MAE_intrabar (teorico) p90={r['mae_intrabar_p90']:.1f}  "
-               f"p99={r['mae_intrabar_p99']:.1f}  max={r['mae_intrabar_max']:.1f}")
-    typer.echo(f"  MFE_close (p/ Rota B) media={r['mfe_close_media']:.1f}  "
-               f"mediana={r['mfe_close_mediana']:.1f}  p10={r['mfe_close_p10']:.1f}  "
-               f"p90={r['mfe_close_p90']:.1f}")
+    typer.echo(
+        f"  MAE_close   media={r['mae_close_media']:.1f}  "
+        f"mediana={r['mae_close_mediana']:.1f}  p90={r['mae_close_p90']:.1f}  "
+        f"p99={r['mae_close_p99']:.1f}  max={r['mae_close_max']:.1f}"
+    )
+    typer.echo(
+        f"  MAE_intrabar (teorico) p90={r['mae_intrabar_p90']:.1f}  "
+        f"p99={r['mae_intrabar_p99']:.1f}  max={r['mae_intrabar_max']:.1f}"
+    )
+    typer.echo(
+        f"  MFE_close (p/ Rota B) media={r['mfe_close_media']:.1f}  "
+        f"mediana={r['mfe_close_mediana']:.1f}  p10={r['mfe_close_p10']:.1f}  "
+        f"p90={r['mfe_close_p90']:.1f}"
+    )
     typer.echo(f"\n  FREQUENCIA no limiar de {stop_catastrofico_pontos:.0f} pts:")
-    typer.echo(f"    stop no CLOSE (hoje) : {r['n_teria_batido_stop']}"
-               f"/{r['n_triggers']} ({r['pct_teria_batido_stop']:.1%})")
-    typer.echo(f"    stop CONTINUO (novo) : {r['n_teria_batido_stop_intrabar']}"
-               f"/{r['n_triggers']} ({r['pct_teria_batido_stop_intrabar']:.1%})")
-    typer.echo(f"  CONFORMIDADE — excesso do close alem do limite: "
-               f"media={r['excesso_close_medio']:.1f}  "
-               f"mediana={r['excesso_close_mediana']:.1f}  "
-               f"max={r['excesso_close_max']:.1f} pts")
+    typer.echo(
+        f"    stop no CLOSE (hoje) : {r['n_teria_batido_stop']}"
+        f"/{r['n_triggers']} ({r['pct_teria_batido_stop']:.1%})"
+    )
+    typer.echo(
+        f"    stop CONTINUO (novo) : {r['n_teria_batido_stop_intrabar']}"
+        f"/{r['n_triggers']} ({r['pct_teria_batido_stop_intrabar']:.1%})"
+    )
+    typer.echo(
+        f"  CONFORMIDADE — excesso do close alem do limite: "
+        f"media={r['excesso_close_medio']:.1f}  "
+        f"mediana={r['excesso_close_mediana']:.1f}  "
+        f"max={r['excesso_close_max']:.1f} pts"
+    )
     typer.echo("\n  TRES REGIMES (pnl bruto medio/operacao):")
     typer.echo(f"    sem stop      : {r['pnl_medio_sem_stop']:+.1f} pts")
     typer.echo(f"    stop no CLOSE : {r['pnl_medio_stop_close']:+.1f} pts")
     typer.echo(f"    stop CONTINUO : {r['pnl_medio_stop_continuo']:+.1f} pts")
-    typer.echo(f"\n  MARGINAIS (so' o continuo mata): n={r['n_marginais']}  "
-               f"pnl medio se deixadas correr={r['pnl_marginais_medio']:+.1f}  "
-               f"positivas={r['n_marginais_positivas']}"
-               f"/{r['n_marginais']} ({r['pct_marginais_positivas']:.1%})")
-    typer.echo("\n  por lado (o EA roda VENDA-APENAS — a linha que decide "
-               "e' a da venda):")
+    typer.echo(
+        f"\n  MARGINAIS (so' o continuo mata): n={r['n_marginais']}  "
+        f"pnl medio se deixadas correr={r['pnl_marginais_medio']:+.1f}  "
+        f"positivas={r['n_marginais_positivas']}"
+        f"/{r['n_marginais']} ({r['pct_marginais_positivas']:.1%})"
+    )
+    typer.echo("\n  por lado (o EA roda VENDA-APENAS — a linha que decide e' a da venda):")
     for nome, s in (("compra", r["stats_compra"]), ("venda ", r["stats_venda"])):
-        typer.echo(f"    {nome}: n={s['n']}  "
-                   f"pnl_bruto_medio={s['pnl_bruto_medio']:+.1f}  "
-                   f"mae_mediana={s['mae_close_mediana']:.1f}  "
-                   f"mfe_mediana={s['mfe_close_mediana']:.1f}  "
-                   f"close={s['n_batido_stop']} ({s['pct_batido_stop']:.1%})  "
-                   f"continuo={s['n_batido_stop_intrabar']} "
-                   f"({s['pct_batido_stop_intrabar']:.1%})  "
-                   f"marginais={s['n_marginais']} "
-                   f"(positivas: {s['n_marginais_positivas']})")
+        typer.echo(
+            f"    {nome}: n={s['n']}  "
+            f"pnl_bruto_medio={s['pnl_bruto_medio']:+.1f}  "
+            f"mae_mediana={s['mae_close_mediana']:.1f}  "
+            f"mfe_mediana={s['mfe_close_mediana']:.1f}  "
+            f"close={s['n_batido_stop']} ({s['pct_batido_stop']:.1%})  "
+            f"continuo={s['n_batido_stop_intrabar']} "
+            f"({s['pct_batido_stop_intrabar']:.1%})  "
+            f"marginais={s['n_marginais']} "
+            f"(positivas: {s['n_marginais_positivas']})"
+        )
     typer.echo("\n  TRES REGIMES POR LADO (pnl bruto medio/operacao):")
     for nome, s in (("compra", r["stats_compra"]), ("venda ", r["stats_venda"])):
-        typer.echo(f"    {nome}: sem stop={s['pnl_medio_sem_stop']:+.1f}  "
-                   f"close={s['pnl_medio_stop_close']:+.1f}  "
-                   f"continuo={s['pnl_medio_stop_continuo']:+.1f}  "
-                   f"dif pareada={s['dif_pareada_media']:+.2f}  "
-                   f"IC95=[{s['ic95_baixo']:+.2f} ; {s['ic95_alto']:+.2f}]  "
-                   f"afetadas={s['n_afetadas']}")
+        typer.echo(
+            f"    {nome}: sem stop={s['pnl_medio_sem_stop']:+.1f}  "
+            f"close={s['pnl_medio_stop_close']:+.1f}  "
+            f"continuo={s['pnl_medio_stop_continuo']:+.1f}  "
+            f"dif pareada={s['dif_pareada_media']:+.2f}  "
+            f"IC95=[{s['ic95_baixo']:+.2f} ; {s['ic95_alto']:+.2f}]  "
+            f"afetadas={s['n_afetadas']}"
+        )
     typer.echo("\n" + "=" * 62)
-    typer.echo("PRE-REGISTRO (criterio congelado): lado VENDA, IC95 da "
-               "diferenca pareada")
-    typer.echo(f"  aceita se limite inferior > "
-               f"{r['limite_nao_inferioridade']:.1f} pts/op")
+    typer.echo("PRE-REGISTRO (criterio congelado): lado VENDA, IC95 da diferenca pareada")
+    typer.echo(f"  aceita se limite inferior > {r['limite_nao_inferioridade']:.1f} pts/op")
     typer.echo(f"  observado: {r['stats_venda']['ic95_baixo']:+.2f}")
     typer.echo(f"  VEREDITO: {r['veredito']}")
     typer.echo("=" * 62)
@@ -2613,11 +3134,11 @@ def reversao_condicional(
     threshold_entrada: float = typer.Option(..., "--threshold-entrada"),
     direcao: str = typer.Option("contrarian", "--direcao"),
     lado: str = typer.Option(
-        "venda", "--lado",
-        help="venda (o unico com edge confirmado), compra ou ambos."),
+        "venda", "--lado", help="venda (o unico com edge confirmado), compra ou ambos."
+    ),
     custo_pontos: float = typer.Option(
-        11.0, "--custo-pontos",
-        help="Deve bater com custo_pontos_estimado do ea.yaml."),
+        11.0, "--custo-pontos", help="Deve bater com custo_pontos_estimado do ea.yaml."
+    ),
     saida: Path = typer.Option(Path("data/research"), "--saida"),
     treino_min: int = typer.Option(3, "--treino-min"),
     teste_dias: int = typer.Option(2, "--teste-dias"),
@@ -2647,27 +3168,46 @@ def reversao_condicional(
         raise SystemExit(f"nao achei {arquivo} — rode `profit-tape features` antes")
 
     r = analisar_reversao_condicional(
-        arquivo, feature, horizonte, threshold_entrada, direcao, custo_pontos,
-        saida, lado_permitido=lado, treino_min=treino_min,
-        teste_dias=teste_dias, n_bootstrap=n_bootstrap)
+        arquivo,
+        feature,
+        horizonte,
+        threshold_entrada,
+        direcao,
+        custo_pontos,
+        saida,
+        lado_permitido=lado,
+        treino_min=treino_min,
+        teste_dias=teste_dias,
+        n_bootstrap=n_bootstrap,
+    )
 
     typer.echo("=" * 78)
-    typer.echo(f"REVERSAO CONDICIONAL — {feature}@h{horizonte} lado={lado}  "
-               f"n={r['n_operacoes']} em {r['n_dias']} pregoes")
+    typer.echo(
+        f"REVERSAO CONDICIONAL — {feature}@h{horizonte} lado={lado}  "
+        f"n={r['n_operacoes']} em {r['n_dias']} pregoes"
+    )
     typer.echo("=" * 78)
-    typer.echo(f"  media INCONDICIONAL (referencia): "
-               f"{r['media_incondicional']:+.2f} pts liquidos")
-    typer.echo(f"  limiar deflacionado ({len(r['grade_x'])} comparacoes): "
-               f"|t| >= {r['limiar_deflacionado']:.3f}\n")
-    typer.echo(f"  {'X':>5} {'n toc':>6} {'media toc':>10} {'media nao':>10} "
-               f"{'dif':>8} {'t':>7}  situacao")
+    typer.echo(f"  media INCONDICIONAL (referencia): {r['media_incondicional']:+.2f} pts liquidos")
+    typer.echo(
+        f"  limiar deflacionado ({len(r['grade_x'])} comparacoes): "
+        f"|t| >= {r['limiar_deflacionado']:.3f}\n"
+    )
+    typer.echo(
+        f"  {'X':>5} {'n toc':>6} {'media toc':>10} {'media nao':>10} {'dif':>8} {'t':>7}  situacao"
+    )
     for p in r["pontos"]:
-        marca = ("SIGNIFICATIVO" if p["significativo"]
-                 else (f"n<{r['n_minimo_por_ponto']} (nao interpretado)"
-                       if not p["n_suficiente"] else "-"))
-        typer.echo(f"  {p['x']:5.0f} {p['n_tocou']:6d} {p['media_tocou']:+10.2f} "
-                   f"{p['media_nao_tocou']:+10.2f} {p['diferenca']:+8.2f} "
-                   f"{p['t_welch']:7.2f}  {marca}")
+        marca = (
+            "SIGNIFICATIVO"
+            if p["significativo"]
+            else (
+                f"n<{r['n_minimo_por_ponto']} (nao interpretado)" if not p["n_suficiente"] else "-"
+            )
+        )
+        typer.echo(
+            f"  {p['x']:5.0f} {p['n_tocou']:6d} {p['media_tocou']:+10.2f} "
+            f"{p['media_nao_tocou']:+10.2f} {p['diferenca']:+8.2f} "
+            f"{p['t_welch']:7.2f}  {marca}"
+        )
     typer.echo(f"\n  VEREDITO: {r['veredito']}")
     typer.echo(f"  {r['justificativa']}")
     typer.echo(f"\nrelatorio: {r['relatorio']}")
@@ -2710,32 +3250,44 @@ def remanescente_apos_toque(
         raise SystemExit(f"nao achei {arquivo} — rode `profit-tape features` antes")
 
     r = analisar_remanescente(
-        arquivo, feature, horizonte, threshold_entrada, direcao, saida,
-        lado_permitido=lado, treino_min=treino_min, teste_dias=teste_dias,
-        n_bootstrap=n_bootstrap)
+        arquivo,
+        feature,
+        horizonte,
+        threshold_entrada,
+        direcao,
+        saida,
+        lado_permitido=lado,
+        treino_min=treino_min,
+        teste_dias=teste_dias,
+        n_bootstrap=n_bootstrap,
+    )
 
     portao = r["portao"]
     typer.echo("=" * 78)
-    typer.echo(f"PORTAO DE HONESTIDADE (ruido puro): "
-               f"{'PASSOU' if portao['passou'] else 'REPROVOU'} — "
-               f"veredito sobre ruido: {portao['veredito']}")
-    typer.echo(f"  amplitude/sd por barra — ruido "
-               f"{portao['razao_amplitude_ruido']:.2f} vs real "
-               f"{portao['razao_amplitude_real']:.2f}")
+    typer.echo(
+        f"PORTAO DE HONESTIDADE (ruido puro): "
+        f"{'PASSOU' if portao['passou'] else 'REPROVOU'} — "
+        f"veredito sobre ruido: {portao['veredito']}"
+    )
+    typer.echo(
+        f"  amplitude/sd por barra — ruido "
+        f"{portao['razao_amplitude_ruido']:.2f} vs real "
+        f"{portao['razao_amplitude_real']:.2f}"
+    )
     typer.echo("=" * 78)
     if not portao["passou"]:
         typer.echo("  Resultado real abaixo NAO se interpreta.\n")
-    typer.echo(f"REMANESCENTE — {feature}@h{horizonte} lado={lado}  "
-               f"{r['n_dias']} pregoes")
-    typer.echo(f"  {'X':>5} {'n':>6} {'rem PESS':>10} {'t':>7} "
-               f"{'rem OTIM':>10} {'t':>7}")
+    typer.echo(f"REMANESCENTE — {feature}@h{horizonte} lado={lado}  {r['n_dias']} pregoes")
+    typer.echo(f"  {'X':>5} {'n':>6} {'rem PESS':>10} {'t':>7} {'rem OTIM':>10} {'t':>7}")
     for p in r["pontos"]:
         if not p["n"]:
             typer.echo(f"  {p['x']:5.0f} {0:6d}   (sem operacao)")
             continue
-        typer.echo(f"  {p['x']:5.0f} {p['n']:6d} {p['media_pess']:+10.2f} "
-                   f"{p['t_pess']:7.2f} {p['media_otim']:+10.2f} "
-                   f"{p['t_otim']:7.2f}")
+        typer.echo(
+            f"  {p['x']:5.0f} {p['n']:6d} {p['media_pess']:+10.2f} "
+            f"{p['t_pess']:7.2f} {p['media_otim']:+10.2f} "
+            f"{p['t_otim']:7.2f}"
+        )
     typer.echo(f"\n  VEREDITO: {r['veredito']}")
     typer.echo(f"  {r['justificativa']}")
     typer.echo(f"\nrelatorio: {r['relatorio']}")
@@ -2744,8 +3296,10 @@ def remanescente_apos_toque(
 @app.command()
 def decomposicao_drawdown(
     operacoes: Path = typer.Option(
-        Path("data/research/operacoes_replay.parquet"), "--operacoes",
-        help="Saida de `ea-replay-lote --saida-operacoes`."),
+        Path("data/research/operacoes_replay.parquet"),
+        "--operacoes",
+        help="Saida de `ea-replay-lote --saida-operacoes`.",
+    ),
     saida: Path = typer.Option(Path("data/research"), "--saida"),
     n_bootstrap: int = typer.Option(2000, "--n-bootstrap"),
 ) -> None:
@@ -2760,25 +3314,33 @@ def decomposicao_drawdown(
     from .research.decomposicao_drawdown import decompor_drawdown
 
     if not operacoes.exists():
-        raise SystemExit(f"nao achei {operacoes} — rode `ea-replay-lote` "
-                         "(ele persiste as operacoes desde v1.45)")
+        raise SystemExit(
+            f"nao achei {operacoes} — rode `ea-replay-lote` (ele persiste as operacoes desde v1.45)"
+        )
     r = decompor_drawdown(operacoes, saida, n_bootstrap=n_bootstrap)
     jk, bt = r["jackknife"], r["bootstrap"]
     typer.echo("=" * 70)
-    typer.echo(f"DECOMPOSICAO DO DRAWDOWN — {r['n_operacoes']} ops, "
-               f"{r['n_dias']} pregoes, P&L {r['pnl_total']:+.1f}")
+    typer.echo(
+        f"DECOMPOSICAO DO DRAWDOWN — {r['n_operacoes']} ops, "
+        f"{r['n_dias']} pregoes, P&L {r['pnl_total']:+.1f}"
+    )
     typer.echo("=" * 70)
     typer.echo(f"  drawdown maximo : {r['drawdown_maximo']:.1f} pts   Calmar {r['calmar']:.2f}")
     typer.echo(f"  jackknife/dia   : [{jk['minimo']:.1f} ; {jk['maximo']:.1f}]")
-    typer.echo(f"  bootstrap/dia   : mediana {bt['mediana']:.1f}  "
-               f"IC95 [{bt['ic95_baixo']:.1f} ; {bt['ic95_alto']:.1f}]\n")
-    typer.echo(f"  {'#':>2} {'prof':>7} {'ops':>4} {'dias':>4} {'OPS':>6} {'DIA':>6} "
-               f"{'SEQ':>6}  dominante")
+    typer.echo(
+        f"  bootstrap/dia   : mediana {bt['mediana']:.1f}  "
+        f"IC95 [{bt['ic95_baixo']:.1f} ; {bt['ic95_alto']:.1f}]\n"
+    )
+    typer.echo(
+        f"  {'#':>2} {'prof':>7} {'ops':>4} {'dias':>4} {'OPS':>6} {'DIA':>6} {'SEQ':>6}  dominante"
+    )
     for i, d in enumerate(r["trechos"], start=1):
-        typer.echo(f"  {i:2d} {d['profundidade']:7.1f} {d['n_operacoes']:4d} "
-                   f"{d['n_dias']:4d} {d['parcela_operacoes']:6.2f} "
-                   f"{d['parcela_dias']:6.2f} {d['parcela_sequencia']:6.2f}  "
-                   f"{d['fonte_dominante']}")
+        typer.echo(
+            f"  {i:2d} {d['profundidade']:7.1f} {d['n_operacoes']:4d} "
+            f"{d['n_dias']:4d} {d['parcela_operacoes']:6.2f} "
+            f"{d['parcela_dias']:6.2f} {d['parcela_sequencia']:6.2f}  "
+            f"{d['fonte_dominante']}"
+        )
     typer.echo(f"\nrelatorio: {r['relatorio']}")
 
 
@@ -2786,17 +3348,23 @@ def decomposicao_drawdown(
 def triagem_inprogress(
     raiz_raw: Path = typer.Argument(..., help="Raiz do dado (ex.: data/raw)."),
     destino_quarentena: Path = typer.Option(
-        Path("_inprogress_orfaos"), "--destino-quarentena",
+        Path("_inprogress_orfaos"),
+        "--destino-quarentena",
         help="Pasta FORA de raiz_raw onde os arquivos sem footer sao "
-             "movidos (nunca apagados). Estrutura relativa preservada."),
+        "movidos (nunca apagados). Estrutura relativa preservada.",
+    ),
     idade_min_min: float = typer.Option(
-        15.0, "--idade-min-min",
+        15.0,
+        "--idade-min-min",
         help="So' mexe em .inprogress mais VELHO que isto (minutos). Um "
-             "arquivo mais recente pode ter escritor vivo -- nunca tocado."),
+        "arquivo mais recente pode ter escritor vivo -- nunca tocado.",
+    ),
     mover: bool = typer.Option(
-        False, "--mover",
+        False,
+        "--mover",
         help="Sem isso, so' LISTA o que faria (dry-run). Com isso, "
-             "promove (footer valido) ou quarentena (sem footer) de verdade."),
+        "promove (footer valido) ou quarentena (sem footer) de verdade.",
+    ),
     log_level: str = typer.Option("INFO", "--log-level"),
     log_file: Path | None = typer.Option(None, "--log-file"),
 ) -> None:
@@ -2848,12 +3416,16 @@ def _tabela_var_es_fmt(tabela: pd.DataFrame) -> str:
 def custo_acoes(
     preco: float = typer.Option(..., "--preco", help="Preco atual da acao (R$)."),
     financeiro: float = typer.Option(
-        ..., "--financeiro",
+        ...,
+        "--financeiro",
         help="Financeiro que voce pretende expor (mesmo criterio de "
-             "risco entre ativos diferentes, ex.: R$10000)."),
+        "risco entre ativos diferentes, ex.: R$10000).",
+    ),
     xlsx: Path = typer.Option(
-        Path("docs/referencias/custos_acoes_xp.xlsx"), "--xlsx",
-        help="Planilha real de custos da XP."),
+        Path("docs/referencias/custos_acoes_xp.xlsx"),
+        "--xlsx",
+        help="Planilha real de custos da XP.",
+    ),
 ) -> None:
     """
     Custo de day trade de UMA acao, calculado a partir da planilha real
@@ -2870,8 +3442,10 @@ def custo_acoes(
     quantidade = financeiro / preco
     r = custo_giro_dia_trade(preco, quantidade, parametros)
 
-    typer.echo(f"preco={preco:.2f}  financeiro={financeiro:,.2f}  "
-               f"quantidade implicita={quantidade:,.0f} acoes")
+    typer.echo(
+        f"preco={preco:.2f}  financeiro={financeiro:,.2f}  "
+        f"quantidade implicita={quantidade:,.0f} acoes"
+    )
     typer.echo(f"custo do giro (abre+fecha): R${r['custo_giro_total_reais']:.2f}")
     typer.echo(f"custo por acao (--custo-pontos): {r['custo_por_acao_reais']:.5f}")
     typer.echo(f"custo como % do financeiro: {r['custo_pct_financeiro']:.4%}")
@@ -2882,18 +3456,24 @@ def risco_realizado(
     symbol: str = typer.Option("WINFUT", "--symbol"),
     features: Path = typer.Option(Path("data/features"), "--features"),
     limiar_pontos: float = typer.Option(
-        ..., "--limiar-pontos",
+        ...,
+        "--limiar-pontos",
         help="O limiar JA' ESCOLHIDO a avaliar (ex.: 500, o stop "
-             "catastrofico do ea.yaml). Responde: que nivel de confianca "
-             "empirico este limiar representa?"),
+        "catastrofico do ea.yaml). Responde: que nivel de confianca "
+        "empirico este limiar representa?",
+    ),
     niveis_confianca: str = typer.Option(
-        "0.90,0.95,0.99,0.995", "--niveis-confianca",
-        help="Lista separada por virgula, ex.: 0.90,0.95,0.99"),
+        "0.90,0.95,0.99,0.995",
+        "--niveis-confianca",
+        help="Lista separada por virgula, ex.: 0.90,0.95,0.99",
+    ),
     por_horario: bool = typer.Option(
-        False, "--por-horario",
+        False,
+        "--por-horario",
         help="Tambem segmenta por faixa de horario (abertura/meio/"
-             "fechamento) -- sazonalidade intradiaria pode enviesar o "
-             "VaR agregado sem isso."),
+        "fechamento) -- sazonalidade intradiaria pode enviesar o "
+        "VaR agregado sem isso.",
+    ),
 ) -> None:
     """
     VaR e Expected Shortfall REALIZADOS sobre o retorno de barra do
@@ -2917,6 +3497,7 @@ def risco_realizado(
         raise SystemExit(f"nao achei {arquivo} — rode `profit-tape features` antes")
 
     import pandas as pd
+
     df = pd.read_parquet(arquivo)
     retornos_abs = df["close"].diff().abs().dropna()
     niveis = tuple(float(x) for x in niveis_confianca.split(","))
@@ -2932,10 +3513,13 @@ def risco_realizado(
     inv = nivel_implicado_por_limiar(retornos_abs, limiar_pontos)
     typer.echo(f"\nO limiar de {limiar_pontos:.0f} pts representa:")
     typer.echo(f"  nivel de confianca implicado: {inv['nivel_confianca_implicado']:.2%}")
-    typer.echo(f"  fracao de barras que excedem : {inv['pct_barras_que_excedem']:.2%} "
-               f"({inv['n_barras_que_excedem']} barras)")
-    typer.echo(f"  ES no limiar (tamanho medio quando excede): "
-               f"{inv['es_no_limiar_pontos']:.1f} pts")
+    typer.echo(
+        f"  fracao de barras que excedem : {inv['pct_barras_que_excedem']:.2%} "
+        f"({inv['n_barras_que_excedem']} barras)"
+    )
+    typer.echo(
+        f"  ES no limiar (tamanho medio quando excede): {inv['es_no_limiar_pontos']:.1f} pts"
+    )
 
     if por_horario:
         typer.echo("\nPor faixa de horario:")
@@ -2950,16 +3534,21 @@ def ea_ordem_teste(
     bolsa: str = typer.Option("F", "--bolsa"),
     quantidade: int = typer.Option(1, "--quantidade"),
     zerar_em_seguida: bool = typer.Option(
-        True, "--zerar-em-seguida/--sem-zerar",
+        True,
+        "--zerar-em-seguida/--sem-zerar",
         help="Zera a posicao logo apos comprar. Default True -- isto e' "
-             "teste de conectividade, nao estrategia."),
+        "teste de conectividade, nao estrategia.",
+    ),
     usar_conta_real: bool = typer.Option(
-        False, "--usar-conta-real",
+        False,
+        "--usar-conta-real",
         help="PERIGO: envia para a conta REAL. Default False (demo). Exige "
-             "tambem ROTEAMENTO_ID_ACCOUNT_REAL/ID_CORRETORA_REAL no .env "
-             "(ver RoteamentoConfig)."),
-    timeout: float = typer.Option(15.0, "--timeout",
-                                  help="Segundos esperando conexao e corretora pronta."),
+        "tambem ROTEAMENTO_ID_ACCOUNT_REAL/ID_CORRETORA_REAL no .env "
+        "(ver RoteamentoConfig).",
+    ),
+    timeout: float = typer.Option(
+        15.0, "--timeout", help="Segundos esperando conexao e corretora pronta."
+    ),
     log_level: str = typer.Option("INFO", "--log-level"),
 ) -> None:
     """
@@ -2993,9 +3582,13 @@ def ea_ordem_teste(
         raise typer.Exit(1)
 
     client = ProfitClient(
-        dll_path=cred.dll_path, activation_key=cred.activation_key,
-        user=cred.user, password=cred.password, bus=EventBus(),
-        tz_offset_horas=cfg.runtime.tz_offset_horas, login_completo=True,
+        dll_path=cred.dll_path,
+        activation_key=cred.activation_key,
+        user=cred.user,
+        password=cred.password,
+        bus=EventBus(),
+        tz_offset_horas=cfg.runtime.tz_offset_horas,
+        login_completo=True,
     )
     typer.echo("Conectando (login completo)...")
     client.connect(timeout_s=timeout)
@@ -3007,26 +3600,34 @@ def ea_ordem_teste(
     # ~83s -- e' o estado REAL no momento do envio que importa, nao "ja'
     # vimos o 5 alguma vez". Se nao estiver pronta agora, nao envia.
     if not client.corretora_pronta:
-        typer.echo("ERRO: corretora nao ficou pronta -- sem sessao de "
-                   "roteamento, nao envio ordem.")
+        typer.echo("ERRO: corretora nao ficou pronta -- sem sessao de roteamento, nao envio ordem.")
         client.disconnect()
         raise typer.Exit(1)
 
-    executor = ExecutorDeOrdens(client._dll, roteamento, ticker=ticker,
-                                bolsa=bolsa, quantidade=quantidade,
-                                usar_conta_real=usar_conta_real)
+    executor = ExecutorDeOrdens(
+        client._dll,
+        roteamento,
+        ticker=ticker,
+        bolsa=bolsa,
+        quantidade=quantidade,
+        usar_conta_real=usar_conta_real,
+    )
 
-    typer.echo(f"Enviando compra a mercado: {quantidade}x {ticker} "
-              f"({'REAL' if usar_conta_real else 'DEMO'})")
-    r1 = executor.executar(Decisao(Acao.COMPRAR, "E2: teste manual de conectividade",
-                                   0.0, "manual"))
+    typer.echo(
+        f"Enviando compra a mercado: {quantidade}x {ticker} "
+        f"({'REAL' if usar_conta_real else 'DEMO'})"
+    )
+    r1 = executor.executar(
+        Decisao(Acao.COMPRAR, "E2: teste manual de conectividade", 0.0, "manual")
+    )
     typer.echo(f"  enviada={r1.enviada} ordem_id={r1.ordem_id} motivo={r1.motivo}")
 
     if r1.enviada and zerar_em_seguida:
-        time.sleep(2.0)   # da' tempo do fill chegar antes de zerar
+        time.sleep(2.0)  # da' tempo do fill chegar antes de zerar
         typer.echo("Zerando posicao...")
-        r2 = executor.executar(Decisao(Acao.ZERAR, "E2: zeragem automatica do teste",
-                                       0.0, "manual"))
+        r2 = executor.executar(
+            Decisao(Acao.ZERAR, "E2: zeragem automatica do teste", 0.0, "manual")
+        )
         typer.echo(f"  enviada={r2.enviada} ordem_id={r2.ordem_id} motivo={r2.motivo}")
 
     client.disconnect()
@@ -3056,8 +3657,10 @@ def ea_contas(
     contas = listar_contas(cred, timeout_s=timeout)
 
     if not contas:
-        typer.echo("Nenhuma conta retornada. Confira se GetAccount() e' "
-                   "suportado nesta versao da DLL, ou aumente --timeout.")
+        typer.echo(
+            "Nenhuma conta retornada. Confira se GetAccount() e' "
+            "suportado nesta versao da DLL, ou aumente --timeout."
+        )
         raise typer.Exit(1)
 
     typer.echo(f"\n{len(contas)} conta(s) encontrada(s):")
@@ -3092,21 +3695,28 @@ def bench(
     ativos: int = typer.Option(5, "--ativos"),
     duracao: float = typer.Option(15.0, "--duracao", help="Segundos de simulacao."),
     intervalo: float = typer.Option(
-        0.0004, "--intervalo",
+        0.0004,
+        "--intervalo",
         help="Pausa entre eventos por produtor. 0 satura o GIL e nao representa mercado.",
     ),
     raiz: Path | None = typer.Option(
-        None, "--raiz",
+        None,
+        "--raiz",
         help="Volume onde MEDIR a escrita (ex.: G:\\bench). Sem isto, mede o "
-             "temp do C: — que pode nao ser onde a captura grava.",
+        "temp do C: — que pode nao ser onde a captura grava.",
     ),
 ) -> None:
     """Mede a folga do pipeline NESTA maquina, com a DLL falsa."""
     configurar("WARNING")
     from .tools.bench import rodar
 
-    rodar(eventos_por_ativo=10_000_000, n_ativos=ativos, duracao_s=duracao,
-          intervalo_s=intervalo, raiz=raiz)
+    rodar(
+        eventos_por_ativo=10_000_000,
+        n_ativos=ativos,
+        duracao_s=duracao,
+        intervalo_s=intervalo,
+        raiz=raiz,
+    )
 
 
 def main() -> None:  # pragma: no cover

@@ -13,7 +13,13 @@ import time
 import pytest
 
 from profittape.ea.config import RoteamentoConfig
-from profittape.ea.ordem_teste import OrdemDeTeste, TravaSimulacao, exigir_simulador
+from profittape.ea.ordem_teste import (
+    OrdemDeTeste,
+    TickerAgregadorInvalido,
+    TravaSimulacao,
+    exigir_simulador,
+    exigir_ticker_especifico,
+)
 from profittape.pipeline.bus import EventBus
 from profittape.profitdll.client import ProfitClient
 from profittape.testing.fake_dll import FakeProfitDLL
@@ -74,7 +80,7 @@ def test_trava_REPROVA_conta_real_mesmo_configurada_como_demo(
     try:
         with pytest.raises(TravaSimulacao, match="nao e' o Simulador"):
             exigir_simulador(c, "1003", "REAL-9")
-        ot = OrdemDeTeste(c, RoteamentoConfig(), horario_hhmm="00:00")
+        ot = OrdemDeTeste(c, RoteamentoConfig(), horario_hhmm="00:00", ticker="WINV26")
         _rodar(ot)
         assert ot.rel.resultado == "trava"
         assert fake.ordens_enviadas == []  # ZERO chamadas de ordem
@@ -99,7 +105,7 @@ def test_fluxo_completo_compra_fill_zeragem_fill() -> None:
     fake = FakeProfitDLL(eventos_por_ativo=0, preco_fill=141000.0)
     c = _client(fake)
     try:
-        ot = OrdemDeTeste(c, RoteamentoConfig(), horario_hhmm="00:00")
+        ot = OrdemDeTeste(c, RoteamentoConfig(), horario_hhmm="00:00", ticker="WINV26")
         _rodar(ot)
         r = ot.rel.resumo()
         assert r["resultado"] == "ok", r
@@ -113,9 +119,9 @@ def test_fluxo_completo_compra_fill_zeragem_fill() -> None:
         assert r["latencia_primeiro_callback_ms"] is not None
         assert r["latencia_fill_compra_ms"] >= r["latencia_primeiro_callback_ms"]
         # argumentos: conta, corretora, senha, ticker, bolsa, qtd (compra)
-        assert fake.ordens_enviadas[0][1] == ("DEMO-1", "32006", "s", "WINFUT", "F", 1)
+        assert fake.ordens_enviadas[0][1] == ("DEMO-1", "32006", "s", "WINV26", "F", 1)
         # zeragem: senha em 5o lugar
-        assert fake.ordens_enviadas[1][1] == ("DEMO-1", "32006", "WINFUT", "F", "s")
+        assert fake.ordens_enviadas[1][1] == ("DEMO-1", "32006", "WINV26", "F", "s")
     finally:
         c.disconnect()
 
@@ -125,7 +131,13 @@ def test_espera_o_horario() -> None:
     c = _client(fake)
     try:
         relogio = {"h": "09:59"}
-        ot = OrdemDeTeste(c, RoteamentoConfig(), horario_hhmm="10:00", relogio=lambda: relogio["h"])
+        ot = OrdemDeTeste(
+            c,
+            RoteamentoConfig(),
+            horario_hhmm="10:00",
+            ticker="WINV26",
+            relogio=lambda: relogio["h"],
+        )
         ot.tick()
         ot.tick()
         assert ot.estado == "aguardando_horario" and fake.ordens_enviadas == []
@@ -140,7 +152,9 @@ def test_fill_nao_confirmado_zera_mesmo_assim_e_marca_timeout() -> None:
     fake = FakeProfitDLL(eventos_por_ativo=0, preenche_ordens=False)
     c = _client(fake)
     try:
-        ot = OrdemDeTeste(c, RoteamentoConfig(), horario_hhmm="00:00", timeout_fill_s=0.1)
+        ot = OrdemDeTeste(
+            c, RoteamentoConfig(), horario_hhmm="00:00", ticker="WINV26", timeout_fill_s=0.1
+        )
         _rodar(ot)
         assert ot.rel.resultado == "timeout_fill"
         assert [n for n, _ in fake.ordens_enviadas] == [
@@ -156,7 +170,7 @@ def test_corretora_nao_pronta_no_instante_nao_envia() -> None:
     fake = FakeProfitDLL(eventos_por_ativo=0)
     c = _client(fake)
     try:
-        ot = OrdemDeTeste(c, RoteamentoConfig(), horario_hhmm="00:00")
+        ot = OrdemDeTeste(c, RoteamentoConfig(), horario_hhmm="00:00", ticker="WINV26")
         c.roteamento_estado = 2  # caiu (evento real de 09/09)
         _rodar(ot)
         assert ot.rel.resultado == "trava" and "pronta" in ot.rel.erro
@@ -170,7 +184,7 @@ def test_e2_e_um_contrato() -> None:
     c = _client(fake)
     try:
         with pytest.raises(ValueError, match="UM contrato"):
-            OrdemDeTeste(c, RoteamentoConfig(), horario_hhmm="00:00", quantidade=3)
+            OrdemDeTeste(c, RoteamentoConfig(), horario_hhmm="00:00", ticker="WINV26", quantidade=3)
     finally:
         c.disconnect()
 
@@ -217,7 +231,9 @@ def test_record_com_ordem_teste_envia_na_conexao_de_captura(tmp_path) -> None:  
     )
     cred = Credenciais(activation_key="k", user="u", password="p", dll_path="fake")
     fake = FakeProfitDLL(eventos_por_ativo=200, intervalo_s=0.0)
-    svc = RecorderService(cfg, cred, dll_injetada=fake, ordem_teste_em="00:00")
+    svc = RecorderService(
+        cfg, cred, dll_injetada=fake, ordem_teste_em="00:00", ordem_teste_ticker="WINV26"
+    )
     t = threading.Thread(target=svc.run, daemon=True)
     t.start()
     fim = time.monotonic() + 8
@@ -233,12 +249,11 @@ def test_record_com_ordem_teste_envia_na_conexao_de_captura(tmp_path) -> None:  
     assert svc.bus.stats().total_descartado == 0  # a captura nao sofreu
 
 
-def test_record_avisa_quando_ordem_teste_usa_ticker_generico(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """WINFUT resolve dado mas nao e' negociavel -- o record precisa avisar
-    isso na hora de agendar, nao so' deixar a ordem falhar (2026-09-11:
-    'Ordem invalida' porque o E2 usava WINFUT por default)."""
-    import structlog
-
+def test_record_bloqueia_ticker_agregador_no_startup(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """WINFUT resolve dado mas nao e' negociavel (manual Nelogica, "Como
+    rotear ordens com a ProfitDLL"). Ate 2026-09-11 isso era so' um AVISO
+    e a ordem falhava so' no pregao ("Ordem invalida", 10:30 real). Agora
+    falha no STARTUP, antes de qualquer conexao, com SystemExit."""
     from profittape.config import Credenciais, RecorderConfig
     from profittape.recorder.service import RecorderService
 
@@ -252,12 +267,21 @@ def test_record_avisa_quando_ordem_teste_usa_ticker_generico(tmp_path) -> None: 
     cred = Credenciais(dll_path="fake", activation_key="k", user="u", password="p")
     fake = FakeProfitDLL(eventos_por_ativo=0)
 
-    with structlog.testing.capture_logs() as eventos:
-        svc = RecorderService(
+    with pytest.raises(SystemExit, match="agregador"):
+        RecorderService(
             cfg, cred, dll_injetada=fake, ordem_teste_em="10:00", ordem_teste_ticker="WINFUT"
         )
-    assert svc.ordem_teste is not None and svc.ordem_teste._ticker == "WINFUT"
-    assert any(e.get("event") == "recorder.ordem_teste_ticker_generico" for e in eventos)
+    # default do comando tambem e' "WINFUT" -- confirma que o default
+    # falha alto em vez de silenciosamente nao funcionar no pregao.
+    with pytest.raises(SystemExit, match="agregador"):
+        RecorderService(cfg, cred, dll_injetada=fake, ordem_teste_em="10:00")
+
+
+def test_outros_agregadores_tambem_sao_bloqueados() -> None:
+    for agregador in ("WDOFUT", "INDFUT", "winfut", "  WINFUT  "):
+        with pytest.raises(TickerAgregadorInvalido):
+            exigir_ticker_especifico(agregador)
+    exigir_ticker_especifico("WINV26")  # nao levanta
 
 
 def test_ordem_teste_aceita_ticker_especifico() -> None:
