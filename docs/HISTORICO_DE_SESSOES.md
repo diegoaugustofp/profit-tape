@@ -1556,3 +1556,23 @@ a fake. Pendente (Diego): primeira rodada real num horario controlado,
 olhando o primeiro sinal disparar de verdade e conferindo no Profit
 antes de deixar rodar o pregao inteiro sem supervisao -- mesmo espirito
 do protocolo que o E3 usou.
+
+### Continuacao (2026-09-11, 21h) — E3 confirmado com posicao ABERTA real (v2.48)
+
+- Operador abriu 1 WINV26 comprada manualmente pelo grafico do Profit,
+  deixou aberta. `--reconciliar-esperado 0` leu lado_bruto=1,
+  encontrado=1, preco_medio=188820.0 -- `open_side=1` dentro do
+  intervalo valido, nao mais so' o caso degenerado de quantidade zero
+  (v2.44). Detectou a divergencia, zerou a mercado, confirmou pela
+  mesma esteira do E2 (ClientCreated x2 -> HadesCreated -> Filled),
+  resultado=divergiu_zerado. Fecha a ultima lacuna documentada do E3.
+- Regra operacional descoberta: com o record em login completo E a
+  reconciliacao ativa, operacao manual pelo Profit e' derrubada na
+  proxima consulta -- desenho funcionando como esperado (qualquer
+  posicao que o EA nao reconhece como sua vira divergencia), nao
+  defeito. Documentado como incompatibilidade estrutural: nao operar
+  manualmente enquanto --reconciliar-em/E4 estiver ativo na sessao.
+- 1 teste novo espelhando o evento real (compra com divergencia e
+  zeragem -- a combinacao que faltava; venda-com-divergencia e
+  compra-sem-divergencia ja' existiam separados). 691 testes, ruff e
+  mypy limpos.

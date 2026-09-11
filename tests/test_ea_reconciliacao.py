@@ -76,6 +76,26 @@ def test_divergencia_aciona_zeragem_automatica() -> None:
         c.disconnect()
 
 
+def test_divergencia_com_posicao_comprada_espelha_evento_real() -> None:
+    """Evento real, 2026-09-11 20:59: operador abriu 1 WINV26 comprada
+    manualmente pelo Profit; o E3 leu lado_bruto=1, encontrado=1,
+    preco_medio=188820.0, detectou a divergencia e zerou -- confirma
+    open_side=1 (nao so' o caso degenerado de open_quantity=0)."""
+    fake = FakeProfitDLL(eventos_por_ativo=0)
+    fake.posicoes[(32006, "DEMO-1", "WINV26")] = (1, 1, 188820.0)  # 1 comprada
+    c = _client(fake)
+    try:
+        r = ReconciliadorPosicao(c, RoteamentoConfig(), horario_hhmm="00:00",
+                                 ticker="WINV26", esperado=0)
+        _rodar(r)
+        assert r.rel.resultado == "divergiu_zerado"
+        assert r.rel.encontrado == 1 and r.rel.plausivel is True
+        assert r.rel.preco_medio == 188820.0
+        assert [n for n, _ in fake.ordens_enviadas] == ["SendZeroPositionAtMarket"]
+    finally:
+        c.disconnect()
+
+
 def test_encontrado_bate_com_esperado_nao_zero_e_nao_zera() -> None:
     """esperado=5 (comprada) e a corretora tambem diz 5 comprada -> bate,
     sem zerar. O E3 reconcilia contra o esperado, nao contra "sempre zero"."""

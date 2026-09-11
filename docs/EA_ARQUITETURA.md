@@ -209,13 +209,27 @@ bug de layout -- era o teste de plausibilidade rigido demais.
 Corrigido: `open_side` so' e' validado quando `open_quantity != 0`. Com
 quantidade zero, qualquer valor de lado e' aceito e o sinal sai 0.
 
-**AINDA NAO CONFIRMADO com posicao ABERTA** (`open_quantity != 0`,
-`open_side` precisando valer 1 ou 2 de verdade) -- so' um teste com
-posicao real aberta confirma essa parte. Ate' la', `consultar_posicao()`
-continua com o teste de plausibilidade (quantidade dentro de um limite
-razoavel; com quantidade != 0, lado tem que ser 1 ou 2) e o
-`ReconciliadorPosicao` NUNCA age sobre um resultado implausivel -- so'
-alarma e pede conferencia manual no Profit.
+**CONFIRMADO com posicao ABERTA real (2026-09-11, v2.48)**: operador
+abriu 1 contrato de WINV26 manualmente pelo grafico do Profit e deixou
+aberto. O E4/E3 rodando com `--reconciliar-esperado 0` leu
+`lado_bruto=1, encontrado=1, preco_medio=188820.0` -- `open_side=1`
+(comprada) dentro do intervalo valido, nao mais so' o caso degenerado
+de zero. Detectou a divergencia (`encontrado=1 != esperado=0`), zerou a
+mercado, confirmou pela mesma esteira do E2 (`ClientCreated` x2 ->
+`HadesCreated` -> `Filled`), `resultado=divergiu_zerado`. Ponta a
+ponta, sem intervencao manual. Fecha a lacuna: a leitura da struct de
+posicao esta' confirmada tanto para zerado (v2.44) quanto para aberto
+(v2.48).
+
+**REGRA OPERACIONAL, descoberta neste teste**: com o record em login
+completo E o E3/E4 de reconciliacao ativo, qualquer posicao aberta
+MANUALMENTE pelo Profit (fora do EA) e' tratada como divergencia e
+ZERADA automaticamente na proxima consulta. Isto e' o desenho
+funcionando como esperado, nao um defeito -- mas significa que
+operacao manual e reconciliacao automatica sao MUTUAMENTE EXCLUSIVAS
+na mesma sessao: NAO opere manualmente pelo grafico enquanto o record
+estiver rodando com `--reconciliar-em`/E4 ativo, a posicao sera'
+derrubada.
 
 **Confirmado byte-a-byte contra o exemplo oficial da Nelogica**
 (`profitTypes.py` + `profit_dll.py`, recebidos do operador em
@@ -957,7 +971,7 @@ precisa.
 | **E1** | record passa a conectar com `DLLInitializeLogin` (login completo) em vez de MarketLogin, para que a conexao unica possa rotear | **e' AQUI que o impacto mora**: muda o modo de login do processo de captura. Testar em record de TESTE (pasta separada) fora do pregao: captura identica? estabilidade? So' depois trocar o record de producao |
 | **E2** | comando `ea-ordem-teste`: 1 contrato, compra a mercado, confirma callback de ordem, zera. Conta DEMO obrigatoria, sem EA | roda DENTRO do record (mesma conexao), fora do pregao ou no simulador |
 | **E3** | reconciliacao posicao EA x corretora (GetPositionV2), parada de emergencia na divergencia | ENTREGUE v2.42, 2026-09-11 -- NAO VERIFICADO contra a DLL real ainda |
-| **E4** | forward em demo com ordens reais, EA atual, 1 contrato. **Mede slippage e latencia de verdade** | ENTREGUE v2.47, 2026-09-11 -- NAO VERIFICADO contra a DLL real ainda |
+| **E4** | forward em demo com ordens reais, EA atual, 1 contrato. **Mede slippage e latencia de verdade** | ENTREGUE v2.47; RECONCILIACAO (E3) verificada com posicao ABERTA real em v2.48 |
 | **E5** | multi-EA | so' depois de um EA sozinho ser confiavel |
 
 Regra da escada: cada degrau e' entregavel e verificavel sozinho, e o
