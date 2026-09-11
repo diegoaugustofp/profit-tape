@@ -49,7 +49,8 @@ def test_envia_compra_e_zera_em_demo(tmp_path, monkeypatch):
 
     monkeypatch.setattr("profittape.profitdll.client.ProfitClient", _client_fake)
 
-    r = runner.invoke(app, ["ea-ordem-teste", "-c", str(cfg), "--timeout", "3"])
+    r = runner.invoke(app, ["ea-ordem-teste", "-c", str(cfg), "--timeout", "3",
+                            "--ticker", "WINV26"])
     assert r.exit_code == 0, r.output
     assert "enviada=True" in r.output
     assert r.output.count("enviada=True") == 2   # compra + zeragem

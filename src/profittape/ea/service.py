@@ -191,7 +191,7 @@ class EAService:
             if motivo is not None:
                 d = Decisao(Acao.ZERAR, motivo, 0.0, "_risco")
                 decisoes.append(d)
-                self._executar_e_simular(d)
+                self._executar_e_simular(d, preco_referencia=barra.close)
                 self.gestor.registrar_fechamento(barra.close, barra.bar_id, motivo)
             return decisoes
 
@@ -207,7 +207,7 @@ class EAService:
             if d.acao not in (Acao.COMPRAR, Acao.VENDER):
                 continue
             decisoes.append(d)
-            self._executar_e_simular(d)
+            self._executar_e_simular(d, preco_referencia=barra.close)
             lado = +1 if d.acao == Acao.COMPRAR else -1
             self.gestor.registrar_abertura(lado, barra.close, barra.bar_id,
                                            sinal_cfg.horizonte,
@@ -220,9 +220,10 @@ class EAService:
                      posicao=self.stats.posicao_simulada)
         return decisoes
 
-    def _executar_e_simular(self, d: Decisao) -> None:
+    def _executar_e_simular(self, d: Decisao, preco_referencia: float | None = None) -> None:
         self.stats.decisoes[d.acao.value] = self.stats.decisoes.get(d.acao.value, 0) + 1
-        executar(d, dry_run=self.config.dry_run, executor=self.executor)
+        executar(d, dry_run=self.config.dry_run, executor=self.executor,
+                preco_referencia=preco_referencia)
         # Simulacao de posicao a partir da PROPRIA decisao (ver docstring).
         if d.acao == Acao.COMPRAR:
             self.stats.posicao_simulada += self.config.tamanho_posicao

@@ -293,3 +293,175 @@ def test_ordem_teste_aceita_ticker_especifico() -> None:
         assert ot._ticker == "WINV26"
     finally:
         c.disconnect()
+
+
+# ---------------------------------------------------------------------
+# E4 (2026-09-11): dry_run=False no ea_config, SO' em demo, SO' com
+# contrato especifico -- montado em duas fases (bridge precisa existir
+# antes do client, o executor precisa do client depois de existir).
+# ---------------------------------------------------------------------
+def _ea_yaml_dry_run_false(tmp_path):  # type: ignore[no-untyped-def]
+    caminho = tmp_path / "ea.yaml"
+    caminho.write_text(
+        "symbol: WINFUT\nvolume_barra: 1000\njanela_z: 10\n"
+        "tamanho_posicao: 1\ndry_run: false\nusar_conta_real: false\n"
+        "sinais:\n  - feature: z_agf_3\n    horizonte: 3\n    agent_id: 3\n"
+        "    threshold_entrada: 1.4\n    direcao: contrarian\n",
+        encoding="utf-8",
+    )
+    return caminho
+
+
+def _recorder_yaml(tmp_path):  # type: ignore[no-untyped-def]
+    caminho = tmp_path / "r.yaml"
+    caminho.write_text(
+        f"storage:\n  raiz: {tmp_path / 'raw'}\nativos:\n  - ticker: WINFUT\n    bolsa: F\n"
+        "    trades: true\nruntime:\n  login_completo: true\n", encoding="utf-8")
+    return caminho
+
+
+def test_e4_exige_ea_ticker_ordem(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    from profittape.config import Credenciais, RecorderConfig
+    from profittape.recorder.service import RecorderService
+
+    cfg = RecorderConfig.from_yaml(_recorder_yaml(tmp_path))
+    cred = Credenciais(dll_path="fake", activation_key="k", user="u", password="p")
+    with pytest.raises(SystemExit, match="ea-ticker-ordem"):
+        RecorderService(cfg, cred, dll_injetada=FakeProfitDLL(eventos_por_ativo=0),
+                        ea_config_path=_ea_yaml_dry_run_false(tmp_path))
+
+
+def test_e4_exige_login_completo(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    from profittape.config import Credenciais, RecorderConfig
+    from profittape.recorder.service import RecorderService
+
+    yaml = tmp_path / "r.yaml"
+    yaml.write_text(
+        f"storage:\n  raiz: {tmp_path / 'raw'}\nativos:\n  - ticker: WINFUT\n    bolsa: F\n"
+        "    trades: true\n", encoding="utf-8")   # SEM login_completo
+    cfg = RecorderConfig.from_yaml(yaml)
+    cred = Credenciais(dll_path="fake", activation_key="k", user="u", password="p")
+    with pytest.raises(SystemExit, match="login completo"):
+        RecorderService(cfg, cred, dll_injetada=FakeProfitDLL(eventos_por_ativo=0),
+                        ea_config_path=_ea_yaml_dry_run_false(tmp_path),
+                        ea_ticker_ordem="WINV26")
+
+
+def test_e4_bloqueia_ticker_agregador(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    from profittape.config import Credenciais, RecorderConfig
+    from profittape.recorder.service import RecorderService
+
+    cfg = RecorderConfig.from_yaml(_recorder_yaml(tmp_path))
+    cred = Credenciais(dll_path="fake", activation_key="k", user="u", password="p")
+    with pytest.raises(SystemExit, match="agregador"):
+        RecorderService(cfg, cred, dll_injetada=FakeProfitDLL(eventos_por_ativo=0),
+                        ea_config_path=_ea_yaml_dry_run_false(tmp_path),
+                        ea_ticker_ordem="WINFUT")
+
+
+def test_e4_constroi_com_ticker_especifico_e_login_completo(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """So' a MONTAGEM (nao precisa de trade fluindo) -- confirma que as
+    duas fases (bridge antes do client, executor depois) produzem um
+    RecorderService valido, com o hook de trade religado."""
+    from profittape.config import Credenciais, RecorderConfig
+    from profittape.recorder.service import RecorderService
+
+    cfg = RecorderConfig.from_yaml(_recorder_yaml(tmp_path))
+    cred = Credenciais(dll_path="fake", activation_key="k", user="u", password="p")
+    fake = FakeProfitDLL(eventos_por_ativo=0)
+    svc = RecorderService(cfg, cred, dll_injetada=fake,
+                          ea_config_path=_ea_yaml_dry_run_false(tmp_path),
+                          ea_ticker_ordem="WINV26")
+    assert svc.ea_bridge is not None
+    assert svc.ea_bridge.ea_service.executor is not None
+    assert svc.ea_bridge.ea_service.executor._ticker == "WINV26"
+    assert svc.ea_bridge.ea_service.executor._apenas_simulador is True
+    assert svc.client._on_trade_extra == svc.ea_bridge.publicar
+
+
+def test_e4_dry_run_true_continua_sem_executor(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """Regressao: o caminho dry_run=True (semanas em producao) nao pode
+    mudar de comportamento so' porque o dry_run=False agora existe."""
+    from profittape.config import Credenciais, RecorderConfig
+    from profittape.recorder.service import RecorderService
+
+    caminho = tmp_path / "ea_dry.yaml"
+    caminho.write_text(
+        "symbol: WINFUT\nvolume_barra: 1000\njanela_z: 10\ntamanho_posicao: 1\n"
+        "dry_run: true\nsinais:\n  - feature: z_agf_3\n    horizonte: 3\n"
+        "    agent_id: 3\n    threshold_entrada: 1.4\n    direcao: contrarian\n",
+        encoding="utf-8")
+    cfg = RecorderConfig.from_yaml(_recorder_yaml(tmp_path))
+    cred = Credenciais(dll_path="fake", activation_key="k", user="u", password="p")
+    fake = FakeProfitDLL(eventos_por_ativo=0)
+    svc = RecorderService(cfg, cred, dll_injetada=fake, ea_config_path=caminho)
+    assert svc.ea_bridge is not None
+    assert svc.ea_bridge.ea_service.executor is None
+    assert svc.client._on_trade_extra == svc.ea_bridge.publicar
+
+
+def test_e4_ponta_a_ponta_ordem_real_em_demo(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """Sinal de verdade fluindo pelo bridge, disparando ExecutorDeOrdens,
+    enviando SendMarketBuyOrder/SellOrder na fake -- fluxo completo do E4."""
+    import threading
+
+    from profittape.config import (
+        AtivoConfig,
+        Credenciais,
+        PipelineConfig,
+        RecorderConfig,
+        RuntimeConfig,
+        StorageConfig,
+    )
+    from profittape.recorder.service import RecorderService
+
+    cfg = RecorderConfig(
+        ativos=[AtivoConfig(ticker="WINFUT", bolsa="F", trades=True)],
+        storage=StorageConfig(raiz=tmp_path / "raw", max_rows_per_file=1_000_000),
+        pipeline=PipelineConfig(fila_maxsize=200_000, batch_max=5_000, poll_timeout_s=0.1),
+        runtime=RuntimeConfig(heartbeat_s=1.0, encerrar_em=None, login_completo=True),
+    )
+    cred = Credenciais(activation_key="k", user="u", password="p", dll_path="fake")
+    # eventos_por_ativo>0: a fake emite trades de tempo real (WINFUT) que
+    # o bridge encaminha ao EAService -- volume_barra baixo para fechar
+    # barra logo e chegar a uma decisao.
+    fake = FakeProfitDLL(eventos_por_ativo=3000, intervalo_s=0.0)
+    svc = RecorderService(cfg, cred, dll_injetada=fake,
+                          ea_config_path=_ea_yaml_dry_run_false(tmp_path),
+                          ea_ticker_ordem="WINV26")
+    t = threading.Thread(target=svc.run, daemon=True)
+    t.start()
+    fim = time.monotonic() + 8
+    while time.monotonic() < fim and not fake.ordens_enviadas:
+        time.sleep(0.1)
+    svc._parar.set()
+    t.join(timeout=60)
+    # Nao afirmamos QUE sinal disparou (depende do fluxo aleatorio da
+    # fake) -- so' que SE disparou, foi por uma chamada real de ordem
+    # (nao dry_run), na conta de simulacao.
+    if fake.ordens_enviadas:
+        nomes = {n for n, _ in fake.ordens_enviadas}
+        assert nomes <= {"SendMarketBuyOrder", "SendMarketSellOrder",
+                         "SendZeroPositionAtMarket"}
+        for _, args in fake.ordens_enviadas:
+            assert "WINV26" in args   # nunca o agregador
+
+
+def test_cli_dry_run_mostra_e4_no_resumo(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """`record --dry-run` so' valida e imprime -- confirma que
+    --ea-ticker-ordem aparece no resumo quando o ea_config e' dry_run=False."""
+    from typer.testing import CliRunner
+
+    from profittape.cli import app
+
+    yaml = tmp_path / "r.yaml"
+    yaml.write_text(
+        "ativos:\n  - ticker: WINFUT\n    bolsa: F\n    trades: true\n"
+        f"storage:\n  raiz: {tmp_path / 'raw'}\n", encoding="utf-8")
+    r = CliRunner().invoke(app, [
+        "record", "-c", str(yaml), "--dry-run", "--login-completo",
+        "--ea-config", str(_ea_yaml_dry_run_false(tmp_path)),
+        "--ea-ticker-ordem", "WINV26",
+    ])
+    assert r.exit_code == 0, r.output
+    assert "E4: ordem real em demo, ticker=WINV26" in r.output

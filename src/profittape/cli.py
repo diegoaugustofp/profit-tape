@@ -32,10 +32,19 @@ def record(
         "--ea-config",
         help="OPCIONAL (2026-08-27, decisao de arquitetura de longo "
         "prazo): roda o EA DENTRO deste processo, mesma conexao -- "
-        "licenca Nelogica so' permite UMA chave de ativacao. Sempre "
-        "dry_run=True nesta fase -- so' loga decisoes, nunca envia "
-        "ordem. Sem este parametro, comportamento identico a sempre.",
+        "licenca Nelogica so' permite UMA chave de ativacao. Com "
+        "dry_run=True (yaml) so' loga decisoes, nunca envia ordem. Com "
+        "dry_run=False (E4, 2026-09-11), envia ordem de verdade EM DEMO "
+        "-- exige tambem --ea-ticker-ordem e login completo. Sem este "
+        "parametro, comportamento identico a sempre.",
     ),
+    ea_ticker_ordem: str | None = typer.Option(
+        None, "--ea-ticker-ordem",
+        help="E4: contrato ESPECIFICO em vigor (ex.: WINV26) para o envio "
+             "de ordem -- NUNCA o symbol do ea_config (que e' 'WINFUT', o "
+             "agregador que a DLL aceita para dado mas rejeita no envio, "
+             "manual Nelogica). Obrigatorio quando o ea_config tem "
+             "dry_run=False; ignorado em dry_run=True."),
     login_completo: bool = typer.Option(
         False,
         "--login-completo",
@@ -108,7 +117,9 @@ def record(
             ]
             typer.echo(f"  {a.ticker:<10} {a.bolsa}  {'+'.join(flags)}")
         if ea_config:
-            typer.echo(f"  EA integrado: --ea-config {ea_config}")
+            typer.echo(f"  EA integrado: --ea-config {ea_config}"
+                       + (f" (E4: ordem real em demo, ticker={ea_ticker_ordem})"
+                          if ea_ticker_ordem else ""))
         modo = "COMPLETO (roteamento)" if cfg.runtime.login_completo else "market data"
         typer.echo(f"  login: {modo}")
         if ordem_teste_em:
@@ -133,6 +144,7 @@ def record(
             reconciliar_em=reconciliar_em,
             reconciliar_ticker=reconciliar_ticker,
             reconciliar_esperado=reconciliar_esperado,
+            ea_ticker_ordem=ea_ticker_ordem,
         ).run()
     )
 
@@ -3552,7 +3564,13 @@ def risco_realizado(
 @app.command("ea-ordem-teste")
 def ea_ordem_teste(
     config: Path = typer.Option(Path("config/recorder.yaml"), "--config", "-c"),
-    ticker: str = typer.Option("WINFUT", "--ticker"),
+    ticker: str = typer.Option(
+        "WINFUT", "--ticker",
+        help="Contrato ESPECIFICO em vigor (ex.: WINV26), nunca o agregador "
+             "'WINFUT'. A ProfitDLL nao substitui agregador pelo contrato "
+             "corrente no envio de ordens -- manual Nelogica, 'Como rotear "
+             "ordens com a ProfitDLL'. O default 'WINFUT' falha alto de "
+             "proposito (mesma regra do `record --ordem-teste-ticker`)."),
     bolsa: str = typer.Option("F", "--bolsa"),
     quantidade: int = typer.Option(1, "--quantidade"),
     zerar_em_seguida: bool = typer.Option(
@@ -3627,7 +3645,7 @@ def ea_ordem_teste(
         raise typer.Exit(1)
 
     executor = ExecutorDeOrdens(
-        client._dll,
+        client,
         roteamento,
         ticker=ticker,
         bolsa=bolsa,

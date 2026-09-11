@@ -241,6 +241,70 @@ se a DLL anunciou a conta nesta sessao e o nome da corretora contem
 implausivel, ticker agregador) -- todos contra a fake, que usa a MESMA
 struct ctypes, ou seja, provam auto-consistencia da logica, nao
 correspondencia com a DLL real.
+
+### E4 dentro do record — ENTREGUE (v2.47, 2026-09-11), NAO VERIFICADO contra a DLL real
+
+Forward em demo com ordens reais, EA atual (`z_agf_3`, venda + Rota B,
+`ea_venda_rota_b.yaml`). O `dry_run=False` do `ea_config` deixa de ser
+bloqueado por `SystemExit` fixo -- mas SO' em demo (estrutural, nao
+opcao) e SO' com o contrato ESPECIFICO em vigor.
+
+    profit-tape record -c config/recorder.yaml \
+        --ea-config config/ea_venda_rota_b.yaml \
+        --ea-ticker-ordem WINV26
+
+**Achado ao ligar (2026-09-11)**: este trabalho tinha comecado em
+sessao anterior (execucao.py ja' tinha confirmacao de fill/slippage/
+latencia e a trava `exigir_conta_anunciada`) mas ficou sem commitar e
+sem terminar. Ao completar, dois bugs REAIS de producao apareceram,
+nenhum novo -- so' nunca antes exercitados:
+  - `EAService._executar_e_simular` nunca passava `preco_referencia`
+    para `executar()` -- sem isso o slippage nunca seria calculado de
+    verdade, so' em teste manual direto.
+  - `ExecutorDeOrdens` nao tinha `exigir_ticker_especifico` (a mesma
+    trava de `OrdemDeTeste`/`ReconciliadorPosicao`) -- e o `symbol` da
+    EAConfig e' literalmente "WINFUT", o agregador. Sem a trava, E4
+    cairia no MESMO defeito do E2 de ontem ("Ordem invalida").
+  - O comando standalone `ea-ordem-teste` (v2.22) construia
+    `ExecutorDeOrdens(client._dll, ...)` em vez de `ExecutorDeOrdens(client, ...)`
+    -- bug latente desde o refactor que deu ao executor acesso a
+    `contas_vistas`/`ordens_eventos`, nunca pego porque nenhum teste
+    tinha chegado tao longe antes da trava de ticker existir.
+
+**Duas travas estruturais, nao configuraveis** (a diferenca real entre
+E4 e o `dry_run=False` generico que `ExecutorDeOrdens` sempre suportou):
+`usar_conta_real=False` e `apenas_simulador=True` sao HARDCODED na
+construcao do executor dentro de `recorder/service.py` -- nao herdam do
+yaml, nao sao opcao de linha de comando. `apenas_simulador=True` troca
+a checagem universal (`exigir_conta_anunciada`) pela forte
+(`exigir_simulador`, confere o NOME da corretora) a cada envio.
+
+**Dependencia circular resolvida em duas fases**: o `EABridge` precisa
+existir ANTES do `client` (e' passado como `on_trade_extra` na
+construcao do `ProfitClient`), mas o `ExecutorDeOrdens` real precisa do
+`client` DEPOIS de existir (le `contas_vistas`/`ordens_eventos`). Para
+`dry_run=True` nada mudou (bridge sem executor, construido antes do
+client, como sempre). Para `dry_run=False`: valida cedo (ticker
+obrigatorio, login completo obrigatorio) antes do client existir;
+monta o executor + service + bridge de verdade LOGO APOS o client
+existir; religa `client._on_trade_extra = ea_bridge.publicar` nesse
+ponto -- seguro porque `connect()` (chamado so' depois, em `.run()`) le
+esse atributo de novo a cada vez, nao captura um valor congelado no
+`__init__` (conferido em `profitdll/client.py`).
+
+**NAO VERIFICADO CONTRA A DLL REAL.** Toda a cadeia (confirmacao de
+fill, calculo de slippage/latencia, as duas travas, a montagem em duas
+fases) foi testada so' contra a `FakeProfitDLL`. A primeira rodada real
+deveria seguir o mesmo espirito do E3: horario controlado, olhar o
+PRIMEIRO sinal disparar de verdade, conferir a ordem e o fill no Profit
+antes de deixar rodar o pregao inteiro sem supervisao.
+
+6 testes no gancho do record (exige ticker, exige login completo,
+bloqueia agregador, monta com as duas fases corretamente, regressao do
+dry_run=True inalterado, ponta a ponta com sinal real disparando ordem
+pela fake) + os testes de `execucao.py`/`ordem_teste.py` atualizados.
+690 testes, ruff limpo, mypy strict limpo.
+
 ### Por que decisao.py ja' tem logica real e o resto e' esboco
 
 decisao.py e' pura (sinal numerico -> acao), zero I/O, testavel sem DLL
@@ -893,7 +957,7 @@ precisa.
 | **E1** | record passa a conectar com `DLLInitializeLogin` (login completo) em vez de MarketLogin, para que a conexao unica possa rotear | **e' AQUI que o impacto mora**: muda o modo de login do processo de captura. Testar em record de TESTE (pasta separada) fora do pregao: captura identica? estabilidade? So' depois trocar o record de producao |
 | **E2** | comando `ea-ordem-teste`: 1 contrato, compra a mercado, confirma callback de ordem, zera. Conta DEMO obrigatoria, sem EA | roda DENTRO do record (mesma conexao), fora do pregao ou no simulador |
 | **E3** | reconciliacao posicao EA x corretora (GetPositionV2), parada de emergencia na divergencia | ENTREGUE v2.42, 2026-09-11 -- NAO VERIFICADO contra a DLL real ainda |
-| **E4** | forward em demo com ordens reais, EA atual, 1 contrato. **Mede slippage e latencia de verdade** | destrava a avaliacao do scalper |
+| **E4** | forward em demo com ordens reais, EA atual, 1 contrato. **Mede slippage e latencia de verdade** | ENTREGUE v2.47, 2026-09-11 -- NAO VERIFICADO contra a DLL real ainda |
 | **E5** | multi-EA | so' depois de um EA sozinho ser confiavel |
 
 Regra da escada: cada degrau e' entregavel e verificavel sozinho, e o

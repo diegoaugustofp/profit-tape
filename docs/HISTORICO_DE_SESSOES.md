@@ -1511,3 +1511,48 @@ ainda sem teste real.
   (25% de um pregao de WIN no codigo 13), nao por manual. Duas fontes
   independentes convergindo no mesmo numero. So' comentario adicionado;
   nenhum valor mudou. 674 testes, ruff e mypy limpos.
+
+### Continuacao (2026-09-11, noite) — E4 entregue: forward em demo com ordens reais (v2.47)
+
+- Operador confirmou: E4 e' para `z_agf_3` (venda + Rota B,
+  `ea_venda_rota_b.yaml`), a estrategia que ja' roda em dry_run hoje --
+  e o pre-requisito 5 da escada (comparar decisoes logadas em dry_run
+  contra o que o research previa) considerado satisfeito.
+- Achado: trabalho de E4 tinha comecado em sessao anterior
+  (`execucao.py` ja' tinha confirmacao de fill/slippage/latencia e
+  `exigir_conta_anunciada`) mas ficou sem commitar -- sobrevivia como
+  modificacao local nao commitada, carregada silenciosamente entre
+  `git checkout -b` desta sessao. Revisado, testado, e completado.
+- Dois bugs REAIS de producao, ambos pre-existentes, nenhum novo:
+  `EAService` nunca passava `preco_referencia` para `executar()`
+  (slippage nunca seria calculado de verdade); o comando standalone
+  `ea-ordem-teste` construia `ExecutorDeOrdens(client._dll, ...)` em
+  vez de `ExecutorDeOrdens(client, ...)` -- bug latente desde o
+  refactor que deu ao executor acesso a `contas_vistas`, nunca pego
+  porque nenhum teste tinha chegado tao longe.
+- Lacuna de seguranca fechada: `ExecutorDeOrdens` nao tinha
+  `exigir_ticker_especifico` -- o `symbol` da EAConfig e' "WINFUT", o
+  agregador. Sem a trava, E4 cairia no MESMO defeito do E2 de ontem.
+  Novo parametro `apenas_simulador` (usa `exigir_simulador`, a
+  checagem forte, em vez da universal).
+- `recorder/service.py`: `dry_run=False` deixa de ser bloqueado, mas
+  SO' em demo -- `usar_conta_real=False` e `apenas_simulador=True`
+  HARDCODED, nao configuraveis. Dependencia circular (bridge antes do
+  client; executor real depois do client) resolvida em duas fases,
+  religando `client._on_trade_extra` apos a montagem (seguro: `connect()`
+  le o atributo de novo a cada chamada, nao captura no `__init__`).
+- Bug sutil do mypy no caminho: reuso de nome de variavel entre dois
+  blocos independentes mascarava um buraco de tipo real
+  (`object.tamanho_posicao` nao acusava erro) -- corrigido tipando o
+  atributo via `TYPE_CHECKING` e renomeando a variavel local.
+- `--ea-ticker-ordem` na CLI, obrigatorio quando o ea_config tem
+  `dry_run: false`. 690 testes (16 novos/ajustados so' nesta rodada:
+  6 no gancho do record, 3 na trava de ticker/apenas_simulador do
+  executor, os demais ajustes de fixture), ruff e mypy strict limpos.
+
+**NAO VERIFICADO CONTRA A DLL REAL** -- toda a cadeia do E4 (fill,
+slippage, latencia, as duas fases de montagem) so' foi testada contra
+a fake. Pendente (Diego): primeira rodada real num horario controlado,
+olhando o primeiro sinal disparar de verdade e conferindo no Profit
+antes de deixar rodar o pregao inteiro sem supervisao -- mesmo espirito
+do protocolo que o E3 usou.

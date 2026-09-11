@@ -116,10 +116,10 @@ def test_dry_run_false_sem_executor_recusa_na_construcao() -> None:
 
 
 def test_dry_run_false_com_executor_envia_de_verdade() -> None:
-    from tests.test_ea_execucao import _FakeDllOrdens, _rot
+    from tests.test_ea_execucao import _client, _FakeDllOrdens, _rot
 
     dll = _FakeDllOrdens()
-    ex = ExecutorDeOrdens(dll, _rot(), "WINFUT", "F", 1)
+    ex = ExecutorDeOrdens(_client(dll), _rot(), "WINV26", "F", 1)
     svc = EAService(_config(dry_run=False), executor=ex)
     _alimentar(svc, 30000, agente_dominante_compra=3)
     n_ordens = sum(v for k, v in svc.stats.decisoes.items() if k != "nada")

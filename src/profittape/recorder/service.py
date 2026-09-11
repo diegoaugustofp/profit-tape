@@ -33,6 +33,7 @@ from ..profitdll.client import ProfitClient
 from ..storage.parquet_sink import ParquetSink
 
 if TYPE_CHECKING:
+    from ..ea.config import EAConfig
     from ..ea.ordem_teste import OrdemDeTeste
     from ..ea.reconciliacao import ReconciliadorPosicao
 
@@ -51,6 +52,7 @@ class RecorderService:
         reconciliar_em: str | None = None,
         reconciliar_ticker: str = "WINFUT",
         reconciliar_esperado: int = 0,
+        ea_ticker_ordem: str | None = None,
     ) -> None:
         self.cfg = cfg
         self.cred = cred
@@ -92,28 +94,61 @@ class RecorderService:
         # ea_config_path explicitamente. Falha CEDO (config invalida) e'
         # aceitavel aqui, ANTES de qualquer captura comecar -- diferente de
         # uma falha DURANTE a sessao, que a EABridge protege via try/except
-        # (ver bridge.py). Sempre dry_run=True nesta fase -- SendOrder real
-        # usando a MESMA conexao do record e' decisao futura separada.
+        # (ver bridge.py).
+        #
+        # E4 (2026-09-11): dry_run=False agora e' suportado, mas SO' em
+        # demo (apenas_simulador=True, hardcoded -- nao e' opcao) e SO'
+        # com o contrato ESPECIFICO (`ea_ticker_ordem`, nunca
+        # `ea_cfg.symbol`, que e' "WINFUT" -- o agregador que a DLL
+        # aceita para dado mas rejeita no envio de ordem, medido no E2).
+        # O ExecutorDeOrdens PRECISA do client ja' construido (le
+        # `contas_vistas`/`ordens_eventos`) mas o client PRECISA do bridge
+        # antes de existir (`on_trade_extra` e' argumento de construcao) --
+        # por isso esta' em DUAS fases: valida e' aqui (falha cedo), a
+        # montagem de verdade e' logo APOS `self.client` existir, mais
+        # abaixo. `ProfitClient._on_trade_extra` e' lido de novo a cada
+        # `connect()` (nao capturado no `__init__`), entao atribuir depois
+        # funciona -- conferido em profitdll/client.py.
         self.ea_bridge: EABridge | None = None
+        self._ea_cfg_para_ordens_reais: EAConfig | None = None
+        self._ea_ticker_ordem = ea_ticker_ordem
         if ea_config_path is not None:
             from ..ea.bridge import EABridge
             from ..ea.config import EAConfig
             from ..ea.service import EAService
 
             ea_cfg = EAConfig.from_yaml(ea_config_path)
-            if not ea_cfg.dry_run:
-                raise SystemExit(
-                    "ea_config_path com dry_run=False -- o record so' "
-                    "suporta o EA em dry_run nesta fase (SendOrder real "
-                    "usando a mesma conexao e' decisao futura separada, "
-                    "ver EA_ARQUITETURA.md)."
+            if ea_cfg.dry_run:
+                self.ea_bridge = EABridge(EAService(ea_cfg))
+                log.info(
+                    "recorder.ea_integrado",
+                    symbol=ea_cfg.symbol,
+                    sinais=[s.feature for s in ea_cfg.sinais],
                 )
-            self.ea_bridge = EABridge(EAService(ea_cfg))
-            log.info(
-                "recorder.ea_integrado",
-                symbol=ea_cfg.symbol,
-                sinais=[s.feature for s in ea_cfg.sinais],
-            )
+            else:
+                if not ea_ticker_ordem:
+                    raise SystemExit(
+                        "ea_config com dry_run=False exige --ea-ticker-ordem "
+                        "(o contrato ESPECIFICO em vigor, ex.: WINV26 -- "
+                        "nunca o symbol da config, que e' o agregador "
+                        "'WINFUT'). E4: forward em demo com ordens reais."
+                    )
+                if not cfg.runtime.login_completo:
+                    raise SystemExit(
+                        "ea_config com dry_run=False exige login completo "
+                        "(--login-completo ou runtime.login_completo: true): "
+                        "sem sessao de roteamento nao ha' onde enviar."
+                    )
+                self._ea_cfg_para_ordens_reais = ea_cfg
+                log.warning(
+                    "recorder.ea_ordens_reais_demo_agendado",
+                    symbol=ea_cfg.symbol,
+                    ticker_ordem=ea_ticker_ordem,
+                    sinais=[s.feature for s in ea_cfg.sinais],
+                    nota="E4: SendOrder de verdade na conta de SIMULACAO "
+                         "(trava dupla: exigir_simulador a cada envio). "
+                         "Monta o executor apos o client conectar.",
+                )
 
         self.client = ProfitClient(
             dll_path=cred.dll_path,
@@ -133,6 +168,36 @@ class RecorderService:
                 nota="conexao sobe com DLLInitializeLogin (roteamento). "
                 "E1 da trilha de execucao -- confira o heartbeat: "
                 "corretora_pronta=True e contas>=1 devem aparecer.",
+            )
+        if self._ea_cfg_para_ordens_reais is not None:
+            from ..ea.bridge import EABridge
+            from ..ea.config import RoteamentoConfig
+            from ..ea.execucao import ExecutorDeOrdens
+            from ..ea.ordem_teste import TickerAgregadorInvalido
+            from ..ea.service import EAService
+
+            ea_cfg_real = self._ea_cfg_para_ordens_reais
+            assert self._ea_ticker_ordem is not None  # validado na fase 1
+            try:
+                executor = ExecutorDeOrdens(
+                    self.client, RoteamentoConfig(), self._ea_ticker_ordem, "F",
+                    ea_cfg_real.tamanho_posicao,
+                    usar_conta_real=False,      # HARDCODED -- E4 nunca e' real
+                    apenas_simulador=True,      # HARDCODED -- exigir_simulador sempre
+                )
+            except TickerAgregadorInvalido as exc:
+                raise SystemExit(
+                    f"{exc}\n--ea-ticker-ordem recebeu {self._ea_ticker_ordem!r}."
+                ) from exc
+            self.ea_bridge = EABridge(EAService(ea_cfg_real, executor=executor))
+            # `connect()` ainda nao foi chamado (roda em `.run()`) -- lido de
+            # novo la', entao atribuir agora e' seguro. Ver nota acima.
+            self.client._on_trade_extra = self.ea_bridge.publicar
+            log.warning(
+                "recorder.ea_ordens_reais_demo_ligado",
+                symbol=ea_cfg_real.symbol, ticker_ordem=self._ea_ticker_ordem,
+                nota="E4 montado: dali em diante, sinal do EA envia ordem "
+                     "de verdade na conta de SIMULACAO.",
             )
         if ordem_teste_em is not None:
             if not cfg.runtime.login_completo:

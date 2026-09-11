@@ -109,10 +109,13 @@ class _ClientRoteamento(Protocol):
     def corretora_pronta(self) -> bool: ...
 
 
-def exigir_simulador(client: _ClientRoteamento, corretora: str, conta: str) -> None:
+def exigir_conta_anunciada(client: _ClientRoteamento, corretora: str, conta: str) -> int:
     """
-    Levanta TravaSimulacao se (corretora, conta) nao for uma conta de
-    simulacao ANUNCIADA PELA DLL nesta sessao. Usado antes de cada envio.
+    Levanta TravaSimulacao se (corretora, conta) nao foi ANUNCIADA PELA
+    DLL nesta sessao (client.contas_vistas). Checagem UNIVERSAL, sem
+    assumir demo ou real -- pega o erro classico de conta/corretora
+    desencontrada em qualquer modo. Devolve o id de corretora como int,
+    para quem chama nao repetir a conversao.
     """
     try:
         cid = int(corretora)
@@ -124,6 +127,16 @@ def exigir_simulador(client: _ClientRoteamento, corretora: str, conta: str) -> N
             f"conta {par} nao foi anunciada pela DLL nesta sessao "
             f"(vistas: {client.contas_vistas}). Nao envio."
         )
+    return cid
+
+
+def exigir_simulador(client: _ClientRoteamento, corretora: str, conta: str) -> None:
+    """
+    Levanta TravaSimulacao se (corretora, conta) nao for uma conta de
+    simulacao ANUNCIADA PELA DLL nesta sessao. Usado antes de cada envio
+    em qualquer modo que NUNCA pode tocar conta real (E2, E3, E4).
+    """
+    cid = exigir_conta_anunciada(client, corretora, conta)
     nome = client.nomes_corretoras.get(cid, "")
     if "simul" not in nome.lower():
         raise TravaSimulacao(

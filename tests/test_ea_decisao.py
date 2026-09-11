@@ -179,13 +179,23 @@ def test_a_corretora_do_par_e_a_que_vai_na_ordem() -> None:
             enviadas.append((conta, corretora))
             return 1
 
+    class _Client:
+        """O suficiente para ExecutorDeOrdens: _dll + o que a trava le."""
+
+        def __init__(self, dll: object, corretora_anunciada: str) -> None:
+            self._dll = dll
+            self.contas_vistas = [(1003, corretora_anunciada)]
+            self.nomes_corretoras: dict[int, str] = {}
+            self.ordens_eventos: list[object] = []
+
     rot = RoteamentoConfig(
         senha_roteamento="x",
         id_corretora="32006",          # campo antigo, da demo
         id_account_demo="DEMO", id_corretora_demo="32006",
         id_account_real="REAL", id_corretora_real="1003")
 
-    ex = ExecutorDeOrdens(_DLL(), rot, "WINFUT", "F", 1, usar_conta_real=True)
+    client = _Client(_DLL(), corretora_anunciada="REAL")
+    ex = ExecutorDeOrdens(client, rot, "WINV26", "F", 1, usar_conta_real=True)
     ex.executar(Decisao(acao=Acao.COMPRAR, motivo="teste",
                         sinal_valor=2.0, feature="z_teste"))
     assert enviadas == [("REAL", "1003")], (
