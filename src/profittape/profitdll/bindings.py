@@ -52,6 +52,8 @@ else:
 from .errors import DLLNotFound
 from .types import (
     TAssetIDRec,
+    TConnectorAccountIdentifier,
+    TConnectorAccountIdentifierOut,
     TConnectorTradingAccountPosition,
 )
 
@@ -332,6 +334,23 @@ def _declare(dll: Any) -> None:
     if hasattr(dll, "GetPositionV2"):
         dll.GetPositionV2.argtypes = [POINTER(TConnectorTradingAccountPosition)]
         dll.GetPositionV2.restype = c_int
+
+    # ----------------------------------------------------------------------
+    # Subcontas (E5.2, 2026-09-11). A DLL NAO CRIA subconta -- so' le. As
+    # unicas funcoes de conta no manual sao Get*. Criar e' pela
+    # XP/Nelogica. Estas duas existem para DESCOBRIR o que existe e
+    # recusar cedo um EA configurado para uma subconta inexistente.
+    # Assinaturas conferidas contra `profit_dll.py` oficial da Nelogica.
+    # ----------------------------------------------------------------------
+    if hasattr(dll, "GetSubAccountCount"):
+        dll.GetSubAccountCount.argtypes = [POINTER(TConnectorAccountIdentifier)]
+        dll.GetSubAccountCount.restype = c_int
+    if hasattr(dll, "GetSubAccounts"):
+        dll.GetSubAccounts.argtypes = [
+            POINTER(TConnectorAccountIdentifier), c_int, c_int, c_int,
+            POINTER(TConnectorAccountIdentifierOut),
+        ]
+        dll.GetSubAccounts.restype = c_int
 
     # ----------------------------------------------------------------------
     # Envio de ordem (modulo ea/execucao.py) — funcoes LEGADAS planas.

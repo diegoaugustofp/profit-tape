@@ -21,14 +21,37 @@ class _FakeLoginCompleto:
     uma real, do jeito que viria de verdade.
     """
 
-    def __init__(self, contas: list[tuple[int, str, str, str]] | None = None) -> None:
+    def __init__(self, contas: list[tuple[int, str, str, str]] | None = None,
+                 subcontas: dict[tuple[int, str], list[str]] | None = None) -> None:
         self._contas = contas if contas is not None else [
             (85, "XP Investimentos CCTVM S/A", "999888", "DIEGO AUGUSTO"),
             (85, "XP Investimentos CCTVM S/A", "111222", "DIEGO AUGUSTO (SIMULADOR)"),
         ]
+        # E5.2: subcontas por (corretora, conta). Vazio = conta sem
+        # subconta, o caso real de hoje.
+        self.subcontas = subcontas or {}
         self._cb_state = None
         self._cb_account = None
         self.finalizado = False
+
+    def _subs_de(self, ptr):
+        conta = ptr.contents
+        return self.subcontas.get((int(conta.broker_id), str(conta.account_id or "")), [])
+
+    def GetSubAccountCount(self, ptr):
+        return len(self._subs_de(ptr))
+
+    def GetSubAccounts(self, ptr, _a, _b, n, buf):
+        conta = ptr.contents
+        subs = self._subs_de(ptr)
+        quantos = min(n, len(subs))
+        for i in range(quantos):
+            buf[i].broker_id = int(conta.broker_id)
+            buf[i].account_id = str(conta.account_id or "")
+            buf[i].account_id_length = len(buf[i].account_id)
+            buf[i].sub_account_id = subs[i]
+            buf[i].sub_account_id_length = len(subs[i])
+        return quantos
 
     def DLLInitializeLogin(self, activation_key, user, password,
                            cb_state, cb_history, cb_order_change, cb_account,
@@ -196,3 +219,61 @@ def test_conta_duplicada_no_callback_vira_uma_so() -> None:
     contas = listar_contas(_cred(), timeout_s=5.0, dll_injetada=fake)
     assert len(contas) == 1
     assert contas[0].account_id == "1000357256"
+
+
+# ---------------------------------------------------------------------
+# Subcontas (E5.2, 2026-09-11). A DLL NAO cria subconta -- so' le. Estes
+# testes cobrem a LEITURA e o caso normal de hoje (conta sem subconta).
+# ---------------------------------------------------------------------
+def test_conta_sem_subconta_e_o_caso_normal_e_nao_e_erro() -> None:
+    """Hoje nenhuma conta tem subconta. Isso nao pode virar erro -- so'
+    lista vazia."""
+    contas = listar_contas(_cred(), timeout_s=5, dll_injetada=_FakeLoginCompleto())
+    assert contas and all(c.subcontas == [] for c in contas)
+
+
+def test_lista_subcontas_quando_existem() -> None:
+    from profittape.ea.contas import listar_subcontas
+
+    fake = _FakeLoginCompleto(
+        contas=[(32006, "Simulador", "DEMO-1", "DIEGO")],
+        subcontas={(32006, "DEMO-1"): ["SUB-A", "SUB-B"]},
+    )
+    contas = listar_contas(_cred(), timeout_s=5, dll_injetada=fake)
+    assert len(contas) == 1
+    subs = contas[0].subcontas
+    assert [x.sub_account_id for x in subs] == ["SUB-A", "SUB-B"]
+    assert all(x.corretora_id == 32006 and x.account_id == "DEMO-1" for x in subs)
+    assert len(listar_subcontas(fake, 32006, "DEMO-1")) == 2
+
+
+def test_subcontas_por_conta_nao_se_misturam() -> None:
+    fake = _FakeLoginCompleto(
+        contas=[(32006, "Simulador", "DEMO-1", "D"), (1003, "XP", "REAL-9", "D")],
+        subcontas={(32006, "DEMO-1"): ["SIM-A"],
+                   (1003, "REAL-9"): ["REAL-A", "REAL-B"]},
+    )
+    contas = {c.corretora_id: c for c in listar_contas(_cred(), timeout_s=5, dll_injetada=fake)}
+    assert [x.sub_account_id for x in contas[32006].subcontas] == ["SIM-A"]
+    assert [x.sub_account_id for x in contas[1003].subcontas] == ["REAL-A", "REAL-B"]
+
+
+def test_dll_sem_suporte_a_subconta_nao_quebra() -> None:
+    """DLL antiga sem GetSubAccountCount/GetSubAccounts: a listagem de
+    contas (o objetivo principal) continua funcionando."""
+    from profittape.ea.contas import listar_subcontas
+
+    class _SemSubconta:
+        pass
+
+    assert listar_subcontas(_SemSubconta(), 32006, "DEMO-1") == []
+
+
+def test_erro_ao_contar_subcontas_nao_derruba_a_listagem() -> None:
+    """Codigo NL negativo -> lista vazia, nunca excecao: a conta ja' foi
+    descoberta com sucesso; subconta e' informacao adicional."""
+    from profittape.ea.contas import listar_subcontas
+
+    fake = _FakeLoginCompleto()
+    fake.GetSubAccountCount = lambda ptr: -2147483645  # type: ignore[method-assign]
+    assert listar_subcontas(fake, 32006, "DEMO-1") == []

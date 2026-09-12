@@ -17,6 +17,7 @@ pergunta continua em aberto, nao e' resolvida por esta ferramenta).
 from __future__ import annotations
 
 import time
+from ctypes import pointer
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -39,6 +40,10 @@ from ..profitdll.bindings import (
     check_exports_ea_contas,
     load_dll,
 )
+from ..profitdll.types import (
+    TConnectorAccountIdentifier,
+    TConnectorAccountIdentifierOut,
+)
 
 log = structlog.get_logger(__name__)
 
@@ -52,11 +57,24 @@ _LOGIN_ERROS = {
 
 
 @dataclass
+class SubcontaEncontrada:
+    """Uma subconta de roteamento. A DLL NAO CRIA subconta (so' funcoes
+    Get* existem no manual) -- criar e' pela XP/Nelogica. Isto so'
+    descobre o que ja' existe, para o E5 validar a config de cada EA
+    antes de subir (docs/EA_ARQUITETURA 4.2)."""
+
+    corretora_id: int
+    account_id: str
+    sub_account_id: str
+
+
+@dataclass
 class ContaEncontrada:
     corretora_id: int
     corretora_nome: str
     account_id: str
     titular: str
+    subcontas: list[SubcontaEncontrada] = field(default_factory=list)
 
 
 @dataclass
@@ -73,6 +91,61 @@ class _Coletor:
     # tipo==LOGIN) -- contas.py copiou o padrao errado.
     pronto_para_contas: bool = False
     erro_estado: str | None = None
+
+
+def listar_subcontas(dll: Any, corretora_id: int, account_id: str) -> list[SubcontaEncontrada]:
+    """
+    Enumera as subcontas de UMA conta, via GetSubAccountCount +
+    GetSubAccounts. Segue o padrao do `main.py` oficial da Nelogica:
+    contar primeiro, alocar o array do tamanho certo, preencher.
+
+    READ-ONLY. Se a DLL nao expuser as funcoes (versao antiga) ou a
+    contagem vier negativa (codigo de erro NL), devolve lista VAZIA --
+    conta sem subconta e' o caso normal hoje, nao e' erro. Quem precisa
+    de uma subconta especifica (E5) e' que deve reclamar se nao achar.
+    """
+    if not (hasattr(dll, "GetSubAccountCount") and hasattr(dll, "GetSubAccounts")):
+        log.info("ea_contas.subcontas_nao_suportadas", corretora_id=corretora_id,
+                 nota="esta DLL nao expoe GetSubAccountCount/GetSubAccounts")
+        return []
+
+    mestre = TConnectorAccountIdentifier(
+        version=0, broker_id=int(corretora_id), account_id=account_id,
+        sub_account_id=None, reserved=0,
+    )
+    n = int(dll.GetSubAccountCount(pointer(mestre)))
+    if n <= 0:
+        # n<0 e' codigo de erro NL; n==0 e' "nao tem subconta". Os dois
+        # levam ao mesmo lugar aqui (lista vazia), mas logam diferente
+        # para nao esconder um erro real atras de "conta sem subconta".
+        if n < 0:
+            log.warning("ea_contas.subcontas_erro", corretora_id=corretora_id,
+                        account_id=account_id, retorno=n)
+        return []
+
+    buf = (TConnectorAccountIdentifierOut * n)()
+    for item in buf:
+        item.version = 0
+    devolvidas = int(dll.GetSubAccounts(pointer(mestre), 0, 0, n, buf))
+    if devolvidas < 0:
+        log.warning("ea_contas.subcontas_erro_enumerar", corretora_id=corretora_id,
+                    account_id=account_id, retorno=devolvidas)
+        return []
+
+    achadas: list[SubcontaEncontrada] = []
+    for i in range(min(devolvidas, n)):
+        sub = buf[i]
+        sub_id = str(sub.sub_account_id or "")
+        if not sub_id:
+            continue
+        achadas.append(SubcontaEncontrada(
+            corretora_id=int(sub.broker_id),
+            account_id=str(sub.account_id or account_id),
+            sub_account_id=sub_id,
+        ))
+        log.info("ea_contas.subconta_recebida", corretora_id=int(sub.broker_id),
+                 account_id=str(sub.account_id or account_id), sub_account_id=sub_id)
+    return achadas
 
 
 def listar_contas(cred: Credenciais, timeout_s: float = 15.0,
@@ -209,8 +282,6 @@ def listar_contas(cred: Credenciais, timeout_s: float = 15.0,
             break
         time.sleep(0.1)
 
-    dll.DLLFinalize()
-
     # Dedup por (corretora_id, account_id) -- observado na pratica
     # (2026-08-26): o AccountCallback pode disparar mais de uma vez para a
     # MESMA conta (nao e' erro nosso, e' como a DLL entrega); sem isso, o
@@ -223,4 +294,18 @@ def listar_contas(cred: Credenciais, timeout_s: float = 15.0,
         if chave not in vistas:
             vistas.add(chave)
             unicas.append(c)
+
+    # Subcontas (E5.2): uma consulta por conta UNICA, depois do dedup --
+    # antes do dedup rodaria 2x para a mesma conta a toa. Feito ANTES do
+    # DLLFinalize (a DLL precisa estar viva), mas DEPOIS de ter a lista
+    # limpa. Falha aqui NAO derruba a listagem de contas: subconta e'
+    # informacao adicional, a conta em si ja' foi descoberta com sucesso.
+    for c in unicas:
+        try:
+            c.subcontas = listar_subcontas(dll, c.corretora_id, c.account_id)
+        except Exception as exc:
+            log.warning("ea_contas.subcontas_falharam", corretora_id=c.corretora_id,
+                        account_id=c.account_id, erro=repr(exc))
+
+    dll.DLLFinalize()
     return unicas

@@ -87,6 +87,10 @@ class FakeProfitDLL:
         # vazio = zerado (open_quantity=0, open_side=0). Testes configuram
         # via `fake.posicoes[(corretora, conta, ticker)] = (qtd, lado, preco)`.
         self.posicoes: dict[tuple[int, str, str], tuple[int, int, float]] = {}
+        # E5.2 (2026-09-11): subcontas por (corretora, conta). Default
+        # vazio = conta sem subconta, que e' o caso real de hoje. Testes
+        # configuram via `fake.subcontas[(32006, "DEMO-1")] = ["SUB-A", ...]`.
+        self.subcontas: dict[tuple[int, str], list[str]] = {}
         self.get_position_chamadas: list[tuple[int, str, str, str, int]] = []
         self._TRUNCA_N = max(1, eventos_por_ativo // 10)
         self._ultima_data_offer = "01/01/1970 00:00:00.000"  # buffer "obsoleto" inicial
@@ -444,6 +448,29 @@ class FakeProfitDLL:
         pos.open_side = lado
         pos.open_average_price = preco
         return 0
+
+    def _subs_de(self, ptr: object) -> list[str]:
+        conta = ptr.contents  # type: ignore[attr-defined]
+        return self.subcontas.get((int(conta.broker_id), str(conta.account_id or "")), [])
+
+    def GetSubAccountCount(self, ptr: object) -> int:
+        return len(self._subs_de(ptr))
+
+    def GetSubAccounts(self, ptr: object, _a: int, _b: int, n: int,
+                       buf: object) -> int:
+        """Preenche `buf` (array de TConnectorAccountIdentifierOut) como a
+        DLL real: campos de texto sao buffer fixo, nao ponteiro."""
+        conta = ptr.contents  # type: ignore[attr-defined]
+        subs = self._subs_de(ptr)
+        quantos = min(n, len(subs))
+        for i in range(quantos):
+            item = buf[i]  # type: ignore[index]
+            item.broker_id = int(conta.broker_id)
+            item.account_id = str(conta.account_id or "")
+            item.account_id_length = len(item.account_id)
+            item.sub_account_id = subs[i]
+            item.sub_account_id_length = len(subs[i])
+        return quantos
 
     def GetAgentNameByID(self, agent_id):
         # Nomes deterministas para teste; codigo 999 simula "desconhecido".

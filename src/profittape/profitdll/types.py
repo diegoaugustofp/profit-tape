@@ -8,7 +8,7 @@ dado errado.
 
 from __future__ import annotations
 
-from ctypes import Structure, c_double, c_int, c_int32, c_int64, c_ubyte, c_wchar_p
+from ctypes import Structure, c_double, c_int, c_int32, c_int64, c_ubyte, c_wchar, c_wchar_p
 
 
 class TAssetIDRec(Structure):
@@ -57,6 +57,28 @@ class TConnectorAccountIdentifier(Structure):
         ("broker_id", c_int32),
         ("account_id", c_wchar_p),
         ("sub_account_id", c_wchar_p),
+        ("reserved", c_int64),
+    )
+
+
+class TConnectorAccountIdentifierOut(Structure):
+    """
+    Versao de SAIDA do identificador de conta: a DLL PREENCHE os buffers,
+    entao os campos de texto sao array fixo (`c_wchar * 100`), nao
+    ponteiro -- quem aloca somos nos. Usada por `GetSubAccounts`.
+
+    Confirmada campo a campo contra `profitTypes.py` oficial da Nelogica
+    (2026-09-11). O tamanho 100 tambem vem de la'; os campos
+    `*IDLength` dizem quanto do buffer foi de fato preenchido.
+    """
+
+    _fields_ = (
+        ("version", c_ubyte),
+        ("broker_id", c_int32),
+        ("account_id", c_wchar * 100),
+        ("account_id_length", c_int32),
+        ("sub_account_id", c_wchar * 100),
+        ("sub_account_id_length", c_int32),
         ("reserved", c_int64),
     )
 

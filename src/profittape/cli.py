@@ -3705,10 +3705,30 @@ def ea_contas(
 
     typer.echo(f"\n{len(contas)} conta(s) encontrada(s):")
     typer.echo("-" * 70)
+    total_subs = 0
     for c in contas:
         typer.echo(f"  corretora_id={c.corretora_id:<6} corretora={c.corretora_nome}")
         typer.echo(f"  account_id={c.account_id!r:<12} titular={c.titular}")
+        if c.subcontas:
+            total_subs += len(c.subcontas)
+            typer.echo(f"  subcontas ({len(c.subcontas)}):")
+            for sub in c.subcontas:
+                typer.echo(f"      sub_account_id={sub.sub_account_id!r}")
+        else:
+            typer.echo("  subcontas: nenhuma")
         typer.echo("-" * 70)
+
+    # E5: uma subconta por EA e' o que separa as posicoes (sem isso, dois
+    # EAs no mesmo ticker se netam e a divergencia nao tem dono --
+    # docs/EA_ARQUITETURA 4.2). A DLL nao cria subconta: criar e' pela
+    # XP/Nelogica.
+    if total_subs:
+        typer.echo(f"\n{total_subs} subconta(s) no total. Para o multi-EA (E5), use uma")
+        typer.echo("subconta POR EA no campo `subconta:` do yaml de cada um.")
+    else:
+        typer.echo("\nNenhuma subconta encontrada. Isso e' normal se voce ainda nao")
+        typer.echo("criou nenhuma -- a DLL NAO cria subconta (so' le), a criacao e'")
+        typer.echo("pela XP/Nelogica. O multi-EA (E5) precisa de uma por EA.")
 
     if len(contas) == 1:
         typer.echo(

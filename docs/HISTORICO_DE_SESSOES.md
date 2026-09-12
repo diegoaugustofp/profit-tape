@@ -1691,3 +1691,24 @@ existencia e recusa subir EA com subconta inexistente, listando as
 disponiveis. Simulador suporta subcontas (confirmado pelo operador).
 
 So' documentacao nesta entrega. 714 testes, ruff e mypy limpos.
+
+### Continuacao (2026-09-11) — ea-contas lista subcontas (v2.52, parte do E5.2)
+
+- `GetSubAccountCount` e `GetSubAccounts` vinculados (assinaturas
+  conferidas contra `profit_dll.py` oficial); `TConnectorAccountIdentifierOut`
+  adicionada (campos de texto sao BUFFER FIXO `c_wchar * 100`, nao
+  ponteiro -- a DLL preenche, nos alocamos).
+- `ea/contas.py`: `listar_subcontas()` + campo `subcontas` em
+  `ContaEncontrada`. Uma consulta por conta UNICA (depois do dedup, se
+  fosse antes rodaria 2x a toa) e ANTES do DLLFinalize. Falha na
+  enumeracao NAO derruba a listagem de contas -- a conta ja' foi
+  descoberta, subconta e' informacao adicional.
+- `profit-tape ea-contas` mostra as subcontas de cada conta e, quando
+  nao ha' nenhuma, explica que a DLL NAO cria (criacao e' pela
+  XP/Nelogica) e que o E5 precisa de uma por EA.
+- Fake (ambas: a do projeto e a local de test_ea_contas) ganhou
+  subcontas configuraveis. 5 testes novos, incluindo DLL sem suporte e
+  erro NL na contagem. 719 testes, ruff e mypy limpos.
+
+**Pendente**: o resto do E5.2 (migrar ENVIO de ordem para a familia V2
+com SubAccountID) e o E5.4 (despachante dinamico).
