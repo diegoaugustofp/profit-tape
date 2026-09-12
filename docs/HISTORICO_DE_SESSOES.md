@@ -1647,3 +1647,47 @@ Entregue:
 
 **Pendente**: E5.2 (migrar execucao para V2 com SubAccountID) em
 diante. E5.3, E5.5 e E5.6 exigem pregao.
+
+### Continuacao (2026-09-11) — E5 redesenhado: record NUNCA para (v2.51)
+
+Operador levantou dois problemas no plano v1 do E5, os dois corretos:
+
+1. **"Se o record iniciou uma estrategia eu nao inicio uma nova sem
+   reiniciar o record. Isso gera perda de dados."** Certo: hoje
+   `--ea-config` e' lido UMA vez, na construcao do RecorderService.
+   Captura perdida e' o unico ativo do projeto que nao da' para refazer.
+   Novo principio: o record e' servico de captura que roda o pregao
+   inteiro; EAs entram e saem DELE em tempo de execucao.
+2. **"Um yaml pra cada corre o risco de 2 EA diferentes erroneamente
+   configurarem a sub conta igual."** Certo: volta o netting
+   silenciosamente. Resolvido mantendo 1 arquivo por EA (identidade num
+   lugar so'; um mestre criaria duas fontes de verdade) mas com colisao
+   virando RECUSA de inclusao, nao so' alerta.
+
+OBSTACULO TECNICO descoberto ao redesenhar: `connect()` captura
+`on_trade_extra` numa VARIAVEL LOCAL antes de registrar o callback --
+trocar `client._on_trade_extra` depois de conectado NAO tem efeito. Por
+isso o fan-out precisa ser um DESPACHANTE estavel (registrado 1x,
+consultando lista mutavel sob lock curto), nao troca de atributo.
+
+Desenho novo (secao 4 reescrita):
+- `DespachanteDeEAs`: registrado 1x como on_trade_extra, lista de
+  bridges mutavel sob lock curto. EA com bug nao derruba os outros nem
+  a captura (regra herdada do on_trade_extra atual).
+- `RegistroDeEAs`: recusa inclusao se (subconta, ticker) ja' ocupado,
+  se o nome repetir, ou se a subconta nao existir de fato na corretora
+  (`GetSubAccounts`).
+- `--ea-dir`: pasta varrida pelo laco de monitoramento (que ja' roda a
+  cada 0,5 s). YAML novo -> inclui; removido -> retira. Auditavel por
+  git, sem porta de rede nem daemon novo.
+- Retirada SEMPRE graciosa: EA com posicao aberta entra em modo "so'
+  fecha" e so' sai depois de zerar -- sumir com posicao aberta criaria
+  a posicao orfa que o LivroDePosicoes marca como "(ninguem)".
+
+Tambem verificado no manual (respondendo pergunta do operador): **a DLL
+NAO cria subconta** -- so' funcoes de leitura (GetAccount*,
+GetSubAccount*). Criar e' pela XP/Nelogica. O codigo valida a
+existencia e recusa subir EA com subconta inexistente, listando as
+disponiveis. Simulador suporta subcontas (confirmado pelo operador).
+
+So' documentacao nesta entrega. 714 testes, ruff e mypy limpos.

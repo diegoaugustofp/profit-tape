@@ -78,7 +78,7 @@ em dia sem pregao.
 | **E2** | uma ordem real (compra + zeragem) na conta demo | FECHADO (v2.41, `resultado=ok` ao vivo 2026-09-11 12:30) |
 | **E3** | reconciliacao de posicao EA x corretora, zeragem na divergencia | FECHADO (v2.48, confirmado com posicao ZERADA **e** ABERTA real) |
 | **E4** | forward em demo com ordens reais, 1 contrato, mede slippage/latencia | MONTADO (v2.47) -- **nunca viu sinal real disparar** |
-| **E5** | **multi-EA** (varias estrategias na mesma conexao) | **NAO COMECADO** -- ver plano abaixo |
+| **E5** | **multi-EA dinamico** (varias estrategias, subcontas separadas, inclusao/remocao SEM parar o record) | E5.0 e E5.1 entregues (v2.50); ver plano na secao 4 |
 
 ### Licoes da escada que valem para sempre
 
@@ -115,7 +115,7 @@ nunca foi atualizado. Especificamente:
 **Pendencias de verdade, hoje:**
 
 1. **E4 nunca viu sinal real virar ordem** (bloqueado por pregao).
-2. **E5 nao comecado** -- exige refatoracao, ver plano na proxima secao.
+2. **E5 em andamento** -- E5.0/E5.1 entregues; E5.2 (familia V2 com subconta) e E5.4 (despachante dinamico) sao os proximos, ambos sem pregao.
 3. **Zeragem V2 struct-based** (`TConnectorZeroPosition`) e **health
    check** (`GetHealthStatus`/`TSystemHealthState`, watchdog da DLL
    4.0.0.41) mapeados nos exemplos oficiais, nunca implementados. Nao
@@ -126,105 +126,171 @@ nunca foi atualizado. Especificamente:
 
 ---
 
-## 4. PLANO DO E5 — multi-EA com SUBCONTAS (validado 2026-09-11)
+## 4. PLANO DO E5 — multi-EA dinamico com SUBCONTAS (v2, 2026-09-11)
 
-> Status: desenho **validado pelo operador** em 2026-09-11. E5.0 e E5.1
-> implementados; o resto pendente.
+> Status: desenho **validado pelo operador**. E5.0 e E5.1 implementados
+> (v2.50); o resto pendente. Esta e' a **segunda versao** do plano -- a
+> primeira assumia EAs fixos na inicializacao, o que o operador
+> corretamente rejeitou (ver 4.3).
 
 ### 4.1 O que E5 e' e o que NAO e'
 
 E5 = rodar **mais de uma estrategia ao mesmo tempo**, na mesma conexao
-unica com a DLL, sem que uma atrapalhe a outra. Nao e' "ir para conta
-real" (isso e' a fase F6 do pipeline, decisao separada e posterior).
+unica com a DLL, **podendo adicionar e remover EAs sem reiniciar o
+record**. Nao e' "ir para conta real" (fase F6, decisao separada).
 
-### 4.2 Decisao do operador: SUBCONTAS separam a execucao
+### 4.2 Decisao: SUBCONTAS separam a execucao
 
-Cada EA opera em sua propria **subconta**. Isso resolve o problema mais
-feio do multi-EA numa conta so': o NETTING. Na mesma conta, EA A
-comprando 1 e EA B vendendo 1 se anulam -- a B3 ve posicao liquida zero
-e nao ha' como saber de quem e' o que. Em subcontas separadas, cada EA
-tem posicao propria, `SendZeroPosition` volta a funcionar direto (sem
-calculo de ordem liquida) e a reconciliacao (E3) desagrega naturalmente.
+Cada EA opera em sua propria subconta. Resolve o NETTING: na mesma
+conta, EA A comprando 1 e EA B vendendo 1 se anulam -- a B3 ve posicao
+liquida zero, indistinguivel de "ninguem tem nada". Em subcontas
+separadas, cada EA tem posicao propria, `SendZeroPosition` funciona
+direto e a reconciliacao (E3) desagrega naturalmente.
 
-**Consequencia tecnica obrigatoria**: a familia LEGADA que usamos hoje
-(`SendMarketBuyOrder`, `SendZeroPositionAtMarket`) recebe conta e
-corretora como strings soltas e **nao tem parametro de subconta**.
-Subconta so' existe na familia **V2 struct-based**
+**Consequencia obrigatoria**: a familia LEGADA que usamos hoje
+(`SendMarketBuyOrder`, `SendZeroPositionAtMarket`) **nao tem parametro
+de subconta**. Subconta so' existe na familia **V2 struct-based**
 (`SendOrder`/`SendZeroPositionV2`), onde `SubAccountID` viaja dentro de
-`TConnectorAccountIdentifier` -- confirmado no `main.py` oficial da
-Nelogica (toda ordem, zeragem e consulta levam o campo).
+`TConnectorAccountIdentifier`. Operador decidiu migrar TUDO para V2.
 
-Operador decidiu (2026-09-11): **migrar TUDO para V2**, nao manter dois
-caminhos. Isso exige revalidar a execucao ao vivo, porque a legada e' a
-unica familia que o E2 validou de verdade.
+**A DLL NAO CRIA SUBCONTA** (verificado no manual, 2026-09-11): as
+unicas funcoes de conta sao de LEITURA -- `GetAccount`,
+`GetAccountCount`, `GetAccounts`, `GetAccountDetails`,
+`GetSubAccountCount`, `GetSubAccounts`. Nao existe `CreateSubAccount`.
+Criar e' pela XP/Nelogica, fora do nosso codigo. O que o codigo FAZ e'
+descobrir as existentes (`GetSubAccounts`) e recusar subir um EA cuja
+subconta nao exista, listando as disponiveis -- mesmo padrao que ja'
+nos salvou 3x nesta semana (ticker agregador, formato de data,
+SubscribeTicker): falhar cedo e claro, nao no meio do pregao.
+Simulador (32006) suporta subcontas -- confirmado pelo operador.
 
-### 4.3 Decisao do operador: risco e' INFORMATIVO, nunca limitante
+### 4.3 Decisao: o record NUNCA para para mexer em EA
 
-Mudanca de filosofia frente ao `GestorDeRisco` atual, que BLOQUEIA
-(`pode_abrir()` retorna False e o EA nao opera):
+**Problema levantado pelo operador (2026-09-11)**: hoje `--ea-config` e'
+lido UMA vez, na construcao do `RecorderService`. Incluir um EA novo
+exige reiniciar o processo -- e reiniciar **perde captura**, o unico
+ativo do projeto que nao da' para refazer depois. Inaceitavel.
 
-- O sistema **calcula e apresenta**: capital recomendado por EA,
-  capital total recomendado, exposicao somada, risco por operacao.
-- O sistema **nunca impede** o operador de operar. Se ele tem R$ 2.000
-  em conta e o recomendado e' R$ 5.000, o sistema AVISA (log de alerta,
-  visivel) e executa assim mesmo.
-- **A decisao e o risco sao sempre do operador**, inclusive o de ser
-  zerado por falta de margem.
-- A conta precisa suportar financeiramente os N EAs -- isso e'
-  responsabilidade do operador, declarada explicitamente aqui.
+**Principio**: o record e' um servico de captura que roda o pregao
+inteiro. EAs entram e saem DELE, em tempo de execucao, sem nunca
+derrubar a captura. A captura tem prioridade absoluta sobre o EA --
+mesma filosofia que ja' governa `on_trade_extra` (excecao do EA e'
+engolida para nao matar o processo).
 
-**Fora do escopo, por decisao**: zeragem em cascata por falta de margem
-(o que a corretora faz quando o capital acaba). Nao vamos modelar nem
-gerenciar isso.
-
-Nota: o circuit breaker por PERDAS CONSECUTIVAS continua sendo trava de
-verdade -- ele protege contra defeito de estrategia (sequencia anomala),
-nao contra escolha de capital do operador. Sao coisas diferentes.
+**Obstaculo tecnico real** (verificado em `profitdll/client.py`):
+`connect()` captura `on_trade_extra` numa VARIAVEL LOCAL antes de
+registrar o callback. Trocar `client._on_trade_extra` depois de
+conectado **nao tem efeito** -- o callback ja' fechou sobre o valor
+antigo. Por isso o fan-out nao pode ser "trocar o atributo": precisa ser
+um DESPACHANTE estavel, registrado uma vez, que consulta uma lista
+mutavel a cada trade.
 
 ### 4.4 Desenho
 
 ```
-                  ProfitClient (uma conexao)
+                  ProfitClient (uma conexao, nunca reiniciado)
                           |
-                    on_trade_extra
+                  on_trade_extra = despachante.publicar   <- registrado 1x,
+                          |                                   nunca trocado
+                  DespachanteDeEAs                        <- lista MUTAVEL,
+                     (lock curto)                            protegida por lock
                           |
-                  +---- fan-out ----+
-                  |                 |
-            EABridge(z_agf_3)   EABridge(deep_f2)    <- fila POR EA
-                  |                 |
-            EAService A         EAService B          <- sinal + risco
-                  |                 |                   isolados
-            subconta A          subconta B           <- execucao isolada
-                  |                 |
-                  +--- ExecutorV2 --+                <- SendOrder com
-                          |                             SubAccountID
-                  SupervisorDeRisco                  <- so' CALCULA e
-                     (informativo)                      AVISA, nao trava
+          +---------------+---------------+
+          |                               |
+    EABridge(z_agf_3)              EABridge(deep_f2)      <- fila POR EA
+    subconta SUB-A                 subconta SUB-B            (+ EAs entram/saem
+          |                               |                   em execucao)
+    EAService A                    EAService B
+          |                               |
+          +--------- ExecutorV2 ----------+               <- SendOrder com
+                          |                                  SubAccountID
+              SupervisorDeRisco + LivroDePosicoes          <- informativo /
+                                                              posicao por EA
 ```
 
-Com subcontas, o `LivroDePosicoes` fica simples: a posicao de cada EA e'
-a posicao da SUA subconta, consultavel direto via `GetPositionV2` com o
-`SubAccountID` preenchido. Nao precisa de rastreio paralelo nem de
-ordem liquida calculada.
+**`DespachanteDeEAs`** (novo, E5.4): registrado como `on_trade_extra` na
+conexao, uma unica vez. Guarda uma lista de bridges protegida por um
+lock **muito curto** (so' copiar a referencia da lista, nunca segurar
+durante o `publicar`). Adicionar/remover EA muta essa lista. O callback
+da DLL continua com o mesmo alvo para sempre.
 
-### 4.5 Ordem de implementacao
+Regra herdada: o despachante NUNCA levanta para o callback. Se um
+bridge falha, loga e segue para o proximo -- um EA com bug nao pode
+derrubar os outros nem a captura.
+
+### 4.5 Decisao: UM arquivo por EA, com validacao de conflito
+
+**Risco levantado pelo operador**: dois YAMLs configurando a MESMA
+subconta por engano -- volta o netting que as subcontas existem para
+evitar, e silenciosamente.
+
+**Resolucao**: mantem-se um arquivo por EA (a identidade de um EA fica
+num lugar so'; um YAML "mestre" criaria duas fontes de verdade que podem
+discordar), MAS a colisao vira erro DURO, em duas camadas:
+
+1. **`SupervisorDeRisco.subcontas_duplicadas()`** (ja' existe, v2.50)
+   detecta e alerta.
+2. **`RegistroDeEAs`** (novo, E5.4) RECUSA a inclusao: um EA so' entra
+   se `(subconta, ticker)` estiver livre e a subconta existir de fato na
+   corretora (`GetSubAccounts`). Nome de EA duplicado tambem recusa.
+
+Ou seja: o alerta do supervisor e' a rede de seguranca; a recusa do
+registro e' a trava. Um EA mal configurado nao entra -- e como a
+inclusao e' dinamica, recusar e' barato (nao derruba nada, so' nao
+adiciona).
+
+### 4.6 Como o operador inclui/remove um EA com o record rodando
+
+Duas rotas, complementares:
+
+- **Arquivo-gatilho** (`--ea-dir config/eas_ativos/`): o laco de
+  monitoramento (que ja' roda a cada 0,5 s) varre a pasta a cada N
+  segundos. YAML novo -> tenta incluir; YAML removido -> agenda a
+  retirada. Sem porta de rede, sem daemon novo, auditavel por `git`.
+- **Comando CLI** (`profit-tape ea-incluir/ea-remover`): conveniencia
+  que escreve/remove o arquivo na pasta acima. Nao fala com o processo
+  diretamente -- o arquivo continua sendo a fonte de verdade.
+
+**Retirada e' SEMPRE graciosa**: um EA com posicao aberta nao some. Ele
+entra em modo "so' fecha" (nao abre nova), e so' sai do despachante
+depois de zerar. Sumir com posicao aberta criaria exatamente a posicao
+orfa que o `LivroDePosicoes` marca como "(ninguem)".
+
+### 4.7 Ordem de implementacao
 
 | Passo | O que | Estado |
 |---|---|---|
-| **E5.0** | `SupervisorDeRisco` informativo: capital recomendado, exposicao somada, alertas -- sem travar nada | **ENTREGUE v2.50** |
-| **E5.1** | `LivroDePosicoes`: posicao por (EA, subconta, ticker) | **ENTREGUE v2.50** |
-| **E5.2** | Migrar execucao para a familia V2 (`SendOrder`, `SendZeroPositionV2`) com `SubAccountID` | pendente |
-| **E5.3** | Revalidar E2/E3/E4 na familia V2, ao vivo (a legada era a unica validada) | pendente, exige pregao |
-| **E5.4** | Fan-out no RecorderService: N bridges, N services | pendente |
-| **E5.5** | 2 EAs em dry_run no record, pregao inteiro | pendente, exige pregao |
-| **E5.6** | 2 EAs em demo com ordens reais, subcontas separadas | pendente, exige pregao |
+| **E5.0** | `SupervisorDeRisco` informativo (capital recomendado, alertas) | **ENTREGUE v2.50** |
+| **E5.1** | `LivroDePosicoes` por (EA, subconta, ticker) | **ENTREGUE v2.50** |
+| **E5.2** | Migrar execucao para familia V2 (`SendOrder`, `SendZeroPositionV2`) com `SubAccountID`; `GetSubAccounts` para validar | pendente (codigo, sem pregao) |
+| **E5.3** | Revalidar E2/E3/E4 na familia V2, ao vivo | pendente, **exige pregao** |
+| **E5.4** | `DespachanteDeEAs` + `RegistroDeEAs` + `--ea-dir`: inclusao/remocao a quente | pendente (codigo, sem pregao) |
+| **E5.5** | 2 EAs em dry_run, pregao inteiro, incluindo 1 a quente | pendente, **exige pregao** |
+| **E5.6** | 2 EAs em demo com ordens reais, subcontas separadas | pendente, **exige pregao** |
 
-### 4.6 O que NAO vou fazer sem ordem explicita
+### 4.8 O que NAO vou fazer sem ordem explicita
 
 - Ligar E5 com ordens reais antes do E4 ter visto um sinal real.
 - Mexer no `z_agf_3` em producao para acomodar o multi-EA.
 - Trocar o circuit breaker de perdas consecutivas por algo informativo
-  (ele e' trava de DEFEITO, nao de escolha de capital).
+  (ele e' trava de DEFEITO, nao de escolha de capital -- ver 4.9).
+- Remover um EA com posicao aberta sem zerar antes.
+
+### 4.9 Risco e' INFORMATIVO, nunca limitante (decisao do operador)
+
+- O sistema **calcula e apresenta**: capital recomendado por EA, total,
+  exposicao somada, cobertura.
+- O sistema **nunca impede**. R$ 2.000 em conta com R$ 5.000 recomendado
+  -> AVISA e executa. A decisao e o risco sao do operador, inclusive o
+  de ser zerado por falta de margem.
+- A conta precisa suportar financeiramente os N EAs -- responsabilidade
+  do operador, declarada explicitamente.
+- **Fora do escopo**: zeragem em cascata por falta de margem.
+
+Excecao que continua sendo trava de verdade: o **circuit breaker de
+perdas consecutivas**. Ele protege contra DEFEITO de estrategia
+(sequencia anomala sugere que algo quebrou hoje), nao contra escolha de
+capital. Coisas diferentes.
 
 ---
 
