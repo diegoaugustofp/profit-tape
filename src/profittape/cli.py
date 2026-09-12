@@ -3740,10 +3740,13 @@ def ea_contas(
             typer.echo("ativacao nao tem o recurso de subcontas liberado. O app de teste")
             typer.echo("oficial da Nelogica devolve o mesmo erro, o que confirma.")
             typer.echo("")
-            typer.echo("O que fazer: pedir a liberacao a Nelogica/corretora, citando")
-            typer.echo("GetSubAccounts e NL_LICENSE_NOT_ALLOWED (-2147483630).")
-            typer.echo("Ate' la', o multi-EA (E5) NAO pode usar subcontas separadas --")
-            typer.echo("ver docs/EA_ARQUITETURA.md secao 4.2.")
+            typer.echo("CONTEXTO (2026-09-11): subconta na Nelogica e' recurso de MESA")
+            typer.echo("PROPRIETARIA -- conta Master administrando operadores, com perfis")
+            typer.echo("de risco e corretagem por operador. NAO e' mecanismo para separar")
+            typer.echo("estrategias do mesmo operador, e NAO e' o que uma 'carteira' do")
+            typer.echo("Profit cria (carteira nao separa posicao na B3).")
+            typer.echo("O multi-EA (E5) NAO depende disto: cada EA opera um TICKER")
+            typer.echo("diferente -- ver docs/EA_ARQUITETURA.md secao 4.2.")
         else:
             typer.echo("\nNao foi possivel consultar as subcontas (ver detalhe acima).")
     else:

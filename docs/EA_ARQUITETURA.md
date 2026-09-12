@@ -78,7 +78,7 @@ em dia sem pregao.
 | **E2** | uma ordem real (compra + zeragem) na conta demo | FECHADO (v2.41, `resultado=ok` ao vivo 2026-09-11 12:30) |
 | **E3** | reconciliacao de posicao EA x corretora, zeragem na divergencia | FECHADO (v2.48, confirmado com posicao ZERADA **e** ABERTA real) |
 | **E4** | forward em demo com ordens reais, 1 contrato, mede slippage/latencia | MONTADO (v2.47) -- **nunca viu sinal real disparar** |
-| **E5** | **multi-EA dinamico** (varias estrategias, subcontas separadas, inclusao/remocao SEM parar o record) | E5.0 e E5.1 entregues (v2.50); ver plano na secao 4 |
+| **E5** | **multi-EA dinamico** (1 EA por ticker, inclusao/remocao SEM parar o record) | E5.0/E5.1 entregues (v2.50); E5.2 CANCELADO (ver 4.2); proximo e' E5.4 |
 
 ### Licoes da escada que valem para sempre
 
@@ -115,7 +115,7 @@ nunca foi atualizado. Especificamente:
 **Pendencias de verdade, hoje:**
 
 1. **E4 nunca viu sinal real virar ordem** (bloqueado por pregao).
-2. **E5 em andamento** -- E5.0/E5.1 entregues; E5.2 (familia V2 com subconta) e E5.4 (despachante dinamico) sao os proximos, ambos sem pregao.
+2. **E5 em andamento** -- E5.0/E5.1 entregues; E5.2 cancelado (subcontas sao produto de mesa proprietaria, ver 4.2); proximo e' E5.4 (despachante dinamico), sem pregao.
 3. **Zeragem V2 struct-based** (`TConnectorZeroPosition`) e **health
    check** (`GetHealthStatus`/`TSystemHealthState`, watchdog da DLL
    4.0.0.41) mapeados nos exemplos oficiais, nunca implementados. Nao
@@ -139,42 +139,60 @@ E5 = rodar **mais de uma estrategia ao mesmo tempo**, na mesma conexao
 unica com a DLL, **podendo adicionar e remover EAs sem reiniciar o
 record**. Nao e' "ir para conta real" (fase F6, decisao separada).
 
-### 4.2 Decisao: SUBCONTAS separam a execucao
+### 4.2 Decisao: TICKERS DIFERENTES separam a execucao (caminho B)
 
-Cada EA opera em sua propria subconta. Resolve o NETTING: na mesma
-conta, EA A comprando 1 e EA B vendendo 1 se anulam -- a B3 ve posicao
-liquida zero, indistinguivel de "ninguem tem nada". Em subcontas
-separadas, cada EA tem posicao propria, `SendZeroPosition` funciona
-direto e a reconciliacao (E3) desagrega naturalmente.
+**Historico desta decisao, porque ela mudou duas vezes em um dia:**
 
-**Consequencia obrigatoria**: a familia LEGADA que usamos hoje
-(`SendMarketBuyOrder`, `SendZeroPositionAtMarket`) **nao tem parametro
-de subconta**. Subconta so' existe na familia **V2 struct-based**
-(`SendOrder`/`SendZeroPositionV2`), onde `SubAccountID` viaja dentro de
-`TConnectorAccountIdentifier`. Operador decidiu migrar TUDO para V2.
+A v1 do plano assumia uma conta so' -- rejeitada pelo operador por causa
+do NETTING: EA A comprando 1 WIN e EA B vendendo 1 WIN se anulam, a B3
+ve posicao liquida zero e nao ha' como saber de quem e' o que.
 
-**BLOQUEIO ATIVO (2026-09-11): NL_LICENSE_NOT_ALLOWED.** O operador tem
-subcontas criadas (2 no Simulador, 1 na XP, visiveis no Profit Chart),
-mas `GetSubAccounts` devolve `-2147483630` -- a chave de ativacao nao
-tem o recurso liberado. O app de teste OFICIAL da Nelogica devolve o
-MESMO erro, o que descarta problema no nosso codigo. **Enquanto isso
-nao for liberado pela Nelogica/corretora, o E5 nao pode usar subcontas
-separadas** -- e sem elas, dois EAs no mesmo ticker se netam e a
-divergencia nao tem dono (e' todo o motivo da secao 4.2). Caminhos:
-(a) pedir liberacao citando GetSubAccounts e NL_LICENSE_NOT_ALLOWED;
-(b) rodar multi-EA em TICKERS DIFERENTES (WIN e WDO), onde o netting
-nao acontece e subconta e' dispensavel.
+A v2 adotou SUBCONTAS. Caiu por dois motivos, descobertos em sequencia:
 
-**A DLL NAO CRIA SUBCONTA** (verificado no manual, 2026-09-11): as
-unicas funcoes de conta sao de LEITURA -- `GetAccount`,
-`GetAccountCount`, `GetAccounts`, `GetAccountDetails`,
-`GetSubAccountCount`, `GetSubAccounts`. Nao existe `CreateSubAccount`.
-Criar e' pela XP/Nelogica, fora do nosso codigo. O que o codigo FAZ e'
-descobrir as existentes (`GetSubAccounts`) e recusar subir um EA cuja
-subconta nao exista, listando as disponiveis -- mesmo padrao que ja'
-nos salvou 3x nesta semana (ticker agregador, formato de data,
-SubscribeTicker): falhar cedo e claro, nao no meio do pregao.
-Simulador (32006) suporta subcontas -- confirmado pelo operador.
+1. `GetSubAccounts` devolve `NL_LICENSE_NOT_ALLOWED` (-2147483630) na
+   licenca do operador -- e o app de teste OFICIAL da Nelogica devolve o
+   mesmo, o que descarta erro nosso.
+2. Mais importante, o operador leu a documentacao e viu que estavamos
+   usando o conceito errado. Pelo artigo "Modulo de Subcontas"
+   (ajuda.nelogica.com.br/hc/pt-br/articles/360044289652): *"Subcontas
+   sao contas de roteamento fornecidas aos operadores por empresas,
+   atraves das Mesas Proprietarias. Estas subcontas sempre estao
+   vinculadas a conta principal, normalmente chamada de conta Master."*
+   E' infraestrutura de MESA PROPRIETARIA -- gestor administrando
+   operadores, com perfis de risco, monitor de risco e corretagem por
+   operador. Nao e' mecanismo para separar duas estrategias do MESMO
+   operador. O `NL_LICENSE_NOT_ALLOWED` nao era um recurso a ativar: e'
+   um produto diferente, de outro publico.
+
+**Cuidado com a confusao que nos custou essa volta**: o que se cria no
+Profit e se chama de CARTEIRA nao e' subconta. Carteira e' agrupamento
+de visualizacao/controle DENTRO da mesma conta de roteamento -- a ordem
+continua indo para a mesma conta na B3, entao **carteira NAO separa
+posicao e o netting continuaria acontecendo**. Nao resolveria, mesmo se
+a DLL a expusesse.
+
+**Decisao (caminho B)**: cada EA opera um TICKER DIFERENTE (ex.: um no
+WIN, outro no WDO). Entre ativos distintos nao existe netting -- a
+posicao de WIN e a de WDO sao contas-correntes separadas na B3 por
+definicao. Isso:
+
+- dispensa subconta por completo (nao depende de licenca nem de mesa);
+- mantem `SendZeroPositionAtMarket` funcionando direto (zera POR ATIVO,
+  que agora e' exatamente "por EA");
+- deixa a reconciliacao (E3) desagregada de graca: consultar posicao por
+  ticker ja' e' consultar por EA;
+- **nao exige migrar para a familia V2** -- a legada (ja' validada ao
+  vivo no E2/E3/E4) continua servindo. E5.2 sai do caminho critico.
+
+**Restricao que isto impoe, declarada**: dois EAs NAO podem operar o
+mesmo ticker ao mesmo tempo. O `RegistroDeEAs` (4.5) recusa a inclusao
+nesse caso -- e' a trava que substitui a subconta. Se um dia dois EAs
+precisarem do mesmo ativo, o problema do netting volta e a discussao
+tera' que ser reaberta (nao ha' solucao pela DLL hoje).
+
+`GetSubAccounts` fica no codigo como diagnostico (`ea-contas` mostra o
+que existe ou explica o bloqueio de licenca), sem ser caminho critico
+de nada.
 
 ### 4.3 Decisao: o record NUNCA para para mexer em EA
 
@@ -210,15 +228,22 @@ mutavel a cada trade.
           +---------------+---------------+
           |                               |
     EABridge(z_agf_3)              EABridge(deep_f2)      <- fila POR EA
-    subconta SUB-A                 subconta SUB-B            (+ EAs entram/saem
+    ticker WINV26                  ticker WDOV26             (+ EAs entram/saem
           |                               |                   em execucao)
     EAService A                    EAService B
           |                               |
-          +--------- ExecutorV2 ----------+               <- SendOrder com
-                          |                                  SubAccountID
+          +--------- Executor ------------+               <- familia LEGADA,
+                          |                                  ja' validada no E2
               SupervisorDeRisco + LivroDePosicoes          <- informativo /
                                                               posicao por EA
 ```
+
+Com um EA por TICKER, o `LivroDePosicoes` fica simples: a posicao de
+cada EA e' a posicao daquele ativo, consultavel via `GetPositionV2` por
+ticker. Sem rastreio paralelo, sem ordem liquida calculada, sem
+subconta. O campo `subconta` no livro e no supervisor continua
+existindo (custa nada, serve se um dia houver mesa) mas fica `None` --
+a chave `(subconta, ticker)` ja' e' unica porque o ticker e' unico.
 
 **`DespachanteDeEAs`** (novo, E5.4): registrado como `on_trade_extra` na
 conexao, uma unica vez. Guarda uma lista de bridges protegida por um
@@ -243,8 +268,9 @@ discordar), MAS a colisao vira erro DURO, em duas camadas:
 1. **`SupervisorDeRisco.subcontas_duplicadas()`** (ja' existe, v2.50)
    detecta e alerta.
 2. **`RegistroDeEAs`** (novo, E5.4) RECUSA a inclusao: um EA so' entra
-   se `(subconta, ticker)` estiver livre e a subconta existir de fato na
-   corretora (`GetSubAccounts`). Nome de EA duplicado tambem recusa.
+   se o TICKER estiver livre (1 EA por ticker e' o que substitui a
+   subconta no caminho B -- dois EAs no mesmo ativo voltariam a netar).
+   Nome de EA duplicado tambem recusa.
 
 Ou seja: o alerta do supervisor e' a rede de seguranca; a recusa do
 registro e' a trava. Um EA mal configurado nao entra -- e como a
@@ -274,11 +300,10 @@ orfa que o `LivroDePosicoes` marca como "(ninguem)".
 |---|---|---|
 | **E5.0** | `SupervisorDeRisco` informativo (capital recomendado, alertas) | **ENTREGUE v2.50** |
 | **E5.1** | `LivroDePosicoes` por (EA, subconta, ticker) | **ENTREGUE v2.50** |
-| **E5.2** | Migrar execucao para familia V2 (`SendOrder`, `SendZeroPositionV2`) com `SubAccountID`; `GetSubAccounts` para validar | pendente (codigo, sem pregao) |
-| **E5.3** | Revalidar E2/E3/E4 na familia V2, ao vivo | pendente, **exige pregao** |
-| **E5.4** | `DespachanteDeEAs` + `RegistroDeEAs` + `--ea-dir`: inclusao/remocao a quente | pendente (codigo, sem pregao) |
-| **E5.5** | 2 EAs em dry_run, pregao inteiro, incluindo 1 a quente | pendente, **exige pregao** |
-| **E5.6** | 2 EAs em demo com ordens reais, subcontas separadas | pendente, **exige pregao** |
+| **E5.2** | ~~Migrar para familia V2 com SubAccountID~~ | **CANCELADO** -- caminho B dispensa (ver 4.2). `ea-contas` lista subcontas como diagnostico (v2.52/v2.53) |
+| **E5.4** | `DespachanteDeEAs` + `RegistroDeEAs` + `--ea-dir`: inclusao/remocao a quente, 1 EA por ticker | pendente (codigo, sem pregao) |
+| **E5.5** | 2 EAs em dry_run, pregao inteiro, incluindo 1 incluido a quente | pendente, **exige pregao** |
+| **E5.6** | 2 EAs em demo com ordens reais, tickers diferentes | pendente, **exige pregao** |
 
 ### 4.8 O que NAO vou fazer sem ordem explicita
 

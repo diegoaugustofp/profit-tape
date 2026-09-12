@@ -1735,3 +1735,32 @@ com SubAccountID) e o E5.4 (despachante dinamico).
   entre ativos distintos.
 - 3 testes novos (licenca negada nao vira "sem subconta"; conta sai
   marcada; outro erro NL nao e' confundido com licenca). 721 testes.
+
+### Continuacao (2026-09-11) — caminho B: 1 EA por TICKER, subcontas descartadas (v2.54)
+
+- Operador leu a documentacao da Nelogica ("Modulo de Subcontas") e viu
+  que estavamos usando o conceito errado: subconta e' infraestrutura de
+  MESA PROPRIETARIA (conta Master administrando operadores, perfis de
+  risco, corretagem por operador), nao mecanismo para separar
+  estrategias do mesmo operador. O NL_LICENSE_NOT_ALLOWED nao era
+  recurso a ativar -- e' produto de outro publico.
+- Operador tambem identificou a confusao que causou a volta: o que ele
+  cria no Profit e' CARTEIRA, que e' agrupamento de visualizacao DENTRO
+  da mesma conta de roteamento -- a ordem vai para a mesma conta na B3,
+  entao carteira NAO separa posicao e o netting continuaria. Nao
+  resolveria nem se a DLL a expusesse.
+- **Decisao: caminho B.** Cada EA opera um TICKER diferente (WIN e WDO).
+  Entre ativos distintos nao ha' netting por definicao. Isso dispensa
+  subconta, mantem SendZeroPositionAtMarket funcionando (zera por ativo
+  = por EA), deixa o E3 desagregado de graca, e **cancela o E5.2** -- a
+  familia LEGADA (ja' validada no E2/E3/E4) continua servindo, nao ha'
+  necessidade de migrar para V2.
+- Restricao declarada: dois EAs NAO podem operar o mesmo ticker. O
+  `RegistroDeEAs` (E5.4) recusa -- e' a trava que substitui a subconta.
+- `ea-contas` passa a explicar o que subconta realmente e', para nao
+  induzir a pedir liberacao de algo que nao resolveria nosso problema.
+- Secao 4 reescrita (4.2, diagrama 4.4, trava do 4.5, tabela 4.7).
+  721 testes, ruff e mypy limpos.
+
+**Proximo**: E5.4 (DespachanteDeEAs + RegistroDeEAs + --ea-dir), codigo
+puro, sem pregao.
