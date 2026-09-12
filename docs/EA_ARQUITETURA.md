@@ -1,4 +1,242 @@
-# EA de fluxo por corretora — arquitetura (esboco, 2026-08-24)
+# EA — arquitetura, estado atual e pipeline de desenvolvimento
+
+> **Como ler este arquivo.** As secoes 0 a 3 abaixo sao o ESTADO ATUAL,
+> reescritas a cada mudanca -- e' o que responde "onde cada coisa esta'
+> hoje". Da secao "Indice por assunto" em diante e' o HISTORICO
+> cronologico (cada sessao empilhou no fim, os titulos preservam a data
+> e o veredito da epoca) -- serve para entender POR QUE uma decisao foi
+> tomada, nao para saber o estado de hoje. Quando os dois divergirem,
+> o topo vence.
+
+---
+
+## 0. Pipeline de desenvolvimento de um EA
+
+As sete fases pelas quais QUALQUER estrategia passa neste projeto. Uma
+fase so' comeca quando a anterior fechou -- a disciplina existe porque
+pular fase foi o erro mais caro que ja' cometemos (ver
+`profit-tape-disciplina`: validar MECANISMO antes de calibrar NUMERO).
+
+| Fase | Nome | O que produz | Como sei que terminou |
+|---|---|---|---|
+| **F0** | Hipotese | uma frase de mecanismo: por que isto deveria funcionar | a frase existe e nao e' circular |
+| **F1** | Features | o sinal calculavel sobre dado historico, sem regra de saida | o numero sai do `curated` sem erro; categoria features, zero trial |
+| **F2** | Triagem | o sinal tem TAXA e EFEITO suficientes? redundante com o que ja' temos? | funil por clausula + poder estatistico: da' para decidir em < 6 meses? |
+| **F3** | Pre-registro | a ficha (hipotese, evento, taxa, efeito, horizonte, criterio, parada) | ficha escrita ANTES de qualquer codigo de execucao |
+| **F4** | Depuracao | replay pelo tape, com risco e execucao simulados | os numeros batem com o que a ficha previa; defeitos de especificacao corrigidos |
+| **F5** | Forward demo | ordens REAIS na conta de simulacao (E4) | slippage e latencia MEDIDOS, nao assumidos |
+| **F6** | Producao | conta real, capital de verdade | criterio da ficha atingido com n suficiente |
+
+**Regra de ouro entre F4 e F5**: a depuracao (F4) mede BORDA; o forward
+demo (F5) mede EXECUCAO. Uma estrategia sem borda em F4 nunca deve
+chegar a F5 -- medir slippage de algo que nao ganha dinheiro e' queimar
+tempo. Foi por isso que o scalp de Bollinger parou em F4.
+
+**A escada E0..E5 e' ortogonal a isto.** E0-E5 e' a INFRAESTRUTURA de
+execucao (a DLL sabe mandar ordem?), nao a estrategia. A infraestrutura
+E0-E4 esta' pronta e serve a QUALQUER estrategia que chegue em F5.
+
+---
+
+## 1. Onde cada EA esta' HOJE (2026-09-11)
+
+| EA | Fase | Estado | Proximo passo concreto |
+|---|---|---|---|
+| **z_agf_3** (venda + Rota B) | **F5** | forward demo MONTADO (v2.47), nunca disparou ordem real | ver 1 sinal virar ordem no pregao; conferir fill/slippage no Profit |
+| **DeepScalper Fase 2** (classificador) | **F3->F4** | forward LIGADO em 2026-09-09; placar fechado ate' n=50 | rodar `fase2-score` nos dias pendentes (offline) e esperar n |
+| **Scalp de Bollinger** (retorno) | **F4 — REPROVADO** | p1=0,480 IC(0,432-0,528), bruto -4,7 pts/op: null | nenhum. Capitulo fechado (2026-09-11) |
+| **Scalp de Bollinger** (rompimento) | **F4 — REPROVADO** | p1=0,415 IC(0,360-0,473), bruto -22,0: borda NEGATIVA | nenhum. Capitulo fechado (2026-09-11) |
+
+### z_agf_3 — o unico vivo em execucao
+
+Config: `config/ea_venda_rota_b.yaml` (`dry_run: true` no arquivo; o E4
+e' quem liga `dry_run=false` via `--ea-ticker-ordem`). Roda em dry_run
+DENTRO do record ha' semanas, decisoes logadas. Pre-requisito 5 da
+escada (comparar decisoes logadas contra o que o research previa)
+declarado satisfeito pelo operador em 2026-09-11.
+
+**O que falta para F6**: a borda so' foi medida em replay/dry_run.
+Slippage e latencia reais ainda nao entraram na conta -- e' exatamente
+o que o F5 existe para descobrir.
+
+### DeepScalper Fase 2 — em forward, nao mexer
+
+Ficha congelada, forward ligado em 2026-09-09, horizonte n=150
+(~33 pregoes). **O placar so' abre em n=50** -- olhar antes disso e'
+violar o proprio pre-registro. O ritual (`curate` -> `features` ->
+`fase2-score`) roda OFFLINE, sobre dado ja' capturado: pode ser feito
+em dia sem pregao.
+
+---
+
+## 2. Infraestrutura de execucao — escada E0..E5
+
+| | O que prova | Estado |
+|---|---|---|
+| **E0** | quais funcoes de ordem a DLL exporta | FECHADO (v2.05) |
+| **E1** | record sobe com login completo (roteamento) sem prejudicar captura | FECHADO (v2.08, testes A e B ao vivo) |
+| **E2** | uma ordem real (compra + zeragem) na conta demo | FECHADO (v2.41, `resultado=ok` ao vivo 2026-09-11 12:30) |
+| **E3** | reconciliacao de posicao EA x corretora, zeragem na divergencia | FECHADO (v2.48, confirmado com posicao ZERADA **e** ABERTA real) |
+| **E4** | forward em demo com ordens reais, 1 contrato, mede slippage/latencia | MONTADO (v2.47) -- **nunca viu sinal real disparar** |
+| **E5** | **multi-EA** (varias estrategias na mesma conexao) | **NAO COMECADO** -- ver plano abaixo |
+
+### Licoes da escada que valem para sempre
+
+1. **Ticker agregador nao serve para ordem.** `WINFUT` resolve para
+   DADO (subscribe, historico) mas a ProfitDLL nao faz cross-order no
+   ENVIO -- so' o contrato especifico (`WINV26`). Manual Nelogica, "Como
+   rotear ordens com a ProfitDLL". Hoje isso e' trava de construcao em
+   `OrdemDeTeste`, `ReconciliadorPosicao` e `ExecutorDeOrdens`.
+2. **Uma chave de ativacao = uma conexao.** Por isso o EA roda DENTRO
+   do processo do record, nao como processo separado.
+3. **Nunca reentrar na DLL de dentro de um callback.** Toda maquina de
+   estados (E2, E3) e' ticada pela thread principal do laco de
+   monitoramento.
+4. **Operacao manual e reconciliacao automatica sao mutuamente
+   exclusivas.** Com E3/E4 ativo, posicao aberta na mao pelo Profit e'
+   tratada como divergencia e zerada (medido 2026-09-11 21h).
+
+---
+
+## 3. Pendencias REAIS (o que de fato falta)
+
+Revisado linha a linha em 2026-09-11. As pendencias historicas listadas
+no corpo antigo deste arquivo estao TODAS resolvidas; o texto e' que
+nunca foi atualizado. Especificamente:
+
+| Pendencia antiga | Onde estava | Situacao real |
+|---|---|---|
+| "teste de concorrencia MarketLogin+MarketLogin" | L116-128 | RESOLVIDO 2026-08-27: colide igual -- foi o que motivou o EA dentro do record |
+| "NotImplementedError nos modulos de esboco" | L334 | RESOLVIDO: nao ha' um `NotImplementedError` sequer em `src/profittape/ea/` |
+| "AINDA NAO implementado: EABridge + --ea-config" | L455-470 | RESOLVIDO 2026-08-27 (`bridge.py` existe, `--ea-config` existe) |
+| "dry_run=False recusado por design" | L873-880 | SUPERADO pelo E4 (v2.47): agora e' suportado, so' em demo, com travas estruturais |
+| "arquitetura de longo prazo para dry_run=False" | L694 | RESOLVIDO: rota (b) escolhida e implementada (EA dentro do record) |
+
+**Pendencias de verdade, hoje:**
+
+1. **E4 nunca viu sinal real virar ordem** (bloqueado por pregao).
+2. **E5 nao comecado** -- exige refatoracao, ver plano na proxima secao.
+3. **Zeragem V2 struct-based** (`TConnectorZeroPosition`) e **health
+   check** (`GetHealthStatus`/`TSystemHealthState`, watchdog da DLL
+   4.0.0.41) mapeados nos exemplos oficiais, nunca implementados. Nao
+   bloqueiam nada; candidatos naturais para dia sem pregao.
+4. **`ea.exemplo.yaml` e `ea_venda_apenas.yaml`** continuam no repo mas
+   nao correspondem a nenhum EA vivo -- `ea_venda_rota_b.yaml` e' o
+   unico em uso. Vale consolidar para nao confundir sessao futura.
+
+---
+
+## 4. PLANO DO E5 — multi-EA (PROPOSTA, aguardando validacao do operador)
+
+> Status: **proposta**, escrita em 2026-09-11 para o operador validar
+> ANTES de qualquer implementacao. Nada disto esta' implementado.
+
+### 4.1 O que E5 e' e o que NAO e'
+
+E5 = rodar **mais de uma estrategia ao mesmo tempo**, na mesma conexao
+unica com a DLL, sem que uma atrapalhe a outra. Nao e' "ir para conta
+real" (isso e' a fase F6 do pipeline, decisao separada e posterior).
+
+**Por que agora**: hoje temos duas estrategias vivas em fases
+diferentes (`z_agf_3` em F5, DeepScalper Fase 2 em F3/F4). Quando o
+DeepScalper chegar em F5, as duas vao querer executar ao mesmo tempo --
+e a arquitetura atual nao suporta isso.
+
+### 4.2 Por que exige refatoracao (os 4 acoplamentos)
+
+O codigo atual assume **um EA por processo**, em quatro lugares:
+
+1. **`RecorderService` tem UM `ea_bridge`** (`self.ea_bridge`, singular)
+   e UM `client._on_trade_extra`. Dois EAs precisariam de um fan-out.
+2. **`GestorDeRisco` e' por simbolo, mas o capital e' global.** Cada
+   EAService constroi o seu com `config.risco.capital`. Com dois EAs,
+   cada um pensaria ter os R$ 5.000 inteiros -- risco real somado seria
+   o dobro do pretendido. **Este e' o acoplamento perigoso.**
+3. **`ExecutorDeOrdens` nao sabe de quem e' a posicao.** `SendZeroPosition`
+   zera a posicao do ATIVO na conta, nao "a posicao do EA X". Dois EAs
+   no mesmo ticker, um zera o outro.
+4. **`ReconciliadorPosicao` compara contra UM esperado.** Com dois EAs,
+   o esperado e' a SOMA -- e a divergencia nao diz de quem e'.
+
+### 4.3 Desenho proposto
+
+**Principio: isolar sinal, compartilhar risco e execucao.**
+
+```
+                  ProfitClient (uma conexao)
+                          |
+                    on_trade_extra
+                          |
+                  +---- fan-out ----+
+                  |                 |
+            EABridge(z_agf_3)   EABridge(deep_f2)     <- fila POR EA
+                  |                 |
+            EAService A         EAService B           <- sinal isolado
+                  |                 |
+                  +--- pedido ------+
+                          |
+                  SupervisorDeRisco                   <- NOVO: capital global,
+                          |                              circuit breaker global,
+                  ExecutorDeOrdens                       posicao por EA
+                     (um so')
+```
+
+**As tres pecas novas:**
+
+- **`SupervisorDeRisco`** (novo): dono do capital TOTAL e do circuit
+  breaker GLOBAL. Cada EAService pede autorizacao antes de abrir; o
+  supervisor conhece a exposicao somada e recusa se estourar. Os
+  `GestorDeRisco` individuais continuam existindo (stop/alvo/tempo por
+  operacao sao por estrategia), mas param de ser donos do capital.
+- **`LivroDePosicoes`** (novo): rastreia posicao POR EA POR ticker. E'
+  o que permite o E3 reconciliar contra a soma e ainda saber de quem e'
+  a divergencia. Tambem resolve o problema de zeragem: com dois EAs no
+  mesmo ticker, a "zeragem" de um vira uma ordem LIQUIDA calculada
+  (nao `SendZeroPosition` cego).
+- **Fan-out no `RecorderService`**: `self.ea_bridges` (lista) em vez de
+  `self.ea_bridge`. Cada bridge com sua propria fila -- um EA lento nao
+  pode atrasar o outro nem o hot path da captura.
+
+### 4.4 Decisao de escopo que preciso do operador
+
+Tem uma pergunta que muda MUITO o tamanho do trabalho:
+
+**Os dois EAs vao operar o MESMO ticker (WIN) ao mesmo tempo?**
+
+- **Se NAO** (um em WIN, outro em WDO, por exemplo): o trabalho cai
+  para ~metade. Sem posicao compartilhada, `SendZeroPosition` continua
+  servindo, o `LivroDePosicoes` fica simples e o E3 reconcilia por
+  ticker independentemente. So' `SupervisorDeRisco` + fan-out.
+- **Se SIM** (os dois em WIN): e' o caso completo acima. Zeragem vira
+  ordem liquida calculada, reconciliacao precisa desagregar, e existe
+  um caso feio: EA A quer comprar 1 enquanto EA B quer vender 1 --
+  liquido zero, mas duas ordens (duas corretagens) ou nenhuma? Precisa
+  de politica declarada.
+
+### 4.5 Ordem de implementacao proposta
+
+Cada passo entregavel e testavel sozinho, como a escada E0-E4:
+
+| Passo | O que | Risco |
+|---|---|---|
+| **E5.0** | `SupervisorDeRisco` puro (sem I/O), com capital global e exposicao somada. So' testes | baixo -- codigo puro |
+| **E5.1** | `LivroDePosicoes` puro: posicao por (EA, ticker), ordem liquida | baixo -- codigo puro |
+| **E5.2** | Fan-out no RecorderService: N bridges, N services, 1 executor | medio -- mexe no hot path da captura |
+| **E5.3** | E3 multi-EA: reconciliar contra a soma, atribuir divergencia | medio |
+| **E5.4** | 2 EAs em dry_run no record, pregao inteiro, sem ordem | validacao ao vivo |
+| **E5.5** | 2 EAs em demo com ordens reais | so' depois de E5.4 limpo |
+
+**E5.0 e E5.1 sao codigo puro** -- podem ser feitos em dia sem pregao,
+inclusive neste fim de semana, e nao dependem da resposta de 4.4 para
+comecar (a resposta muda o `LivroDePosicoes`, nao o `SupervisorDeRisco`).
+
+### 4.6 O que NAO vou fazer sem ordem explicita
+
+- Ligar E5 com ordens reais antes do E4 ter visto um sinal real.
+- Mexer no `z_agf_3` em producao para acomodar o multi-EA.
+- Qualquer mudanca que altere o comportamento do EA unico atual.
+
+---
 
 ## Indice por assunto
 
@@ -12,7 +250,7 @@ eixo "o que aconteceu em qual sessao".)
 
 **Concorrencia de sessao DLL (record + EA, uma so' chave de ativacao)**
 - [CORRIGIDO (2026-08-27) — a conclusao anterior estava ERRADA por interpretacao](#corrigido-2026-08-27--a-conclusao-anterior-estava-errada-por-interpretacao)
-- [Pergunta RESOLVIDA (2026-08-26) — teste de concorrencia real](#pergunta-resolvida-2026-08-26--teste-de-concorrencia-real-superado-ver-acima)
+- [Pergunta RESOLVIDA (2026-08-26) — teste de concorrencia real](#pergunta-resolvida-2026-08-26--teste-de-concorrencia-real-superado)
 - [CONFIRMADO (2026-08-27): MarketLogin+MarketLogin TAMBEM colide](#confirmado-2026-08-27-marketloginmarketlogin-tambem-colide----ea-replay-criado)
 - [DECISAO DE ARQUITETURA DE LONGO PRAZO: EA integrado ao processo do record (2026-08-27)](#decisao-de-arquitetura-de-longo-prazo-ea-integrado-ao-processo-do-record-2026-08-27)
 - [IMPLEMENTADO: EA integrado ao record (2026-08-27, noite)](#implementado-ea-integrado-ao-record-2026-08-27-noite)
@@ -127,7 +365,7 @@ precisa rodar DENTRO do mesmo processo/conexao do record (consumindo os
 trades que ele ja' esta capturando), nao como processo separado com
 conexao propria -- mudanca de arquitetura real, nao cosmetica.
 
-## Pergunta RESOLVIDA (2026-08-26) — teste de concorrencia real ~~[SUPERADO, ver acima]~~
+## Pergunta RESOLVIDA (2026-08-26) — teste de concorrencia real [SUPERADO]
 
 **Resultado: as duas conexoes COEXISTEM sem conflito.**
 
@@ -256,7 +494,7 @@ implausivel, ticker agregador) -- todos contra a fake, que usa a MESMA
 struct ctypes, ou seja, provam auto-consistencia da logica, nao
 correspondencia com a DLL real.
 
-### E4 dentro do record — ENTREGUE (v2.47, 2026-09-11), NAO VERIFICADO contra a DLL real
+### E4 dentro do record — MONTADO (v2.47, 2026-09-11), aguardando 1o sinal real
 
 Forward em demo com ordens reais, EA atual (`z_agf_3`, venda + Rota B,
 `ea_venda_rota_b.yaml`). O `dry_run=False` do `ea_config` deixa de ser
@@ -428,8 +666,7 @@ pergunta que ficou em aberto em 2026-08-27 mais cedo ("segunda chave OU
 integrar no processo do record") a favor da segunda opcao, por motivo
 contratual, nao de engenharia.
 
-### Design da integracao (FUNDACAO implementada, integracao completa
-### ainda pendente)
+### Design da integracao [historico -- integracao COMPLETA desde 2026-08-27]
 
 O `EventBus` (pipeline/bus.py) e' fila de UM consumidor -- dois
 consumidores nela competiriam pelos mesmos eventos, nao veriam cada um a
@@ -452,7 +689,9 @@ copia inteira. Por isso a integracao NAO reusa a fila do writer: usa um
 - `test_sem_on_trade_extra_comportamento_identico_a_sempre` prova
   retrocompatibilidade total.
 
-**AINDA NAO implementado** (proximos passos, nesta ordem):
+**AINDA NAO implementado** [historico -- os 3 itens abaixo foram
+implementados em 2026-08-27; o item 3 (dry_run=False) foi superado pelo
+E4 em 2026-09-11. Mantido para registro do raciocinio da epoca]:
 1. Um `EABridge` (fila PROPRIA, independente do EventBus do writer,
    mesmo filosofia de "perda contabilizada > perda silenciosa" -- se
    encher, descarta e conta, nunca bloqueia o hot path) + uma thread
@@ -979,7 +1218,7 @@ resultado de um pode invalidar o desenho dos seguintes (E0 decide a
 familia de funcoes que E2 usa; E1 decide se a captura sobrevive ao
 login completo). Nao pular.
 
-### E0 — ENTREGUE (v2.05), resultado pendente
+### E0 — FECHADO (v2.05) [historico; resultado chegou, ver secao 2]
 
 `profit-tape doctor` ganhou a secao "EXECUCAO (E0)". Informativa: nao
 altera o veredito PRONTO/PENDENCIAS do doctor, porque o doctor gateia o
@@ -995,7 +1234,7 @@ Minimo para o E2 por caminho:
 Se NENHUM caminho estiver completo, E1/E2 como desenhados nao sao
 possiveis e o proximo passo e' outro.
 
-### E1 — ENTREGUE (v2.06), aguardando os testes A e B do operador
+### E1 — FECHADO (v2.08) [historico; testes A e B passaram ao vivo]
 
 **O que entrou.** `ProfitClient(login_completo=True)` sobe a conexao com
 `DLLInitializeLogin` em vez de `MarketLogin`. Espelhado em

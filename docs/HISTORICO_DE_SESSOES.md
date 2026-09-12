@@ -1576,3 +1576,33 @@ do protocolo que o E3 usou.
   zeragem -- a combinacao que faltava; venda-com-divergencia e
   compra-sem-divergencia ja' existiam separados). 691 testes, ruff e
   mypy limpos.
+
+### Continuacao (2026-09-11, fim de semana) — revisao do EA_ARQUITETURA + plano do E5 (v2.49)
+
+- `EA_ARQUITETURA.md` reestruturado: o topo agora tem ESTADO ATUAL
+  (secoes 0-4), o resto continua sendo historico cronologico. Regra
+  declarada no cabecalho: quando topo e historico divergirem, o topo
+  vence.
+- **Pipeline de desenvolvimento de EA (F0-F6)** definido e cada EA
+  enquadrado: z_agf_3 em F5 (forward demo montado, sem sinal real
+  ainda), DeepScalper Fase 2 em F3/F4 (forward ligado 09/09, placar
+  fechado ate' n=50), scalp de Bollinger nas duas variantes em F4
+  REPROVADO. Regra F4->F5 registrada: depuracao mede BORDA, forward
+  demo mede EXECUCAO -- estrategia sem borda nunca deve chegar em F5.
+- **Revisao das pendencias historicas**: TODAS as 5 pendencias
+  declaradas no corpo antigo ja' estavam resolvidas e o texto nunca
+  tinha sido atualizado (teste de concorrencia, NotImplementedError,
+  EABridge+--ea-config, dry_run=False recusado, arquitetura de longo
+  prazo). Marcadas como resolvidas com ponteiro para onde/quando.
+  Titulos historicos desatualizados corrigidos com marca [historico].
+- **CORRECAO IMPORTANTE**: eu tinha escrito no resumo da sessao anterior
+  que E5 = "producao/conta real". Errado -- a escada original
+  (2026-09-08) define **E5 = multi-EA**. Producao e' a fase F6 do
+  pipeline, decisao separada. Corrigido no documento.
+- **Plano do E5 escrito como PROPOSTA** (secao 4), aguardando validacao:
+  4 acoplamentos que exigem refatoracao (o perigoso e' capital global --
+  hoje cada EAService acha que tem os R$5.000 inteiros), desenho com
+  `SupervisorDeRisco` + `LivroDePosicoes` + fan-out, e 6 passos
+  entregaveis (E5.0-E5.5). Pergunta aberta que muda o tamanho do
+  trabalho: os EAs vao operar o MESMO ticker simultaneamente?
+- E5.0 e E5.1 sao codigo puro -- podem ser feitos sem pregao.
