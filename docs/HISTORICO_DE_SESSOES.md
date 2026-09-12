@@ -1606,3 +1606,44 @@ do protocolo que o E3 usou.
   entregaveis (E5.0-E5.5). Pergunta aberta que muda o tamanho do
   trabalho: os EAs vao operar o MESMO ticker simultaneamente?
 - E5.0 e E5.1 sao codigo puro -- podem ser feitos sem pregao.
+
+### Continuacao (2026-09-11) — E5 redesenhado com SUBCONTAS; E5.0 e E5.1 entregues (v2.50)
+
+Decisoes do operador que mudaram o desenho do E5:
+- **Subcontas separam a execucao**: cada EA na sua. Resolve o netting
+  (na mesma conta, compra de um EA anula venda do outro e ninguem sabe
+  de quem e' o que). Com subconta, `SendZeroPosition` volta a funcionar
+  direto e a reconciliacao desagrega naturalmente.
+- **Consequencia obrigatoria**: a familia LEGADA (SendMarketBuyOrder,
+  SendZeroPositionAtMarket) nao tem parametro de subconta. So' a V2
+  struct-based tem (`SubAccountID` dentro de TConnectorAccountIdentifier)
+  -- confirmado no main.py oficial. Operador decidiu MIGRAR TUDO para
+  V2. Isso exige revalidar E2/E3/E4 ao vivo, porque a legada e' a unica
+  familia que foi validada de verdade.
+- **Risco e' INFORMATIVO, nunca limitante**: o sistema calcula e
+  apresenta (capital recomendado, exposicao somada, cobertura) e AVISA
+  -- nunca impede. Se o operador opera com R$2.000 onde o recomendado
+  e' R$5.000, executa mesmo assim; o risco, inclusive de zeragem por
+  falta de margem, e' dele. A conta precisa suportar os N EAs -- dito
+  explicitamente. Zeragem em cascata fica FORA do escopo.
+- Nota preservada no desenho: o circuit breaker de perdas consecutivas
+  continua trava DE VERDADE -- protege contra DEFEITO de estrategia,
+  nao contra escolha de capital. Sao coisas diferentes.
+
+Entregue:
+- `ea/supervisor.py` (E5.0): `SupervisorDeRisco` informativo.
+  `capital_recomendado_para()` e' a inversa da formula do
+  `GestorDeRisco` -- confere com o default historico (stop 500 pts,
+  1 WIN, risco 2% -> R$5.000). Alerta em 3 niveis, detecta subconta
+  compartilhada e EA sem subconta em multi-EA. NAO tem `pode_abrir`
+  nem `bloqueado` -- e um teste garante que nao volte a ter.
+- `ea/livro.py` (E5.1): `LivroDePosicoes`, posicao por (EA, subconta,
+  ticker), preco medio ponderado, virada de lado, reconciliacao que
+  ATRIBUI dono a divergencia (possivel so' por causa da subconta) e
+  marca posicao orfa como "(ninguem)" -- o caso da operacao manual que
+  o E3 encontrou ao vivo.
+- Conferido a mao antes dos testes formais nos dois modulos. 23 testes
+  novos, 714 no total, ruff e mypy limpos.
+
+**Pendente**: E5.2 (migrar execucao para V2 com SubAccountID) em
+diante. E5.3, E5.5 e E5.6 exigem pregao.

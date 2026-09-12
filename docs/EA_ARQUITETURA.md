@@ -126,10 +126,10 @@ nunca foi atualizado. Especificamente:
 
 ---
 
-## 4. PLANO DO E5 — multi-EA (PROPOSTA, aguardando validacao do operador)
+## 4. PLANO DO E5 — multi-EA com SUBCONTAS (validado 2026-09-11)
 
-> Status: **proposta**, escrita em 2026-09-11 para o operador validar
-> ANTES de qualquer implementacao. Nada disto esta' implementado.
+> Status: desenho **validado pelo operador** em 2026-09-11. E5.0 e E5.1
+> implementados; o resto pendente.
 
 ### 4.1 O que E5 e' e o que NAO e'
 
@@ -137,30 +137,51 @@ E5 = rodar **mais de uma estrategia ao mesmo tempo**, na mesma conexao
 unica com a DLL, sem que uma atrapalhe a outra. Nao e' "ir para conta
 real" (isso e' a fase F6 do pipeline, decisao separada e posterior).
 
-**Por que agora**: hoje temos duas estrategias vivas em fases
-diferentes (`z_agf_3` em F5, DeepScalper Fase 2 em F3/F4). Quando o
-DeepScalper chegar em F5, as duas vao querer executar ao mesmo tempo --
-e a arquitetura atual nao suporta isso.
+### 4.2 Decisao do operador: SUBCONTAS separam a execucao
 
-### 4.2 Por que exige refatoracao (os 4 acoplamentos)
+Cada EA opera em sua propria **subconta**. Isso resolve o problema mais
+feio do multi-EA numa conta so': o NETTING. Na mesma conta, EA A
+comprando 1 e EA B vendendo 1 se anulam -- a B3 ve posicao liquida zero
+e nao ha' como saber de quem e' o que. Em subcontas separadas, cada EA
+tem posicao propria, `SendZeroPosition` volta a funcionar direto (sem
+calculo de ordem liquida) e a reconciliacao (E3) desagrega naturalmente.
 
-O codigo atual assume **um EA por processo**, em quatro lugares:
+**Consequencia tecnica obrigatoria**: a familia LEGADA que usamos hoje
+(`SendMarketBuyOrder`, `SendZeroPositionAtMarket`) recebe conta e
+corretora como strings soltas e **nao tem parametro de subconta**.
+Subconta so' existe na familia **V2 struct-based**
+(`SendOrder`/`SendZeroPositionV2`), onde `SubAccountID` viaja dentro de
+`TConnectorAccountIdentifier` -- confirmado no `main.py` oficial da
+Nelogica (toda ordem, zeragem e consulta levam o campo).
 
-1. **`RecorderService` tem UM `ea_bridge`** (`self.ea_bridge`, singular)
-   e UM `client._on_trade_extra`. Dois EAs precisariam de um fan-out.
-2. **`GestorDeRisco` e' por simbolo, mas o capital e' global.** Cada
-   EAService constroi o seu com `config.risco.capital`. Com dois EAs,
-   cada um pensaria ter os R$ 5.000 inteiros -- risco real somado seria
-   o dobro do pretendido. **Este e' o acoplamento perigoso.**
-3. **`ExecutorDeOrdens` nao sabe de quem e' a posicao.** `SendZeroPosition`
-   zera a posicao do ATIVO na conta, nao "a posicao do EA X". Dois EAs
-   no mesmo ticker, um zera o outro.
-4. **`ReconciliadorPosicao` compara contra UM esperado.** Com dois EAs,
-   o esperado e' a SOMA -- e a divergencia nao diz de quem e'.
+Operador decidiu (2026-09-11): **migrar TUDO para V2**, nao manter dois
+caminhos. Isso exige revalidar a execucao ao vivo, porque a legada e' a
+unica familia que o E2 validou de verdade.
 
-### 4.3 Desenho proposto
+### 4.3 Decisao do operador: risco e' INFORMATIVO, nunca limitante
 
-**Principio: isolar sinal, compartilhar risco e execucao.**
+Mudanca de filosofia frente ao `GestorDeRisco` atual, que BLOQUEIA
+(`pode_abrir()` retorna False e o EA nao opera):
+
+- O sistema **calcula e apresenta**: capital recomendado por EA,
+  capital total recomendado, exposicao somada, risco por operacao.
+- O sistema **nunca impede** o operador de operar. Se ele tem R$ 2.000
+  em conta e o recomendado e' R$ 5.000, o sistema AVISA (log de alerta,
+  visivel) e executa assim mesmo.
+- **A decisao e o risco sao sempre do operador**, inclusive o de ser
+  zerado por falta de margem.
+- A conta precisa suportar financeiramente os N EAs -- isso e'
+  responsabilidade do operador, declarada explicitamente aqui.
+
+**Fora do escopo, por decisao**: zeragem em cascata por falta de margem
+(o que a corretora faz quando o capital acaba). Nao vamos modelar nem
+gerenciar isso.
+
+Nota: o circuit breaker por PERDAS CONSECUTIVAS continua sendo trava de
+verdade -- ele protege contra defeito de estrategia (sequencia anomala),
+nao contra escolha de capital do operador. Sao coisas diferentes.
+
+### 4.4 Desenho
 
 ```
                   ProfitClient (uma conexao)
@@ -169,72 +190,41 @@ O codigo atual assume **um EA por processo**, em quatro lugares:
                           |
                   +---- fan-out ----+
                   |                 |
-            EABridge(z_agf_3)   EABridge(deep_f2)     <- fila POR EA
+            EABridge(z_agf_3)   EABridge(deep_f2)    <- fila POR EA
                   |                 |
-            EAService A         EAService B           <- sinal isolado
+            EAService A         EAService B          <- sinal + risco
+                  |                 |                   isolados
+            subconta A          subconta B           <- execucao isolada
                   |                 |
-                  +--- pedido ------+
-                          |
-                  SupervisorDeRisco                   <- NOVO: capital global,
-                          |                              circuit breaker global,
-                  ExecutorDeOrdens                       posicao por EA
-                     (um so')
+                  +--- ExecutorV2 --+                <- SendOrder com
+                          |                             SubAccountID
+                  SupervisorDeRisco                  <- so' CALCULA e
+                     (informativo)                      AVISA, nao trava
 ```
 
-**As tres pecas novas:**
+Com subcontas, o `LivroDePosicoes` fica simples: a posicao de cada EA e'
+a posicao da SUA subconta, consultavel direto via `GetPositionV2` com o
+`SubAccountID` preenchido. Nao precisa de rastreio paralelo nem de
+ordem liquida calculada.
 
-- **`SupervisorDeRisco`** (novo): dono do capital TOTAL e do circuit
-  breaker GLOBAL. Cada EAService pede autorizacao antes de abrir; o
-  supervisor conhece a exposicao somada e recusa se estourar. Os
-  `GestorDeRisco` individuais continuam existindo (stop/alvo/tempo por
-  operacao sao por estrategia), mas param de ser donos do capital.
-- **`LivroDePosicoes`** (novo): rastreia posicao POR EA POR ticker. E'
-  o que permite o E3 reconciliar contra a soma e ainda saber de quem e'
-  a divergencia. Tambem resolve o problema de zeragem: com dois EAs no
-  mesmo ticker, a "zeragem" de um vira uma ordem LIQUIDA calculada
-  (nao `SendZeroPosition` cego).
-- **Fan-out no `RecorderService`**: `self.ea_bridges` (lista) em vez de
-  `self.ea_bridge`. Cada bridge com sua propria fila -- um EA lento nao
-  pode atrasar o outro nem o hot path da captura.
+### 4.5 Ordem de implementacao
 
-### 4.4 Decisao de escopo que preciso do operador
-
-Tem uma pergunta que muda MUITO o tamanho do trabalho:
-
-**Os dois EAs vao operar o MESMO ticker (WIN) ao mesmo tempo?**
-
-- **Se NAO** (um em WIN, outro em WDO, por exemplo): o trabalho cai
-  para ~metade. Sem posicao compartilhada, `SendZeroPosition` continua
-  servindo, o `LivroDePosicoes` fica simples e o E3 reconcilia por
-  ticker independentemente. So' `SupervisorDeRisco` + fan-out.
-- **Se SIM** (os dois em WIN): e' o caso completo acima. Zeragem vira
-  ordem liquida calculada, reconciliacao precisa desagregar, e existe
-  um caso feio: EA A quer comprar 1 enquanto EA B quer vender 1 --
-  liquido zero, mas duas ordens (duas corretagens) ou nenhuma? Precisa
-  de politica declarada.
-
-### 4.5 Ordem de implementacao proposta
-
-Cada passo entregavel e testavel sozinho, como a escada E0-E4:
-
-| Passo | O que | Risco |
+| Passo | O que | Estado |
 |---|---|---|
-| **E5.0** | `SupervisorDeRisco` puro (sem I/O), com capital global e exposicao somada. So' testes | baixo -- codigo puro |
-| **E5.1** | `LivroDePosicoes` puro: posicao por (EA, ticker), ordem liquida | baixo -- codigo puro |
-| **E5.2** | Fan-out no RecorderService: N bridges, N services, 1 executor | medio -- mexe no hot path da captura |
-| **E5.3** | E3 multi-EA: reconciliar contra a soma, atribuir divergencia | medio |
-| **E5.4** | 2 EAs em dry_run no record, pregao inteiro, sem ordem | validacao ao vivo |
-| **E5.5** | 2 EAs em demo com ordens reais | so' depois de E5.4 limpo |
-
-**E5.0 e E5.1 sao codigo puro** -- podem ser feitos em dia sem pregao,
-inclusive neste fim de semana, e nao dependem da resposta de 4.4 para
-comecar (a resposta muda o `LivroDePosicoes`, nao o `SupervisorDeRisco`).
+| **E5.0** | `SupervisorDeRisco` informativo: capital recomendado, exposicao somada, alertas -- sem travar nada | **ENTREGUE v2.50** |
+| **E5.1** | `LivroDePosicoes`: posicao por (EA, subconta, ticker) | **ENTREGUE v2.50** |
+| **E5.2** | Migrar execucao para a familia V2 (`SendOrder`, `SendZeroPositionV2`) com `SubAccountID` | pendente |
+| **E5.3** | Revalidar E2/E3/E4 na familia V2, ao vivo (a legada era a unica validada) | pendente, exige pregao |
+| **E5.4** | Fan-out no RecorderService: N bridges, N services | pendente |
+| **E5.5** | 2 EAs em dry_run no record, pregao inteiro | pendente, exige pregao |
+| **E5.6** | 2 EAs em demo com ordens reais, subcontas separadas | pendente, exige pregao |
 
 ### 4.6 O que NAO vou fazer sem ordem explicita
 
 - Ligar E5 com ordens reais antes do E4 ter visto um sinal real.
 - Mexer no `z_agf_3` em producao para acomodar o multi-EA.
-- Qualquer mudanca que altere o comportamento do EA unico atual.
+- Trocar o circuit breaker de perdas consecutivas por algo informativo
+  (ele e' trava de DEFEITO, nao de escolha de capital).
 
 ---
 
