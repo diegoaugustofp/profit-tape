@@ -1712,3 +1712,26 @@ So' documentacao nesta entrega. 714 testes, ruff e mypy limpos.
 
 **Pendente**: o resto do E5.2 (migrar ENVIO de ordem para a familia V2
 com SubAccountID) e o E5.4 (despachante dinamico).
+
+### Continuacao (2026-09-11) — subcontas BLOQUEADAS pela licenca (v2.53)
+
+- `ea-contas` rodou na DLL real: 2 contas, ZERO subcontas -- mas o
+  operador TEM subcontas criadas (2 no Simulador, 1 na XP, visiveis no
+  Profit Chart). O app de teste oficial da Nelogica devolve
+  `GetSubAccounts: NL_LICENSE_NOT_ALLOWED` -- confirma que nao e' erro
+  nosso: a chave de ativacao nao tem o recurso liberado.
+- DEFEITO NOSSO que o teste expos: `listar_subcontas` tratava qualquer
+  retorno negativo como aviso silencioso e devolvia lista vazia. O
+  operador leu "subcontas: nenhuma" (que sugere "e' so' criar") quando
+  a verdade era "a licenca nem deixa perguntar" -- mandou procurar
+  problema no lugar errado. Corrigido: `SubcontasIndisponiveis`
+  (excecao propria, com `por_licenca`), campo
+  `subcontas_indisponiveis` na conta, e a CLI passa a dizer
+  explicitamente NAO FOI POSSIVEL CONSULTAR + o que fazer.
+- `-2147483630` adicionado a tabela de erros NL.
+- **Impacto no E5**: o desenho de subcontas separadas fica BLOQUEADO
+  ate' a Nelogica liberar. Alternativa registrada: multi-EA em tickers
+  DIFERENTES (WIN e WDO) dispensa subconta, porque nao ha' netting
+  entre ativos distintos.
+- 3 testes novos (licenca negada nao vira "sem subconta"; conta sai
+  marcada; outro erro NL nao e' confundido com licenca). 721 testes.

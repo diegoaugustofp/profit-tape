@@ -3706,6 +3706,7 @@ def ea_contas(
     typer.echo(f"\n{len(contas)} conta(s) encontrada(s):")
     typer.echo("-" * 70)
     total_subs = 0
+    bloqueadas = 0
     for c in contas:
         typer.echo(f"  corretora_id={c.corretora_id:<6} corretora={c.corretora_nome}")
         typer.echo(f"  account_id={c.account_id!r:<12} titular={c.titular}")
@@ -3714,6 +3715,13 @@ def ea_contas(
             typer.echo(f"  subcontas ({len(c.subcontas)}):")
             for sub in c.subcontas:
                 typer.echo(f"      sub_account_id={sub.sub_account_id!r}")
+        elif c.subcontas_indisponiveis:
+            # NAO dizer "nenhuma" aqui: a consulta FALHOU, entao nao
+            # sabemos se existem. Ver 2026-09-11 -- o operador tinha
+            # subcontas criadas e o comando dizia "nenhuma".
+            bloqueadas += 1
+            typer.echo("  subcontas: NAO FOI POSSIVEL CONSULTAR")
+            typer.echo(f"      {c.subcontas_indisponiveis}")
         else:
             typer.echo("  subcontas: nenhuma")
         typer.echo("-" * 70)
@@ -3725,6 +3733,19 @@ def ea_contas(
     if total_subs:
         typer.echo(f"\n{total_subs} subconta(s) no total. Para o multi-EA (E5), use uma")
         typer.echo("subconta POR EA no campo `subconta:` do yaml de cada um.")
+    elif bloqueadas:
+        if any(c.subcontas_erro_licenca for c in contas):
+            typer.echo("\nA DLL RECUSOU listar subcontas: NL_LICENSE_NOT_ALLOWED.")
+            typer.echo("Isso NAO e' erro de codigo nem falta de subconta -- a chave de")
+            typer.echo("ativacao nao tem o recurso de subcontas liberado. O app de teste")
+            typer.echo("oficial da Nelogica devolve o mesmo erro, o que confirma.")
+            typer.echo("")
+            typer.echo("O que fazer: pedir a liberacao a Nelogica/corretora, citando")
+            typer.echo("GetSubAccounts e NL_LICENSE_NOT_ALLOWED (-2147483630).")
+            typer.echo("Ate' la', o multi-EA (E5) NAO pode usar subcontas separadas --")
+            typer.echo("ver docs/EA_ARQUITETURA.md secao 4.2.")
+        else:
+            typer.echo("\nNao foi possivel consultar as subcontas (ver detalhe acima).")
     else:
         typer.echo("\nNenhuma subconta encontrada. Isso e' normal se voce ainda nao")
         typer.echo("criou nenhuma -- a DLL NAO cria subconta (so' le), a criacao e'")

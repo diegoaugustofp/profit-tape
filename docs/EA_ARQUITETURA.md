@@ -153,6 +153,18 @@ de subconta**. Subconta so' existe na familia **V2 struct-based**
 (`SendOrder`/`SendZeroPositionV2`), onde `SubAccountID` viaja dentro de
 `TConnectorAccountIdentifier`. Operador decidiu migrar TUDO para V2.
 
+**BLOQUEIO ATIVO (2026-09-11): NL_LICENSE_NOT_ALLOWED.** O operador tem
+subcontas criadas (2 no Simulador, 1 na XP, visiveis no Profit Chart),
+mas `GetSubAccounts` devolve `-2147483630` -- a chave de ativacao nao
+tem o recurso liberado. O app de teste OFICIAL da Nelogica devolve o
+MESMO erro, o que descarta problema no nosso codigo. **Enquanto isso
+nao for liberado pela Nelogica/corretora, o E5 nao pode usar subcontas
+separadas** -- e sem elas, dois EAs no mesmo ticker se netam e a
+divergencia nao tem dono (e' todo o motivo da secao 4.2). Caminhos:
+(a) pedir liberacao citando GetSubAccounts e NL_LICENSE_NOT_ALLOWED;
+(b) rodar multi-EA em TICKERS DIFERENTES (WIN e WDO), onde o netting
+nao acontece e subconta e' dispensavel.
+
 **A DLL NAO CRIA SUBCONTA** (verificado no manual, 2026-09-11): as
 unicas funcoes de conta sao de LEITURA -- `GetAccount`,
 `GetAccountCount`, `GetAccounts`, `GetAccountDetails`,

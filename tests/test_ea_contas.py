@@ -10,6 +10,8 @@ from __future__ import annotations
 import threading
 import time
 
+import pytest
+
 from profittape.config import Credenciais
 from profittape.ea.contas import ContaEncontrada, listar_contas
 
@@ -269,11 +271,39 @@ def test_dll_sem_suporte_a_subconta_nao_quebra() -> None:
     assert listar_subcontas(_SemSubconta(), 32006, "DEMO-1") == []
 
 
-def test_erro_ao_contar_subcontas_nao_derruba_a_listagem() -> None:
-    """Codigo NL negativo -> lista vazia, nunca excecao: a conta ja' foi
-    descoberta com sucesso; subconta e' informacao adicional."""
-    from profittape.ea.contas import listar_subcontas
+def test_licenca_negada_NAO_pode_parecer_conta_sem_subconta() -> None:
+    """Caso REAL de 2026-09-11: o operador tinha subcontas criadas e viu
+    "subcontas: nenhuma". A causa era NL_LICENSE_NOT_ALLOWED
+    (-2147483630) -- a licenca nem deixa PERGUNTAR. Confundir os dois
+    casos mandou o operador procurar problema no lugar errado."""
+    from profittape.ea.contas import SubcontasIndisponiveis, listar_subcontas
+
+    fake = _FakeLoginCompleto()
+    fake.GetSubAccountCount = lambda ptr: -2147483630  # type: ignore[method-assign]
+    with pytest.raises(SubcontasIndisponiveis) as exc:
+        listar_subcontas(fake, 32006, "DEMO-1")
+    assert exc.value.por_licenca is True
+    assert "NL_LICENSE_NOT_ALLOWED" in str(exc.value)
+
+
+def test_listar_contas_marca_a_conta_e_segue_quando_a_licenca_nega() -> None:
+    """A listagem de CONTAS (objetivo principal) nao pode quebrar -- mas a
+    conta tem que sair marcada, para a exibicao nao mentir."""
+    fake = _FakeLoginCompleto(contas=[(32006, "Simulador", "DEMO-1", "D")])
+    fake.GetSubAccountCount = lambda ptr: -2147483630  # type: ignore[method-assign]
+    contas = listar_contas(_cred(), timeout_s=5, dll_injetada=fake)
+    assert len(contas) == 1
+    c = contas[0]
+    assert c.subcontas == []
+    assert c.subcontas_erro_licenca is True
+    assert c.subcontas_indisponiveis and "licenca" in c.subcontas_indisponiveis.lower()
+
+
+def test_outro_erro_nl_tambem_marca_mas_nao_como_licenca() -> None:
+    from profittape.ea.contas import SubcontasIndisponiveis, listar_subcontas
 
     fake = _FakeLoginCompleto()
     fake.GetSubAccountCount = lambda ptr: -2147483645  # type: ignore[method-assign]
-    assert listar_subcontas(fake, 32006, "DEMO-1") == []
+    with pytest.raises(SubcontasIndisponiveis) as exc:
+        listar_subcontas(fake, 32006, "DEMO-1")
+    assert exc.value.por_licenca is False

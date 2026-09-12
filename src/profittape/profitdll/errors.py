@@ -35,6 +35,13 @@ _ERRORS: dict[int, str] = {
     # 'data inicial' dentro dos ultimos 30 dias corridos a partir de hoje.
     # Nao e' restricao de conta/conexao — e' limite documentado da funcao.
     # Ver docs/OPERACAO.md para o que isso implica no backfill.
+    # Encontrado ao vivo (2026-09-11): GetSubAccounts devolve isto quando
+    # a chave de ativacao nao tem o recurso de subcontas liberado. NAO e'
+    # erro de codigo nem "conta sem subconta" -- o app de teste oficial da
+    # Nelogica devolve o mesmo. So' a Nelogica/corretora libera.
+    -2147483630: "Recurso nao liberado na licenca (NL_LICENSE_NOT_ALLOWED) "
+                 "— a chave de ativacao nao tem permissao para este "
+                 "recurso; pedir liberacao a Nelogica/corretora",
     -2147483602: "Periodo de historico excede o limite permitido "
                  "(data inicial com mais de 30 dias) — GetHistoryTrades "
                  "so' cobre os ultimos ~30 dias corridos a partir de hoje",

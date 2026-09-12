@@ -40,6 +40,7 @@ from ..profitdll.bindings import (
     check_exports_ea_contas,
     load_dll,
 )
+from ..profitdll.errors import describe
 from ..profitdll.types import (
     TConnectorAccountIdentifier,
     TConnectorAccountIdentifierOut,
@@ -54,6 +55,25 @@ _LOGIN_ERROS = {
     LoginResult.EXPIRED_PASS: "senha expirada",
     LoginResult.UNKNOWN_ERR: "erro interno de login (LOGIN_UNKNOWN_ERR)",
 }
+
+
+class SubcontasIndisponiveis(RuntimeError):
+    """A DLL recusou enumerar subcontas. Diferente de "conta sem
+    subconta" (que e' lista vazia, sem excecao). O caso mais comum,
+    medido em 2026-09-11, e' NL_LICENSE_NOT_ALLOWED (-2147483630): a
+    chave de ativacao nao tem o recurso liberado -- so' a Nelogica ou a
+    corretora resolve, nao ha' o que mudar no codigo."""
+
+    def __init__(self, mensagem: str, codigo: int, corretora_id: int,
+                 account_id: str) -> None:
+        super().__init__(mensagem)
+        self.codigo = codigo
+        self.corretora_id = corretora_id
+        self.account_id = account_id
+
+    @property
+    def por_licenca(self) -> bool:
+        return self.codigo == -2147483630
 
 
 @dataclass
@@ -75,6 +95,10 @@ class ContaEncontrada:
     account_id: str
     titular: str
     subcontas: list[SubcontaEncontrada] = field(default_factory=list)
+    # None = consulta funcionou (subcontas pode estar vazia legitimamente).
+    # str = a consulta FALHOU; lista vazia NAO significa 'nao tem'.
+    subcontas_indisponiveis: str | None = None
+    subcontas_erro_licenca: bool = False
 
 
 @dataclass
@@ -114,13 +138,16 @@ def listar_subcontas(dll: Any, corretora_id: int, account_id: str) -> list[Subco
         sub_account_id=None, reserved=0,
     )
     n = int(dll.GetSubAccountCount(pointer(mestre)))
-    if n <= 0:
-        # n<0 e' codigo de erro NL; n==0 e' "nao tem subconta". Os dois
-        # levam ao mesmo lugar aqui (lista vazia), mas logam diferente
-        # para nao esconder um erro real atras de "conta sem subconta".
-        if n < 0:
-            log.warning("ea_contas.subcontas_erro", corretora_id=corretora_id,
-                        account_id=account_id, retorno=n)
+    if n < 0:
+        # ERRO, nao "conta sem subconta". Distinguir importa: em
+        # 2026-09-11 o operador viu "subcontas: nenhuma" (que sugere "e'
+        # so' criar") quando a verdade era NL_LICENSE_NOT_ALLOWED -- a
+        # licenca nem deixa PERGUNTAR. O app de teste oficial da Nelogica
+        # devolve o mesmo codigo, o que descarta erro nosso.
+        raise SubcontasIndisponiveis(
+            f"GetSubAccountCount devolveu {n}: {describe(n)}",
+            codigo=n, corretora_id=corretora_id, account_id=account_id)
+    if n == 0:
         return []
 
     buf = (TConnectorAccountIdentifierOut * n)()
@@ -128,9 +155,9 @@ def listar_subcontas(dll: Any, corretora_id: int, account_id: str) -> list[Subco
         item.version = 0
     devolvidas = int(dll.GetSubAccounts(pointer(mestre), 0, 0, n, buf))
     if devolvidas < 0:
-        log.warning("ea_contas.subcontas_erro_enumerar", corretora_id=corretora_id,
-                    account_id=account_id, retorno=devolvidas)
-        return []
+        raise SubcontasIndisponiveis(
+            f"GetSubAccounts devolveu {devolvidas}: {describe(devolvidas)}",
+            codigo=devolvidas, corretora_id=corretora_id, account_id=account_id)
 
     achadas: list[SubcontaEncontrada] = []
     for i in range(min(devolvidas, n)):
@@ -303,7 +330,19 @@ def listar_contas(cred: Credenciais, timeout_s: float = 15.0,
     for c in unicas:
         try:
             c.subcontas = listar_subcontas(dll, c.corretora_id, c.account_id)
+        except SubcontasIndisponiveis as exc:
+            # Guardado na conta, NAO engolido: quem exibe precisa poder
+            # dizer "a licenca nao permite" em vez de "nenhuma subconta",
+            # que sugeriria que bastaria criar uma. Confusao real em
+            # 2026-09-11: o operador tinha subcontas criadas e o comando
+            # dizia "nenhuma".
+            c.subcontas_indisponiveis = str(exc)
+            c.subcontas_erro_licenca = exc.por_licenca
+            log.warning("ea_contas.subcontas_indisponiveis", corretora_id=c.corretora_id,
+                        account_id=c.account_id, codigo=exc.codigo,
+                        por_licenca=exc.por_licenca, detalhe=str(exc))
         except Exception as exc:
+            c.subcontas_indisponiveis = repr(exc)
             log.warning("ea_contas.subcontas_falharam", corretora_id=c.corretora_id,
                         account_id=c.account_id, erro=repr(exc))
 
