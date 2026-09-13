@@ -1237,7 +1237,7 @@ def eas_preco(
         r["equivalencia"] = equivalencia(r["barras"], tolerancia)
     m = r["meta"]
     typer.echo("=" * 72)
-    typer.echo("EAs DE PRECO — dump do grafico M15 (ficha IFR2 v0)")
+    typer.echo("EAs DE PRECO — dump do grafico M15 (ficha IFR2 v1: K=0,5, regime = estrato)")
     typer.echo("=" * 72)
     typer.echo(
         f"  {m['barras']} barras | {m['pregoes']} pregoes | {m['blocos']} bloco(s) "
@@ -1252,7 +1252,8 @@ def eas_preco(
             if det.get("comparaveis"):
                 typer.echo(
                     f"      {var:12} n={det['comparaveis']:5d} "
-                    f"dif_max={det['dif_max']} dif_mediana={det['dif_mediana']}"
+                    f"dif_max={det['dif_max']} em {det['dif_max_em']} "
+                    f"dif_mediana={det['dif_mediana']}"
                 )
     pt = r["pontos"]
     typer.echo("\n--- EM PONTOS (7.5) ---")

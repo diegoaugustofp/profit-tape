@@ -153,27 +153,30 @@ def _cenario(tmp_path: Path) -> pd.DataFrame:
 
 
 def test_funil_ifr2_clausula_a_clausula(tmp_path: Path) -> None:
+    """Ficha v1: regime NAO e' clausula -- vira estrato do sinal."""
     x = _cenario(tmp_path)
     f = ep.contar_clausulas(x).set_index(["lado", "clausula"])["n"]
     assert f[("compra", "extremo")] == 4                  # 09:00, 09:30, 09:45, dia2 10:30
     assert f[("compra", "+excursao (1 sinal por excursao)")] == 3   # 09:00, 09:30, dia2 10:30
-    assert f[("compra", "+regime MME80")] == 2            # dia2 10:30 cai
-    assert f[("compra", "+janela 09:15-16:30")] == 1      # 09:00 cai
-    assert f[("compra", "+t+1 existe e D ok = SINAL")] == 1
+    assert f[("compra", "+janela 09:15-16:30")] == 2      # 09:00 cai
+    assert f[("compra", "+t+1 existe e D ok = SINAL")] == 2
+    assert f[("compra", "(estrato) sinal a favor da MME80")] == 1   # dia1 09:30
+    assert f[("compra", "(estrato) sinal contra a MME80")] == 1     # dia2 10:30
     assert f[("venda", "extremo")] == 2
-    assert f[("venda", "+regime MME80")] == 1
-    assert f[("venda", "+t+1 existe e D ok = SINAL")] == 1
+    assert f[("venda", "+t+1 existe e D ok = SINAL")] == 1          # 16:45 fora da janela
+    assert f[("venda", "(estrato) sinal a favor da MME80")] == 1
+    assert f[("venda", "(estrato) sinal contra a MME80")] == 0
 
 
 def test_sinal_tem_barreiras_simetricas_em_pontos(tmp_path: Path) -> None:
     x = _cenario(tmp_path)
     c = x[x["sinal_compra"]].iloc[0]
     assert c["hhmm"] == 930
-    assert c["D_pts"] == 100.0                       # 1.0 x ATR14=100, ao tick
+    assert c["D_pts"] == 50.0                        # 0.5 x ATR14=100, ao tick (v1)
     assert c["entrada_ref"] == 140000.0              # open de t+1
-    assert c["alvo"] == 140100.0 and c["stop"] == 139900.0
+    assert c["alvo"] == 140050.0 and c["stop"] == 139950.0
     v = x[x["sinal_venda"]].iloc[0]
-    assert v["alvo"] == 139900.0 and v["stop"] == 140100.0
+    assert v["alvo"] == 139950.0 and v["stop"] == 140050.0
 
 
 def test_ultima_barra_do_dia_nao_gera_sinal_sem_t1(tmp_path: Path) -> None:
@@ -194,14 +197,18 @@ def test_ambiguidade_classifica_as_tres_saidas(tmp_path: Path) -> None:
     d1 = _dia(1260901, 1)
     for b in d1:
         b["mme80_ntsl"] = 139000.0
-    # sinal em 09:30 (idx 2), entrada open(09:45)=140000, alvo 140100 / stop 139900
+    # barras do cenario tem high/low = base +- 50; para +-50 nao contar
+    # como toque, estreita tudo para +-20 (alvo/stop v1 = +-50)
+    for b in d1:
+        b["high"], b["low"] = 140020.0, 139980.0
+    # sinal em 09:30 (idx 2), entrada open(09:45)=140000, alvo 140050 / stop 139950
     d1[2]["rsi_ntsl"] = 5.0
     # 10:00 (idx 4): barra contem os DOIS -> ambigua
-    d1[4]["high"], d1[4]["low"] = 140150.0, 139850.0
+    d1[4]["high"], d1[4]["low"] = 140080.0, 139920.0
     # segundo sinal em 11:00 (idx 8); 11:30 (idx 10) so' toca o alvo -> resolvida
     d1[8]["rsi_ntsl"] = 5.0
-    d1[10]["high"] = 140120.0
-    # terceiro sinal em 14:00 (idx 20): resto do dia dentro de +-50 -> por_tempo
+    d1[10]["high"] = 140060.0
+    # terceiro sinal em 14:00 (idx 20): resto do dia dentro de +-20 -> por_tempo
     d1[20]["rsi_ntsl"] = 5.0
     df, _ = ep.carregar_log(_dump(tmp_path, d1))
     x = ep.marcar_ifr2(ep.indicadores(df))
@@ -214,10 +221,10 @@ def test_ambiguidade_classifica_as_tres_saidas(tmp_path: Path) -> None:
 def test_em_pontos_reporta_custo_maximo(tmp_path: Path) -> None:
     x = _cenario(tmp_path)
     pt = ep.em_pontos(x)
-    assert pt["D_pts"]["p50"] == 100.0
+    assert pt["D_pts"]["p50"] == 50.0
     assert pt["D_minimo_para_pagar_custo_a_p1_056_pts"] == pytest.approx(91.7, abs=0.1)
-    # p1 que empata 11 pts com D=100: 0,5 + 11/200 = 0,555
-    assert pt["p1_que_empata_custo_com_D_mediano"] == pytest.approx(0.555, abs=1e-3)
+    # p1 que empata 11 pts com D=50: 0,5 + 11/100 = 0,61
+    assert pt["p1_que_empata_custo_com_D_mediano"] == pytest.approx(0.61, abs=1e-3)
 
 
 # ---------------------------------------------------------------------
@@ -252,3 +259,41 @@ def test_rodar_escreve_saida(tmp_path: Path) -> None:
     assert (tmp_path / "saida" / "resumo.json").exists()
     assert (tmp_path / "saida" / "barras_m15.parquet").exists()
     assert r["ambiguidade"]["n_sinais"] == 0
+
+
+def test_equivalencia_aquecimento_e_por_campo_exato(tmp_path: Path) -> None:
+    """
+    BUG REAL do primeiro dump (2026-09-13): `startswith("mme8")` casava
+    com "mme80" e a MME80 era comparada da barra 24, onde a semente
+    ainda pesa centenas de pontos. Este teste reproduz: "Profit" com
+    MME80 semeada muito longe do primeiro close -- a formula e' a mesma,
+    so' a semente difere -- e exige BATE depois do aquecimento certo.
+    """
+    rng = np.random.default_rng(3)
+    closes = 140000.0 + np.cumsum(rng.normal(0, 60, 700))
+    barras = []
+    cb, h, m, data = 1, 9, 0, 1260901
+    for i, c in enumerate(closes):
+        if i and i % 37 == 0:
+            data += 1
+            h, m = 9, 0
+        barras.append(_barra(data, h * 100 + m, cb, c, c + 30, c - 30, c))
+        cb += 1
+        m += 15
+        if m == 60:
+            h, m = h + 1, 0
+    df, _ = ep.carregar_log(_dump(tmp_path, barras))
+    # MME80 do "Profit": mesma formula, semente 2.000 pts acima
+    alpha = 2.0 / (80 + 1)
+    mm, out = closes[0] + 2000.0, []
+    for c in closes:
+        mm = alpha * c + (1 - alpha) * mm
+        out.append(mm)
+    df["mme80_ntsl"] = out
+    df["rsi_ntsl"] = ep.rsi_wilder(df["close"], 2)
+    d = ep.indicadores(df)
+    eq = ep.equivalencia(d, tolerancia=0.5)
+    assert eq["mme80_ntsl"]["bate"], eq["mme80_ntsl"]
+    assert eq["mme80_ntsl"]["detalhe"]["mme80_close"]["comparaveis"] == 700 - 400
+    assert eq["rsi_ntsl"]["bate"]
+    assert "dif_max_em" in eq["rsi_ntsl"]["detalhe"]["rsi_wilder"]

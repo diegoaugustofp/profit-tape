@@ -66,7 +66,17 @@ RSI_SOBRECOMPRADO = 90.0
 MME_CURTA = 8
 MME_LONGA = 80
 ATR_PERIODO = 14
-K_ATR = 1.0                    # D = K_ATR x ATR14(t), ao tick
+# FICHA v1 (2026-09-13, docs/EAS_DE_PRECO.md 3): K = 0,5. O v0 (K = 1)
+# dava D mediano de 510 pts com p90 de 805 -- acima do stop catastrofico
+# de 500 pts do risco.py; o teste mediria o seguro de cauda, nao o IFR2.
+# Com 0,5: D mediano ~255 pts, o mesmo stop mediano da Rota B.
+# Incompatibilidade de MECANISMO, decidida antes de congelar; nao e'
+# calibracao por resultado (nenhum p1 foi olhado).
+K_ATR = 0.5                    # D = K_ATR x ATR14(t), ao tick
+# FICHA v1: o regime MME80 SAIU da clausula (7.4: cortava 70% dos sinais,
+# 1,09/pregao -> ~980 pregoes para n=1.070). Passa a ESTRATIFICACAO
+# reportada -- o primario e' o total; o regime nunca e' escolhido depois.
+REGIME_NA_CLAUSULA = False
 TICK_WIN = 5.0                 # pontos por tick
 HORA_PRIMEIRO_FECHAMENTO = 915     # HHMM, inclusivo: t fecha a partir daqui
 HORA_ULTIMO_FECHAMENTO = 1630      # HHMM, inclusivo
@@ -284,6 +294,24 @@ CANDIDATOS: dict[str, list[str]] = {
 }
 
 
+# Barras do bloco descartadas ANTES de comparar: a semente diferente decai
+# exponencialmente e comparar antes disso mede a semente, nao a formula.
+# BUG REAL (2026-09-13, primeiro dump): `startswith("mme8")` casava
+# tambem com "mme80" -> MME80 comparada da barra 24 em vez da 240, e o
+# RSI sem aquecimento nenhum. O verificador dizia NAO BATE com mediana
+# 0,0 -- o proprio sintoma que denunciou. Agora e' chave EXATA.
+# Quanto sobra da semente depois de k barras: (1 - alpha)^k, alpha =
+# 2/(n+1). Com 3n sobra ~0,26% -- de uma semente 2.000 pts fora (o
+# grafico tem historico antes do dump; o Python nao) ainda sao ~5 pts,
+# acima da tolerancia de 0,5. Com 5n sobra ~0,005%: 0,1 pt. O teste de
+# regressao reproduz exatamente esse caso.
+AQUECIMENTO: dict[str, int] = {
+    "rsi_ntsl": 10 * RSI_PERIODO,      # alpha 0,5: semente some em ~10 barras
+    "mme8_ntsl": 5 * MME_CURTA,
+    "mme80_ntsl": 5 * MME_LONGA,
+}
+
+
 def equivalencia(d: pd.DataFrame, tolerancia: float = 0.5,
                  candidatos: dict[str, list[str]] | None = None) -> dict[str, Any]:
     """
@@ -294,9 +322,9 @@ def equivalencia(d: pd.DataFrame, tolerancia: float = 0.5,
     fica dentro da tolerancia em TODAS as barras comparaveis -- uma barra
     fora ja' e' formula diferente, nao ruido.
 
-    As MMEs sao comparadas so' depois de 3 x periodo barras do bloco: a
-    semente diferente decai exponencialmente e comparar antes disso
-    mediria a semente, nao a formula.
+    RSI e MMEs sao comparados so' depois do AQUECIMENTO do bloco (ver
+    acima). `dif_max_em` diz ONDE a maior diferenca esta' -- se for na
+    borda do aquecimento, e' semente; se for no meio, e' formula.
     """
     cands = candidatos or CANDIDATOS
     saida: dict[str, Any] = {}
@@ -304,19 +332,20 @@ def equivalencia(d: pd.DataFrame, tolerancia: float = 0.5,
     for campo, lista in cands.items():
         melhor: dict[str, Any] | None = None
         detalhe: dict[str, Any] = {}
-        aquecimento = 0
-        if campo.startswith("mme8"):
-            aquecimento = 3 * MME_CURTA
-        elif campo.startswith("mme80"):
-            aquecimento = 3 * MME_LONGA
+        aquecimento = AQUECIMENTO.get(campo, 0)
         for c in lista:
             m = d[campo].notna() & d[c].notna() & (pos >= aquecimento)
             if int(m.sum()) == 0:
                 detalhe[c] = {"comparaveis": 0}
                 continue
             dif = (d.loc[m, campo] - d.loc[m, c]).abs()
+            i_max = int(dif.idxmax())
+            hhmm_max = int(d["hhmm"].to_numpy()[i_max])
+            pos_max = int(pos.to_numpy()[i_max])
             r = {"comparaveis": int(m.sum()),
                  "dif_max": round(float(dif.max()), 4),
+                 "dif_max_em": f"{d['dia'].iat[i_max]} {hhmm_max:04d} "
+                               f"(barra {pos_max} do bloco)",
                  "dif_mediana": round(float(dif.median()), 4)}
             detalhe[c] = r
             if melhor is None or r["dif_max"] < melhor["dif_max"]:
@@ -338,12 +367,13 @@ def marcar_ifr2(d: pd.DataFrame, col_rsi: str = "rsi_ntsl",
     """
     Barra t e' a de SINAL; a entrada e' a mercado na abertura de t+1.
 
-    Clausulas, na ordem do funil:
+    Clausulas, na ordem do funil (ficha v1):
         extremo     compra: RSI2(t) <= 10        venda: RSI2(t) >= 90
         excursao    primeira barra da excursao (t-1 NAO estava no extremo)
-        regime      compra: close(t) > MME80(t)  venda: close(t) < MME80(t)
         janela      915 <= hhmm(t) <= 1630
         t+1         existe, no mesmo dia e no mesmo bloco contiguo
+    Regime (compra: close(t) > MME80(t); venda: close(t) < MME80(t)) e'
+    ESTRATIFICACAO reportada, nao clausula (v1; ver REGIME_NA_CLAUSULA).
 
     D = K_ATR x ATR14(t) ao tick, congelado. `entrada_ref` = open(t+1).
     Alvo/stop = entrada_ref +- D (espelho na venda).
@@ -370,9 +400,11 @@ def marcar_ifr2(d: pd.DataFrame, col_rsi: str = "rsi_ntsl",
     x["entrada_ref"] = np.where(x["tem_t1"], x["open"].shift(-1), np.nan)
 
     x["D_pts"] = (K_ATR * x[col_atr]).map(arredondar_ao_tick)
-    x["sinal_compra"] = (x["excursao_compra"] & x["regime_compra"]
+    reg_c = x["regime_compra"] if REGIME_NA_CLAUSULA else True
+    reg_v = x["regime_venda"] if REGIME_NA_CLAUSULA else True
+    x["sinal_compra"] = (x["excursao_compra"] & reg_c
                          & x["janela"] & x["tem_t1"] & x["D_pts"].notna())
-    x["sinal_venda"] = (x["excursao_venda"] & x["regime_venda"]
+    x["sinal_venda"] = (x["excursao_venda"] & reg_v
                         & x["janela"] & x["tem_t1"] & x["D_pts"].notna())
     x["alvo"] = np.where(x["sinal_compra"], x["entrada_ref"] + x["D_pts"],
                 np.where(x["sinal_venda"], x["entrada_ref"] - x["D_pts"], np.nan))
@@ -400,9 +432,10 @@ def contar_clausulas(x: pd.DataFrame) -> pd.DataFrame:
         etapas = [
             ("extremo", x[f"extremo_{lado}"]),
             ("+excursao (1 sinal por excursao)", x[f"excursao_{lado}"]),
-            ("+regime MME80", x[f"excursao_{lado}"] & x[f"regime_{lado}"]),
-            ("+janela 09:15-16:30", x[f"excursao_{lado}"] & x[f"regime_{lado}"] & x["janela"]),
+            ("+janela 09:15-16:30", x[f"excursao_{lado}"] & x["janela"]),
             ("+t+1 existe e D ok = SINAL", x[f"sinal_{lado}"]),
+            ("(estrato) sinal a favor da MME80", x[f"sinal_{lado}"] & x[f"regime_{lado}"]),
+            ("(estrato) sinal contra a MME80", x[f"sinal_{lado}"] & ~x[f"regime_{lado}"]),
             ("(info) sinal e regime Eden", x[f"sinal_{lado}"] & x[f"eden_{lado}"]),
         ]
         for nome, mask in etapas:

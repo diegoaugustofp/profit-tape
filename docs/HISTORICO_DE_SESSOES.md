@@ -1918,3 +1918,26 @@ Proximo passo (operador): aplicar o `preco_m15.ntsl` no grafico M15 do
 WINFUT, tirar quantos dumps o historico permitir (janelas de data sem
 sobreposicao), rodar `profit-tape eas-preco <dump>` e trazer o funil, os
 pontos e a fracao ambigua para preencher a ficha IFR2 e congelar.
+
+### Continuacao (2026-09-13, noite) — primeiro dump M15, ficha IFR2 v1, bug do verificador (v2.60)
+
+O operador rodou o `eas-preco` no primeiro dump (174 pregoes de 2026).
+Tres coisas sairam dele:
+
+1. **Bug do verificador (7.3)**: `startswith("mme8")` casava com `mme80`
+   — MME80 comparada da barra 24 em vez da 240, RSI sem aquecimento. O
+   "NAO BATE" com mediana 0,0 era o proprio sintoma. Corrigido: chave
+   exata, aquecimento 5 x periodo (a conta da semente residual esta' no
+   codigo), `dif_max_em` imprime onde esta' a maior diferenca. Teste de
+   regressao com semente 2.000 pts fora, mesma formula, exige BATE.
+2. **K = 1 colidia com o risco.py**: D mediano 510 pts, p90 806, contra
+   o stop catastrofico de 500. Decidido K = 0,5 (D ~255, o stop
+   mediano da Rota B). Mecanismo, nao calibracao.
+3. **Regime MME80 cortava 70% dos sinais** (1,09/pregao -> 980 pregoes
+   para n). Decisao (B) do operador: regime sai da clausula, vira
+   estrato reportado. Eden morto (0 sinais).
+
+Ficha IFR2 v1 escrita em `docs/EAS_DE_PRECO.md` 3 com os numeros
+medidos e o que ainda falta para congelar (rodada com a v2.60; 2025 se
+o grafico carregar). IFR2 na tabela: F2->F3. 778 testes, ruff e mypy
+limpos.

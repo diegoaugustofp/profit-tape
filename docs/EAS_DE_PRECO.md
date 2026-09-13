@@ -1,9 +1,12 @@
 # EAs de PRECO — linha paralela enquanto o tape acumula (2026-09-13)
 
-Estado: **tres fichas em RASCUNHO, NAO CONGELADAS.** Congelam quando a
-TAXA de cada uma estiver MEDIDA (`profit-tape eas-preco` sobre o dump
-M15) e os numeros em pontos preenchidos. Ate' la' nenhuma delas gasta
-amostra de TESTE.
+Estado (2026-09-13, noite): **IFR2 em ficha v1** — TAXA e pontos
+medidos no primeiro dump (174 pregoes, 02/01 a 11/09/2026), dois ajustes
+de MECANISMO decididos antes de congelar (K = 0,5; regime vira estrato).
+Congela quando o dump de 2025 entrar (se o grafico carregar) e o
+verificador corrigido (v2.60) confirmar as equivalencias. **ORB e 123
+continuam em RASCUNHO.** Nenhuma delas gastou amostra de TESTE: nenhum
+p1 foi calculado.
 
 Ordem decidida pelo operador: **IFR2 primeiro**, ORB em seguida, 123
 depois. Fase de cada uma na tabela da secao 1 do `EA_ARQUITETURA.md`.
@@ -91,70 +94,136 @@ um sozinho); e' problema em F5/F6 e fica visivel no log.
 - Custo: 11 pts ida-e-volta por contrato (`custo_pontos_estimado`).
 - Circuit breaker de 3 perdas: mantido, e' risco, nao veredito.
 
-## 3. Ficha IFR2 (rascunho v0) — retorno a` media em extremo
+## 3. Ficha IFR2 — v1 (2026-09-13, a congelar) — retorno a` media em extremo
 
-    HIPOTESE   No WIN em M15, RSI(2) em extremo (<= 10 na compra,
-               >= 90 na venda) e' exaustao de curto prazo; entrando a
-               favor do regime (lado da MME80) na abertura da barra
-               seguinte, a barreira favoravel a 1 x ATR14 bate antes da
-               desfavoravel em mais de 50% das vezes.
+### 3.0 O que o primeiro dump mediu (v0 -> v1)
 
-    EVENTO     Barra M15 t fechada. COMPRA: RSI2(t) <= 10 e close(t) >
-               MME80(t). VENDA: RSI2(t) >= 90 e close(t) < MME80(t).
-               Entrada a mercado na abertura de t+1. D = 1,0 x ATR14(t)
-               ao tick, congelado. Alvo = entrada + D, stop = entrada -
-               D (espelho na venda). Sem re-entrada enquanto RSI2 nao
-               sair do extremo (< 10 ou > 90 continuo nao gera sinal
-               novo — um sinal por excursao). Posicao aberta ignora
-               sinal. Janela de entrada: t fecha entre 09:15 e 16:30.
+`profit-tape eas-preco` sobre `dump_preco_15m.txt`: 6.580 barras, 174
+pregoes (02/01–11/09/2026), 1 bloco contiguo, 37,8 barras/pregao.
 
-    TAXA       A MEDIR (`eas-preco`, funil por clausula). Se < 1
-               evento/pregao somando os dois lados, HORIZONTE estoura
-               e a ficha volta ao desenho ANTES de congelar (7.4).
+**Equivalencia (com o verificador da v2.59, que tinha bug de
+aquecimento — ver 3.0b):** ATR14 = **SMA do TrueRange** (dif 0,0, igual
+ao Bollinger); MME8 **semeada no close** (0,45 pt); RSI = **Wilder**
+(mediana 0,0; `rsi_ewm` identico — so' a semente difere); MME80 mediana
+0,0. Os `dif_max` de 8 (RSI) e 323 (MME80) sao semente no inicio do
+bloco, medidos ANTES do aquecimento por bug do verificador. A v2.60
+corrige e imprime ONDE esta' o `dif_max`; a confirmacao final e' com a
+rodada nova.
 
-    EFEITO     p1 >= 0,56 contra p1 <= 0,50, meia-largura 3 pp ->
-               n = 1.070 operacoes. Barra ambigua excluida e reportada.
+**Em pontos:** ATR14 p10/p50/p90 = 258 / 465 / 742. Com K = 1, D nos
+sinais = 265 / 510 / 806. O stop catastrofico do `risco.py` e' **500 pts**
+(2% de R$5.000 a R$0,20) — com K = 1 o seguro de cauda dispararia antes
+do stop da estrategia em mais da metade dos sinais, e o teste mediria o
+`risco.py`, nao o IFR2. **Decisao: K = 0,5** -> D mediano ~255 pts
+(R$51/contrato), p90 ~400, dentro dos 500. E 255 e' o stop mediano da
+Rota B: "so' arrisco o que ja' arrisco". Incompatibilidade de mecanismo,
+nao calibracao — nenhum resultado foi olhado.
 
-    CUSTO      D x (2 p1 - 1) por operacao. Com D = ATR14, paga 11 pts
-    MAXIMO     a p1 = 0,56 so' se ATR14 >= 92 pts — o `eas-preco`
-               reporta p10/p50/p90 do ATR14 em pontos; se p50 < 92, a
-               borda so' existe em dia de volatilidade acima da mediana
-               e isso tem que estar na ficha antes de congelar.
+**Funil (7.4), compra + venda por pregao:**
 
-    HORIZONTE  Historico: n vem do dump, nao do calendario. A X
-               eventos/pregao, precisa de 1.070 / X pregoes de M15 — o
-               `eas-preco` diz se o historico do grafico basta. Forward
-               (F5): mesma conta, em calendario.
+| clausula | n | por pregao |
+|---|---|---|
+| extremo (RSI2 <= 10 / >= 90) | 1.887 | 10,85 |
+| 1 sinal por excursao | 856 | 4,92 |
+| + regime MME80 | 263 | **1,51** (corta 70%) |
+| + janela 09:15–16:30 | 190 | 1,09 |
+| (info) Eden | 1 | 0,01 |
 
-    CRITERIO   p1 >= 0,56 favoravel; p1 <= 0,50 contra; entre, inconclusivo.
-               IC95 sempre. Secundario, so' reportado: P&L bruto em
-               pontos por operacao (IC95) e fracao zerada por tempo.
+A 1,09/pregao, n = 1.070 sao ~980 pregoes — 4+ anos. E' o caso literal
+do 7.4: a clausula de regime derruba 3,3x o calendario. **Decisao (B), do
+operador: o regime SAI da clausula e vira ESTRATIFICACAO reportada.** A
+hipotese passa a afirmar menos ("exaustao de curto prazo, em qualquer
+tendencia"); o primario e' o total; o estrato e' reportado, nunca
+escolhido depois. Eden morre como variante: RSI2 em extremo e MME8
+subindo nao coexistem (0 e 1 sinais).
 
-    PARADA     Historico: UMA rodada de teste, depois de congelar, sobre
-               amostra nao olhada na depuracao. Forward: olho em n/2 so'
-               para defeito de especificacao (barras marcadas), decido
-               em n. Perdas seguidas, dia ruim, circuit breaker NAO
-               autorizam parar. Mudar qualquer numero acima reinicia.
+**Estimador:** 190 sinais (v0): 89,5% resolvidos, **1,1% ambiguos**
+(alvo e stop na mesma barra — o estimador binario serve), 9,5% zerados
+por tempo (devem cair com D menor). Duracao ate' resolver: p50 4
+barras (1h), p90 14.
+
+### 3.0b Bug do verificador (7.3), corrigido na v2.60
+
+`campo.startswith("mme8")` casava tambem com `mme80`: a MME80 foi
+comparada a partir da barra 24 em vez da 240 (`n=6556` denunciou), e o
+RSI nao tinha aquecimento. O verificador dizia NAO BATE com mediana 0,0
+— o proprio sintoma. Correcao: aquecimento por chave EXATA, 5 x periodo
+para as MMEs (sobra 0,005% da semente; com 3 x sobrava 0,26%, que de
+uma semente 2.000 pts fora ainda e' 5 pts), 10 x periodo para o RSI;
+`dif_max_em` imprime dia/hora/posicao no bloco. Teste de regressao
+reproduz o caso (semente 2.000 pts fora, mesma formula) e exige BATE.
+
+### 3.1 A ficha
+
+    HIPOTESE   No WIN em M15, RSI(2) em extremo (<= 10 na compra, >= 90
+               na venda) e' exaustao de curto prazo; entrando a mercado
+               na abertura da barra seguinte, a barreira favoravel a
+               0,5 x ATR14 bate antes da desfavoravel em mais de 50%
+               das vezes. Em qualquer tendencia (o regime e' estrato).
+
+    EVENTO     Barra M15 t fechada. COMPRA: RSI2(t) <= 10. VENDA:
+               RSI2(t) >= 90. Um sinal por excursao (t-1 fora do
+               extremo). Entrada a mercado na abertura de t+1 (t+1 no
+               mesmo pregao). D = 0,5 x ATR14(t) ao tick, congelado;
+               ATR14 = SMA14 do TrueRange, RSI = Wilder, indicadores
+               continuos entre pregoes. Alvo = entrada + D, stop =
+               entrada - D (espelho na venda). Posicao aberta ignora
+               sinal. Janela: t fecha entre 09:15 e 16:30. Zeragem
+               17:30.
+
+    TAXA       MEDIDA (2026, 174 pregoes): ~4,9 sinais/pregao antes da
+               janela; ~3,5/pregao esperado com a janela (a confirmar
+               na rodada v2.60 — a v0 media 190/263 = 72% passando na
+               janela). Duracao p50 4 barras: sobreposicao rara.
+
+    EFEITO     p1 >= 0,56 contra p1 <= 0,50, meia-largura 3 pp -> n =
+               1.070 operacoes. Barra ambigua (1,1% na v0) excluida e
+               reportada; zerada por tempo excluida e reportada.
+
+    CUSTO      D x (2 p1 - 1). Com D mediano ~255 pts, o p1 que EMPATA
+    MAXIMO     11 pts e' 0,52 — o custo nao decide nada aqui. Alerta no
+               EA: `custo_pontos_estimado` > D x (2 x 0,56 - 1) = ~31
+               pts -> avisa e nao liga.
+
+    HORIZONTE  Historico: a ~3,5/pregao, n = 1.070 sao ~305 pregoes.
+               2026 (174) da' n ~600, meia-largura +-4 pp. Com 2025 no
+               grafico (+~250 pregoes), n ~1.500: fecha com folga.
+               Forward (F5): ~3,5/pregao -> n = 1.070 em ~14 meses; a
+               conta em calendario e' do F5, nao daqui.
+
+    CRITERIO   p1 >= 0,56 favoravel; p1 <= 0,50 contra; entre,
+               inconclusivo. IC95 sempre. Reportados, nao decisorios:
+               p1 por estrato (a favor / contra a MME80, compra /
+               venda), P&L bruto em pontos por operacao (IC95), fracao
+               ambigua e zerada por tempo.
+
+    PARADA     Historico: UMA rodada de teste, depois de congelar.
+               Amostra de DEPURACAO = os 20 pregoes mais recentes do
+               dump (barras marcadas, olhadas uma a uma); TESTE = o
+               resto, nao olhado na depuracao. Forward: olho em n/2 so'
+               para defeito de especificacao, decido em n. Perdas
+               seguidas, dia ruim, circuit breaker NAO autorizam parar.
+               Mudar qualquer numero acima reinicia a contagem.
 
 **Porta de volume (declarada, NAO implementada):** `absorcao` na barra
 de sinal — a feature que ja' existe em `flow.py` e que e' o "por que"
-deste setup (exaustao = agressao que nao move preco). Entra como GATE
-(`filtro_fluxo.absorcao_min`): so' entra se absorcao(t) >= limiar.
-Hipotese nova quando entrar; contagem reinicia.
+deste setup. Entra como GATE (`filtro_fluxo.absorcao_min`). Hipotese
+nova quando entrar; contagem reinicia.
 
-**Em pontos (preencher com o `eas-preco`):**
+**Em pontos (medido, K = 1 na v0; K = 0,5 na v1 = metade):**
 
-| item | valor |
-|---|---|
-| ATR14 p10 / p50 / p90 | a medir |
-| D = ATR14 ao tick, p50 | a medir |
-| eventos/pregao (compra / venda) | a medir |
-| fracao de barras ambiguas (alvo e stop na mesma barra) | a medir |
+| item | v0 (K=1) | v1 (K=0,5) |
+|---|---|---|
+| ATR14 p10 / p50 / p90 | 258 / 465 / 742 | idem |
+| D nos sinais p10 / p50 / p90 | 265 / 510 / 806 | ~130 / ~255 / ~400 |
+| stop catastrofico do risco.py | 500 | 500 |
+| fracao ambigua | 1,1% | a medir (v2.60) |
+| eventos/pregao (com janela) | 1,09 (com regime) | ~3,5 (sem regime, a medir) |
 
-**Fora desta ficha (v0):** saida por RSI cruzando 50 (regra classica do
-QuantBrasil, alvo na maxima dos N anteriores) — variancia ilimitada,
-estimador pior; fica como variante registrada. Estocastico, Bollinger,
-volume. Duas posicoes.
+**Fora desta ficha (v1):** regime como clausula (v0, descartado por
+7.4); Eden (0 sinais, morto); saida por RSI cruzando 50 / maxima dos N
+anteriores (variancia ilimitada); estocastico, Bollinger, volume; duas
+posicoes; K diferente de 0,5.
 
 **Referencia externa:** `quantbrasil backtests run ifr2 WINFUT
 --timeframe M15` e' uma SEGUNDA implementacao do mesmo padrao, util
@@ -286,9 +355,10 @@ hipotese inteira.
 ## 7. O que este documento NAO autoriza
 
 - Rodar p1 sobre o dump antes de a ficha estar congelada.
-- Escolher entre variantes (Eden vs MME80, Inside Bar sim/nao) olhando
-  o funil — o funil MEDE taxa, nao escolhe. A variante da v0 ja' esta'
-  escrita acima.
-- Ajustar D (1,0 x ATR, 1,0 x A) — sao numeros declarados, nao
-  calibrados. Mudar = ficha nova.
+- Escolher entre variantes olhando RESULTADO. Olhar TAXA para afrouxar
+  uma clausula restritiva demais e' o 7.4 e e' permitido ANTES de
+  congelar — foi o que a v1 do IFR2 fez com o regime, e esta' escrito.
+- Ajustar D depois de congelar. Antes, so' por incompatibilidade de
+  mecanismo (foi o caso: K = 1 colidia com o stop catastrofico) —
+  nunca por p1.
 - Preencher `filtro_fluxo` em qualquer EA sem ficha propria.
