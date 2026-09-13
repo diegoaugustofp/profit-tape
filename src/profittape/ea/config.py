@@ -171,6 +171,12 @@ class RiscoConfig(BaseModel):
 class EAConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    # Identidade do EA no multi-EA (E5.4). Opcional para nao quebrar os
+    # yamls existentes; quando ausente, `RegistroDeEAs` usa o nome do
+    # arquivo. Declarar explicitamente e' melhor: renomear o arquivo
+    # deixa de trocar a identidade do EA (e o que o log/livro chamam de
+    # "quem tem a posicao").
+    nome: str | None = None
     symbol: str
     volume_barra: int               # CONGELADO do features.parquet que validou
                                     # o sinal -- nunca recalculado ao vivo

@@ -301,7 +301,8 @@ orfa que o `LivroDePosicoes` marca como "(ninguem)".
 | **E5.0** | `SupervisorDeRisco` informativo (capital recomendado, alertas) | **ENTREGUE v2.50** |
 | **E5.1** | `LivroDePosicoes` por (EA, subconta, ticker) | **ENTREGUE v2.50** |
 | **E5.2** | ~~Migrar para familia V2 com SubAccountID~~ | **CANCELADO** -- caminho B dispensa (ver 4.2). `ea-contas` lista subcontas como diagnostico (v2.52/v2.53) |
-| **E5.4** | `DespachanteDeEAs` + `RegistroDeEAs` + `--ea-dir`: inclusao/remocao a quente, 1 EA por ticker | pendente (codigo, sem pregao) |
+| **E5.4a** | `DespachanteDeEAs` + `RegistroDeEAs`: fan-out estavel e trava de 1 EA por ticker | **ENTREGUE v2.55** |
+| **E5.4b** | `--ea-dir` + integracao no `RecorderService`: incluir/remover com o record rodando | pendente (codigo, sem pregao) |
 | **E5.5** | 2 EAs em dry_run, pregao inteiro, incluindo 1 incluido a quente | pendente, **exige pregao** |
 | **E5.6** | 2 EAs em demo com ordens reais, tickers diferentes | pendente, **exige pregao** |
 

@@ -84,6 +84,13 @@ class SupervisorDeRisco:
         (evita contar duas vezes se a montagem rodar mais de uma vez)."""
         self.exigencias[exigencia.nome] = exigencia
 
+    def remover(self, nome: str) -> bool:
+        """Tira o EA da soma. Sem isto, um EA removido continuaria
+        inflando o capital recomendado -- defeito pego na conferencia a
+        mao do E5.4 (2026-09-13): apos remover 1 de 2 EAs, o resumo ainda
+        mostrava 3 e pedia R$15.000."""
+        return self.exigencias.pop(nome, None) is not None
+
     @property
     def capital_recomendado_total(self) -> float:
         return sum(e.capital_recomendado for e in self.exigencias.values())
@@ -149,8 +156,14 @@ class SupervisorDeRisco:
                 "exatamente o que subcontas separadas evitam (ver "
                 "EA_ARQUITETURA 4.2)"))
 
+        # So' alerta se ALGUM EA declarou subconta -- isto e', se o desenho
+        # em uso e' o de subcontas e alguem ficou de fora. No caminho B
+        # (1 EA por ticker, EA_ARQUITETURA 4.2) NINGUEM tem subconta e
+        # isso e' correto por desenho: alertar ali seria ruido constante,
+        # e ruido ensina a ignorar alerta.
         sem_sub = sorted(e.nome for e in self.exigencias.values() if not e.subconta)
-        if len(self.exigencias) > 1 and sem_sub:
+        algum_com_sub = any(e.subconta for e in self.exigencias.values())
+        if len(self.exigencias) > 1 and sem_sub and algum_com_sub:
             alertas.append(Alerta(
                 "atencao", "ea_sem_subconta",
                 f"{len(sem_sub)} EA(s) sem subconta declarada ({', '.join(sem_sub)}) "

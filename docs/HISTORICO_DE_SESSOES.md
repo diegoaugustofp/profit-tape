@@ -1764,3 +1764,33 @@ com SubAccountID) e o E5.4 (despachante dinamico).
 
 **Proximo**: E5.4 (DespachanteDeEAs + RegistroDeEAs + --ea-dir), codigo
 puro, sem pregao.
+
+### Continuacao (2026-09-13) — E5.4a: despachante e registro (v2.55)
+
+- `ea/despachante.py`: `DespachanteDeEAs`, o alvo FIXO de
+  `on_trade_extra`. Resolve o obstaculo tecnico identificado no
+  redesenho: `connect()` captura o hook numa variavel local, entao
+  trocar `client._on_trade_extra` depois de conectado nao tem efeito --
+  o fan-out tem que ser um alvo estavel com lista mutavel por dentro.
+  Lista e' TUPLA imutavel trocada inteira (copy-on-write): `publicar`
+  le sem lock nenhum no hot path. Excecao de um EA nao impede os
+  outros nem propaga para o callback da DLL.
+- `ea/registro.py`: `RegistroDeEAs`, dono das regras de entrada. A
+  trava central do caminho B: **1 EA por ticker** -- dois EAs no mesmo
+  ativo voltariam a netar e a reconciliacao nao saberia de quem e' a
+  divergencia. Recusa tambem nome duplicado. Remocao e' graciosa
+  (`bridge.parar()` chama `encerrar_dia()`, que zera posicao) e libera
+  o ticker.
+- `EAConfig.nome` (opcional): identidade estavel do EA. Sem ele, o nome
+  do arquivo serve -- mas declarar e' melhor, porque renomear o arquivo
+  deixa de trocar a identidade.
+- **Dois defeitos pegos na conferencia a mao**, invisiveis na leitura do
+  codigo: (1) `remover` nao tirava o EA do supervisor -- apos remover 1
+  de 2 EAs, o resumo mostrava 3 EAs e pedia R$15.000; (2) o alerta
+  `ea_sem_subconta` disparava sempre no caminho B, onde ninguem tem
+  subconta por desenho -- ruido constante ensina a ignorar alerta.
+  Corrigidos, com teste para cada um.
+- 19 testes novos (8 despachante incl. concorrencia, 11 registro).
+  740 no total, ruff e mypy limpos.
+
+**Pendente**: E5.4b -- `--ea-dir` e a integracao no `RecorderService`.
