@@ -51,6 +51,9 @@ E0-E4 esta' pronta e serve a QUALQUER estrategia que chegue em F5.
 | **DeepScalper Fase 2** (classificador) | **F3->F4** | forward LIGADO em 2026-09-09; placar fechado ate' n=50 | rodar `fase2-score` nos dias pendentes (offline) e esperar n |
 | **Scalp de Bollinger** (retorno) | **F4 — REPROVADO** | p1=0,480 IC(0,432-0,528), bruto -4,7 pts/op: null | nenhum. Capitulo fechado (2026-09-11) |
 | **Scalp de Bollinger** (rompimento) | **F4 — REPROVADO** | p1=0,415 IC(0,360-0,473), bruto -22,0: borda NEGATIVA | nenhum. Capitulo fechado (2026-09-11) |
+| **IFR2 M15** (preco, retorno a` media) | **F1** | ficha em RASCUNHO (`docs/EAS_DE_PRECO.md` 3); ferramenta `eas-preco` entregue | dump M15 do grafico (`ntsl/preco_m15.ntsl`) -> `eas-preco` -> preencher TAXA e pontos -> congelar (F3) |
+| **ORB M15** (preco, rompimento da abertura) | **F0** | ficha em RASCUNHO (`EAS_DE_PRECO.md` 4); risco de HORIZONTE (<= 1 op/pregao) | funil no mesmo dump; decidir efeito (0,56 vs 0,60) antes de congelar |
+| **123 M15** (preco, continuacao) | **F0** | ficha em RASCUNHO (`EAS_DE_PRECO.md` 5) | funil no mesmo dump, depois do IFR2 |
 
 ### z_agf_3 — o unico vivo em execucao
 
@@ -166,6 +169,15 @@ nunca foi atualizado. Especificamente:
 7. **Pesquisa nova** sobre o `curated` ja' capturado -- unica coisa que
    pode gerar um EA novo para a esteira, que hoje tem so' dois nomes
    (um deles parado esperando pregao).
+8. **EAs de PRECO** (2026-09-13, `docs/EAS_DE_PRECO.md`): o operador
+   roda o `ntsl/preco_m15.ntsl` no grafico M15 do WINFUT (quantos
+   dumps o console permitir, ~54 pregoes cada) e o `profit-tape
+   eas-preco` sobre eles. Isso preenche TAXA e pontos da ficha IFR2 e
+   diz se o historico do grafico basta para o n. Nao exige pregao.
+9. **`RequestSerieHistory` serie de BARRAS** (mapeado em OPERACAO.md,
+   nunca implementado): 10.000 candles = ~270 pregoes de M15 sem dump
+   manual. Passa a ter dono: e' a fonte F1 dos EAs de preco. Exige
+   pregao (ou ao menos DLL conectada).
 
 ### Divida tecnica conhecida, sem urgencia
 
@@ -440,6 +452,58 @@ Excecao que continua sendo trava de verdade: o **circuit breaker de
 perdas consecutivas**. Ele protege contra DEFEITO de estrategia
 (sequencia anomala sugere que algo quebrou hoje), nao contra escolha de
 capital. Coisas diferentes.
+
+---
+
+## 5. EAs de PRECO — linha paralela enquanto o tape acumula (2026-09-13)
+
+> Detalhe completo, com as tres fichas: `docs/EAS_DE_PRECO.md`.
+
+**Decisao do operador.** O custo de P&D esta' assumido por 6 meses (prazo
+minimo para o tape acumular), mas o primeiro EA em execucao nao espera
+esses 6 meses. A linha de EAs de PRECO existe porque candle de WIN tem
+anos de historico — o EA de preco pode ser validado HOJE com amostra de
+teste de verdade. Nao e' "algo rodando para pagar a infra".
+
+**Tres candidatos, decorrelacionados por construcao** (um segue
+tendencia, um aposta contra, um opera horario — tres EAs de tendencia
+seriam um EA com tres nomes):
+
+| EA | Mecanismo em uma frase | Porta de volume (declarada, nao implementada) | Fase |
+|---|---|---|---|
+| **IFR2** | RSI(2) em extremo a favor da MME80 e' exaustao; barreiras simetricas a 1 x ATR14 | `absorcao` na barra de sinal (gate) | **F1** |
+| **ORB** | primeiro rompimento do range 09:00-09:30, lado da MME80; D = amplitude do range | agressao no rompimento vs. mediana do horario | F0 |
+| **123** | fundo de 3 barras a favor da MME80; stop de compra acima da 3a, stop na minima da 2a; alvo simetrico | agressao/delta na barra de rompimento (mesma porta do ORB) | F0 |
+
+Ordem: IFR2 -> ORB -> 123.
+
+**O que muda no pipeline (F0-F6) para EA de preco:** a fonte de F1/F2/F4
+e' o candle (dump do grafico M15 hoje; `RequestSerieHistory` de barras
+depois), nao o tape. Estimador binario com barreiras simetricas nos
+tres (nula 50%, variancia limitada). Barra ambigua (alvo e stop na
+mesma barra) excluida e reportada; no periodo com tape, resolvida pelo
+tape. Amostra de DEPURACAO = dump mais recente; TESTE = historico
+anterior, uma rodada. Tudo em `EAS_DE_PRECO.md` 1.
+
+**Regras que valem para os tres, sempre:**
+
+1. As fichas sao RASCUNHO ate' a TAXA estar MEDIDA. Ninguem roda p1
+   antes de congelar.
+2. O EA nasce com a porta de volume na INTERFACE (`filtro_fluxo: null`,
+   `extra="forbid"`, um gate unico entre sinal e ordem). O conteudo so'
+   entra por ficha propria, e reinicia a contagem daquele EA.
+3. Toda variavel nova, em qualquer um dos tres, passa pela disciplina
+   inteira (7.2 triagem, poder, 7.4, pre-registro). Sem excecao por ser
+   "so' um filtro".
+4. Os tres operam WIN: em F5/F6 e' `--ea-modo-ticker exclusivo`, e o
+   custo estatistico disso (`sinais_sem_vaga`) fica no log.
+
+**Entregue nesta sessao (v2.59):** `ntsl/preco_m15.ntsl` (dump M15 com
+OHLC, RSI2, MME8, MME80, ATR14, TR calculados pelo Profit) e
+`profit-tape eas-preco` (parser, equivalencia Python x Profit das
+variantes em aberto — RSI Wilder/SMA, MME com/sem semente —, funil por
+clausula do IFR2, ATR e D em pontos, fracao de barras ambiguas).
+Categoria `features`: nao olha retorno, nao consome trial.
 
 ---
 

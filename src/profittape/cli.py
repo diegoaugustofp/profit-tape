@@ -1206,6 +1206,83 @@ def absorcao_grafico(
     typer.echo(f"  {r['motivo']}")
 
 
+@app.command(name="eas-preco")
+def eas_preco(
+    log: Path = typer.Argument(
+        ..., help="Dump do console com linhas PRCBARRA| (grafico M15 do WINFUT)"),
+    saida: Path = typer.Option(Path("data/research/eas_preco"), "--saida"),
+    tolerancia: float = typer.Option(
+        0.5, "--tolerancia",
+        help="Diferenca maxima Python x Profit para considerar a variante equivalente",
+    ),
+    log_level: str = typer.Option("INFO", "--log-level"),
+) -> None:
+    """
+    EAs de PRECO (M15): equivalencia Python x Profit + funil da ficha IFR2.
+
+    Categoria `features`, nao consome trial: nao olha retorno. Responde,
+    medindo: (1) qual variante de cada indicador o Profit calcula (RSI
+    Wilder/exponencial/simples, MME semeada no close ou na SMA, ATR
+    aritmetica/Wilder); (2) quantos sinais cada clausula da ficha IFR2
+    deixa passar, por pregao (7.4); (3) ATR14 e D em pontos (7.5); (4) a
+    fracao de operacoes cuja barra de resolucao contem alvo E stop --
+    diagnostico do estimador binario, NAO resultado. Preenche a ficha
+    de docs/EAS_DE_PRECO.md antes de congelar.
+    """
+    configurar(log_level)
+    from .research.eas_preco import K_ATR, equivalencia, rodar
+
+    r = rodar(log, saida)
+    if tolerancia != 0.5:
+        r["equivalencia"] = equivalencia(r["barras"], tolerancia)
+    m = r["meta"]
+    typer.echo("=" * 72)
+    typer.echo("EAs DE PRECO — dump do grafico M15 (ficha IFR2 v0)")
+    typer.echo("=" * 72)
+    typer.echo(
+        f"  {m['barras']} barras | {m['pregoes']} pregoes | {m['blocos']} bloco(s) "
+        f"contiguo(s) | {m['inicio']} a {m['fim']} | ~{m['barras_por_pregao']} barras/pregao"
+    )
+    typer.echo("\n--- EQUIVALENCIA Python x Profit (a variante que bate e' a que o")
+    typer.echo("    operador ve no grafico; a que nao bate e' formula diferente) ---")
+    for campo, v in r["equivalencia"].items():
+        marca = "BATE" if v["bate"] else "NAO BATE"
+        typer.echo(f"  {campo:12} melhor={v['melhor']!s:12} {marca}")
+        for var, det in v["detalhe"].items():
+            if det.get("comparaveis"):
+                typer.echo(
+                    f"      {var:12} n={det['comparaveis']:5d} "
+                    f"dif_max={det['dif_max']} dif_mediana={det['dif_mediana']}"
+                )
+    pt = r["pontos"]
+    typer.echo("\n--- EM PONTOS (7.5) ---")
+    typer.echo(f"  ATR14 p10/p50/p90: {pt['atr14_pts']}")
+    typer.echo(f"  D = {K_ATR} x ATR14 ao tick, nos sinais: {pt['D_pts']}")
+    typer.echo(
+        f"  Para pagar 11 pts a p1=0,56, D precisa ser >= "
+        f"{pt['D_minimo_para_pagar_custo_a_p1_056_pts']} pts; com o D mediano, o p1 que "
+        f"EMPATA o custo e' {pt['p1_que_empata_custo_com_D_mediano']}"
+    )
+    pregoes = max(int(m["pregoes"]), 1)
+    typer.echo(f"\n--- FUNIL DA FICHA IFR2 (7.4) -- por_pregao = / {pregoes} pregao(oes) ---")
+    typer.echo(r["funil"].to_string(index=False))
+    a = r["ambiguidade"]
+    typer.echo("\n--- ESTIMADOR BINARIO: a barra de resolucao contem os dois? ---")
+    typer.echo(f"  sinais={a['n_sinais']}  {a['contagem']}  fracao={a['fracao']}")
+    if a["duracao_barras"]:
+        typer.echo(f"  duracao ate' resolver (barras M15): {a['duracao_barras']}")
+    if a["n_sinais"]:
+        taxa = a["n_sinais"] / pregoes
+        typer.echo(
+            f"\n  HORIZONTE: {taxa:.2f} sinais/pregao -> n=1.070 precisa de "
+            f"~{1070 / taxa:.0f} pregoes de M15 (este dump tem {pregoes})."
+        )
+        if (a["fracao"].get("ambigua") or 0) > 0.10:
+            typer.echo("  AVISO: fracao ambigua > 10% -- o estimador binario nao serve "
+                       "sem o tape; a ficha volta ao desenho (EAS_DE_PRECO.md, 1).")
+    typer.echo(f"\n  Saida: {saida}/resumo.json e barras_m15.parquet")
+
+
 @app.command()
 def bollinger_scalp(
     log: Path = typer.Argument(..., help="Dump do console com linhas BBSBARRA| (grafico de 15s)"),

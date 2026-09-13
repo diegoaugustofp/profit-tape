@@ -1873,3 +1873,48 @@ puro, sem pregao.
     pendente", quando todo o codigo ja' esta' pronto).
 
 So' documentacao. 761 testes, ruff e mypy limpos.
+
+### Continuacao (2026-09-13, noite) — EAs de PRECO: tres fichas e o inicio do IFR2 (v2.59)
+
+Decisao do operador: o custo de P&D esta' assumido por 6 meses (prazo
+minimo para o tape acumular), mas o primeiro EA em execucao nao espera
+esses 6 meses. Nasce a linha de **EAs de PRECO** — validaveis HOJE
+porque candle de WIN tem anos de historico — desenhados com a PORTA DE
+VOLUME na interface desde o dia 1, e com a regra de que toda variavel
+nova passa pela disciplina inteira.
+
+- `docs/EAS_DE_PRECO.md` (novo): por que a linha existe; o que muda no
+  pipeline F0-F6 para EA de preco (fonte = candle, estimador binario
+  com barreiras simetricas, barra ambigua excluida, DEPURACAO x TESTE);
+  tres fichas em RASCUNHO — **IFR2** (RSI2 extremo a favor da MME80, D
+  = 1 x ATR14), **ORB** (rompimento do range 09:00-09:30, D =
+  amplitude), **123** (fundo de 3 barras, stop de compra acima da 3a,
+  stop na minima da 2a, alvo simetrico); custo maximo em pontos (D >
+  92 pts a p1 = 0,56 para pagar 11); a porta de volume como GATE
+  (`filtro_fluxo: null`, `extra="forbid"`); o que o documento NAO
+  autoriza. ORB tem risco de HORIZONTE declarado (<= 1 op/pregao).
+- `docs/EA_ARQUITETURA.md`: os tres na tabela da secao 1 com fase (IFR2
+  F1, ORB F0, 123 F0); pendencias 8 e 9 (dump M15 + `eas-preco`;
+  `RequestSerieHistory` de barras ganha dono); secao 5 nova resumindo a
+  linha e as regras.
+- `ntsl/preco_m15.ntsl` (novo): dump M15 com OHLC, RSI2, MME8, MME80,
+  ATR14, TR calculados pelo Profit. Um dump serve as tres fichas (~54
+  pregoes por dump de console). Segue as convencoes do
+  `bollinger_scalp.ntsl`. A assinatura `RSI(periodo, tipo)` e' a
+  suposicao a confirmar ao compilar (fallback `RSI(2)` no cabecalho).
+- `research/eas_preco.py` + `profit-tape eas-preco` (novos): parser
+  (CAMPOS congelados, espelho do .ntsl), variantes em aberto (RSI
+  Wilder com semente SMA / exponencial / simples; MME semeada no close
+  ou na SMA; ATR aritmetica / Wilder), equivalencia Python x Profit,
+  funil por clausula do IFR2 (extremo -> excursao -> regime -> janela
+  -> t+1), ATR14 e D em pontos com o p1 que empata o custo, fracao de
+  barras ambiguas e duracao ate' resolver. **Nao calcula qual barreira
+  bateu** — categoria `features`, zero trial.
+- RSI de Wilder conferido A MAO antes dos testes (regra 4); o exemplo
+  esta' no docstring e fixado no teste. 16 testes novos. 777 no total,
+  ruff e mypy limpos.
+
+Proximo passo (operador): aplicar o `preco_m15.ntsl` no grafico M15 do
+WINFUT, tirar quantos dumps o historico permitir (janelas de data sem
+sobreposicao), rodar `profit-tape eas-preco <dump>` e trazer o funil, os
+pontos e a fracao ambigua para preencher a ficha IFR2 e congelar.

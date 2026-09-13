@@ -1,0 +1,112 @@
+//=====================================================================
+// EAs DE PRECO -- DUMP DO GRAFICO DE 15 MINUTOS (WINFUT)
+//
+// O que este indicador FAZ: loga, barra a barra, o OHLC e os valores
+// que o PROPRIO Profit calcula para os indicadores das tres fichas de
+// docs/EAS_DE_PRECO.md (RSI de 2, MME8, MME80, ATR14, TrueRange). O
+// Python (`research/eas_preco.py`) recalcula tudo a partir do mesmo
+// OHLC e MEDE a diferenca -- a mesma tecnica do `bollinger_scalp.ntsl`
+// e do `absorcao_barra.ntsl` (erro de 2,4e-08 em 2.001 barras).
+//
+// O que ele NAO faz: nao marca sinal, nao decide nada. As regras de
+// entrada (IFR2, ORB, 123) vivem so' no Python, de proposito -- aqui o
+// Profit e' a REFERENCIA dos indicadores, e a referencia nao pode
+// conter a coisa que esta sendo conferida.
+//
+// UM DUMP SERVE AS TRES FICHAS: todas rodam em M15 com os mesmos
+// indicadores. O funil de cada uma e' Python.
+//
+// PARA QUE SERVE (duas coisas, o mesmo arquivo)
+//   1. Equivalencia: o manual do NTSL nao diz se RSI() e' Wilder ou
+//      media simples, nem como MediaExp() semeia a primeira barra. O
+//      Python calcula as variantes e mede qual bate.
+//   2. Historico: quantos gatilhos cada clausula de cada ficha deixa
+//      passar POR PREGAO (7.4), e ATR14 / amplitudes em PONTOS (7.5),
+//      ANTES de congelar qualquer ficha.
+//
+// O BUFFER DO CONSOLE RETEM ~2.000 LINHAS (medido 2026-08-30). Em M15
+// um pregao tem ~37 barras -> um dump cobre ~54 pregoes. Use as janelas
+// de DATA para fatiar o historico em dumps sem sobreposicao; o parser
+// recusa (dia, current_bar) duplicado.
+//
+// FUNCOES DO PROFIT QUE ESTE ARQUIVO ASSUME (confira ao compilar):
+//   RSI(periodo, tipoMedia)        -- se o compilador recusar o 2o
+//                                     argumento, troque por RSI(2). O
+//                                     Python mede a variante de todo
+//                                     jeito.
+//   MediaExp(periodo, serie)       -- media exponencial
+//   AvgTrueRange(periodo, tipo)    -- tipo 0 = aritmetica (SMA do TR,
+//                                     medido no Bollinger: dif 0,0)
+//   TrueRange                      -- TrueHigh - TrueLow
+//
+// NTSL: sem Abs(), sem indexar chamada de funcao, sem Integer em
+// ConsoleLog (declare Float), acesso posicional no topo. Ver skill
+// `profit-tape-engenharia`, 3.1.
+//=====================================================================
+
+input
+  //--- PARAMETROS DAS FICHAS (docs/EAS_DE_PRECO.md, secao 2). Nao sao
+  //--- calibrados: sao os declarados. Mudar = ficha nova. ---
+  RsiPeriodo(2);
+  MmeCurta(8);
+  MmeLonga(80);
+  AtrPeriodo(14);
+  //--- somente apresentacao / janela do log ---
+  LogAtivo(1);
+  LogDataInicio(0);          // formato EasyLanguage 1AnoMesDia; 0 = sem filtro
+  LogDataFim(0);
+  BarsPorDiaEsperado(37);    // ~ 9h15 de pregao / 15 min. So' AVISA.
+
+var
+  sRsi, sMmeC, sMmeL, sAtr, sTr : Float;
+  sVol, sBar, sBarsDia          : Float;
+  bNaJanela                      : Boolean;
+
+begin
+  //-------------------------------------------------------------------
+  // Funcoes do Profit, guardadas em variavel (padrao do arquivo que
+  // funciona). Tipo de media 0 = aritmetica onde houver o argumento.
+  //-------------------------------------------------------------------
+  sRsi     := RSI(RsiPeriodo, 0);
+  sMmeC    := MediaExp(MmeCurta, Close);
+  sMmeL    := MediaExp(MmeLonga, Close);
+  sAtr     := AvgTrueRange(AtrPeriodo, 0);
+  sTr      := TrueRange;
+  sVol     := QuantityVol(False, False);
+  sBar     := CurrentBar;
+  sBarsDia := RS_BarsPerDay;
+
+  Plot(sMmeC);
+  Plot2(sMmeL);
+
+  //-------------------------------------------------------------------
+  // SINAL DE VIDA: uma linha, incondicional. Se nao aparecer, o
+  // indicador nao compilou ou nao esta aplicado.
+  //-------------------------------------------------------------------
+  if CurrentBar = 1 then
+    ConsoleLog("PRCVIDA|barras=" + BarCount + "|primeira_data=" + Date
+      + "|barras_por_dia=" + sBarsDia
+      + "|LogDataInicio=" + LogDataInicio + "|LogDataFim=" + LogDataFim);
+
+  if (CurrentBar = 1) and (sBarsDia <> BarsPorDiaEsperado) then
+    ConsoleLog("PRCAVISO|barras_por_dia=" + sBarsDia
+      + "|esperado=" + BarsPorDiaEsperado
+      + "|confira que o grafico esta em 15 MINUTOS");
+
+  bNaJanela := ((LogDataInicio = 0) or (Date >= LogDataInicio))
+           and ((LogDataFim = 0) or (Date <= LogDataFim));
+
+  //-------------------------------------------------------------------
+  // LOG -- ordem CONGELADA, espelhada em `CAMPOS` do
+  // research/eas_preco.py. Mudanca sai nos DOIS lados na mesma entrega
+  // (skill engenharia, 3.2).
+  //
+  // CurrentBar <= BarCount - 3 evita as barras ainda em formacao.
+  //-------------------------------------------------------------------
+  if (LogAtivo = 1) and bNaJanela and (CurrentBar <= BarCount - 3) then
+    ConsoleLog("PRCBARRA|" + Date + "|" + Time + "|" + TimeExchange
+      + "|" + sBar
+      + "|" + Open + "|" + High + "|" + Low + "|" + Close
+      + "|" + sVol
+      + "|" + sRsi + "|" + sMmeC + "|" + sMmeL + "|" + sAtr + "|" + sTr);
+end;
