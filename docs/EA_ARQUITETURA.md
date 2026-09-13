@@ -38,7 +38,12 @@ E0-E4 esta' pronta e serve a QUALQUER estrategia que chegue em F5.
 
 ---
 
-## 1. Onde cada EA esta' HOJE (2026-09-11)
+## 1. Onde cada EA esta' HOJE (revisado 2026-09-13)
+
+> **Nada mudou nos EAs desde 2026-09-11** -- o trabalho dos ultimos dias
+> foi todo em INFRAESTRUTURA (escada E0-E5), que e' ortogonal a`s
+> estrategias. Os dois EAs vivos continuam parados no mesmo ponto,
+> esperando pregao.
 
 | EA | Fase | Estado | Proximo passo concreto |
 |---|---|---|---|
@@ -78,7 +83,21 @@ em dia sem pregao.
 | **E2** | uma ordem real (compra + zeragem) na conta demo | FECHADO (v2.41, `resultado=ok` ao vivo 2026-09-11 12:30) |
 | **E3** | reconciliacao de posicao EA x corretora, zeragem na divergencia | FECHADO (v2.48, confirmado com posicao ZERADA **e** ABERTA real) |
 | **E4** | forward em demo com ordens reais, 1 contrato, mede slippage/latencia | MONTADO (v2.47) -- **nunca viu sinal real disparar** |
-| **E5** | **multi-EA dinamico** (1 EA por ticker, inclusao/remocao SEM parar o record) | E5.0/E5.1/E5.4 entregues; E5.2 CANCELADO (ver 4.2); falta E5.5/E5.6 (exigem pregao) |
+| **E5** | **multi-EA dinamico** (inclusao/remocao SEM parar o record) | CODIGO COMPLETO (v2.50-v2.57); falta so' validar ao vivo (E5.5/E5.6) |
+
+**Detalhe do E5** (sub-passos, porque foi o mais longo):
+
+| | O que | Estado |
+|---|---|---|
+| E5.0 | `SupervisorDeRisco` informativo (calcula e avisa, nunca trava) | ENTREGUE v2.50 |
+| E5.1 | `LivroDePosicoes` por (EA, subconta, ticker) | ENTREGUE v2.50 |
+| E5.2 | migrar execucao para familia V2 com `SubAccountID` | **CANCELADO** -- subconta e' produto de mesa proprietaria, conceito errado (4.2) |
+| E5.3 | revalidar E2/E3/E4 na familia V2 | **CANCELADO** junto com o E5.2 -- a familia legada ja' validada continua servindo |
+| E5.4a | `DespachanteDeEAs` + `RegistroDeEAs` | ENTREGUE v2.55 |
+| E5.4b | `--ea-dir`: incluir/remover EA com o record rodando | ENTREGUE v2.56 |
+| E5.4c | `--ea-modo-ticker exclusivo`: 2 EAs num ticker, so' 1 posicionado | ENTREGUE v2.57 |
+| E5.5 | 2 EAs em dry_run, pregao inteiro, 1 incluido a quente | **pendente -- exige pregao** |
+| E5.6 | 2 EAs em demo com ordens reais | **pendente -- exige pregao** |
 
 ### Licoes da escada que valem para sempre
 
@@ -95,6 +114,14 @@ em dia sem pregao.
 4. **Operacao manual e reconciliacao automatica sao mutuamente
    exclusivas.** Com E3/E4 ativo, posicao aberta na mao pelo Profit e'
    tratada como divergencia e zerada (medido 2026-09-11 21h).
+5. **`on_trade_extra` e' capturado em variavel local no `connect()`.**
+   Trocar `client._on_trade_extra` depois de conectado NAO tem efeito.
+   Por isso o multi-EA usa um despachante fixo com lista mutavel por
+   dentro, nao troca de atributo (descoberto no redesenho do E5).
+6. **Erro de EA nunca derruba a captura, mas a assimetria importa**: na
+   CONSTRUCAO um EA mal configurado mata o processo (nao ha' captura a
+   perder, e subir um record que o operador acha que vai operar -- mas
+   nao vai -- e' pior que nao subir); EM EXECUCAO nada derruba.
 
 ---
 
@@ -112,26 +139,79 @@ nunca foi atualizado. Especificamente:
 | "dry_run=False recusado por design" | L873-880 | SUPERADO pelo E4 (v2.47): agora e' suportado, so' em demo, com travas estruturais |
 | "arquitetura de longo prazo para dry_run=False" | L694 | RESOLVIDO: rota (b) escolhida e implementada (EA dentro do record) |
 
-**Pendencias de verdade, hoje:**
+**Pendencias de verdade (revisado 2026-09-13):**
 
-1. **E4 nunca viu sinal real virar ordem** (bloqueado por pregao).
-2. **E5 em andamento** -- E5.0/E5.1 entregues; E5.2 cancelado (subcontas sao produto de mesa proprietaria, ver 4.2); proximo e' E5.4 (despachante dinamico), sem pregao.
-3. **Zeragem V2 struct-based** (`TConnectorZeroPosition`) e **health
+### Bloqueadas por PREGAO (nada a fazer ate' segunda)
+
+1. **E4 nunca viu sinal real virar ordem.** Todo o E4 (fill, slippage,
+   latencia, travas) so' rodou contra a fake. Primeira rodada real deve
+   ser em horario controlado, olhando o PRIMEIRO sinal disparar e
+   conferindo no Profit antes de deixar solto.
+2. **E5.5**: 2 EAs em dry_run, pregao inteiro, um deles incluido a
+   quente pela `--ea-dir`.
+3. **E5.6**: 2 EAs em demo com ordens reais.
+
+### Podem ser feitas SEM pregao
+
+4. **DeepScalper Fase 2**: rodar `fase2-score` nos dias ja' capturados
+   (`curate` -> `features` -> `fase2-score`). Placar fechado ate' n=50 --
+   olhar antes viola o proprio pre-registro.
+5. **Zeragem V2 struct-based** (`TConnectorZeroPosition`) e **health
    check** (`GetHealthStatus`/`TSystemHealthState`, watchdog da DLL
-   4.0.0.41) mapeados nos exemplos oficiais, nunca implementados. Nao
-   bloqueiam nada; candidatos naturais para dia sem pregao.
-4. **`ea.exemplo.yaml` e `ea_venda_apenas.yaml`** continuam no repo mas
-   nao correspondem a nenhum EA vivo -- `ea_venda_rota_b.yaml` e' o
-   unico em uso. Vale consolidar para nao confundir sessao futura.
+   4.0.0.41): mapeados nos exemplos oficiais, nunca implementados. Nao
+   bloqueiam nada.
+6. **`ea.exemplo.yaml` e `ea_venda_apenas.yaml`** continuam no repo mas
+   nao correspondem a nenhum EA vivo -- so' `ea_venda_rota_b.yaml` esta'
+   em uso. Vale consolidar para nao confundir sessao futura.
+7. **Pesquisa nova** sobre o `curated` ja' capturado -- unica coisa que
+   pode gerar um EA novo para a esteira, que hoje tem so' dois nomes
+   (um deles parado esperando pregao).
+
+### Divida tecnica conhecida, sem urgencia
+
+8. O corpo historico deste arquivo (da secao "Indice por assunto" em
+   diante) tem trechos de agosto que descrevem estado ja' superado. Os
+   titulos foram marcados `[historico]` em 2026-09-11, mas o texto
+   interno nao foi revisado linha a linha.
 
 ---
 
-## 4. PLANO DO E5 — multi-EA dinamico com SUBCONTAS (v2, 2026-09-11)
+## 3b. Entregue x APLICADO (2026-09-13)
 
-> Status: desenho **validado pelo operador**. E5.0 e E5.1 implementados
-> (v2.50); o resto pendente. Esta e' a **segunda versao** do plano -- a
-> primeira assumia EAs fixos na inicializacao, o que o operador
-> corretamente rejeitou (ver 4.3).
+Distincao que importa: uma tag entregue existe no bundle, mas so' vale
+no ambiente do operador depois do `git merge`. Em 2026-09-13 o remoto
+estava em **v2.55**; v2.56 e v2.57 tinham sido entregues mas ainda nao
+aplicadas.
+
+| Tag | O que trouxe | Aplicada? |
+|---|---|---|
+| v2.50 | E5.0/E5.1 (supervisor, livro) | sim |
+| v2.51 | E5 redesenhado (record nunca para) | sim |
+| v2.52 | `ea-contas` lista subcontas | sim |
+| v2.53 | licenca negada != "sem subconta" | sim |
+| v2.54 | caminho B (1 EA por ticker) | sim |
+| v2.55 | E5.4a (despachante, registro) | sim |
+| v2.56 | E5.4b (`--ea-dir`, EA a quente) | **pendente** |
+| v2.57 | E5.4c (`--ea-modo-ticker exclusivo`) | **pendente** |
+
+Quando uma sessao futura encontrar o remoto atras das tags locais, o
+caminho e' construir o proximo incremento SOBRE a tag local mais alta
+(nao sobre `origin/main`), e mandar os bundles pendentes juntos no zip
+-- foi o que se fez na v2.57.
+
+---
+
+## 4. PLANO DO E5 — multi-EA dinamico por TICKER (v3, 2026-09-13)
+
+> Status: desenho validado pelo operador e **todo o codigo implementado**
+> (v2.50-v2.57). Falta so' validar ao vivo -- E5.5 e E5.6, que exigem
+> pregao.
+>
+> Esta e' a **terceira versao** do plano, e as duas quedas anteriores
+> foram por razoes que valem guardar: a v1 assumia EAs fixos na
+> inicializacao (rejeitada -- reiniciar o record perde captura); a v2
+> adotou SUBCONTAS (caiu -- conceito errado, e' produto de mesa
+> proprietaria, ver 4.2). Esta usa o TICKER como separador.
 
 ### 4.1 O que E5 e' e o que NAO e'
 

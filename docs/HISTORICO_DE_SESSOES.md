@@ -1849,3 +1849,27 @@ puro, sem pregao.
   (a medicao de cada EA fica condicionada ao que o outro fazia) esta'
   documentado em 4.4b e visivel no log, nao escondido.
 - 12 testes novos. 761 no total, ruff e mypy limpos.
+
+### Continuacao (2026-09-13) — revisao do plano: o que fechou, o que falta (v2.58)
+
+- Secoes de estado do EA_ARQUITETURA revisadas contra o codigo real:
+  - **Secao 1** (EAs): nada mudou desde 11/09 -- explicitado que o
+    trabalho recente foi TODO em infraestrutura, que e' ortogonal a`s
+    estrategias. Os dois EAs vivos seguem parados esperando pregao.
+  - **Secao 2** (escada): E5 detalhado em sub-passos (E5.0 a E5.6) com
+    o estado de cada um. E5.2 e E5.3 marcados CANCELADOS (subconta e'
+    produto de mesa proprietaria). Duas licoes novas: `on_trade_extra`
+    capturado em variavel local no `connect()`, e a assimetria do
+    tratamento de erro de EA (construcao mata, execucao nunca).
+  - **Secao 3** (pendencias): reorganizada por VIABILIDADE -- o que
+    esta' bloqueado por pregao, o que da' para fazer sem, e divida
+    tecnica sem urgencia.
+  - **Secao 3b (nova)**: entregue x APLICADO. O remoto estava em v2.55
+    com v2.56/v2.57 entregues mas nao aplicadas -- distincao que uma
+    sessao futura precisa ver para nao construir sobre `origin/main`
+    desatualizado.
+  - **Secao 4**: titulo e status corrigidos (dizia "com SUBCONTAS",
+    conceito ja' descartado; e "E5.0/E5.1 implementados, resto
+    pendente", quando todo o codigo ja' esta' pronto).
+
+So' documentacao. 761 testes, ruff e mypy limpos.
