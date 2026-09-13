@@ -1,12 +1,11 @@
 # EAs de PRECO — linha paralela enquanto o tape acumula (2026-09-13)
 
-Estado (2026-09-13, noite): **IFR2 em ficha v1** — TAXA e pontos
-medidos no primeiro dump (174 pregoes, 02/01 a 11/09/2026), dois ajustes
-de MECANISMO decididos antes de congelar (K = 0,5; regime vira estrato).
-Congela quando o dump de 2025 entrar (se o grafico carregar) e o
-verificador corrigido (v2.60) confirmar as equivalencias. **ORB e 123
-continuam em RASCUNHO.** Nenhuma delas gastou amostra de TESTE: nenhum
-p1 foi calculado.
+Estado (2026-09-13, noite): **IFR2 CONGELADA (3.2)** — 923 pregoes de
+M15 (2023-01-02 a 2026-09-11) medidos, todas as equivalencias BATEM,
+tres amostras fixadas por DATA. O comando de teste
+(`profit-tape eas-preco-teste`) existe e recusa misturar amostras ou
+repetir a rodada primaria. **Nenhum p1 foi calculado ainda.** ORB e 123
+continuam em RASCUNHO.
 
 Ordem decidida pelo operador: **IFR2 primeiro**, ORB em seguida, 123
 depois. Fase de cada uma na tabela da secao 1 do `EA_ARQUITETURA.md`.
@@ -230,6 +229,111 @@ posicoes; K diferente de 0,5.
 para conferir a deteccao de sinal em barras conhecidas. Conferencia de
 formula; nao e' calibracao nem prova.
 
+### 3.0c O que os dois dumps mediram com a v2.60 (2026-09-13, noite)
+
+| | 2026 (dump 1) | 2023–2025 (dump 2) |
+|---|---|---|
+| pregoes / barras | 174 / 6.580 | 749 / 28.083 |
+| equivalencia | RSI Wilder, MME8/MME80 no close, ATR SMA, TR — **todos BATEM** (dif_max <= 0,03 fora do aquecimento) | idem (dif_max <= 0,12) |
+| ATR14 p10/p50/p90 | 258 / 465 / 742 | 213 / 331 / 523 |
+| D = 0,5 x ATR14 p10/p50/p90 | 145 / 245 / 375 | 120 / 175 / 265 |
+| sinais/pregao (compra + venda) | **3,51** | **3,54** |
+| estrato a favor / contra MME80 | 31% / 69% | 31% / 69% |
+| ambigua / por tempo | **7,4%** / 0 | **7,4%** / 0 |
+| duracao ate' resolver p50 / p90 | 1 / 3 barras | 1 / 3 barras |
+| p1 que empata 11 pts | 0,522 | 0,531 |
+
+**Estacionariedade do evento:** taxa e estratos identicos nos dois
+periodos, com ATR mediano 40% diferente. A clausula nao depende do
+regime de volatilidade.
+
+**Mecanismo, dito em voz alta (regra 0):** com D = metade do ATR, a
+mediana resolve NA BARRA DE ENTRADA. Na pratica a hipotese e' "depois
+de um extremo de RSI2, a primeira excursao de 0,5 x ATR14 da barra
+seguinte vai a favor". E' um mecanismo de exaustao imediata, nao de
+reversao que se desenvolve em varias barras. A HIPOTESE abaixo diz isso.
+
+**Os 7,4% ambiguos** sao as barras largas; excluir nao e' neutro. Abaixo
+do corte de 10%, o estimador serve — com a mitigacao de conferir, na
+amostra de DEPURACAO (que tem tape a partir de 24/07/2026), se os
+ambiguos pendem para um lado. `eas-preco-teste` lista-os
+(`sinais_<amostra>.csv`, classe=ambigua) com dia, hora e barra.
+
+### 3.2 FICHA CONGELADA — IFR2 M15 (2026-09-13, `entregue-v2.61`)
+
+    HIPOTESE   No WIN em M15, RSI(2) em extremo (<= 10 / >= 90) e'
+               exaustao imediata: entrando a mercado na abertura da
+               barra seguinte, a primeira excursao de 0,5 x ATR14 vai a
+               favor (barreira favoravel antes da desfavoravel) em mais
+               de 50% das vezes, em qualquer tendencia.
+
+    EVENTO     Barra M15 t fechada, WINFUT, indicadores continuos entre
+               pregoes. COMPRA: RSI2(t) <= 10 (Wilder). VENDA: RSI2(t)
+               >= 90. Um sinal por excursao (t-1 fora do extremo).
+               Janela: t fecha entre 09:15 e 16:30; t+1 no mesmo
+               pregao. Entrada = open(t+1). D = 0,5 x ATR14(t) ao tick
+               (meio-tick sobe), ATR14 = SMA14 do TrueRange. Alvo =
+               entrada + D, stop = entrada - D (espelho na venda).
+               Resolucao: primeira barra >= t+1 do mesmo dia em que
+               alvo ou stop cabem em [low, high]; os dois na mesma
+               barra = AMBIGUA (excluida, reportada); dia acaba sem
+               tocar = POR TEMPO (excluida, reportada). Posicao aberta
+               ignora sinal (no historico: sinais sao independentes,
+               duracao p50 = 1 barra).
+
+    TAXA       MEDIDA: 3,51 (2026) e 3,54 (2023-25) sinais/pregao.
+
+    EFEITO     p1 >= 0,56 contra p1 <= 0,50; meia-largura 3 pp -> n =
+               1.070 resolvidas. Nula a custo zero = 0,50 (barreiras
+               simetricas).
+
+    CUSTO      D x (2 p1 - 1). D mediano 175-245 pts: p1 de empate
+    MAXIMO     0,52-0,53. Alerta no EA: custo_pontos_estimado > D x 0,12
+               -> avisa e nao liga.
+
+    AMOSTRAS   Por DATA, fixadas:
+               TESTE       2023-01-01 .. 2025-12-31  (749 pregoes,
+                           ~2.650 sinais, +-1,9 pp) -- PRIMARIO, UMA
+                           rodada. `eas-preco-teste --amostra teste`
+                           recusa a segunda.
+               REPLICACAO  2026-01-01 .. 2026-08-13  (~154 pregoes,
+                           ~540 sinais) -- reportada DEPOIS do
+                           primario, sem veto sobre ele.
+               DEPURACAO   2026-08-14 em diante (~20 pregoes) -- barras
+                           olhadas uma a uma; ambiguas conferidas no
+                           tape; NAO interpretavel. Corrigir formula
+                           aqui e' permitido; ajustar numero, nao.
+
+    HORIZONTE  Historico: fechado (n >> 1.070). Forward (F5): a
+               ~3,5/pregao, n = 1.070 em ~305 pregoes (~14 meses); e'
+               conta do F5, com a mesma ficha.
+
+    CRITERIO   Sobre o TESTE: p1 >= 0,56 FAVORAVEL; p1 <= 0,50 CONTRA;
+               entre, INCONCLUSIVO. IC95 de Wilson sempre. Reportados,
+               sem veredito proprio: p1 por estrato (a favor / contra a
+               MME80; compra / venda), P&L bruto e liquido em pontos
+               por operacao (IC95), fracao ambigua e por tempo, e a
+               tendencia das ambiguas no tape (depuracao).
+
+    PARADA     Ordem obrigatoria: (1) DEPURACAO -- barras olhadas,
+               formula conferida, ambiguas no tape; (2) TESTE -- uma
+               rodada; (3) REPLICACAO -- reportada. Perdas seguidas,
+               dia ruim, circuit breaker NAO autorizam nada. Mudar
+               qualquer numero acima muda `hash_ficha` e reinicia:
+               resultados com hash diferente nunca sao somados.
+
+    CARIMBO    `eas-preco-teste` grava `git describe --tags` e o hash
+               sha256 (12) dos parametros da ficha em cada saida.
+
+**Porta de volume (declarada, NAO implementada):** `absorcao` na barra
+de sinal, como GATE. Hipotese nova; contagem reinicia.
+
+**O que a ficha congelada NAO autoriza:** rodar `teste` antes da
+depuracao; rodar `teste` duas vezes (o `--forcar` exige motivo escrito e
+so' vale para bug que faz o codigo passar a fazer o que a ficha ja'
+dizia); escolher estrato depois; mudar K, limiares, janela ou datas das
+amostras.
+
 ## 4. Ficha ORB (rascunho v0) — rompimento da abertura
 
     HIPOTESE   O range das duas primeiras barras M15 (09:00-09:30) do
@@ -362,3 +466,5 @@ hipotese inteira.
   mecanismo (foi o caso: K = 1 colidia com o stop catastrofico) —
   nunca por p1.
 - Preencher `filtro_fluxo` em qualquer EA sem ficha propria.
+- Rodar `eas-preco-teste --amostra teste` antes da depuracao, ou mais
+  de uma vez.

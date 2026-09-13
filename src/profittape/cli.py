@@ -1284,6 +1284,63 @@ def eas_preco(
     typer.echo(f"\n  Saida: {saida}/resumo.json e barras_m15.parquet")
 
 
+@app.command(name="eas-preco-teste")
+def eas_preco_teste(
+    log: Path = typer.Argument(..., help="Dump PRCBARRA| contendo SO' os dias da amostra pedida"),
+    amostra: str = typer.Option(..., "--amostra", help="teste | replicacao | depuracao"),
+    saida: Path = typer.Option(Path("data/research/eas_preco_teste"), "--saida"),
+    forcar: str | None = typer.Option(
+        None, "--forcar", help="Motivo para repetir a rodada de TESTE (fica gravado)"),
+    log_level: str = typer.Option("INFO", "--log-level"),
+) -> None:
+    """
+    IFR2 M15: o TESTE da ficha congelada (docs/EAS_DE_PRECO.md 3.2).
+
+    Calcula p1 sobre UMA amostra: `teste` (2023-2025, primario, UMA
+    rodada -- o comando recusa a segunda), `replicacao` (2026 ate'
+    13/08, reportada depois, sem veto) ou `depuracao` (14/08 em diante,
+    barras para olhar uma a uma; NAO interpretavel). Recusa dump com dia
+    fora da amostra. Carimba com a tag do codigo e o hash da ficha.
+    """
+    configurar(log_level)
+    from .research.eas_preco_teste import AMOSTRAS, rodar
+
+    r = rodar(log, saida, amostra, forcar)
+    m, pl, c = r["meta"], r["placar"], r["carimbo"]
+    pr = pl["primario"]
+    typer.echo("=" * 72)
+    typer.echo(f"IFR2 M15 — {amostra.upper()} ({AMOSTRAS[amostra][0]} .. {AMOSTRAS[amostra][1]})")
+    typer.echo("=" * 72)
+    typer.echo(f"  {m['barras']} barras | {m['pregoes']} pregoes | {m['inicio']} a {m['fim']}")
+    typer.echo(f"  carimbo: codigo={c['codigo']} ficha={c['hash_ficha']}")
+    if amostra == "depuracao":
+        typer.echo("\n  AMOSTRA DE DEPURACAO: os numeros abaixo NAO sao interpretaveis.")
+        typer.echo("  Serve para olhar as barras marcadas uma a uma e conferir as")
+        typer.echo("  ambiguas no tape. Ajustar qualquer numero por causa delas e' overfit.")
+    typer.echo("\n--- PRIMARIO (total) ---")
+    typer.echo(
+        f"  sinais={pr['n_sinais']}  resolvidas={pr['n_resolvidas']}  "
+        f"ambiguas={pr['n_ambiguas']} ({pr['fracao_ambigua']})  por_tempo={pr['n_por_tempo']}"
+    )
+    typer.echo(f"  p1 = {pr['p1']}  IC95 = {pr['ic95']}")
+    typer.echo(
+        f"  P&L bruto/op = {pr['pnl_bruto_pts_medio']} pts  IC95 = {pr['pnl_bruto_pts_ic95']}"
+        f"  | liquido (-{11.0}) = {pr['pnl_liquido_pts_medio']} pts"
+    )
+    if amostra != "depuracao":
+        typer.echo(f"\n  VEREDITO ({amostra}): {pr['veredito']}   "
+                   "(favoravel >= 0,56 | contra <= 0,50 | entre: inconclusivo)")
+        if amostra == "replicacao":
+            typer.echo("  A replicacao e' REPORTADA; nao tem veto sobre o teste primario.")
+    typer.echo("\n--- ESTRATOS (so' reportados, sem veredito proprio) ---")
+    for nome, e in pl["estratos_reportados"].items():
+        typer.echo(f"  {nome:16} n={e['n_resolvidas']:5d}  p1={e['p1']}  IC95={e['ic95']}"
+                   f"  pnl_bruto={e['pnl_bruto_pts_medio']}")
+    typer.echo(f"\n  Ambiguas para conferir no tape: {pl['ambiguas_para_conferir_no_tape']} "
+               f"(lista em sinais_{amostra}.csv, classe=ambigua)")
+    typer.echo(f"  Saida: {r['arquivo']}")
+
+
 @app.command()
 def bollinger_scalp(
     log: Path = typer.Argument(..., help="Dump do console com linhas BBSBARRA| (grafico de 15s)"),

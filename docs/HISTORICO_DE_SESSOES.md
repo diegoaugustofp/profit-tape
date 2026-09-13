@@ -1941,3 +1941,27 @@ Ficha IFR2 v1 escrita em `docs/EAS_DE_PRECO.md` 3 com os numeros
 medidos e o que ainda falta para congelar (rodada com a v2.60; 2025 se
 o grafico carregar). IFR2 na tabela: F2->F3. 778 testes, ruff e mypy
 limpos.
+
+### Continuacao (2026-09-13, madrugada) — IFR2 CONGELADA e `eas-preco-teste` (v2.61)
+
+Segundo dump (2023-2025, 749 pregoes) + primeiro dump com a v2.60: todas
+as equivalencias BATEM; taxa 3,5 sinais/pregao e estratos 31/69
+identicos nos dois periodos (ATR mediano 40% diferente); 7,4% ambiguo,
+duracao mediana 1 barra. Mecanismo redito em voz alta: "exaustao
+imediata -- a primeira excursao de 0,5 x ATR14 da barra seguinte".
+
+- `docs/EAS_DE_PRECO.md` 3.0c (tabela dos dois dumps) e **3.2 FICHA
+  CONGELADA**: amostras por DATA (TESTE 2023-25 primario, uma rodada;
+  REPLICACAO 2026 ate' 13/08, reportada sem veto; DEPURACAO 14/08 em
+  diante, nao interpretavel), ordem obrigatoria depuracao -> teste ->
+  replicacao, carimbo de versao (tag + hash da ficha).
+- `research/eas_preco_teste.py` + `profit-tape eas-preco-teste` (novos):
+  resultado binario por sinal, p1 com IC de Wilson (conferido a mao
+  7/10 -> 0,397-0,892), veredito pelo criterio da ficha, estratos SO'
+  reportados (sem veredito proprio), portao de amostra por data (recusa
+  dia fora), lock de UMA rodada no `teste` (`--forcar` exige motivo,
+  gravado), carimbo `git describe` + sha256 dos parametros. Lista as
+  ambiguas para conferir no tape; NAO as resolve (pendencia: ordem
+  intrabarra pelo tape na depuracao).
+- EA_ARQUITETURA: IFR2 em **F3 — CONGELADA**, proximo passo = F4 na
+  ordem da ficha. 11 testes novos; 789 no total, ruff e mypy limpos.
