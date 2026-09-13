@@ -53,6 +53,14 @@ def record(
              "principal. O record NUNCA para para mexer em EA -- reiniciar "
              "perderia captura, que e' o unico ativo que nao da' para "
              "refazer. Regra: 1 EA por TICKER (ver EA_ARQUITETURA 4.2)."),
+    ea_modo_ticker: str = typer.Option(
+        "unico", "--ea-modo-ticker",
+        help="'unico' (default): 1 EA por ticker -- o 2o EA no mesmo ativo "
+             "e' recusado. E' o modo honesto para MEDIR uma estrategia "
+             "(nenhum sinal se perde por disputa). 'exclusivo': varios EAs "
+             "dividem o ticker, mas so' UM fica posicionado por vez (quem "
+             "sinaliza primeiro; quem perde DESCARTA o sinal). Sem netting, "
+             "mas CONTAMINA a medicao -- ver ea/vagas.py."),
     capital_em_conta: float = typer.Option(
         0.0, "--capital-em-conta",
         help="Quanto voce de fato tem na conta, para o supervisor CALCULAR "
@@ -163,6 +171,7 @@ def record(
             ea_ticker_ordem=ea_ticker_ordem,
             ea_dir=ea_dir,
             capital_em_conta=capital_em_conta,
+            ea_modo_ticker=ea_modo_ticker,
         ).run()
     )
 

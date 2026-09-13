@@ -1824,3 +1824,28 @@ puro, sem pregao.
   sofre descarte). 749 testes, ruff e mypy limpos.
 
 **Pendente**: E5.5 e E5.6, que exigem pregao.
+
+### Continuacao (2026-09-13) — E5.4c: modo exclusivo, 2 EAs no mesmo ticker (v2.57)
+
+- Operador propos: em vez de proibir 2 EAs no mesmo ticker, deixar os
+  dois rodando e impedir que o segundo ENTRE enquanto o primeiro estiver
+  posicionado. Resolve o netting pela raiz -- ele so' existe se houver
+  duas posicoes simultaneas.
+- Regras escolhidas: quem sinaliza PRIMEIRO fica com a vaga; quem perde
+  DESCARTA o sinal (nao fica em espera -- ao abrir a vaga o sinal ja'
+  estaria velho); vaga liberada quando o dono zera.
+- `ea/vagas.py` (`VagasPorTicker`): lock de verdade, nao tupla imutavel
+  como o despachante -- aqui a operacao e' leitura-e-escrita atomica
+  ("pega se estiver livre"), que snapshot sem lock nao resolve. Cada
+  bridge roda na sua thread, entao a disputa e' real (teste com 20
+  threads simultaneas confirma que so' um ganha). Um EA NAO consegue
+  liberar a vaga de outro.
+- `--ea-modo-ticker unico|exclusivo`. O default (`unico`) mantem o
+  comportamento anterior identico.
+- Vaga liberada tambem no `encerrar_dia`, nos DOIS caminhos (com e sem
+  posicao aberta) -- senao um EA removido a quente logo apos zerar
+  travaria o ticker para sempre.
+- `sinais_sem_vaga` no heartbeat: o custo estatistico do modo exclusivo
+  (a medicao de cada EA fica condicionada ao que o outro fazia) esta'
+  documentado em 4.4b e visivel no log, nao escondido.
+- 12 testes novos. 761 no total, ruff e mypy limpos.

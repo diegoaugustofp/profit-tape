@@ -44,6 +44,7 @@ from .decisao import Acao, Decisao, decidir
 from .execucao import ExecutorDeOrdens, executar
 from .risco import GestorDeRisco
 from .sinal import BarraFechada, ConstrutorDeSinalAoVivo
+from .vagas import VagasPorTicker
 
 log = structlog.get_logger(__name__)
 
@@ -64,6 +65,11 @@ class EstatisticasEA:
     barras: int = 0
     decisoes: dict[str, int] = field(default_factory=dict)
     posicao_simulada: int = 0
+    # E5.4c: quantas vezes este EA sinalizou e NAO entrou porque outro EA
+    # estava posicionado no mesmo ticker. Numero importante para ler o
+    # resultado: um EA que perdeu metade dos sinais nao teve o desempenho
+    # da estrategia, teve o da estrategia CONDICIONADA a' outra.
+    sinais_descartados_sem_vaga: int = 0
 
 
 def carregar_trades_do_dia(raiz_raw: Path) -> list[_TradeBruto]:
@@ -147,7 +153,9 @@ class EAService:
 
     def __init__(self, config: EAConfig, roteamento: RoteamentoConfig | None = None,
                 executor: ExecutorDeOrdens | None = None,
-                ignorar_circuit_breaker: bool = False) -> None:
+                ignorar_circuit_breaker: bool = False,
+                vagas: VagasPorTicker | None = None,
+                nome: str | None = None) -> None:
         if not config.dry_run and executor is None:
             raise RuntimeError(
                 "dry_run=False exige um ExecutorDeOrdens construido "
@@ -155,6 +163,11 @@ class EAService:
             )
         self.config = config
         self.executor = executor
+        # E5.4c: modo exclusivo -- varios EAs no mesmo ticker, so' um
+        # posicionado por vez. None = modo normal (1 EA por ticker,
+        # garantido pelo RegistroDeEAs na inclusao).
+        self.vagas = vagas
+        self.nome = nome or config.nome or config.symbol
         agentes = [s.agent_id for s in config.sinais]
         self.construtor = ConstrutorDeSinalAoVivo(
             config.volume_barra, config.janela_z, agentes)
@@ -193,6 +206,8 @@ class EAService:
                 decisoes.append(d)
                 self._executar_e_simular(d, preco_referencia=barra.close)
                 self.gestor.registrar_fechamento(barra.close, barra.bar_id, motivo)
+                if self.vagas is not None:
+                    self.vagas.liberar(self.config.symbol, self.nome)
             return decisoes
 
         # 2. Zerado: circuit breaker primeiro, sinal depois.
@@ -205,6 +220,15 @@ class EAService:
             d = decidir(sinal_cfg, valor_atual=valor,
                         posicao_atual=self.stats.posicao_simulada)
             if d.acao not in (Acao.COMPRAR, Acao.VENDER):
+                continue
+            # Modo exclusivo (E5.4c): a vaga do ticker e' de quem sinaliza
+            # primeiro. Perdeu -> DESCARTA o sinal (nao fica em espera: ao
+            # abrir a vaga, o sinal ja' estaria velho). A checagem vem
+            # DEPOIS de decidir e ANTES de executar -- assim a decisao
+            # continua sendo contabilizada como do EA, mas nao vira ordem.
+            if self.vagas is not None and not self.vagas.tentar_ocupar(
+                    self.config.symbol, self.nome):
+                self.stats.sinais_descartados_sem_vaga += 1
                 continue
             decisoes.append(d)
             self._executar_e_simular(d, preco_referencia=barra.close)
@@ -237,6 +261,11 @@ class EAService:
         tambem no gestor (P&L com o ultimo close conhecido) para o
         circuit breaker e o pnl_dia ficarem consistentes no log final."""
         if self.stats.posicao_simulada == 0 and not self.gestor.em_posicao():
+            # Zerado: nao ha' o que encerrar, mas a vaga pode estar em
+            # nome deste EA (ex.: removido a quente logo apos zerar).
+            # Deixar presa travaria o ticker para todos os outros.
+            if self.vagas is not None:
+                self.vagas.liberar(self.config.symbol, self.nome)
             return None
         d = Decisao(acao=Acao.ZERAR, motivo="encerramento do dia (posicao aberta)",
                     sinal_valor=0.0, feature="_encerramento")
@@ -244,6 +273,8 @@ class EAService:
         if self.gestor.em_posicao() and self._ultimo_close is not None:
             self.gestor.registrar_fechamento(self._ultimo_close,
                                              motivo="encerramento do dia")
+        if self.vagas is not None:
+            self.vagas.liberar(self.config.symbol, self.nome)
         log.info("ea.encerramento_dia", posicao_zerada=True,
                  pnl_dia_pontos=round(self.gestor.pnl_dia_pontos, 1))
         return d
@@ -451,7 +482,8 @@ class EAService:
                 "posicao": self.stats.posicao_simulada,
                 "pnl_dia_pontos": round(self.gestor.pnl_dia_pontos, 1),
                 "perdas_seguidas": self.gestor.perdas_consecutivas,
-                "bloqueado": self.gestor.bloqueado}
+                "bloqueado": self.gestor.bloqueado,
+                "sinais_sem_vaga": self.stats.sinais_descartados_sem_vaga}
 
     @staticmethod
     def _hora_de_encerrar(alvo_hhmm: str, tz_offset_horas: int) -> bool:

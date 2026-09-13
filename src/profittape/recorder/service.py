@@ -65,6 +65,7 @@ class RecorderService:
         ea_ticker_ordem: str | None = None,
         ea_dir: Path | str | None = None,
         capital_em_conta: float = 0.0,
+        ea_modo_ticker: str = "unico",
     ) -> None:
         self.cfg = cfg
         self.cred = cred
@@ -133,7 +134,13 @@ class RecorderService:
         self.supervisor = SupervisorDeRisco(capital_em_conta=capital_em_conta)
         self.livro = LivroDePosicoes()
         self.registro = RegistroDeEAs(self.despachante, supervisor=self.supervisor,
-                                      livro=self.livro)
+                                      livro=self.livro, modo_ticker=ea_modo_ticker)
+        if ea_modo_ticker == "exclusivo":
+            log.warning("recorder.ea_modo_exclusivo",
+                       nota="varios EAs podem dividir um ticker; so' UM fica "
+                            "posicionado por vez (quem sinaliza primeiro; quem "
+                            "perde DESCARTA o sinal). Isso CONTAMINA a medicao "
+                            "de cada EA -- ver `sinais_sem_vaga` no heartbeat.")
         self._ea_dir = Path(ea_dir) if ea_dir else None
         self._ea_ticker_ordem = ea_ticker_ordem
         self._ea_config_path = ea_config_path

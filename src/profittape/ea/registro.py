@@ -36,6 +36,7 @@ from .despachante import DespachanteDeEAs
 from .livro import LivroDePosicoes
 from .service import EAService
 from .supervisor import ExigenciaDeEA, SupervisorDeRisco, capital_recomendado_para
+from .vagas import VagasPorTicker
 
 log = structlog.get_logger(__name__)
 
@@ -65,10 +66,27 @@ class RegistroDeEAs:
 
     def __init__(self, despachante: DespachanteDeEAs,
                  supervisor: SupervisorDeRisco | None = None,
-                 livro: LivroDePosicoes | None = None) -> None:
+                 livro: LivroDePosicoes | None = None,
+                 modo_ticker: str = "unico") -> None:
+        """
+        `modo_ticker` (E5.4c, decisao do operador 2026-09-13):
+
+        - "unico" (default): 1 EA por ticker. Um segundo EA no mesmo
+          ativo e' RECUSADO na inclusao. E' o caminho B puro -- e' o modo
+          honesto para MEDIR uma estrategia, porque nenhum sinal se
+          perde por disputa.
+        - "exclusivo": varios EAs podem dividir o ticker, mas so' UM fica
+          posicionado por vez (quem sinaliza primeiro; quem perde,
+          descarta). Nao ha' netting porque nunca ha' duas posicoes
+          simultaneas. CONTAMINA a medicao de cada EA -- ver vagas.py.
+        """
+        if modo_ticker not in ("unico", "exclusivo"):
+            raise ValueError("modo_ticker deve ser 'unico' ou 'exclusivo'")
         self._despachante = despachante
         self._supervisor = supervisor
         self._livro = livro
+        self.modo_ticker = modo_ticker
+        self.vagas = VagasPorTicker() if modo_ticker == "exclusivo" else None
         self._registrados: dict[str, EARegistrado] = {}
 
     # ------------------------------------------------------------------
@@ -100,6 +118,11 @@ class RegistroDeEAs:
                 "unicos (o nome e' o que identifica a posicao no livro e "
                 "nos logs)")
         dono = self.tickers_ocupados().get(cfg.symbol)
+        if dono is not None and self.modo_ticker == "exclusivo":
+            # Permitido: a exclusao mutua acontece na POSICAO (vagas.py),
+            # nao na inclusao. Dois EAs coexistem no ticker; so' um opera
+            # por vez.
+            return
         if dono is not None:
             raise InclusaoRecusada(
                 f"ticker {cfg.symbol!r} ja' e' operado pelo EA {dono!r}. No "
@@ -119,7 +142,8 @@ class RegistroDeEAs:
         nome_final = nome or cfg.nome or (origem.stem if origem else cfg.symbol)
         self.validar(cfg, nome_final)
 
-        servico = EAService(cfg, executor=executor)  # type: ignore[arg-type]
+        servico = EAService(cfg, executor=executor,  # type: ignore[arg-type]
+                           vagas=self.vagas, nome=nome_final)
         bridge = EABridge(servico)
         registrado = EARegistrado(nome=nome_final, symbol=cfg.symbol,
                                  origem=origem.resolve() if origem else None,
@@ -130,7 +154,12 @@ class RegistroDeEAs:
         if self._livro is not None:
             # subconta=None de proposito: no caminho B o ticker ja' e'
             # unico por EA, entao (None, ticker) ja' e' chave unica.
-            self._livro.registrar_ea(nome_final, subconta="", ticker=cfg.symbol)
+            # No modo exclusivo varios EAs dividem o ticker: a chave do
+            # livro usa o NOME como discriminador, senao o segundo EA
+            # colidiria com o primeiro em (subconta, ticker).
+            self._livro.registrar_ea(nome_final, subconta=(
+                nome_final if self.modo_ticker == "exclusivo" else ""),
+                ticker=cfg.symbol)
         if self._supervisor is not None:
             self._supervisor.registrar(ExigenciaDeEA(
                 nome=nome_final,

@@ -255,6 +255,36 @@ Regra herdada: o despachante NUNCA levanta para o callback. Se um
 bridge falha, loga e segue para o proximo -- um EA com bug nao pode
 derrubar os outros nem a captura.
 
+### 4.4b Dois modos de ticker (E5.4c, 2026-09-13)
+
+A restricao "1 EA por ticker" existe por causa do NETTING -- mas o
+netting so' acontece se DOIS EAs estiverem posicionados ao mesmo tempo.
+Operador propos: e se dois EAs dividirem o ticker e o segundo simplesmente
+nao entrar enquanto o primeiro estiver posicionado? Funciona, e resolve o
+problema pela raiz -- nunca ha' posicao oposta para netar.
+
+| | `unico` (default) | `exclusivo` |
+|---|---|---|
+| 2o EA no mesmo ticker | RECUSADO na inclusao | aceito |
+| quem opera | o unico que existe | quem sinalizar primeiro |
+| quem perde a disputa | nao ha' disputa | DESCARTA o sinal |
+| vaga liberada quando | -- | o dono zera a posicao |
+| medicao da estrategia | limpa | CONTAMINADA |
+
+**Regras do modo exclusivo** (decididas pelo operador): quem sinaliza
+primeiro fica com a vaga; quem perde DESCARTA (nao fica em espera --
+quando a vaga abrisse, o sinal ja' estaria velho e a entrada sairia em
+preco que ja' correu); a vaga sai quando o dono zera.
+
+**O custo, que precisa estar na cara**: isto CONTAMINA a medicao. Se o
+EA B perde metade dos sinais porque o A estava posicionado, o
+desempenho medido de B nao e' o da estrategia B -- e' o da estrategia B
+CONDICIONADA ao que a A fazia. Para COMPARAR estrategias, `unico` (em
+tickers separados) continua sendo o modo honesto. `exclusivo` e' para
+OPERAR as duas no mesmo ativo. Por isso `sinais_sem_vaga` aparece no
+heartbeat de cada EA: quem le o resultado precisa ver quantas vezes
+aquele EA ficou de fora.
+
 ### 4.5 Decisao: UM arquivo por EA, com validacao de conflito
 
 **Risco levantado pelo operador**: dois YAMLs configurando a MESMA
@@ -303,6 +333,7 @@ orfa que o `LivroDePosicoes` marca como "(ninguem)".
 | **E5.2** | ~~Migrar para familia V2 com SubAccountID~~ | **CANCELADO** -- caminho B dispensa (ver 4.2). `ea-contas` lista subcontas como diagnostico (v2.52/v2.53) |
 | **E5.4a** | `DespachanteDeEAs` + `RegistroDeEAs`: fan-out estavel e trava de 1 EA por ticker | **ENTREGUE v2.55** |
 | **E5.4b** | `--ea-dir` + integracao no `RecorderService`: incluir/remover com o record rodando | **ENTREGUE v2.56** |
+| **E5.4c** | `--ea-modo-ticker exclusivo`: varios EAs no mesmo ticker, so' um posicionado por vez | **ENTREGUE v2.57** |
 | **E5.5** | 2 EAs em dry_run, pregao inteiro, incluindo 1 incluido a quente | pendente, **exige pregao** |
 | **E5.6** | 2 EAs em demo com ordens reais, tickers diferentes | pendente, **exige pregao** |
 
