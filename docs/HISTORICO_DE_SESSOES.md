@@ -1794,3 +1794,33 @@ puro, sem pregao.
   740 no total, ruff e mypy limpos.
 
 **Pendente**: E5.4b -- `--ea-dir` e a integracao no `RecorderService`.
+
+### Continuacao (2026-09-13) — E5.4b: EAs entram e saem com o record rodando (v2.56)
+
+- `--ea-dir <pasta>`: yaml novo INCLUI um EA a quente; yaml removido
+  RETIRA (graciosamente -- zera posicao antes de sair). Varredura a cada
+  5 s pela thread principal (o laco ja' roda a 0,5 s; varrer disco nessa
+  frequencia seria desperdicio e incluir EA nao e' urgencia).
+- `--capital-em-conta`: alimenta o SupervisorDeRisco. Puramente
+  informativo, como decidido -- calcula e avisa, nunca impede.
+- O despachante virou o `on_trade_extra` SEMPRE, registrado uma vez.
+  Isso **eliminou a logica de duas fases do E4** (que trocava
+  `client._on_trade_extra` depois de construir o client): um caminho a
+  menos, e o mais fragil deles.
+- O EA inicial (`--ea-config`) passou a entrar pelo MESMO caminho de um
+  EA a quente (`_incluir_ea`), com as mesmas travas. Antes eram dois
+  caminhos; agora o que vale no pregao vale no startup.
+- Tratamento de erro assimetrico, de proposito: NA CONSTRUCAO um EA mal
+  configurado mata o processo (nao ha' captura a perder, e subir um
+  record que o operador acha que vai operar -- mas nao vai -- e' pior
+  que nao subir). EM EXECUCAO nada derruba: yaml torto, ticker
+  repetido, pasta ilegivel, pre-requisito faltando -- tudo logado, EA
+  nao entra, captura segue. Flag `_em_execucao` distingue.
+- Defeito pego rodando: `_em_execucao` estava definido DEPOIS do bloco
+  que inclui o EA inicial -- AttributeError na construcao. Ordem
+  corrigida.
+- 9 testes novos, incluindo o central (incluir EA com o record ja'
+  capturando, confirmando que ele recebe trades e que a captura nao
+  sofre descarte). 749 testes, ruff e mypy limpos.
+
+**Pendente**: E5.5 e E5.6, que exigem pregao.

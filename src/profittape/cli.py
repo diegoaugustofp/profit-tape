@@ -45,6 +45,20 @@ def record(
              "agregador que a DLL aceita para dado mas rejeita no envio, "
              "manual Nelogica). Obrigatorio quando o ea_config tem "
              "dry_run=False; ignorado em dry_run=True."),
+    ea_dir: Path | None = typer.Option(
+        None, "--ea-dir",
+        help="E5.4b: pasta vigiada de EAs. Yaml novo ali dentro INCLUI um "
+             "EA com o record rodando; yaml removido RETIRA (o EA zera "
+             "posicao antes de sair). Varrida a cada 5 s pela thread "
+             "principal. O record NUNCA para para mexer em EA -- reiniciar "
+             "perderia captura, que e' o unico ativo que nao da' para "
+             "refazer. Regra: 1 EA por TICKER (ver EA_ARQUITETURA 4.2)."),
+    capital_em_conta: float = typer.Option(
+        0.0, "--capital-em-conta",
+        help="Quanto voce de fato tem na conta, para o supervisor CALCULAR "
+             "e AVISAR se os EAs somados pedem mais. Puramente informativo: "
+             "nunca impede nada -- a decisao e o risco sao sempre seus, "
+             "inclusive o de zeragem por falta de margem."),
     login_completo: bool = typer.Option(
         False,
         "--login-completo",
@@ -128,6 +142,8 @@ def record(
         if reconciliar_em:
             typer.echo(f"  E3: reconciliacao ({reconciliar_ticker}, esperado="
                        f"{reconciliar_esperado}) as {reconciliar_em}")
+        if ea_dir:
+            typer.echo(f"  E5.4b: pasta de EAs vigiada: {ea_dir}")
         typer.echo(f"  encerramento: {cfg.runtime.encerrar_em or 'so Ctrl+C'}")
         raise typer.Exit(0)
 
@@ -145,6 +161,8 @@ def record(
             reconciliar_ticker=reconciliar_ticker,
             reconciliar_esperado=reconciliar_esperado,
             ea_ticker_ordem=ea_ticker_ordem,
+            ea_dir=ea_dir,
+            capital_em_conta=capital_em_conta,
         ).run()
     )
 

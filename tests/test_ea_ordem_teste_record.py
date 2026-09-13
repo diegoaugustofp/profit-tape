@@ -372,11 +372,13 @@ def test_e4_constroi_com_ticker_especifico_e_login_completo(tmp_path) -> None:  
     svc = RecorderService(cfg, cred, dll_injetada=fake,
                           ea_config_path=_ea_yaml_dry_run_false(tmp_path),
                           ea_ticker_ordem="WINV26")
-    assert svc.ea_bridge is not None
-    assert svc.ea_bridge.ea_service.executor is not None
-    assert svc.ea_bridge.ea_service.executor._ticker == "WINV26"
-    assert svc.ea_bridge.ea_service.executor._apenas_simulador is True
-    assert svc.client._on_trade_extra == svc.ea_bridge.publicar
+    assert len(svc.despachante) == 1
+    ea_service = svc.despachante.bridges[0].ea_service
+    assert ea_service.executor is not None
+    assert ea_service.executor._ticker == "WINV26"
+    assert ea_service.executor._apenas_simulador is True
+    # E5.4b: o alvo do callback e' o DESPACHANTE, fixo -- nao o bridge.
+    assert svc.client._on_trade_extra == svc.despachante.publicar
 
 
 def test_e4_dry_run_true_continua_sem_executor(tmp_path) -> None:  # type: ignore[no-untyped-def]
@@ -395,9 +397,9 @@ def test_e4_dry_run_true_continua_sem_executor(tmp_path) -> None:  # type: ignor
     cred = Credenciais(dll_path="fake", activation_key="k", user="u", password="p")
     fake = FakeProfitDLL(eventos_por_ativo=0)
     svc = RecorderService(cfg, cred, dll_injetada=fake, ea_config_path=caminho)
-    assert svc.ea_bridge is not None
-    assert svc.ea_bridge.ea_service.executor is None
-    assert svc.client._on_trade_extra == svc.ea_bridge.publicar
+    assert len(svc.despachante) == 1
+    assert svc.despachante.bridges[0].ea_service.executor is None
+    assert svc.client._on_trade_extra == svc.despachante.publicar
 
 
 def test_e4_ponta_a_ponta_ordem_real_em_demo(tmp_path) -> None:  # type: ignore[no-untyped-def]

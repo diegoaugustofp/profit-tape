@@ -448,7 +448,11 @@ risco:
     fake = FakeProfitDLL(eventos_por_ativo=n, intervalo_s=0.0)
     svc = RecorderService(_config(tmp_raiz), _cred(), dll_injetada=fake,
                           ea_config_path=ea_yaml)
-    assert svc.ea_bridge is not None   # confirma que a integracao foi montada
+    assert len(svc.despachante) == 1   # confirma que a integracao foi montada
+    # Referencia guardada ANTES do run(): o encerramento esvazia o
+    # despachante (parar_todos), entao inspecionar depois daria tupla
+    # vazia -- o EAService em si sobrevive, e' so' a lista que zera.
+    ea_svc = svc.despachante.bridges[0].ea_service
 
     t = threading.Thread(target=svc.run, daemon=True)
     t.start()
@@ -467,18 +471,17 @@ risco:
 
     # GARANTIA 2: o EA de fato recebeu e processou os trades de PETR4
     # (o simbolo configurado) -- nao ficou so' de enfeite.
-    ea_svc = svc.ea_bridge.ea_service
     assert ea_svc.stats.trades == n   # so' PETR4 tem 'n' trades (VALE3 e' outro simbolo, filtrado)
     assert ea_svc.stats.barras > 0    # pelo menos 1 barra fechou (volume_barra=30, n=400)
 
 
 def test_sem_ea_config_path_comportamento_identico_a_sempre(tmp_raiz: Path) -> None:
     """Retrocompatibilidade EXPLICITA no nivel do RecorderService (nao so'
-    do ProfitClient, ja testado): sem ea_config_path, ea_bridge e' None,
+    do ProfitClient, ja testado): sem ea_config_path, nenhum EA e' incluido,
     tudo funciona exatamente como antes desta feature existir."""
     fake = FakeProfitDLL(eventos_por_ativo=100, intervalo_s=0.0)
     svc = RecorderService(_config(tmp_raiz), _cred(), dll_injetada=fake)
-    assert svc.ea_bridge is None
+    assert len(svc.despachante) == 0
 
     t = threading.Thread(target=svc.run, daemon=True)
     t.start()

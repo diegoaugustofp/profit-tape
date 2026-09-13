@@ -26,6 +26,11 @@ import structlog
 
 from ..alertas import ConfigAlertas, enviar
 from ..config import Credenciais, RecorderConfig
+from ..ea.config import EAConfig
+from ..ea.despachante import DespachanteDeEAs
+from ..ea.livro import LivroDePosicoes
+from ..ea.registro import RegistroDeEAs
+from ..ea.supervisor import SupervisorDeRisco
 from ..health.metrics import Metrics
 from ..pipeline.bus import EventBus, nivel_ocupacao
 from ..pipeline.writer import WriterThread
@@ -41,6 +46,11 @@ log = structlog.get_logger(__name__)
 
 
 class RecorderService:
+    # Intervalo da varredura de `--ea-dir` (E5.4b). 5 s e' folgado: incluir
+    # um EA nao e' operacao de urgencia, e varrer disco a cada 0,5 s (o
+    # passo do laco) seria desperdicio.
+    _EA_DIR_INTERVALO_S = 5.0
+
     def __init__(
         self,
         cfg: RecorderConfig,
@@ -53,6 +63,8 @@ class RecorderService:
         reconciliar_ticker: str = "WINFUT",
         reconciliar_esperado: int = 0,
         ea_ticker_ordem: str | None = None,
+        ea_dir: Path | str | None = None,
+        capital_em_conta: float = 0.0,
     ) -> None:
         self.cfg = cfg
         self.cred = cred
@@ -101,54 +113,36 @@ class RecorderService:
         # com o contrato ESPECIFICO (`ea_ticker_ordem`, nunca
         # `ea_cfg.symbol`, que e' "WINFUT" -- o agregador que a DLL
         # aceita para dado mas rejeita no envio de ordem, medido no E2).
-        # O ExecutorDeOrdens PRECISA do client ja' construido (le
-        # `contas_vistas`/`ordens_eventos`) mas o client PRECISA do bridge
-        # antes de existir (`on_trade_extra` e' argumento de construcao) --
-        # por isso esta' em DUAS fases: valida e' aqui (falha cedo), a
-        # montagem de verdade e' logo APOS `self.client` existir, mais
-        # abaixo. `ProfitClient._on_trade_extra` e' lido de novo a cada
-        # `connect()` (nao capturado no `__init__`), entao atribuir depois
-        # funciona -- conferido em profitdll/client.py.
-        self.ea_bridge: EABridge | None = None
-        self._ea_cfg_para_ordens_reais: EAConfig | None = None
+        # E5.4b (2026-09-13): o despachante e' o alvo FIXO de
+        # `on_trade_extra` -- registrado UMA vez na construcao do client e
+        # nunca trocado. Os EAs entram e saem DELE em tempo de execucao,
+        # sem reiniciar o record (decisao do operador: reiniciar perde
+        # captura, o unico ativo que nao da' para refazer).
+        #
+        # Isto substitui o esquema anterior de duas fases: antes, ligar o
+        # EA com ordens reais exigia trocar `client._on_trade_extra` DEPOIS
+        # de construir o client -- o que so' funcionava porque `connect()`
+        # ainda nao tinha rodado. Com o despachante, nao ha' mais troca de
+        # atributo: o alvo e' estavel desde o inicio.
+        # True depois que `run()` comeca -- muda o tratamento de erro de
+        # EA: na construcao da' para morrer (nada capturado ainda), em
+        # execucao NUNCA (derrubaria a captura). Definido ANTES de
+        # qualquer inclusao de EA, que ja' o consulta.
+        self._em_execucao = False
+        self.despachante = DespachanteDeEAs()
+        self.supervisor = SupervisorDeRisco(capital_em_conta=capital_em_conta)
+        self.livro = LivroDePosicoes()
+        self.registro = RegistroDeEAs(self.despachante, supervisor=self.supervisor,
+                                      livro=self.livro)
+        self._ea_dir = Path(ea_dir) if ea_dir else None
         self._ea_ticker_ordem = ea_ticker_ordem
+        self._ea_config_path = ea_config_path
+        self._proxima_varredura = 0.0
         if ea_config_path is not None:
-            from ..ea.bridge import EABridge
-            from ..ea.config import EAConfig
-            from ..ea.service import EAService
-
+            # Validacao CEDO (antes de qualquer captura comecar): config
+            # invalida derruba o processo aqui, nao no meio do pregao.
             ea_cfg = EAConfig.from_yaml(ea_config_path)
-            if ea_cfg.dry_run:
-                self.ea_bridge = EABridge(EAService(ea_cfg))
-                log.info(
-                    "recorder.ea_integrado",
-                    symbol=ea_cfg.symbol,
-                    sinais=[s.feature for s in ea_cfg.sinais],
-                )
-            else:
-                if not ea_ticker_ordem:
-                    raise SystemExit(
-                        "ea_config com dry_run=False exige --ea-ticker-ordem "
-                        "(o contrato ESPECIFICO em vigor, ex.: WINV26 -- "
-                        "nunca o symbol da config, que e' o agregador "
-                        "'WINFUT'). E4: forward em demo com ordens reais."
-                    )
-                if not cfg.runtime.login_completo:
-                    raise SystemExit(
-                        "ea_config com dry_run=False exige login completo "
-                        "(--login-completo ou runtime.login_completo: true): "
-                        "sem sessao de roteamento nao ha' onde enviar."
-                    )
-                self._ea_cfg_para_ordens_reais = ea_cfg
-                log.warning(
-                    "recorder.ea_ordens_reais_demo_agendado",
-                    symbol=ea_cfg.symbol,
-                    ticker_ordem=ea_ticker_ordem,
-                    sinais=[s.feature for s in ea_cfg.sinais],
-                    nota="E4: SendOrder de verdade na conta de SIMULACAO "
-                         "(trava dupla: exigir_simulador a cada envio). "
-                         "Monta o executor apos o client conectar.",
-                )
+            self._exigir_pre_requisitos_de_ordem_real(ea_cfg, ea_config_path)
 
         self.client = ProfitClient(
             dll_path=cred.dll_path,
@@ -158,7 +152,7 @@ class RecorderService:
             bus=self.bus,
             tz_offset_horas=cfg.runtime.tz_offset_horas,
             on_state=self._on_state,
-            on_trade_extra=self.ea_bridge.publicar if self.ea_bridge else None,
+            on_trade_extra=self.despachante.publicar,
             dll=dll_injetada,
             login_completo=cfg.runtime.login_completo,
         )
@@ -169,36 +163,13 @@ class RecorderService:
                 "E1 da trilha de execucao -- confira o heartbeat: "
                 "corretora_pronta=True e contas>=1 devem aparecer.",
             )
-        if self._ea_cfg_para_ordens_reais is not None:
-            from ..ea.bridge import EABridge
-            from ..ea.config import RoteamentoConfig
-            from ..ea.execucao import ExecutorDeOrdens
-            from ..ea.ordem_teste import TickerAgregadorInvalido
-            from ..ea.service import EAService
+        if self._ea_config_path is not None:
+            # EA inicial entra pelo MESMO caminho de um EA incluido a
+            # quente (`_incluir_ea`), com as mesmas travas. Antes do E5.4b
+            # havia dois caminhos diferentes; um so' significa que o que
+            # vale no pregao vale no startup.
+            self._incluir_ea(self._ea_config_path)
 
-            ea_cfg_real = self._ea_cfg_para_ordens_reais
-            assert self._ea_ticker_ordem is not None  # validado na fase 1
-            try:
-                executor = ExecutorDeOrdens(
-                    self.client, RoteamentoConfig(), self._ea_ticker_ordem, "F",
-                    ea_cfg_real.tamanho_posicao,
-                    usar_conta_real=False,      # HARDCODED -- E4 nunca e' real
-                    apenas_simulador=True,      # HARDCODED -- exigir_simulador sempre
-                )
-            except TickerAgregadorInvalido as exc:
-                raise SystemExit(
-                    f"{exc}\n--ea-ticker-ordem recebeu {self._ea_ticker_ordem!r}."
-                ) from exc
-            self.ea_bridge = EABridge(EAService(ea_cfg_real, executor=executor))
-            # `connect()` ainda nao foi chamado (roda em `.run()`) -- lido de
-            # novo la', entao atribuir agora e' seguro. Ver nota acima.
-            self.client._on_trade_extra = self.ea_bridge.publicar
-            log.warning(
-                "recorder.ea_ordens_reais_demo_ligado",
-                symbol=ea_cfg_real.symbol, ticker_ordem=self._ea_ticker_ordem,
-                nota="E4 montado: dali em diante, sinal do EA envia ordem "
-                     "de verdade na conta de SIMULACAO.",
-            )
         if ordem_teste_em is not None:
             if not cfg.runtime.login_completo:
                 raise SystemExit(
@@ -266,6 +237,137 @@ class RecorderService:
         self._parar = threading.Event()
 
     # ------------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # EAs a quente (E5.4b) -- tudo roda na THREAD PRINCIPAL (construcao ou
+    # laco de monitoramento), nunca de dentro de um callback da DLL.
+    # ------------------------------------------------------------------
+    def _exigir_pre_requisitos_de_ordem_real(self, ea_cfg: EAConfig,
+                                            origem: Path) -> None:
+        """Falha ALTO e cedo se o EA pede ordem real sem o necessario.
+        Chamado na construcao (EA inicial) e antes de incluir a quente."""
+        if ea_cfg.dry_run:
+            return
+        if not self._ea_ticker_ordem:
+            raise SystemExit(
+                f"{origem}: dry_run=False exige --ea-ticker-ordem (o contrato "
+                "ESPECIFICO em vigor, ex.: WINV26 -- nunca o symbol da config, "
+                "que e' o agregador 'WINFUT'). E4: forward em demo com ordens "
+                "reais."
+            )
+        if not self.cfg.runtime.login_completo:
+            raise SystemExit(
+                f"{origem}: dry_run=False exige login completo "
+                "(--login-completo ou runtime.login_completo: true): sem "
+                "sessao de roteamento nao ha' onde enviar."
+            )
+
+    def _incluir_ea(self, caminho: Path) -> bool:
+        """
+        Le o yaml, valida e inclui. Devolve True se entrou.
+
+        NUNCA levanta por culpa do EA: um yaml invalido, um ticker
+        repetido ou um erro de montagem sao LOGADOS e a captura segue --
+        e' o principio do E5.4b (o record nao para por causa de EA). A
+        unica excecao e' `SystemExit` de pre-requisito de ordem real, e
+        so' na construcao (onde ainda nao ha' captura a perder).
+        """
+        from ..ea.config import EAConfig, RoteamentoConfig
+        from ..ea.execucao import ExecutorDeOrdens
+        from ..ea.ordem_teste import TickerAgregadorInvalido
+        from ..ea.registro import InclusaoRecusada
+
+        try:
+            ea_cfg = EAConfig.from_yaml(caminho)
+        except Exception as exc:
+            log.error("recorder.ea_yaml_invalido", origem=str(caminho), erro=repr(exc))
+            return False
+
+        executor = None
+        if not ea_cfg.dry_run:
+            if self._em_execucao:
+                # A quente: nao da' para matar o processo -- so' recusa.
+                if not self._ea_ticker_ordem or not self.cfg.runtime.login_completo:
+                    log.error("recorder.ea_ordens_reais_sem_pre_requisito",
+                             origem=str(caminho),
+                             tem_ticker=bool(self._ea_ticker_ordem),
+                             login_completo=self.cfg.runtime.login_completo,
+                             nota="EA com dry_run=False precisa de "
+                                  "--ea-ticker-ordem e login completo; nao incluido")
+                    return False
+            else:
+                self._exigir_pre_requisitos_de_ordem_real(ea_cfg, caminho)
+            assert self._ea_ticker_ordem is not None  # validado logo acima
+            try:
+                executor = ExecutorDeOrdens(
+                    self.client, RoteamentoConfig(), self._ea_ticker_ordem, "F",
+                    ea_cfg.tamanho_posicao,
+                    usar_conta_real=False,   # HARDCODED -- E4/E5 nunca e' real
+                    apenas_simulador=True,   # HARDCODED -- exigir_simulador sempre
+                )
+            except TickerAgregadorInvalido as exc:
+                # Na CONSTRUCAO isto e' fatal: o operador pediu ordem real
+                # com um ticker que a DLL nunca aceitaria ("Ordem invalida"
+                # no meio do pregao, medido no E2). Melhor nao subir.
+                # A QUENTE seria inaceitavel matar o processo -- ai' so'
+                # recusa o EA e a captura segue.
+                if not self._em_execucao:
+                    raise SystemExit(
+                        f"{exc}\n--ea-ticker-ordem recebeu {self._ea_ticker_ordem!r} "
+                        f"(exigido por {caminho}, que tem dry_run=False)."
+                    ) from exc
+                log.error("recorder.ea_ticker_agregador_recusado",
+                         origem=str(caminho), ticker=self._ea_ticker_ordem,
+                         erro=str(exc))
+                return False
+            except Exception as exc:
+                log.error("recorder.ea_executor_recusado", origem=str(caminho),
+                         erro=repr(exc))
+                return False
+
+        try:
+            registrado = self.registro.incluir(ea_cfg, origem=caminho, executor=executor)
+        except InclusaoRecusada as exc:
+            log.error("recorder.ea_inclusao_recusada", origem=str(caminho),
+                     motivo=str(exc))
+            return False
+        except Exception as exc:
+            log.exception("recorder.ea_inclusao_falhou", origem=str(caminho),
+                         erro=repr(exc))
+            return False
+        log.warning("recorder.ea_incluido", nome=registrado.nome,
+                   symbol=registrado.symbol, dry_run=ea_cfg.dry_run,
+                   origem=str(caminho), a_quente=self._em_execucao,
+                   total=len(self.registro.nomes))
+        return True
+
+    def _varrer_ea_dir(self) -> None:
+        """
+        Chamado pelo laco de monitoramento. YAML novo -> inclui; YAML que
+        sumiu -> remove (graciosamente: o EA zera posicao antes de sair).
+
+        Erro de I/O na pasta e' logado e ignorado -- uma pasta em rede
+        indisponivel nao pode derrubar a captura.
+        """
+        assert self._ea_dir is not None
+        try:
+            arquivos = {p.resolve() for p in self._ea_dir.glob("*.yaml")}
+        except OSError as exc:
+            log.warning("recorder.ea_dir_ilegivel", dir=str(self._ea_dir), erro=repr(exc))
+            return
+
+        registrados = {r.origem: r for r in
+                      (self.registro._registrados[n] for n in self.registro.nomes)
+                      if r.origem is not None}
+        for novo in sorted(arquivos - set(registrados)):
+            self._incluir_ea(novo)
+        for sumiu in sorted(set(registrados) - arquivos):
+            nome = registrados[sumiu].nome
+            log.warning("recorder.ea_removido_por_arquivo", nome=nome,
+                       origem=str(sumiu),
+                       nota="yaml removido da pasta -- retirada graciosa "
+                            "(zera posicao antes de sair)")
+            self.registro.remover(nome)
+
     def _on_state(self, tipo: int, valor: int) -> None:
         log.info("profitdll.estado", tipo=tipo, valor=valor)
 
@@ -295,9 +397,15 @@ class RecorderService:
     # ------------------------------------------------------------------
     def run(self) -> int:
         self._instalar_sinais()
+        self._em_execucao = True
         self.writer.start()
-        if self.ea_bridge is not None:
-            self.ea_bridge.iniciar()
+        # Os bridges ja' foram iniciados por `registro.incluir` (o
+        # despachante inicia cada um ao incluir) -- nada a fazer aqui.
+        if self._ea_dir is not None:
+            log.warning("recorder.ea_dir_vigiada", dir=str(self._ea_dir),
+                       intervalo_s=self._EA_DIR_INTERVALO_S,
+                       nota="E5.4b: yaml novo nessa pasta inclui um EA; yaml "
+                            "removido retira (graciosamente). Record NAO para.")
         try:
             self.client.connect()
             self._subscrever()
@@ -344,6 +452,13 @@ class RecorderService:
                 self.ordem_teste.tick()  # thread principal, nunca callback
             if self.reconciliador is not None and not self.reconciliador.concluida:
                 self.reconciliador.tick()  # thread principal, nunca callback
+            if self._ea_dir is not None and time.monotonic() >= self._proxima_varredura:
+                # Varredura da pasta de EAs: thread principal, nunca
+                # callback. Protegida por dentro (`_varrer_ea_dir` engole
+                # erro de I/O) -- uma pasta em rede fora do ar nao pode
+                # derrubar a captura.
+                self._proxima_varredura = time.monotonic() + self._EA_DIR_INTERVALO_S
+                self._varrer_ea_dir()
             if self._hora_de_encerrar():
                 log.info("recorder.encerramento_agendado", horario=self.cfg.runtime.encerrar_em)
                 break
@@ -437,12 +552,11 @@ class RecorderService:
     def _encerrar(self) -> None:
         log.info("recorder.encerrando")
         self.client.disconnect()  # 1: para de entrar evento novo
-        if self.ea_bridge is not None:
-            # ANTES do bus.close() -- protegido internamente (try/except em
-            # torno de encerrar_dia(), ver bridge.py); um erro aqui nunca
-            # pode impedir o restante do encerramento do record (footer,
-            # verificacao, alerta), que e' sempre prioridade.
-            self.ea_bridge.parar()
+        # ANTES do bus.close() -- protegido internamente (try/except em
+        # torno de encerrar_dia(), ver bridge.py e despachante.py); um erro
+        # aqui nunca pode impedir o restante do encerramento do record
+        # (footer, verificacao, alerta), que e' sempre prioridade.
+        self.despachante.parar_todos()
         self.bus.close()  # 2: sentinela
         self.writer.join(timeout=120)  # 3: drena o que sobrou
         if self.writer.is_alive():
