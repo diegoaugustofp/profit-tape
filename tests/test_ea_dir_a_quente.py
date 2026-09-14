@@ -206,3 +206,64 @@ def test_EA_com_ordens_reais_NA_CONSTRUCAO_sem_pre_requisito_mata_o_processo(
         RecorderService(_cfg(tmp_path), _cred(),
                         dll_injetada=FakeProfitDLL(eventos_por_ativo=0),
                         ea_config_path=ea)
+
+
+def test_yaml_recusado_NAO_repete_o_erro_a_cada_varredura(tmp_path: Path) -> None:
+    """Producao 2026-09-14: um yaml com ticker ja' ocupado gerou ~25
+    linhas de erro IDENTICAS em 2 minutos (uma a cada varredura), ate' o
+    operador corrigir. Ruido nessa escala esconde o que importa ler."""
+    import structlog
+
+    pasta = tmp_path / "eas"
+    _escrever(pasta, "primeiro", "PETR4")
+    ruim = _escrever(pasta, "segundo", "PETR4")      # ticker ja' ocupado
+    svc = RecorderService(_cfg(tmp_path), _cred(),
+                          dll_injetada=FakeProfitDLL(eventos_por_ativo=0),
+                          ea_dir=pasta)
+    svc._em_execucao = True
+
+    with structlog.testing.capture_logs() as eventos:
+        for _ in range(5):                            # 5 varreduras
+            svc._varrer_ea_dir()
+    recusas = [e for e in eventos if e.get("event") == "recorder.ea_inclusao_recusada"]
+    assert len(recusas) == 1, f"a recusa tem que sair UMA vez, saiu {len(recusas)}"
+    assert len(svc.registro.nomes) == 1
+
+    # editar o arquivo (corrigir o ticker) faz tentar de novo, sem reiniciar
+    ruim.write_text(_YAML.format(symbol="VALE3"), encoding="utf-8")
+    svc._varrer_ea_dir()
+    assert sorted(svc.registro.nomes) == ["primeiro", "segundo"], (
+        "corrigir o arquivo tem que bastar -- sem reiniciar o record")
+
+
+def test_yaml_invalido_tambem_para_de_repetir(tmp_path: Path) -> None:
+    import structlog
+
+    pasta = tmp_path / "eas"
+    pasta.mkdir()
+    (pasta / "torto.yaml").write_text("isto: nao e' EAConfig\n", encoding="utf-8")
+    svc = RecorderService(_cfg(tmp_path), _cred(),
+                          dll_injetada=FakeProfitDLL(eventos_por_ativo=0),
+                          ea_dir=pasta)
+    svc._em_execucao = True
+    with structlog.testing.capture_logs() as eventos:
+        for _ in range(5):
+            svc._varrer_ea_dir()
+    assert len([e for e in eventos if e.get("event") == "recorder.ea_yaml_invalido"]) == 1
+
+
+def test_remover_e_recolocar_o_arquivo_tenta_de_novo(tmp_path: Path) -> None:
+    """Tirar o yaml da pasta esquece a falha: se voltar, merece nova
+    chance (o operador pode ter arrumado fora da pasta)."""
+    pasta = tmp_path / "eas"
+    _escrever(pasta, "primeiro", "PETR4")
+    ruim = _escrever(pasta, "segundo", "PETR4")
+    svc = RecorderService(_cfg(tmp_path), _cred(),
+                          dll_injetada=FakeProfitDLL(eventos_por_ativo=0),
+                          ea_dir=pasta)
+    svc._em_execucao = True
+    svc._varrer_ea_dir()
+    assert len(svc._ea_falhas_conhecidas) == 1
+    ruim.unlink()
+    svc._varrer_ea_dir()
+    assert svc._ea_falhas_conhecidas == set(), "arquivo fora da pasta: esquecer a falha"

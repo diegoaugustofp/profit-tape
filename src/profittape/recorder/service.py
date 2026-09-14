@@ -150,6 +150,8 @@ class RecorderService:
         self._ea_ticker_ordem = ea_ticker_ordem
         self._ea_config_path = ea_config_path
         self._proxima_varredura = 0.0
+        # (caminho, mtime_ns) dos yamls que ja' falharam -- ver _varrer_ea_dir.
+        self._ea_falhas_conhecidas: set[tuple[Path, int]] = set()
         if ea_config_path is not None:
             # Validacao CEDO (antes de qualquer captura comecar): config
             # invalida derruba o processo aqui, nao no meio do pregao.
@@ -401,7 +403,29 @@ class RecorderService:
                       (self.registro._registrados[n] for n in self.registro.nomes)
                       if r.origem is not None}
         for novo in sorted(arquivos - set(registrados)):
-            self._incluir_ea(novo)
+            # Um yaml que ja' falhou nao e' retentado a cada 5 s. Sem isto,
+            # um unico arquivo invalido enche o log de linhas identicas --
+            # medido em producao 2026-09-14: ~25 repeticoes da mesma recusa
+            # em 2 minutos, ate' o operador corrigir o arquivo. Ruido nessa
+            # escala esconde justamente o que importa ler.
+            #
+            # A chave inclui o mtime: editar o arquivo (corrigir o erro)
+            # muda o mtime e o EA e' tentado de novo na varredura seguinte,
+            # sem precisar reiniciar nada.
+            try:
+                assinatura = (novo, novo.stat().st_mtime_ns)
+            except OSError:
+                continue          # sumiu entre o glob e o stat
+            if assinatura in self._ea_falhas_conhecidas:
+                continue
+            if not self._incluir_ea(novo):
+                self._ea_falhas_conhecidas.add(assinatura)
+                log.info("recorder.ea_nao_sera_retentado", origem=str(novo),
+                        nota="mesma versao deste arquivo nao sera' tentada de "
+                             "novo; edite o arquivo para forcar nova tentativa")
+        self._ea_falhas_conhecidas = {
+            (caminho, mtime) for caminho, mtime in self._ea_falhas_conhecidas
+            if caminho in arquivos}
         for sumiu in sorted(set(registrados) - arquivos):
             nome = registrados[sumiu].nome
             log.warning("recorder.ea_removido_por_arquivo", nome=nome,

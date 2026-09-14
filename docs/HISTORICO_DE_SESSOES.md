@@ -2074,3 +2074,30 @@ numero; sequencia inteira declarada (depuracao -> teste -> replicacao
 - Fake DLL: ordens pendentes, cancelamento por ClOrdID, execucao
   automatica de uma perna. 7 testes (ciclo completo, timeout do OCO
   cancela as duas e zera, trava, stop mudo zera). 815 no total.
+### 2026-09-14 (pregao) — E5.5 VALIDADO ao vivo; erro repetido corrigido (v2.59)
+
+**E5.5 validado por completo.** `z_agf_win` (WINFUT) subiu junto com o
+record e rodou 5 horas; `venda_apenas` (WDOFUT) foi incluido A QUENTE
+as 19:51, com o record em 47,6M de linhas. `descartados=0` o tempo
+todo, fila estavel (pico 9.963 num total de 47M), ~25k linhas/s
+sustentadas. O EA em cima da captura nao custou nada a ela.
+
+- A trava de 1 EA por ticker funcionou ao vivo: `venda_apenas` estava
+  com `symbol: WINFUT` e foi RECUSADO; o operador trocou para WDOFUT e
+  entrou na varredura seguinte, sem reiniciar nada.
+- Primeira operacao real do EA em dry_run: venda a 187435 (z_agf_3=1.98),
+  **stop catastrofico batido a 545 pts contra** (limite 500), -556 pts
+  liquidos, circuit breaker disparou na 3a perda seguida (-828 no dia).
+  **Anomalia a investigar**: a ficha da Rota B preve stop de 100 pts;
+  o preco andou 545 contra antes de qualquer saida. Ou a barra de
+  120.000 contratos demorou demais a fechar num movimento rapido, ou a
+  aplicacao do stop nao esta' saindo quando deveria. Analise offline,
+  nao precisa de pregao.
+
+**DEFEITO corrigido (achado pelo operador no log):** um yaml recusado
+era reprocessado a cada varredura, gerando a MESMA linha de erro a cada
+5 s -- ~25 repeticoes em 2 minutos, e seriam milhares num pregao
+inteiro. Agora `_ea_falhas_conhecidas` guarda (caminho, mtime_ns): a
+recusa sai UMA vez; editar o arquivo muda o mtime e provoca nova
+tentativa na varredura seguinte, sem reiniciar; tirar o arquivo da
+pasta esquece a falha. 3 testes novos. 764 no total.
