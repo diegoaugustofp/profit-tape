@@ -57,7 +57,8 @@ def test_evento_ordem_carrega_cl_ord_id_tipo_e_stop() -> None:
         time.sleep(0.1)
         evs = list(c.ordens_eventos)
         assert evs and evs[-1].cl_ord_id.startswith("CL")
-        assert evs[-1].tipo == "Stop" and evs[-1].stop_preco == 141300.0
+        assert evs[-1].tipo == "StopLimit" and evs[-1].stop_preco == 141300.0
+        assert evs[0].cl_ord_id == ""            # ClientCreated vem sem ClOrdID (real)
     finally:
         c.disconnect()
 
@@ -80,11 +81,13 @@ def test_ciclo_completo_stop_cancel_oco(monkeypatch: pytest.MonkeyPatch) -> None
         assert r["preco_ref"] == 141000.0
         pl = r["pernas"]
         assert pl["stop_longe"]["stop"] == 141300.0 and pl["stop_longe"]["preco"] == 141350.0
-        assert pl["stop_longe"]["status"][-1] == "Cancelled"
+        assert pl["stop_longe"]["status"][-1] == "Canceled"
+        assert pl["stop_longe"]["status"][:4] == [
+            "ClientCreated", "ClientCreated", "HadesCreated", "New"]
         assert pl["stop_longe"]["latencia_cancel_ms"] is not None
         assert pl["stop_venda"]["stop"] == 140985.0 and pl["limite_venda"]["preco"] == 141015.0
         assert r["perna_oco_executada"] == "stop_venda"          # a 1a venda enviada
-        assert pl["limite_venda"]["status"][-1] == "Cancelled"
+        assert pl["limite_venda"]["status"][-1] == "Canceled"
         # cancelamento pelo ClOrdID, senha em 4o
         cancel_args = [a for n, a in fake.ordens_enviadas if n == "SendCancelOrder"]
         assert cancel_args[0][2] == pl["stop_longe"]["cl_ord_id"] and cancel_args[0][3] == "s"
@@ -104,8 +107,8 @@ def test_oco_sem_execucao_cancela_as_duas_e_zera() -> None:
         assert r["resultado"] == "timeout_oco", r
         nomes = _nomes(fake)
         assert nomes[-3:] == ["SendCancelOrder", "SendCancelOrder", "SendZeroPositionAtMarket"]
-        assert r["pernas"]["stop_venda"]["status"][-1] == "Cancelled"
-        assert r["pernas"]["limite_venda"]["status"][-1] == "Cancelled"
+        assert r["pernas"]["stop_venda"]["status"][-1] == "Canceled"
+        assert r["pernas"]["limite_venda"]["status"][-1] == "Canceled"
         assert r["pernas"]["zeragem"]["preco_medio"] == 141000.0
     finally:
         c.disconnect()

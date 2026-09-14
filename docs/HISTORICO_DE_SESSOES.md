@@ -2109,3 +2109,15 @@ inteiro. Agora `_ea_falhas_conhecidas` guarda (caminho, mtime_ns): a
 recusa sai UMA vez; editar o arquivo muda o mtime e provoca nova
 tentativa na varredura seguinte, sem reiniciar; tirar o arquivo da
 pasta esquece a falha. 3 testes novos. 764 no total.
+
+### 2026-09-14 (noite) — E2b FECHADO ao vivo; fake alinhada; status reescrito (v2.72)
+
+- E2b ao vivo (17:32, WINV26, Simulador): `resultado=ok` de primeira.
+  Esteira medida: pendente `ClientCreated x2 (sem ClOrdID) ->
+  HadesCreated -> New`; cancel `-> Canceled`; stop legada = `StopLimit`;
+  cancel devolve 0. Latencias no EA_ARQUITETURA. Fake DLL alinhada.
+- `docs/ESTADO_E_CAMINHOS.md` reescrito para 2026-09-14: as duas linhas
+  (fluxo / preco), a escada, os 7 passos do F5 do 123 com estado, o que
+  anda sozinho, o backlog, e a ordem recomendada. Repositorio local
+  sincronizado com o remoto (v2.71: E5.5 validado, yaml recusado uma
+  vez por versao).

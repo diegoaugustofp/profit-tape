@@ -274,7 +274,7 @@ class FakeProfitDLL:
         conta, corretora, ticker = str(args[0]), int(str(args[1])), str(args[3])
         preco = float(str(args[5])) if len(args) > 5 else 0.0
         stop = float(str(args[6])) if len(args) > 7 else 0.0
-        tipo = "Stop" if "Stop" in nome else "Limit"
+        tipo = "StopLimit" if "Stop" in nome else "Limit"
         pend[f"CL{oid}"] = {"oid": oid, "conta": conta, "corretora": corretora,
                             "ticker": ticker, "lado": lado, "preco": preco,
                             "stop": stop, "tipo": tipo, "viva": True}
@@ -287,12 +287,20 @@ class FakeProfitDLL:
                preco if traded else 0.0, oid, tipo, conta, "TITULAR", f"CL{oid}",
                status, "01/01/2026 10:00:00", texto)
 
+        def _cb_sem_id(status: str, texto: str) -> None:
+            cb(_ativo(ticker, "F"), corretora, 1, 0, 1, lado, preco, stop, 0.0, oid,
+               tipo, conta, "TITULAR", "", status, "01/01/2026 10:00:00", texto)
+
         def _emitir() -> None:
+            # Esteira REAL de uma pendente (E2b ao vivo, 2026-09-14 17:32):
+            # ClientCreated x2 (ClOrdID VAZIO) -> HadesCreated -> New.
             passo = self.atraso_fill_s / 4
             time.sleep(passo)
-            _cb("ClientCreated", 0, 1, "Enviando ordem ao HadesProxy")
+            _cb_sem_id("ClientCreated", "Enviando ordem ao HadesProxy")
+            _cb_sem_id("ClientCreated", "Enviado ao servidor de ordens.")
             time.sleep(passo)
             _cb("HadesCreated", 0, 1, "Criação")
+            _cb("New", 0, 1)
             auto = getattr(self, "fill_pendente_apos_s", None)
             if auto is not None and lado == 2 and not getattr(self, "_auto_fill_usado", False):
                 self._auto_fill_usado = True
@@ -330,10 +338,17 @@ class FakeProfitDLL:
         cb = self._cb.get("ordem_mudanca")
         if cb is not None:
             def _emitir() -> None:
+                # Esteira REAL do cancelamento (E2b): ClientCreated x2 com texto
+                # "Enviando cancelamento..." e restante=1 AINDA -> Canceled (um L).
                 time.sleep(self.atraso_fill_s / 4)
-                cb(_ativo(o["ticker"], "F"), o["corretora"], 1, 0, 0, o["lado"],
+                for texto in ("Enviando cancelamento ao HadesProxy",
+                              "Enviado ao servidor de ordens."):
+                    cb(_ativo(o["ticker"], "F"), o["corretora"], 1, 0, 1, o["lado"],
+                       o["preco"], o["stop"], 0.0, o["oid"], o["tipo"], o["conta"],
+                       "TITULAR", cl, "ClientCreated", "01/01/2026 10:00:00", texto)
+                cb(_ativo(o["ticker"], "F"), o["corretora"], 1, 0, 1, o["lado"],
                    o["preco"], o["stop"], 0.0, o["oid"], o["tipo"], o["conta"],
-                   "TITULAR", cl, "Cancelled", "01/01/2026 10:00:00", "")
+                   "TITULAR", cl, "Canceled", "01/01/2026 10:00:00", "")
             t = threading.Thread(target=_emitir, daemon=True)
             t.start()
             self._threads.append(t)

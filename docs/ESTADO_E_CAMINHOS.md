@@ -1,126 +1,98 @@
-# Onde estamos e para onde dá para ir — 2026-09-04
+# Onde estamos e para onde dá para ir — 2026-09-14
 
-## 1. O estado da hipótese de absorção
+> Substitui a versão de 2026-09-04. O que ela dizia (absorção não
+> sobreviveu como formulada; momentum como hipótese nova; acumular tape)
+> continua verdadeiro e está registrado no `RESEARCH_PLANO.md`. Este
+> documento é o estado DEPOIS de duas semanas em que a infraestrutura
+> fechou e uma linha inteira de pesquisa nasceu, correu e se resolveu.
 
-Testada duas vezes, com amostra suficiente na segunda.
+## 1. O que existe hoje, em uma tela
 
-    lado AQUA (absorcao apos ALTA)     n=251   +6,6 pts   t 0,361
-      -> RESPOSTA CLARA: nao antecipa queda. Sem desculpa de poder.
+**Duas linhas de pesquisa**, uma infraestrutura.
 
-    lado FUCSIA (absorcao apos QUEDA)  n=216  -36,3 pts   t -1,996
-      -> marginal (folga 0,036), e confundido com momentum
+| linha | o que é | estado |
+|---|---|---|
+| **Fluxo** (tape) | a aposta original: absorção, agressão, `z_agf` sobre barras de volume | absorção fechada como formulada; `z_agf_3` + Rota B em forward demo montado, **nunca disparou ordem real**; DeepScalper fase 2 em forward, placar fechado até n=50; **tape acumulando desde 24/07** (o recurso escasso) |
+| **Preço** (M15) | nasceu em 13/09 para ter EA validável HOJE, com 10 anos de candle | três candidatos, três respostas em dois dias: IFR2 **nulo** (2 trials), ORB **nulo** (10 anos), **123 real e pequeno** (p1 0,5285, IC exclui 0,50, +6 pts líquidos/op) — vai a F5 como portador |
 
-**A hipótese como formulada não sobreviveu.** O lado aqua tem resposta
-negativa firme. O lado fúcsia tem um sinal marginal que aponta para o
-lado **contrário** ao esperado, e que o controle sugere não ser
-absorção.
+**Infraestrutura (escada E0–E5):** E0–E3 fechados; **E2b fechado hoje**
+(stop, limitada, cancelamento, OCO pelo EA — tudo na demo, de primeira);
+E4 montado, nunca viu sinal real; **E5.5 validado ao vivo hoje** (2 EAs,
+5 h, 47,6 M linhas, inclusão a quente, `descartados=0`); E5.6 pendente
+(2 EAs com ordens reais).
 
-**Não há amostra cega restante** no gráfico para 2025 e 2026. Sobram 2024
-e anteriores, que seriam nova declaração com multiplicidade acumulada.
+## 2. O que a linha de preço ensinou (e por que valeu)
 
-## 2. O achado mais forte da sessão não foi a absorção
+1. **O pipeline reprova em uma noite o que o forward levaria anos.** Do
+   funil ao veredito, sobre 923 → 2.685 pregões, sem gastar um dia de
+   calendário. É a ferramenta que fica para qualquer hipótese futura.
+2. **O que existe de graça em preço no WIN M15 já foi arbitrado.** IFR2 e
+   ORB, os dois setups públicos mais conhecidos, são nulos a custo zero
+   em dez anos. Não negativos — nulos.
+3. **O 123 é diferente**: IC exclui 0,50 em 5.444 operações, onze anos de
+   doze acima de 0,50, compra e venda iguais. Mas +6 pts líquidos por
+   operação, com o IC do P&L tocando zero. É uma borda que existe e não
+   paga a execução sozinha — o caso exato para o qual a porta de volume
+   foi declarada no dia 1.
+4. **Três erros meus, corrigidos e registrados:** verificador com bug de
+   aquecimento (dizia NÃO BATE com mediana 0,0); capital usado para
+   encolher D duas vezes, contra a decisão 4.9; e a expectativa
+   "provavelmente nulo" para o 123. Os três estão no `EAS_DE_PRECO.md`.
 
-    CONTROLE contexto sem evento   n=10.305   media -4,55   t -2,296
+## 3. O que falta — em ordem
 
-São barras com movimento prévio e **sem absorção nenhuma**. Retorno
-negativo na direção contrária ao movimento significa que **o preço
-continuou** no sentido dele.
+### A. Levar o 123 a F5 (o caminho decidido)
 
-Isso é momentum, e o poder é de outra ordem:
+Ficha de forward em `EAS_DE_PRECO.md` 5.4. O forward **não** re‑verifica
+o p1 (seis anos a 2 op/dia); mede **execução** — slippage ≤ 6 pts em
+n = 100, ~50 pregões — e grava, por sinal, as features de fluxo da barra
+do gatilho: a amostra da porta de volume, F1 do gate.
 
-    EMD do desenho 3 (absorcao)      0,34 unidades
-    EMD deste grupo                  0,016 unidades
+Passos, cada um uma entrega:
 
-**O problema de poder que dominou a sessão inteira simplesmente não
-existe aqui** — n de 10.305 em vez de 216.
+| # | passo | estado |
+|---|---|---|
+| 1 | barra de TEMPO no EA (`ConstrutorDeBarraDeTempo`, M15 alinhado à bolsa) | **próximo** |
+| 2 | semente da MME80 (400 barras do parquet antes do 1º trade; sem semente não arma) | |
+| 3 | `SinalPreco123` importando `marcar_123` do research (uma fórmula, dois lados) | |
+| 3b | E2b — stop / limitada / cancel / OCO na demo | **FECHADO 14/09** |
+| 4 | ciclo de ordens do 123 (stop de entrada → cancela no fim de t+1; fill → stop + limitada; um executa → cancela o outro), slippage e latência por ordem | |
+| 4b | reconciliação de ORDENS ao reconectar (`GetOrders`, cancela órfãs) | |
+| 5 | `GateDeFluxo` / `SemFiltro`, `filtro_fluxo: null` | |
+| 6 | registro do sinal com features de fluxo (F1 do gate) | |
+| 7 | `ea_123.yaml` na esteira exclusiva; um pregão em dry_run com barras olhadas; depois E4 real | |
 
-**Ressalva grande**: isto foi encontrado OLHANDO o dado, num grupo que
-existia como diagnóstico. Como hipótese, precisa de declaração própria e
-amostra que não seja 2025 nem 2026.
+Depois do passo 7 o 123 é o **primeiro EA com sinal real** a atravessar a
+escada, e E5.6 fecha junto (dois EAs com ordens reais: 123 no WIN, Rota B
+ou `venda_apenas` no outro ticker).
 
-## 3. O que ficou estabelecido sobre o problema
+### B. O que continua andando sozinho
 
-- **Absorção não é rara**: 2,7 barras por pregão, 2,4% das barras.
-- **Absorção e movimento andam juntos**: 3,7x acima do acaso.
-- **O contexto não seleciona eventos menos ruidosos.** O desvio é
-  constante de `K=0` a `K=3`. Ele reduz quantidade, não ruído.
-- **O alvo de 1.000 está além do p90 da excursão favorável.** O preço
-  tipicamente anda menos de 1x o risco a favor.
-- **Média de retorno em pontos é instrumento fraco** para amostras desta
-  ordem: exige 105+ eventos por lado só para detectar 0,25 amplitude de
-  barra.
+- **Tape acumula** todo pregão (`record`). É o insumo da porta de volume
+  e da linha de fluxo. Nada a fazer além de manter o `record` de pé.
+- **DeepScalper fase 2**: `fase2-score` nos dias pendentes até n = 50.
+- **z_agf_3 / Rota B**: espera um sinal real disparar no forward.
 
-## 4. Caminhos, com o custo de cada um
+### C. O que fica no backlog, declarado, sem ação
 
-### A. Fechar a absorção e registrar
+- Porta de volume do 123 (ficha própria quando o forward tiver n de
+  sinais gravados; a observação do operador nas por tempo do ORB está
+  registrada em 4.5).
+- `RequestSerieHistory` de barras (substitui o parquet da semente).
+- Momentum como hipótese nova (desde 04/09, sem amostra virgem de fluxo).
+- 2015–2022 e 2023–2026 estão QUEIMADOS para as famílias IFR2, ORB e 123.
+  Qualquer variante delas precisa de amostra nova.
 
-Custo zero. O lado aqua tem resposta; o fúcsia fica registrado como
-marginal e confundido. Honesto, e libera atenção.
+## 4. O que eu faria, e por quê
 
-### B. Momentum como hipótese NOVA
+Seguir a ordem A, sem pular o passo 1 para "chegar logo" no 4. A barra
+de tempo é o único pedaço que o EA de fluxo não tem, e é onde um defeito
+de alinhamento (fronteira de 15 min no horário da bolsa, barra sem
+trade) custaria semanas de forward. Um passo por entrega, cada um com o
+seu teste, é o que permitiu os 815 verdes de hoje.
 
-O achado do controle, formalizado e pré-registrado do zero.
-
-**A favor**: poder de sobra (EMD 0,016), mecanismo simples e testável,
-usa infraestrutura que já existe.
-**Contra**: foi encontrado olhando dado, então precisa de amostra virgem
-— 2024 ou anterior. E momentum em índice futuro é fenômeno muito
-estudado; a chance de haver algo não explorado é menor que numa leitura
-de tape.
-
-### C. Acumular tape adiante (`record`)
-
-**A favor**: é a única fonte de dado **genuinamente novo**, sem
-multiplicidade acumulada. E abre perguntas que só o tape responde —
-preenchimento exato, book, agressão por lado.
-**Contra**: lento. ~21 pregões por mês.
-
-### D. Trocar o instrumento de medição
-
-Média de retorno em pontos é fraca. Alternativas: taxa de acerto
-(classificação), rotulagem por barreiras triplas, ou critério sobre a
-forma da distribuição.
-
-**A favor**: ataca a causa estrutural, não um sintoma. Serve para
-qualquer hipótese futura.
-**Contra**: é trabalho de infraestrutura, não de descoberta. E não
-garante que exista sinal.
-
-### E. Exaustão
-
-Nunca testada. É processo de **sequência** (base de 2-5 candles, acima de
-20 vira indecisão), escala diferente da barra única.
-
-**A favor**: é hipótese do operador, vinda da leitura de tela, e nunca
-tocada. Ortogonal a tudo que foi testado.
-**Contra**: precisa de formalização do zero, e a experiência desta sessão
-diz que a formalização é onde os erros moram.
-
-### F. Stop como controle de drawdown
-
-Pré-registro pendente de sessões anteriores. A Rota B deixou explícito
-que "stop não detecta reversão" — mas controlar drawdown é outra
-pergunta.
-
-**A favor**: pergunta de gestão, não de sinal. Não depende de haver edge.
-**Contra**: só faz sentido quando houver estratégia para proteger.
-
-## 5. O que eu faria, e por quê
-
-**A + C em paralelo.** Fechar a absorção honestamente, e deixar o
-`record` acumulando — é a única fonte de dado sem multiplicidade
-herdada.
-
-**E depois E (exaustão)**, porque é a única hipótese que ainda vem da
-leitura de tela do operador e nunca foi tocada. A absorção nasceu assim e
-o processo funcionou: a formalização estava errada duas vezes, foi
-corrigida por inspeção visual, e a resposta veio limpa.
-
-**B (momentum) é tentador e eu desconfiaria dele.** O poder é atraente
-justamente porque `n` é enorme, e `n` enorme torna significativo qualquer
-viés residual de medição. Um efeito de −4,5 pontos por operação também
-não sobrevive a custo.
-
-**D vale quando houver hipótese que precise dele** — construir
-instrumento sem pergunta é o erro que a sessão já cometeu com o desenho
-2.
+E lembrar o que o forward do 123 é: um teste de execução e um gerador de
+amostra, com um sinal pequeno e real por baixo. Se o slippage ficar ≤ 6
+pts, o 123 puro vira candidato a F6 com o gate; se não, ele só vive com
+o gate — e o gate só nasce da amostra que ele mesmo vai gravar. Os dois
+caminhos passam pelo mesmo lugar.

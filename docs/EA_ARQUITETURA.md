@@ -85,7 +85,7 @@ em dia sem pregao.
 | **E1** | record sobe com login completo (roteamento) sem prejudicar captura | FECHADO (v2.08, testes A e B ao vivo) |
 | **E2** | uma ordem real (compra + zeragem) na conta demo | FECHADO (v2.41, `resultado=ok` ao vivo 2026-09-11 12:30) |
 | **E3** | reconciliacao de posicao EA x corretora, zeragem na divergencia | FECHADO (v2.48, confirmado com posicao ZERADA **e** ABERTA real) |
-| **E2b** | STOP, LIMITADA e CANCELAMENTO na demo + OCO pelo EA (ciclo de ordens do 123) | CODIGO (v2.70): `record --ordem-teste-b-em HH:MM`; **a rodar ao vivo** |
+| **E2b** | STOP, LIMITADA e CANCELAMENTO na demo + OCO pelo EA (ciclo de ordens do 123) | **FECHADO (v2.70, ao vivo 2026-09-14 17:32)**: `resultado=ok` de primeira; esteira `ClientCreated x2 -> HadesCreated -> New`, cancel `-> Canceled`; cancel 73-589 ms; OCO executou a limitada em 37 s e cancelou o stop |
 | **E4** | forward em demo com ordens reais, 1 contrato, mede slippage/latencia | MONTADO (v2.47) -- **nunca viu sinal real disparar** |
 | **E5** | **multi-EA dinamico** (inclusao/remocao SEM parar o record) | CODIGO COMPLETO (v2.50-v2.57); falta so' validar ao vivo (E5.5/E5.6) |
 
@@ -692,7 +692,29 @@ ea/
 ```
 
 
-### E2b — CODIGO PRONTO (v2.70), a rodar ao vivo
+### E2b — FECHADO (v2.70; ao vivo 2026-09-14 17:32, `resultado=ok` de primeira)
+
+**O que a DLL instalada disse, e o passo 4 vai consumir:**
+
+- Esteira de uma ordem PENDENTE: `ClientCreated` x2 (ClOrdID **vazio**)
+  -> `HadesCreated` -> **`New`** (= aceita e viva). ClOrdID chega a
+  partir do `HadesCreated`, formato `NELO.<corretora><timestamp>...`.
+- Cancelamento: `SendCancelOrder(conta, corretora, ClOrdID, senha)`
+  devolve **0** no sucesso; a esteira e' `ClientCreated` x2 de novo
+  (texto "Enviando cancelamento...", `restante=1` AINDA) -> **`Canceled`**
+  (um L). Logo `ClientCreated` NAO significa "ordem nova".
+- Tipos: stop legada volta como **`StopLimit`** (gatilho + limite; o slack
+  de 50 pts entre os dois e' o que garante execucao); a mercado volta
+  `Market` e, no fill, `Limit` com `preco` != `preco_medio` (o simulador
+  converte mercado em limitada com protecao) -- para slippage vale
+  `preco_medio`.
+- Latencias: 1o callback 1-19 ms; fill a mercado 316 ms; cancel
+  confirmado 73-589 ms; a limitada do OCO executou em 37 s e o stop foi
+  cancelado 1 s depois.
+
+A fake DLL reproduz esta esteira (v2.72), para os testes do passo 4
+nascerem contra o comportamento medido.
+
 
 O ciclo de ordens do 123 (`EAS_DE_PRECO.md` 5.4) precisa de tres coisas
 que o executor nunca mandou: STOP, LIMITADA e CANCELAMENTO — e do OCO
