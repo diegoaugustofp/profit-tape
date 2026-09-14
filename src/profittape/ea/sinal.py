@@ -38,6 +38,12 @@ class BarraFechada:
     close: float
     vol_agr: int
     agf: dict[int, float]      # agente_id -> z-score do agf, SO' p/ agentes rastreados
+    # Barra de TEMPO (F5 do 123, v2.73): volume agredido por lado e n de
+    # trades -- insumo da porta de volume. Defaults para a barra de
+    # volume (que nao os preenche) continuar valendo.
+    vol_agr_compra: int = 0
+    vol_agr_venda: int = 0
+    n_trades: int = 0
 
 
 @dataclass

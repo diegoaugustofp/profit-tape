@@ -821,11 +821,21 @@ observacao.
 
 **O que precisa existir (nesta ordem, cada passo entregue e testado):**
 
-1. **Barra de TEMPO no EA** — `ConstrutorDeBarraDeTempo(periodo_s=900)`
-   ao lado do de volume: alinhado em hh:00/15/30/45 no horario da
-   bolsa, fecha no primeiro trade que cruza a fronteira. Mesmo
-   `BarraFechada`; `agf` vazio (o 123 nao usa) — mas `vol_agr` e as
-   agressoes da barra ficam gravadas: e' a amostra do gate.
+1. **Barra de TEMPO no EA** — **ENTREGUE (v2.73)**:
+   `ea/barra_tempo.py`, `ConstrutorDeBarraDeTempo(periodo_s=900)`.
+   Alinhado em hh:00/15/30/45 (grade UTC = grade da bolsa porque o
+   fuso e' inteiro; periodo tem que dividir uma hora, senao e' erro).
+   Fecha pelo primeiro trade que cruza a fronteira OU pelo relogio
+   (`avancar_relogio`, no tick de 0,5 s — sem isso a ultima barra do
+   dia nunca fecha). Buraco nao inventa barra vazia. Trade fora de
+   ordem levanta. `BarraFechada` ganhou `vol_agr_compra`,
+   `vol_agr_venda`, `n_trades` (insumo do gate). Equivalencia com
+   `resample('15min')` do pandas medida em teste (5.000 trades, OHLC e
+   volumes por lado identicos). **Falta a conferencia no dado REAL:**
+   `profit-tape barra-tempo-conferir <dump> --dia YYYY-MM-DD ...` compara
+   as barras do tape com as do grafico, barra a barra — item 2 do
+   checklist do forward; roda em qualquer dia com tape (24/07+) que
+   esteja no dump de 2026.
 2. **Semente dos indicadores** — MME80 continua entre pregoes e leva
    400 barras (~11 pregoes) para esquecer a semente. O EA carrega as
    ultimas 400 barras M15 do dump mais recente (`barras_123.parquet`)

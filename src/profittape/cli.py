@@ -1388,6 +1388,43 @@ def _eas_preco_123(log: Path, saida: Path, rodar_123: Any) -> None:
     typer.echo(f"\n  Saida: {saida}/resumo_123.json e barras_123.parquet")
 
 
+@app.command(name="barra-tempo-conferir")
+def barra_tempo_conferir(
+    dump: Path = typer.Argument(..., help="Dump PRCBARRA| do grafico M15 com os dias a conferir"),
+    dias: list[str] = typer.Option(..., "--dia", help="YYYY-MM-DD (repetivel)"),
+    curated: Path = typer.Option(Path("data/curated"), "--curated"),
+    symbol: str = typer.Option("WINFUT", "--symbol"),
+    periodo_s: int = typer.Option(900, "--periodo-s"),
+    log_level: str = typer.Option("INFO", "--log-level"),
+) -> None:
+    """
+    Passo 1 do F5 do 123: barras M15 que o EA constroi do TAPE (trade a
+    trade) contra as barras do GRAFICO do Profit (dump), barra a barra.
+    Diferenca esperada em OHLC: zero. E' o "recalcular e comparar" do
+    checklist do forward, no dado real.
+    """
+    configurar(log_level)
+    from .research.barra_tempo_conferir import conferir
+
+    r = conferir(curated, dump, symbol, dias, periodo_s)
+    typer.echo("=" * 72)
+    typer.echo("BARRA DE TEMPO — EA (tape) x GRAFICO (dump), M15")
+    typer.echo("=" * 72)
+    for dia, d in r["dias"].items():
+        if "erro" in d:
+            typer.echo(f"  {dia}: {d['erro']}")
+            continue
+        typer.echo(f"  {dia}: EA={d['barras_ea']} grafico={d['barras_grafico']} "
+                   f"em comum={d['em_comum']} identicas(OHLC)={d['identicas_ohlc']}")
+        typer.echo(f"      dif_max (pts, hhmm): {d['dif_max_por_campo']}")
+        if d["so_no_ea"] or d["so_no_grafico"]:
+            typer.echo(f"      so' no EA: {d['so_no_ea']}   so' no grafico: {d['so_no_grafico']}")
+        for b in d["barras_diferentes"]:
+            typer.echo(f"      {b}")
+    typer.echo("\n  Veredito: BATE se identicas == em comum em todos os dias e nenhuma barra "
+               "so' de um lado (fora a ultima do dia, que o grafico pode nao ter fechado).")
+
+
 @app.command(name="eas-preco-teste")
 def eas_preco_teste(
     log: Path = typer.Argument(..., help="Dump PRCBARRA| contendo SO' os dias da amostra pedida"),

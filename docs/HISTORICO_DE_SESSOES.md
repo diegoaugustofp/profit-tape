@@ -2121,3 +2121,16 @@ pasta esquece a falha. 3 testes novos. 764 no total.
   anda sozinho, o backlog, e a ordem recomendada. Repositorio local
   sincronizado com o remoto (v2.71: E5.5 validado, yaml recusado uma
   vez por versao).
+
+### 2026-09-14 (noite) — passo 1 do F5 do 123: barra de TEMPO no EA (v2.73)
+
+- `ea/barra_tempo.py`: `ConstrutorDeBarraDeTempo` — grade hh:00/15/30/45
+  (periodo tem que dividir uma hora), fecha pelo trade ou pelo relogio,
+  buraco sem barra vazia, trade fora de ordem levanta. `BarraFechada`
+  com `vol_agr_compra/venda` e `n_trades` (defaults; barra de volume
+  intacta). Equivalencia com resample do pandas em teste.
+- `research/barra_tempo_conferir.py` + `profit-tape barra-tempo-conferir`:
+  barras do TAPE (construtor do EA) x barras do GRAFICO (dump), barra a
+  barra, por dia — item 2 do checklist do forward no dado real. Teste
+  com dump adulterado acusa a barra certa.
+- 8 testes novos; 826 no total, ruff e mypy limpos.
