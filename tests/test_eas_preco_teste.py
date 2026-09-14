@@ -191,3 +191,32 @@ def test_combinar_recusa_hash_diferente(tmp_path: Path) -> None:
         json.dumps({"carimbo": {"hash_ficha": "outro"}}), encoding="utf-8")
     with pytest.raises(SystemExit, match="hashes de ficha diferentes"):
         et.combinar(s, "orb")
+
+
+def test_123_resolve_sequencial_e_ignora_sinal_com_posicao_aberta(tmp_path: Path) -> None:
+    from tests.test_eas_preco import _dia_123
+    d = _dia_123(1250901, 1)
+    # sinal A em t=idx4: padrao idx2-4, gatilho idx5; alvo 140315 -> resolve em idx 8
+    d[2]["low"], d[3]["low"] = 139900.0, 139800.0
+    d[4].update({"low": 139900.0, "high": 140050.0})
+    d[5]["high"] = 140060.0
+    # sinal B em t=idx6 (padrao idx4-6: low4=139900 > low5? montar low5=139850, low6=139900)
+    d[5]["low"], d[6]["low"] = 139850.0, 139900.0
+    d[6]["high"] = 140050.0
+    d[7]["high"] = 140060.0          # gatilho de B em idx7, com A ainda aberta -> ignorado
+    d[8]["high"] = 140320.0          # A resolve a favor em idx8
+    df, _ = ep.carregar_log(_dump(tmp_path, d))
+    r = et.resolver_123(ep.indicadores(df))
+    assert list(r["classe"]) == ["resolvida", "ignorado_posicao"]
+    assert r["resultado"].iloc[0] == 1.0 and r["barras"].iloc[0] == 4
+    pl = et.placar(r, "123")
+    assert pl["primario"]["n_resolvidas"] == 1 and pl["primario"]["n_ignorados_posicao"] == 1
+    assert pl["primario"]["ic_confianca"] == 0.95
+
+
+def test_rodar_123_por_ficha(tmp_path: Path) -> None:
+    from tests.test_eas_preco import _dia_123
+    d = _dia_123(1250901, 1)
+    r = et.rodar(_dump(tmp_path, d), tmp_path / "s", "teste", ficha="123")
+    assert r["arquivo"].name == "resultado_123_teste.json"
+    assert r["carimbo"]["parametros"]["TRIAL"] == 1

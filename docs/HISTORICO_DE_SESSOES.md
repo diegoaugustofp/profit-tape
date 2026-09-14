@@ -2020,3 +2020,16 @@ imediata -- a primeira excursao de 0,5 x ATR14 da barra seguinte".
   (out/2015-dez/2022) como UMA amostra; veredito final no combinado;
   por-ano reportado. `AMOSTRAS["historico_2015_22"]`, `combinar()` com
   recusa de hash diferente, `eas-preco-combinar` na CLI. 801 testes.
+
+### Continuacao (2026-09-14, noite) — ORB fechado (CONTRA em 10 anos); 123 em F1 (v2.66)
+
+- ORB historico 2015-22: 0,478 [0,454; 0,503] n=1.631; combinado
+  2015-2026: **0,491 [0,471; 0,511] n=2.382 -> CONTRA**. Nenhum ano com
+  IC fora de 0,50. Fechamento em `EAS_DE_PRECO.md` 4.5, com a
+  observacao do operador (por tempo "acertava o lado") registrada como
+  backlog da porta de volume, sem acao.
+- 123: `marcar_123` / `contar_clausulas_123` / `ambiguidade_123` /
+  `rodar_123` (`eas-preco --ficha 123`); `resolver_123` SEQUENCIAL
+  (posicao aberta ignora sinal -> `ignorado_posicao`, contado);
+  `FICHAS["123"]` trial 1. Expectativa declarada antes: provavelmente
+  nulo. 9 testes novos; 808 no total, ruff e mypy limpos.

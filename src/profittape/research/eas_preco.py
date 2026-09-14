@@ -737,3 +737,158 @@ def rodar_orb(log_path: Path, saida: Path) -> dict[str, Any]:
     log.info("eas_preco.rodada_orb", **meta, sinais=n_sin, saida=str(saida))
     return {"meta": meta, "equivalencia": eq, "funil": funil, "pontos": pontos,
             "pregoes": o, "n_sinais": n_sin}
+
+
+# ---------------------------------------------------------------------
+# 9. Ficha 123 v0 -- funil por BARRA (docs/EAS_DE_PRECO.md, 5)
+# ---------------------------------------------------------------------
+# Declarados, nao calibrados.
+P123_REGIME_NA_CLAUSULA = True       # v0: a favor da MME80 (pullback em tendencia)
+P123_PRIMEIRO_FECHAMENTO = 930       # t fecha a partir daqui (3 barras formadas)
+P123_ULTIMO_FECHAMENTO = 1630
+P123_D_MINIMO = 4 * TICK_WIN         # 20 pts
+
+
+def marcar_123(d: pd.DataFrame, col_mme80: str = "mme80_ntsl") -> pd.DataFrame:
+    """
+    Barra t fecha o padrao (t-2, t-1, t). Clausulas, na ordem do funil:
+        padrao     COMPRA: low(t-1) < low(t-2) e low(t-1) < low(t) (a 2a e'
+                   a menor minima; empate NAO forma). VENDA: espelho nas
+                   maximas.
+        regime     COMPRA: close(t) > MME80(t); VENDA: <. (v0: clausula;
+                   contado tambem sem regime como informacao)
+        janela     930 <= hhmm(t) <= 1630
+        D          entrada - stop >= 20 pts
+        gatilho    t+1 existe no mesmo dia/bloco e toca a entrada:
+                   high(t+1) >= high(t) + tick (compra); espelho na venda
+    Entrada = high(t) + tick. Stop = low(t-1) - tick. D = entrada - stop
+    ao tick. Alvo = entrada + D. Venda espelho.
+    """
+    x = d.copy()
+    g = x.groupby("bloco", group_keys=False)
+    lo1, lo2 = g["low"].shift(1), g["low"].shift(2)
+    hi1, hi2 = g["high"].shift(1), g["high"].shift(2)
+    x["padrao_compra"] = (lo1 < lo2) & (lo1 < x["low"])
+    x["padrao_venda"] = (hi1 > hi2) & (hi1 > x["high"])
+    x["regime_compra"] = x["close"] > x[col_mme80]
+    x["regime_venda"] = x["close"] < x[col_mme80]
+    x["janela"] = (x["hhmm"] >= P123_PRIMEIRO_FECHAMENTO) & (x["hhmm"] <= P123_ULTIMO_FECHAMENTO)
+    x["tem_t1"] = (x["dia"].shift(-1) == x["dia"]) & (x["bloco"].shift(-1) == x["bloco"])
+    hi_t1, lo_t1 = x["high"].shift(-1), x["low"].shift(-1)
+
+    ent_c, stop_c = x["high"] + TICK_WIN, lo1 - TICK_WIN
+    ent_v, stop_v = x["low"] - TICK_WIN, hi1 + TICK_WIN
+    x["D_compra"] = (ent_c - stop_c).map(arredondar_ao_tick)
+    x["D_venda"] = (stop_v - ent_v).map(arredondar_ao_tick)
+    x["gatilho_compra"] = x["tem_t1"] & (hi_t1 >= ent_c)
+    x["gatilho_venda"] = x["tem_t1"] & (lo_t1 <= ent_v)
+    reg_c = x["regime_compra"] if P123_REGIME_NA_CLAUSULA else True
+    reg_v = x["regime_venda"] if P123_REGIME_NA_CLAUSULA else True
+    x["sinal_compra"] = (x["padrao_compra"] & reg_c & x["janela"]
+                         & (x["D_compra"] >= P123_D_MINIMO) & x["gatilho_compra"])
+    x["sinal_venda"] = (x["padrao_venda"] & reg_v & x["janela"]
+                        & (x["D_venda"] >= P123_D_MINIMO) & x["gatilho_venda"])
+    x["entrada"] = np.where(x["sinal_compra"], ent_c, np.where(x["sinal_venda"], ent_v, np.nan))
+    x["D_pts"] = np.where(x["sinal_compra"], x["D_compra"],
+                 np.where(x["sinal_venda"], x["D_venda"], np.nan))
+    x["stop"] = np.where(x["sinal_compra"], x["entrada"] - x["D_pts"],
+                np.where(x["sinal_venda"], x["entrada"] + x["D_pts"], np.nan))
+    x["alvo"] = np.where(x["sinal_compra"], x["entrada"] + x["D_pts"],
+                np.where(x["sinal_venda"], x["entrada"] - x["D_pts"], np.nan))
+    # info: inside bar em t (a pagina do QuantBrasil oferece como filtro; v0 nao usa)
+    x["inside_bar"] = (x["high"] <= hi1) & (x["low"] >= lo1)
+    return x
+
+
+def contar_clausulas_123(x: pd.DataFrame) -> pd.DataFrame:
+    pregoes = max(int(x["dia"].nunique()), 1)
+    linhas = []
+    for lado in ("compra", "venda"):
+        p, r = x[f"padrao_{lado}"], x[f"regime_{lado}"]
+        j, dd, gt = x["janela"], x[f"D_{lado}"] >= P123_D_MINIMO, x[f"gatilho_{lado}"]
+        reg = r if P123_REGIME_NA_CLAUSULA else pd.Series(True, index=x.index)
+        etapas = [
+            ("padrao (3 barras)", p),
+            ("+regime MME80" if P123_REGIME_NA_CLAUSULA else "(regime = estrato)", p & reg),
+            ("+janela 09:30-16:30", p & reg & j),
+            ("+D >= 20 pts", p & reg & j & dd),
+            ("+gatilho em t+1 = SINAL", x[f"sinal_{lado}"]),
+            ("(info) SINAL sem exigir regime", p & j & dd & gt),
+            ("(info) sinal com inside bar em t", x[f"sinal_{lado}"] & x["inside_bar"]),
+            ("(estrato) sinal a favor da MME80", x[f"sinal_{lado}"] & r),
+            ("(estrato) sinal contra a MME80", x[f"sinal_{lado}"] & ~r),
+        ]
+        for nome, m in etapas:
+            n = int(m.sum())
+            linhas.append({"lado": lado, "clausula": nome, "n": n,
+                           "por_pregao": round(n / pregoes, 2)})
+    return pd.DataFrame(linhas)
+
+
+def ambiguidade_123(x: pd.DataFrame, max_barras: int = 400) -> dict[str, Any]:
+    """Como `ambiguidade`, com a regra da barra do gatilho (t+1): stop
+    tocado nela = ambigua (o OHLC nao ordena contra o rompimento); alvo
+    nela = resolvida. NAO diz qual barreira bateu."""
+    highs, lows = x["high"].to_numpy(dtype=float), x["low"].to_numpy(dtype=float)
+    alvos, stops = x["alvo"].to_numpy(dtype=float), x["stop"].to_numpy(dtype=float)
+    dias = x["dia"].to_numpy()
+    sc, sv = x["sinal_compra"].to_numpy(dtype=bool), x["sinal_venda"].to_numpy(dtype=bool)
+    cont = {"resolvida": 0, "ambigua": 0, "por_tempo": 0}
+    dur: list[int] = []
+    for i in [int(k) for k in np.flatnonzero(sc | sv)]:
+        compra = sc[i]
+        j, classe = i + 1, "por_tempo"
+        while j < len(x) and dias[j] == dias[i] and j - i <= max_barras:
+            t_alvo = highs[j] >= alvos[i] if compra else lows[j] <= alvos[i]
+            t_stop = lows[j] <= stops[i] if compra else highs[j] >= stops[i]
+            if (j == i + 1 and t_stop) or (t_alvo and t_stop):
+                classe = "ambigua"
+                break
+            if t_alvo or t_stop:
+                classe = "resolvida"
+                break
+            j += 1
+        cont[classe] += 1
+        dur.append(j - i)
+    n = len(dur)
+    s = pd.Series(dur, dtype=float)
+    return {"n_sinais": n, "contagem": cont,
+            "fracao": {k: (round(v / n, 3) if n else None) for k, v in cont.items()},
+            "duracao_barras": ({"p50": float(s.median()), "p90": float(s.quantile(0.9))}
+                               if n else {})}
+
+
+def em_pontos_123(x: pd.DataFrame) -> dict[str, Any]:
+    sin = x[x["sinal_compra"] | x["sinal_venda"]]
+    dd = sin["D_pts"].dropna()
+
+    def q(s: pd.Series) -> dict[str, float]:
+        return ({"p10": round(float(s.quantile(0.1)), 1), "p50": round(float(s.median()), 1),
+                 "p90": round(float(s.quantile(0.9)), 1)} if not s.empty else {})
+    dq = q(dd)
+    d50 = float(dd.median()) if not dd.empty else float("nan")
+    return {"D_pts": dq,
+            "capital_recomendado_por_contrato_reais": (
+                {"em_D_p50": capital_recomendado(dq["p50"]),
+                 "em_D_p90": capital_recomendado(dq["p90"])} if dq else {}),
+            "p1_que_empata_custo_com_D_mediano": (round(0.5 + CUSTO_PONTOS / (2 * d50), 3)
+                                                  if dq else None)}
+
+
+def rodar_123(log_path: Path, saida: Path) -> dict[str, Any]:
+    df, meta = carregar_log(log_path)
+    d = indicadores(df)
+    eq = equivalencia(d)
+    x = marcar_123(d)
+    funil = contar_clausulas_123(x)
+    pontos = em_pontos_123(x)
+    amb = ambiguidade_123(x)
+    saida.mkdir(parents=True, exist_ok=True)
+    x.to_parquet(saida / "barras_123.parquet", index=False)
+    resumo = {"dump": meta, "equivalencia": eq, "pontos": pontos, "ambiguidade": amb,
+              "funil_123": funil.to_dict(orient="records")}
+    (saida / "resumo_123.json").write_text(json.dumps(resumo, indent=2, default=str),
+                                           encoding="utf-8")
+    log.info("eas_preco.rodada_123", **meta, sinais=amb["n_sinais"], saida=str(saida))
+    return {"meta": meta, "equivalencia": eq, "funil": funil, "pontos": pontos,
+            "ambiguidade": amb, "barras": x}

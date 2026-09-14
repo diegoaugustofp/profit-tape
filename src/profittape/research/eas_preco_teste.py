@@ -88,6 +88,11 @@ FICHAS: dict[str, dict[str, Any]] = {
             "ORB_ULTIMA_ENTRADA": ep.ORB_ULTIMA_ENTRADA,
             "ORB_AMPLITUDE_MINIMA": ep.ORB_AMPLITUDE_MINIMA,
             "ORB_REGIME_NA_CLAUSULA": ep.ORB_REGIME_NA_CLAUSULA},
+    "123": {**_COMUM, "TRIAL": 1,
+            "P123_REGIME_NA_CLAUSULA": ep.P123_REGIME_NA_CLAUSULA,
+            "P123_PRIMEIRO_FECHAMENTO": ep.P123_PRIMEIRO_FECHAMENTO,
+            "P123_ULTIMO_FECHAMENTO": ep.P123_ULTIMO_FECHAMENTO,
+            "P123_D_MINIMO": ep.P123_D_MINIMO},
 }
 # Compatibilidade com quem importa os nomes antigos (IFR2).
 PARAMETROS_FICHA = FICHAS["ifr2"]
@@ -231,6 +236,64 @@ def resolver_orb(d: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(linhas)
 
 
+def resolver_123(d: pd.DataFrame) -> pd.DataFrame:
+    """
+    Resultado por sinal da ficha 123 (docs/EAS_DE_PRECO.md 5), SEQUENCIAL
+    dentro do dia: "posicao aberta ignora sinal" -- um sinal cujo t+1 cai
+    dentro de uma operacao ainda aberta e' PULADO (classe=ignorado_posicao,
+    contado, fora do p1). Barra do gatilho (t+1): stop tocado = ambigua;
+    alvo tocado = favoravel. Por tempo: P&L na zeragem 17:30 reportado.
+    """
+    x = ep.marcar_123(d).reset_index(drop=True)
+    highs, lows = x["high"].to_numpy(dtype=float), x["low"].to_numpy(dtype=float)
+    closes = x["close"].to_numpy(dtype=float)
+    alvos, stops = x["alvo"].to_numpy(dtype=float), x["stop"].to_numpy(dtype=float)
+    entr, d_all = x["entrada"].to_numpy(dtype=float), x["D_pts"].to_numpy(dtype=float)
+    dias, hhmm = x["dia"].to_numpy(), x["hhmm"].to_numpy(dtype=int)
+    cbar = x["current_bar"].to_numpy(dtype=int)
+    sc, sv = x["sinal_compra"].to_numpy(dtype=bool), x["sinal_venda"].to_numpy(dtype=bool)
+    reg_c, reg_v = x["regime_compra"].to_numpy(dtype=bool), x["regime_venda"].to_numpy(dtype=bool)
+    linhas = []
+    livre_a_partir = -1          # indice da barra em que a posicao anterior fechou
+    for i in [int(k) for k in np.flatnonzero(sc | sv)]:
+        compra = bool(sc[i])
+        lado = "compra" if compra else "venda"
+        base = {"dia": dias[i], "hhmm": int(hhmm[i]), "current_bar": int(cbar[i]), "lado": lado,
+                "a_favor_mme80": bool(reg_c[i] if compra else reg_v[i]),
+                "entrada": float(entr[i]), "alvo": float(alvos[i]), "stop": float(stops[i]),
+                "D_pts": float(d_all[i])}
+        if i + 1 <= livre_a_partir and dias[i] == dias[livre_a_partir]:
+            linhas.append({**base, "classe": "ignorado_posicao", "resultado": float("nan"),
+                           "barras": 0, "pnl_bruto_pts": float("nan"),
+                           "pnl_zeragem_pts": float("nan"), "barra_resolucao_hhmm": None})
+            continue
+        j, classe, res = i + 1, "por_tempo", float("nan")
+        while j < len(x) and dias[j] == dias[i]:
+            t_alvo = highs[j] >= alvos[i] if compra else lows[j] <= alvos[i]
+            t_stop = lows[j] <= stops[i] if compra else highs[j] >= stops[i]
+            if (j == i + 1 and t_stop) or (t_alvo and t_stop):
+                classe, res = "ambigua", 0.0
+                break
+            if t_alvo:
+                classe, res = "resolvida", 1.0
+                break
+            if t_stop:
+                classe, res = "resolvida", -1.0
+                break
+            j += 1
+        fim = min(j, len(x) - 1)
+        livre_a_partir = fim
+        pnl_z = float("nan")
+        if classe == "por_tempo":
+            k = fim if dias[fim] == dias[i] else fim - 1
+            pnl_z = (closes[k] - entr[i]) * (1.0 if compra else -1.0)
+        linhas.append({**base, "classe": classe, "resultado": res, "barras": fim - i,
+                       "pnl_bruto_pts": (res * d_all[i]) if classe == "resolvida" else float("nan"),
+                       "pnl_zeragem_pts": pnl_z,
+                       "barra_resolucao_hhmm": (int(hhmm[fim]) if classe != "por_tempo" else None)})
+    return pd.DataFrame(linhas)
+
+
 # ---------------------------------------------------------------------
 # 3. p1, IC de Wilson, veredito
 # ---------------------------------------------------------------------
@@ -283,6 +346,7 @@ def _placar(r: pd.DataFrame, z: float = Z95) -> dict[str, Any]:
     return {
         "n_sinais": len(r), "n_resolvidas": n, "n_ambiguas": n_amb,
         "n_por_tempo": int((r["classe"] == "por_tempo").sum()),
+        "n_ignorados_posicao": int((r["classe"] == "ignorado_posicao").sum()),
         "fracao_ambigua": (round(n_amb / len(r), 4) if len(r) else None),
         "p1": (round(p1, 4) if n else None),
         "ic95": ([round(lo, 4), round(hi, 4)] if n else None),   # nivel = ic_confianca
@@ -384,7 +448,9 @@ def rodar(dump: Path, saida: Path, amostra: str,
                 "--forcar \"motivo\" e ele fica gravado na saida.")
         log.warning("eas_preco_teste.forcado", motivo=forcar_motivo, arquivo=str(arquivo))
 
-    r = resolver_sinais(ep.marcar_ifr2(d)) if ficha == "ifr2" else resolver_orb(d)
+    r = {"ifr2": lambda: resolver_sinais(ep.marcar_ifr2(d)),
+         "orb": lambda: resolver_orb(d),
+         "123": lambda: resolver_123(d)}[ficha]()
     pl = placar(r, ficha)
     carimbo = {"codigo": _carimbo(), "hash_ficha": hash_ficha(ficha), "ficha": ficha,
                "parametros": FICHAS[ficha],

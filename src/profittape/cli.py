@@ -1211,7 +1211,7 @@ def eas_preco(
     log: Path = typer.Argument(
         ..., help="Dump do console com linhas PRCBARRA| (grafico M15 do WINFUT)"),
     saida: Path = typer.Option(Path("data/research/eas_preco"), "--saida"),
-    ficha: str = typer.Option("ifr2", "--ficha", help="ifr2 | orb"),
+    ficha: str = typer.Option("ifr2", "--ficha", help="ifr2 (fechada) | orb (fechada) | 123"),
     tolerancia: float = typer.Option(
         0.5, "--tolerancia",
         help="Diferenca maxima Python x Profit para considerar a variante equivalente",
@@ -1237,8 +1237,12 @@ def eas_preco(
     if ficha == "orb":
         _eas_preco_orb(log, saida, rodar_orb)
         return
+    if ficha == "123":
+        from .research.eas_preco import rodar_123
+        _eas_preco_123(log, saida, rodar_123)
+        return
     if ficha != "ifr2":
-        raise SystemExit("--ficha aceita ifr2 ou orb")
+        raise SystemExit("--ficha aceita ifr2, orb ou 123")
     r = rodar(log, saida)
     if tolerancia != 0.5:
         r["equivalencia"] = equivalencia(r["barras"], tolerancia)
@@ -1329,12 +1333,42 @@ def _eas_preco_orb(log: Path, saida: Path, rodar_orb: Any) -> None:
     typer.echo(f"\n  Saida: {saida}/resumo_orb.json e pregoes_orb.parquet")
 
 
+def _eas_preco_123(log: Path, saida: Path, rodar_123: Any) -> None:
+    r = rodar_123(log, saida)
+    m, pt, a = r["meta"], r["pontos"], r["ambiguidade"]
+    typer.echo("=" * 72)
+    typer.echo("EAs DE PRECO — dump M15 (ficha 123 v0: fundo/topo de 3 barras, stop na 2a)")
+    typer.echo("=" * 72)
+    typer.echo(f"  {m['barras']} barras | {m['pregoes']} pregoes | {m['inicio']} a {m['fim']}")
+    falhas = [k for k, v in r["equivalencia"].items() if not v["bate"]]
+    eq_txt = "todas BATEM" if not falhas else "NAO BATE: " + ", ".join(falhas)
+    typer.echo(f"  equivalencia: {eq_txt}")
+    typer.echo("\n--- FUNIL DA FICHA 123 (7.4) ---")
+    typer.echo(r["funil"].to_string(index=False))
+    typer.echo("\n--- EM PONTOS (7.5) ---")
+    typer.echo(f"  D = entrada - stop, nos sinais: {pt['D_pts']}")
+    typer.echo(f"  capital RECOMENDADO por contrato (informativo, 4.9): "
+               f"{pt['capital_recomendado_por_contrato_reais']}")
+    typer.echo(f"  p1 que empata 11 pts com D mediano: {pt['p1_que_empata_custo_com_D_mediano']}")
+    typer.echo("\n--- ESTIMADOR BINARIO ---")
+    typer.echo(f"  sinais={a['n_sinais']}  {a['contagem']}  fracao={a['fracao']}  "
+               f"duracao={a['duracao_barras']}")
+    preg = max(int(m["pregoes"]), 1)
+    if a["n_sinais"]:
+        taxa = a["n_sinais"] / preg
+        typer.echo(f"\n  HORIZONTE: {taxa:.2f} sinais/pregao (sem a regra de posicao aberta) -> "
+                   f"n=1.070 em ~{1070 / taxa:.0f} pregoes (este dump tem {preg}).")
+        if (a["fracao"].get("ambigua") or 0) > 0.10:
+            typer.echo("  AVISO: fracao ambigua > 10% -- estimador binario nao serve sem o tape.")
+    typer.echo(f"\n  Saida: {saida}/resumo_123.json e barras_123.parquet")
+
+
 @app.command(name="eas-preco-teste")
 def eas_preco_teste(
     log: Path = typer.Argument(..., help="Dump PRCBARRA| contendo SO' os dias da amostra pedida"),
     amostra: str = typer.Option(
         ..., "--amostra", help="teste | replicacao | depuracao | historico_2015_22"),
-    ficha: str = typer.Option("ifr2", "--ficha", help="ifr2 (fechada) | orb"),
+    ficha: str = typer.Option("ifr2", "--ficha", help="ifr2 (fechada) | orb (fechada) | 123"),
     saida: Path = typer.Option(Path("data/research/eas_preco_teste"), "--saida"),
     forcar: str | None = typer.Option(
         None, "--forcar", help="Motivo para repetir a rodada de TESTE (fica gravado)"),
@@ -1369,6 +1403,8 @@ def eas_preco_teste(
     typer.echo(
         f"  sinais={pr['n_sinais']}  resolvidas={pr['n_resolvidas']}  "
         f"ambiguas={pr['n_ambiguas']} ({pr['fracao_ambigua']})  por_tempo={pr['n_por_tempo']}"
+        + (f"  ignorados_posicao={pr['n_ignorados_posicao']}"
+           if pr.get("n_ignorados_posicao") else "")
     )
     typer.echo(f"  p1 = {pr['p1']}  IC{int(pr['ic_confianca'] * 100)}% = {pr['ic95']}  "
                f"(trial {c['parametros']['TRIAL']} da familia; IC deflacionado por Bonferroni)")

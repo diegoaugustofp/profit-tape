@@ -390,3 +390,78 @@ def test_rodar_orb_escreve_saida(tmp_path: Path) -> None:
     d = _dia_orb(1250901, 1, 139000.0, **{"4": {"high": 140110.0}})
     r = ep.rodar_orb(_dump(tmp_path, d), tmp_path / "s")
     assert (tmp_path / "s" / "resumo_orb.json").exists() and r["n_sinais"] == 1
+
+
+# ---------------------------------------------------------------------
+# Ficha 123 v0: funil por barra
+# ---------------------------------------------------------------------
+def _dia_123(data: int, cb0: int, mme80: float = 139000.0) -> list[dict]:
+    """Barras planas (139990-140000); o padrao e' montado por indice."""
+    d = _dia(data, cb0)
+    for b in d:
+        b["high"], b["low"], b["mme80_ntsl"] = 140000.0, 139990.0, mme80
+    return d
+
+
+def test_123_compra_padrao_entrada_stop_alvo(tmp_path: Path) -> None:
+    d = _dia_123(1250901, 1)
+    # t-2 (idx 2): low 139900; t-1 (idx 3): low 139800 (menor); t (idx 4, 10:00): high 140050
+    d[2]["low"] = 139900.0
+    d[3]["low"] = 139800.0
+    d[4].update({"low": 139900.0, "high": 140050.0})
+    d[5]["high"] = 140060.0          # t+1 toca 140055 -> gatilho
+    df, _ = ep.carregar_log(_dump(tmp_path, d))
+    x = ep.marcar_123(ep.indicadores(df))
+    s = x[x["sinal_compra"]]
+    assert len(s) == 1 and s.iloc[0]["hhmm"] == 1000
+    assert s.iloc[0]["entrada"] == 140055.0
+    assert s.iloc[0]["stop"] == 139795.0 and s.iloc[0]["D_pts"] == 260.0
+    assert s.iloc[0]["alvo"] == 140315.0
+
+
+def test_123_empate_nao_forma_e_sem_gatilho_nao_e_sinal(tmp_path: Path) -> None:
+    d = _dia_123(1250901, 1)
+    d[2]["low"] = 139800.0
+    d[3]["low"] = 139800.0           # empate com t-2 -> nao forma
+    d[4]["low"] = 139900.0
+    d[5]["high"] = 140100.0
+    df, _ = ep.carregar_log(_dump(tmp_path, d))
+    x = ep.marcar_123(ep.indicadores(df))
+    assert not x["padrao_compra"].iloc[4]
+    d2 = _dia_123(1250902, 38)
+    d2[2]["low"], d2[3]["low"], d2[4]["low"] = 139900.0, 139800.0, 139900.0   # padrao ok
+    d2[5]["high"] = 140000.0         # t+1 nao chega a 140005 -> sem gatilho
+    df, _ = ep.carregar_log(_dump(tmp_path, d2))
+    x = ep.marcar_123(ep.indicadores(df))
+    assert bool(x["padrao_compra"].iloc[4]) and not bool(x["sinal_compra"].iloc[4])
+
+
+def test_123_venda_espelho_e_regime(tmp_path: Path) -> None:
+    d = _dia_123(1250901, 1, mme80=141000.0)       # close 140000 < MME80 -> regime venda
+    d[2]["high"] = 140100.0
+    d[3]["high"] = 140200.0
+    d[4].update({"high": 140100.0, "low": 139950.0})
+    d[5]["low"] = 139940.0           # toca 139945 -> gatilho
+    df, _ = ep.carregar_log(_dump(tmp_path, d))
+    x = ep.marcar_123(ep.indicadores(df))
+    s = x[x["sinal_venda"]]
+    assert len(s) == 1 and s.iloc[0]["entrada"] == 139945.0 and s.iloc[0]["stop"] == 140205.0
+    f = ep.contar_clausulas_123(x).set_index(["lado", "clausula"])["n"]
+    assert f[("venda", "+gatilho em t+1 = SINAL")] == 1
+    assert f[("venda", "(estrato) sinal a favor da MME80")] == 1
+
+
+def test_123_ambiguidade_na_barra_do_gatilho(tmp_path: Path) -> None:
+    d = _dia_123(1250901, 1)
+    d[2]["low"], d[3]["low"] = 139900.0, 139800.0
+    d[4].update({"low": 139900.0, "high": 140050.0})
+    d[5].update({"high": 140060.0, "low": 139790.0})   # gatilho E stop na mesma barra
+    df, _ = ep.carregar_log(_dump(tmp_path, d))
+    a = ep.ambiguidade_123(ep.marcar_123(ep.indicadores(df)))
+    assert a["contagem"] == {"resolvida": 0, "ambigua": 1, "por_tempo": 0}
+
+
+def test_rodar_123_escreve_saida(tmp_path: Path) -> None:
+    d = _dia_123(1250901, 1)
+    r = ep.rodar_123(_dump(tmp_path, d), tmp_path / "s")
+    assert (tmp_path / "s" / "resumo_123.json").exists() and r["ambiguidade"]["n_sinais"] == 0

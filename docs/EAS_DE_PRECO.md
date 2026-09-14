@@ -1,10 +1,9 @@
 # EAs de PRECO — linha paralela enquanto o tape acumula (2026-09-13)
 
-Estado (2026-09-14, manha): **IFR2 FECHADA — familia inteira CONTRA**
-(trial 1 K=0,5: 0,492; trial 2 K=1: 0,486 IC97,5% [0,464; 0,509]).
-**ORB: teste INCONCLUSIVO (4.3: 0,524 [0,485; 0,562]); replicacao 2
-declarada = todo o historico 2015-2022 (4.4), veredito final no
-combinado.** 123 em rascunho.
+Estado (2026-09-14, noite): **IFR2 FECHADA (familia CONTRA). ORB FECHADO
+— CONTRA no combinado de 10 anos (4.5).** **123 em F1**: funil entregue
+(`eas-preco --ficha 123`), ficha v0 em rascunho ate' medir. Ultimo dos
+tres candidatos declarados.
 
 **Regra da linha inteira (2026-09-14, apos erro meu, duas vezes):
 capital NUNCA restringe uma ficha.** E' a decisao 4.9 do
@@ -590,7 +589,48 @@ hash diferente. Criterio: p1 >= 0,56 e IC acima de 0,50 = FAVORAVEL; <=
 0,50 = CONTRA; entre = INCONCLUSIVO, e ai' o ORB FECHA como "borda, se
 existe, menor do que a que vale operar". Nao ha' terceira replicacao.
 
+### 4.5 FECHAMENTO — CONTRA (2026-09-14, `entregue-v2.65` / `7ae066bb3efb`)
+
+| amostra | pregoes | resolvidas | por tempo (zeragem) | p1 | IC95 | P&L bruto/op |
+|---|---|---|---|---|---|---|
+| TESTE 2023-25 | 749 | 636 | 84 (-47) | 0,524 | [0,485; 0,562] | +37 |
+| REPLICACAO 2026 | 154 | 115 | 34 (-10) | 0,496 | [0,406; 0,586] | -9 |
+| HISTORICO 2015-22 | 1.782 | 1.631 | 87 (+26) | 0,478 | [0,454; 0,503] | -29 |
+| **COMBINADO** | 2.685 | **2.382** | 205 (-10) | **0,491** | **[0,471; 0,511]** | -10 |
+
+Por ano (reportado): nenhum ano com IC fora de 0,50. 2015-17 abaixo de
+0,45; 2019, 2021, 2023-25 entre 0,52 e 0,54; 2020 (pandemia) 0,478 —
+nem melhor nem pior que a vizinhanca. Estratos no combinado: a favor
+da MME80 0,484; contra 0,500; compra 0,495; venda 0,487.
+
+**Leitura:** o 0,524 do teste era a borda superior de uma faixa de
+ruido de dez anos. Nulo a custo zero, como o IFR2. Capitulo fechado;
+sem trial 2.
+
+**Backlog (observacao do operador na depuracao, sem acao agora):** nas
+operacoes por tempo o lado da entrada era frequentemente o certo e o
+alvo ficava perto. Isso e' exatamente a porta de volume declarada
+(agressao no rompimento como gate) — hipotese nova, com ficha propria e
+amostra que estes testes nao tocaram, quando o tape permitir.
+
+**O que a linha diz depois de dois fechamentos:** dois setups publicos
+de preco, M15, no futuro mais liquido do Brasil, 10 anos, estimador
+limpo: nulos. Evidencia sobre a CATEGORIA — o que existe de graca em
+preco no WIN M15 ja' foi arbitrado. O 123 (5) e' da mesma categoria e
+roda com essa expectativa dita antes.
+
 ## 5. Ficha 123 (rascunho v0) — continuacao em pullback
+
+> **F1 (2026-09-14, `entregue-v2.66`):** `eas-preco --ficha 123` faz o
+> funil por barra (padrao -> regime -> janela -> D >= 20 -> gatilho em
+> t+1 = SINAL), reporta o sinal sem regime e o inside bar como
+> informacao, D e capital em pontos, ambiguidade (barra do gatilho:
+> stop tocado = ambigua). `eas-preco-teste --ficha 123` ja' existe:
+> resolve SEQUENCIAL no dia — sinal com posicao aberta e' `ignorado_posicao`,
+> contado, fora do p1. Trial 1 da familia. Expectativa declarada antes
+> de medir: provavelmente nulo (4.5). A ficha congela depois do funil,
+> com a decisao do regime (clausula ou estrato) tomada pelo 7.4.
+
 
     HIPOTESE   Um fundo de 3 barras M15 (a 2a com a menor minima), a
                favor do regime, e' pullback numa tendencia; o rompimento
