@@ -180,10 +180,13 @@ nunca foi atualizado. Especificamente:
    pregao (ou ao menos DLL conectada).
 10. **F5 do 123** (2026-09-14, `EAS_DE_PRECO.md` 5.4): barra de TEMPO
     no EA, semente da MME80 pelo parquet, `SinalPreco123` importando a
-    formula do research, gatilho e OCO por TRADE com slippage medido,
-    `GateDeFluxo`/`SemFiltro`, registro do sinal com features de fluxo
-    (F1 do gate), `ea_123.yaml` na esteira exclusiva. Um passo por
-    entrega. E' o primeiro EA com sinal real a passar pela escada E4.
+    formula do research, **E2b** (stop / limitada / cancelamento na
+    demo — ordens REAIS por decisao do operador: protecao na corretora,
+    nao no processo), ciclo de ordens com slippage medido,
+    reconciliacao de ORDENS ao reconectar, `GateDeFluxo`/`SemFiltro`,
+    registro do sinal com features de fluxo (F1 do gate),
+    `ea_123.yaml` na esteira exclusiva. Um passo por entrega. Passo 1
+    (barra de tempo) comeca ja'; E2b espera pregao.
 
 ### Divida tecnica conhecida, sem urgencia
 

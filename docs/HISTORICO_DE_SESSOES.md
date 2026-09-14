@@ -2053,3 +2053,9 @@ numero; sequencia inteira declarada (depuracao -> teste -> replicacao
   pregoes) e gravando a amostra da porta de volume. Ficha de forward
   de seis linhas e os 7 passos de implementacao em `EAS_DE_PRECO.md`
   5.4; pendencia 10 no EA_ARQUITETURA. Codigo comeca na proxima sessao.
+- Execucao do 123 decidida: ORDENS REAIS (stop de entrada, stop de
+  protecao + limitada de alvo, cancelamento pelo EA), nao emulacao —
+  protecao na corretora sobrevive a queda de conexao. Residuo (par
+  orfao, entrada nao cancelada) mitigado por reconciliacao de ORDENS
+  ao reconectar (passo 4b). E2b (stop/limitada/cancel na demo) entra
+  antes do passo 4. Passo 1 (barra de tempo) comeca na proxima sessao.

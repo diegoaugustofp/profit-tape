@@ -776,14 +776,16 @@ pregao, seis anos. Nao e' o objetivo, e esta' escrito para ninguem
 
     HIPOTESE   A borda de 0,53 do 123 (~17 pts brutos/op) sobrevive a`
                execucao real: slippage de entrada + saida <= 6 pts.
-    EVENTO     O mesmo da ficha 5.2, com a execucao definida: gatilho
-               = primeiro TRADE do tape com preco >= entrada (compra)
-               durante a barra t+1 -> ordem a MERCADO; alvo/stop =
-               primeiro trade que toca o nivel -> ordem a mercado
-               (OCO emulado no EA, trade a trade, nao no fechamento
-               da barra); zeragem 17:30 (a que ja' existe no risco).
-               Regime, janela, D >= 20, posicao aberta ignora sinal:
-               identicos. 1 contrato. `filtro_fluxo: null`.
+    EVENTO     O mesmo da ficha 5.2, com a execucao definida: ORDENS
+               REAIS NA CORRETORA (decisao do operador, 2026-09-14 —
+               execucao, nao hipotese). Fechou t com padrao -> ordem
+               STOP de entrada em X; t+1 fechou sem executar -> EA
+               cancela. Entrada executou -> EA manda stop de protecao
+               (STOP) e alvo (LIMITADA) juntos; um executou -> EA
+               cancela o outro (OCO e' do EA; a DLL nao tem). Zeragem
+               17:30 (a que ja' existe). Regime, janela, D >= 20,
+               posicao aberta ignora sinal: identicos. 1 contrato.
+               `filtro_fluxo: null`.
     TAXA       ~3,4 sinais/pregao antes da regra sequencial; ~2
                operacoes resolvidas/pregao (medido em 2.685 pregoes).
     EFEITO     Slippage medio (fill real - nivel teorico, entrada e
@@ -800,9 +802,22 @@ pregao, seis anos. Nao e' o objetivo, e esta' escrito para ninguem
                execucao (ordem nao saiu, fill fora da barra); decido
                em n = 100. Perdas seguidas nao autorizam nada.
 
+**Por que stop real e nao emulacao pelo tape (operador):** com a
+conexao caida, a emulacao deixaria a posicao SEM stop ate' o EA voltar
+— e ele poderia voltar com o preco ja' alem da barreira. Com ordem
+real a protecao esta' na corretora, nao no processo. Nao ha' emulacao
+em nenhuma fase; logo "emulacao -> stop real" saiu da lista do que
+reinicia a contagem.
+
+**Residuo honesto da escolha:** com a conexao caida o PAR stop+alvo
+tambem fica vivo na corretora — se o stop executar e o preco voltar ao
+alvo, a limitada abre posicao CONTRARIA; um stop de entrada nao
+cancelado no fim de t+1 pode executar horas depois. A E3 ja' zera
+divergencia de POSICAO ao reconectar; falta o equivalente para ORDENS
+(passo 4b).
+
 **Carimbo.** Tag do codigo + hash do YAML (`ea_123.yaml`) em cada
-observacao. Trocar emulacao por ordem STOP real da DLL e' mudanca de
-execucao: carimbo novo, contagem nova.
+observacao.
 
 **O que precisa existir (nesta ordem, cada passo entregue e testado):**
 
@@ -821,10 +836,23 @@ execucao: carimbo novo, contagem nova.
    arma `OrdemPendente(lado, entrada, stop, alvo, valida_ate=fim de
    t+1)`. Python identico a `eas_preco.marcar_123` — mesma funcao,
    importada, nao reescrita (regra 7.3: dois lados, uma formula).
-4. **Gatilho e OCO por TRADE** — `processar_trade` checa a pendente
-   (preco cruza entrada -> mercado) e a posicao (alvo/stop tocado ->
-   mercado). Registra `nivel_teorico`, `fill`, `slippage_pts`,
-   `latencia_ms` por ordem. E' aqui que o forward mede o que mede.
+3b. **E2b — familias de ordem que o executor nao tem.** Hoje so'
+   mercado (E2) e zeragem (E3). Entram: STOP de compra/venda
+   (`SendStopBuyOrder`/`SendStopSellOrder`, existem na DLL, faltam no
+   `bindings.py`), LIMITADA (`SendBuyOrder`/`SendSellOrder`, declaradas,
+   nunca usadas) e CANCELAMENTO (`SendCancelOrder`). Mesmo ciclo da E2
+   para cada uma: assinatura conferida contra o manual, uma ordem real
+   na demo, evento no callback, `resultado=ok` ao vivo. Exige pregao e
+   o operador. Independente do passo 1, que pode andar antes.
+4. **Ciclo de ordens do 123** — fechou t: STOP de entrada; t+1 sem
+   execucao: cancela. Entrada executou: STOP de protecao + LIMITADA de
+   alvo, juntos; um executou: cancela o outro. Registra `nivel_teorico`,
+   `fill`, `slippage_pts`, `latencia_ms` por ordem. E' aqui que o
+   forward mede o que mede.
+4b. **Reconciliacao de ORDENS ao reconectar** — o EA lista as ordens
+   vivas (`GetOrders`), cancela as que nao deveriam existir (entrada
+   fora de t+1; par orfao sem posicao) e loga. O `OrderChangeCallback`
+   ja' e' contado desde a E1; aqui passa a ser lido.
 5. **`GateDeFluxo`** — protocolo com `permite(barra_gatilho) -> bool`;
    `SemFiltro` default; `filtro_fluxo: null` no YAML, `extra="forbid"`.
    Sem conteudo. So' a porta.
@@ -837,8 +865,8 @@ execucao: carimbo novo, contagem nova.
    `dry_run`, barras marcadas olhadas uma a uma (checklist do forward);
    depois E4 real com 1 contrato.
 
-**O que reinicia a contagem:** qualquer numero da ficha 5.2; a
-execucao (emulacao -> stop real); ligar o gate. **O que nao reinicia:**
+**O que reinicia a contagem:** qualquer numero da ficha 5.2; mudar
+o tipo de ordem de qualquer perna; ligar o gate. **O que nao reinicia:**
 bug que faz o codigo passar a fazer o que a ficha ja' diz.
 
 **Capital:** informativo, por sinal, no log: D x R$0,20 / 2%. Mediano
