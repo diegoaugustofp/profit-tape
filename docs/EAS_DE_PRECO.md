@@ -1,9 +1,9 @@
 # EAs de PRECO — linha paralela enquanto o tape acumula (2026-09-13)
 
 Estado (2026-09-14, noite): **IFR2 FECHADA (familia CONTRA). ORB FECHADO
-— CONTRA no combinado de 10 anos (4.5).** **123 em F1**: funil entregue
-(`eas-preco --ficha 123`), ficha v0 em rascunho ate' medir. Ultimo dos
-tres candidatos declarados.
+— CONTRA no combinado de 10 anos (4.5).** **123 CONGELADA (5.2)**: funil medido em
+2.705 pregoes, regime fica como clausula, sequencia inteira declarada.
+Ultimo dos tres candidatos.
 
 **Regra da linha inteira (2026-09-14, apos erro meu, duas vezes):
 capital NUNCA restringe uma ficha.** E' a decisao 4.9 do
@@ -619,7 +619,7 @@ limpo: nulos. Evidencia sobre a CATEGORIA — o que existe de graca em
 preco no WIN M15 ja' foi arbitrado. O 123 (5) e' da mesma categoria e
 roda com essa expectativa dita antes.
 
-## 5. Ficha 123 (rascunho v0) — continuacao em pullback
+## 5. Ficha 123 — CONGELADA (2026-09-14, 5.2) — continuacao em pullback
 
 > **F1 (2026-09-14, `entregue-v2.66`):** `eas-preco --ficha 123` faz o
 > funil por barra (padrao -> regime -> janela -> D >= 20 -> gatilho em
@@ -678,6 +678,52 @@ alvo por amplitude dos 3 candles (assimetrico, variancia maior).
 **Referencia externa:** `quantbrasil.com.br/estrategias/123-de-compra/`
 e `backtests run` do QuantBrasil com o setup 123 em WINFUT M15 —
 segunda implementacao para conferir deteccao. So' isso.
+
+### 5.1 Funil medido (`entregue-v2.66`, tres dumps, 2.705 pregoes)
+
+| | 2015–22 | 2023–25 | 2026 |
+|---|---|---|---|
+| padrao de 3 barras (compra + venda) por pregao | 15,7 | 16,3 | 16,6 |
+| + regime MME80 | 7,8 | 8,0 | 8,2 |
+| + janela 09:30–16:30 | 6,1 | 6,0 | 6,1 |
+| + D >= 20 pts | idem (nunca corta) | idem | idem |
+| **+ gatilho em t+1 = SINAL** | **3,47** | **3,38** | **3,32** |
+| (info) sinal sem exigir regime | 6,97 | 6,77 | 6,67 |
+| (info) sinal com inside bar | 1,0 | 1,0 | 1,0 |
+| D p10 / p50 / p90 (pts) | 320 / 620 / 1.285 | 225 / 430 / 910 | 280 / 595 / 1.188 |
+| capital recomendado p50 / p90 (R$/contrato, informativo) | 6.200 / 12.850 | 4.300 / 9.100 | 5.950 / 11.880 |
+| classes: resolvida / ambigua / por tempo | 80% / 7,1% / 13% | 77% / 6,4% / 17% | 78% / 5,4% / 16% |
+| duracao p50 / p90 | 4 / 15 | 4 / 19 | 4,5 / 19 |
+
+**Decisoes, antes de congelar:**
+
+1. **Regime fica como CLAUSULA** (v0). Corta metade dos sinais, mas
+   sobram 3,4/pregao — ~8.700 sinais em 2015-25, nenhum problema de
+   horizonte. Sem razao do 7.4 para afrouxar, e o regime e' o mecanismo
+   ("pullback em tendencia"). O "sem regime" e' informacao, nao opcao.
+2. Ambiguidade 5-7% — a maior dos tres (o stop na minima da 2a barra
+   fica perto da entrada; a barra do gatilho pode visitar os dois).
+   Abaixo do corte de 10%; excluida e reportada.
+3. A regra sequencial ("posicao aberta ignora sinal") tira mais alguns:
+   `ignorado_posicao`, contado, fora do p1.
+4. Nenhum numero muda. Inside bar e "sem regime" ficam fora.
+
+### 5.2 CONGELAMENTO (2026-09-14, `entregue-v2.67`) — ficha v0 sem alteracao
+
+    TAXA       3,3-3,5 sinais/pregao (antes da regra sequencial),
+               estavel em tres periodos.
+    EFEITO     p1 >= 0,56 contra <= 0,50. Teste 2023-25: ~1.900
+               resolvidas, +-2,2 pp. Combinado 2015-26: ~7.300, +-1,1 pp.
+    AMOSTRAS   As mesmas por data. SEQUENCIA INTEIRA DECLARADA AGORA,
+               sem parada opcional: DEPURACAO (14/08+) -> TESTE
+               (2023-25, uma rodada) -> REPLICACAO (2026 ate' 13/08)
+               -> HISTORICO_2015_22 -> COMBINADO. Veredito FINAL no
+               combinado; por-ano reportado. Trial 1 da familia, IC 95%.
+    CRITERIO   como as outras: >= 0,56 e IC acima de 0,50 = FAVORAVEL;
+               <= 0,50 = CONTRA; entre = INCONCLUSIVO = fecha.
+    EXPECTATIVA (dita antes, 4.5): provavelmente nulo. Se nao for, e' a
+               primeira borda de preco da linha, e o proximo passo e'
+               a ficha de F5 com a porta de volume — hipotese nova.
 
 ## 6. A porta de volume — interface, nao conteudo
 

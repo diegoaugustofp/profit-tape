@@ -53,7 +53,7 @@ E0-E4 esta' pronta e serve a QUALQUER estrategia que chegue em F5.
 | **Scalp de Bollinger** (rompimento) | **F4 — REPROVADO** | p1=0,415 IC(0,360-0,473), bruto -22,0: borda NEGATIVA | nenhum. Capitulo fechado (2026-09-11) |
 | **IFR2 M15** (preco) | **F4 — REPROVADO (familia)** | trial 1 K=0,5: 0,492; trial 2 K=1: 0,486 IC97,5%(0,464-0,509) n=2.478. Nulo | nenhum. Familia fechada sobre 2023-26 (`EAS_DE_PRECO.md` 3.5) |
 | **ORB M15** (preco, rompimento da abertura) | **F4 — REPROVADO** | combinado 2015-2026: p1=0,491 IC(0,471-0,511) n=2.382; nenhum ano com IC fora de 0,50 | nenhum. Capitulo fechado (`EAS_DE_PRECO.md` 4.5) |
-| **123 M15** (preco, continuacao) | **F1** | ficha em RASCUNHO (`EAS_DE_PRECO.md` 5); `eas-preco --ficha 123` e `eas-preco-teste --ficha 123` entregues (v2.66). Ultimo dos tres; expectativa declarada: provavelmente nulo | rodar o funil nos dumps (2015-22, 2023-25, 2026) -> decidir regime pelo 7.4 -> congelar -> depuracao -> teste -> replicacoes |
+| **123 M15** (preco, continuacao) | **F3 — CONGELADA** | funil em 2.705 pregoes: 3,3-3,5 sinais/pregao, ambigua 5-7%, por tempo 13-17%; regime fica clausula (`EAS_DE_PRECO.md` 5.1/5.2) | F4 na sequencia declarada: depuracao -> teste -> replicacao -> historico_2015_22 -> combinar |
 
 ### z_agf_3 — o unico vivo em execucao
 
@@ -473,7 +473,7 @@ seriam um EA com tres nomes):
 |---|---|---|---|
 | **IFR2** | RSI(2) em extremo e' exaustao; barreiras simetricas a K x ATR14 | `absorcao` na barra de sinal (gate) | **F4 — REPROVADO** (2 trials, familia fechada) |
 | **ORB** | primeiro rompimento do range 09:00-09:30, qualquer lado (MME80 = estrato); D = amplitude do range | agressao no rompimento vs. mediana do horario | **F4 — REPROVADO** (10 anos, 0,491) |
-| **123** | fundo de 3 barras a favor da MME80; stop de compra acima da 3a, stop na minima da 2a; alvo simetrico | agressao/delta na barra de rompimento (mesma porta do ORB) | **F1** |
+| **123** | fundo de 3 barras a favor da MME80; stop de compra acima da 3a, stop na minima da 2a; alvo simetrico | agressao/delta na barra de rompimento (mesma porta do ORB) | **F3 — CONGELADA** |
 
 Ordem: IFR2 -> ORB -> 123.
 

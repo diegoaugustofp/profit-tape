@@ -2033,3 +2033,11 @@ imediata -- a primeira excursao de 0,5 x ATR14 da barra seguinte".
   (posicao aberta ignora sinal -> `ignorado_posicao`, contado);
   `FICHAS["123"]` trial 1. Expectativa declarada antes: provavelmente
   nulo. 9 testes novos; 808 no total, ruff e mypy limpos.
+
+### Continuacao (2026-09-14, noite) — 123 CONGELADA (v2.67, so' docs)
+
+Funil do 123 nos tres dumps: 3,3-3,5 sinais/pregao com regime, estavel;
+ambigua 5-7%; por tempo 13-17%; D p50 430-620. Regime fica como
+clausula (sem razao do 7.4; e' o mecanismo). Ficha congelada sem mudar
+numero; sequencia inteira declarada (depuracao -> teste -> replicacao
+-> historico -> combinado), veredito no combinado, trial 1.
