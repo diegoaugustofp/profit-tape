@@ -1,11 +1,10 @@
 # EAs de PRECO — linha paralela enquanto o tape acumula (2026-09-13)
 
-Estado (2026-09-13, noite): **IFR2 CONGELADA (3.2)** — 923 pregoes de
-M15 (2023-01-02 a 2026-09-11) medidos, todas as equivalencias BATEM,
-tres amostras fixadas por DATA. O comando de teste
-(`profit-tape eas-preco-teste`) existe e recusa misturar amostras ou
-repetir a rodada primaria. **Nenhum p1 foi calculado ainda.** ORB e 123
-continuam em RASCUNHO.
+Estado (2026-09-14): **IFR2 FECHADA — CONTRA (3.3).** p1 = 0,492 IC95
+[0,472; 0,512] em n = 2.452 (2023-2025); replicacao 2026 0,482. Sem
+borda a custo zero. **ORB em F1**: funil por pregao entregue
+(`eas-preco --ficha orb`), ficha continua em RASCUNHO ate' a TAXA ser
+medida. 123 em rascunho.
 
 Ordem decidida pelo operador: **IFR2 primeiro**, ORB em seguida, 123
 depois. Fase de cada uma na tabela da secao 1 do `EA_ARQUITETURA.md`.
@@ -334,7 +333,58 @@ so' vale para bug que faz o codigo passar a fazer o que a ficha ja'
 dizia); escolher estrato depois; mudar K, limiares, janela ou datas das
 amostras.
 
+### 3.3 FECHAMENTO — CONTRA (2026-09-14, carimbo `entregue-v2.61` / `449b012649c4`)
+
+Rodado na ordem da ficha: depuracao -> teste -> replicacao.
+
+| amostra | pregoes | sinais | resolvidas | ambiguas | p1 | IC95 | P&L bruto/op | veredito |
+|---|---|---|---|---|---|---|---|---|
+| DEPURACAO (14/08–11/09/2026) | 20 | 77 | 73 | 5,2% | 0,466 | [0,356; 0,579] | -25,8 | nao interpretavel |
+| **TESTE (2023–2025)** | 749 | 2.648 | 2.452 | 7,4% | **0,492** | **[0,472; 0,512]** | -4,8 | **CONTRA** |
+| REPLICACAO (01/01–13/08/2026) | 154 | 534 | 492 | 7,7% | 0,482 | [0,438; 0,526] | -6,9 | CONTRA (reportada) |
+
+Estratos no teste (reportados): a favor da MME80 0,505 [0,470; 0,540];
+contra 0,486; compra 0,499; venda 0,485. Nenhum estrato tem IC fora
+de 0,50, e o unico que passa de 0,50 no teste (a favor) da' 0,32 na
+depuracao e 0,53 na replicacao — ruido.
+
+**Por que e' CONTRA sem ambiguidade:** o IC inteiro do teste fica
+abaixo de 0,50, e o teto de 0,512 nem paga o custo (D mediano 175 pts
+x 0,024 = 4 pts brutos contra 11). Nao ha' borda a custo NENHUM. E' o
+mesmo tipo de fechamento do scalp de Bollinger (retorno): nulo, nao
+negativo.
+
+**O que o fechamento assume:** que a formula esta' certa — os 77 sinais
+da depuracao conferidos no grafico (barra de sinal, entrada, alvo,
+stop). Defeito de FORMULA reabriria; defeito de numero, nao.
+
+**O que NAO se faz agora:** K = 1, regime de volta a` clausula, RSI2 <=
+5, saida por RSI 50. Cada um e' hipotese nova, e 2023-2025 ja' foi
+QUEIMADO por esta. Qualquer variante futura precisa de amostra que
+este teste nao tocou (2022 para tras, ou forward), com ficha propria.
+
+**O que a linha de preco entregou aqui:** hipotese -> funil ->
+congelamento -> depuracao -> teste -> replicacao, numa noite, sobre 923
+pregoes, sem gastar um dia de calendario. Um forward disso levaria ~14
+meses para dizer o que o historico disse em dois minutos. Esse e' o
+argumento da linha: **reprovar rapido**.
+
 ## 4. Ficha ORB (rascunho v0) — rompimento da abertura
+
+> **F1 (2026-09-14, `entregue-v2.62`):** `profit-tape eas-preco <dump>
+> --ficha orb` faz o funil POR PREGAO (range presente -> A >= 20 pts ->
+> rompeu ate' 11:45 -> lado da MME80 rompeu = SINAL), reporta o custo
+> do regime ("o outro lado rompeu antes"), A e D em pontos, hora do
+> gatilho, classes de resolucao e fracao ambigua. Sem p1.
+>
+> **Ambiguidade especifica do ORB, decidida antes de medir:** na barra
+> do GATILHO o stop (= R_low + tick na compra) fica dentro do range, e
+> o OHLC nao diz se foi tocado antes ou depois do rompimento. Stop
+> tocado na barra do gatilho = AMBIGUA sempre; alvo, nao (esta' alem da
+> entrada). Se a fracao passar de 10%, o ORB so' se valida com o tape
+> (e o tape so' tem 2026 a partir de 24/07). E' o risco principal da
+> ficha, junto com o horizonte — os dois saem do mesmo funil.
+
 
     HIPOTESE   O range das duas primeiras barras M15 (09:00-09:30) do
                WIN concentra a decisao do dia: o primeiro rompimento

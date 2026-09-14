@@ -1211,6 +1211,7 @@ def eas_preco(
     log: Path = typer.Argument(
         ..., help="Dump do console com linhas PRCBARRA| (grafico M15 do WINFUT)"),
     saida: Path = typer.Option(Path("data/research/eas_preco"), "--saida"),
+    ficha: str = typer.Option("ifr2", "--ficha", help="ifr2 | orb"),
     tolerancia: float = typer.Option(
         0.5, "--tolerancia",
         help="Diferenca maxima Python x Profit para considerar a variante equivalente",
@@ -1218,7 +1219,8 @@ def eas_preco(
     log_level: str = typer.Option("INFO", "--log-level"),
 ) -> None:
     """
-    EAs de PRECO (M15): equivalencia Python x Profit + funil da ficha IFR2.
+    EAs de PRECO (M15): equivalencia Python x Profit + funil da ficha
+    (`--ficha ifr2`, fechada em 2026-09-14, ou `--ficha orb`).
 
     Categoria `features`, nao consome trial: nao olha retorno. Responde,
     medindo: (1) qual variante de cada indicador o Profit calcula (RSI
@@ -1230,8 +1232,13 @@ def eas_preco(
     de docs/EAS_DE_PRECO.md antes de congelar.
     """
     configurar(log_level)
-    from .research.eas_preco import K_ATR, equivalencia, rodar
+    from .research.eas_preco import K_ATR, equivalencia, rodar, rodar_orb
 
+    if ficha == "orb":
+        _eas_preco_orb(log, saida, rodar_orb)
+        return
+    if ficha != "ifr2":
+        raise SystemExit("--ficha aceita ifr2 ou orb")
     r = rodar(log, saida)
     if tolerancia != 0.5:
         r["equivalencia"] = equivalencia(r["barras"], tolerancia)
@@ -1282,6 +1289,40 @@ def eas_preco(
             typer.echo("  AVISO: fracao ambigua > 10% -- o estimador binario nao serve "
                        "sem o tape; a ficha volta ao desenho (EAS_DE_PRECO.md, 1).")
     typer.echo(f"\n  Saida: {saida}/resumo.json e barras_m15.parquet")
+
+
+def _eas_preco_orb(log: Path, saida: Path, rodar_orb: Any) -> None:
+    r = rodar_orb(log, saida)
+    m, pt = r["meta"], r["pontos"]
+    typer.echo("=" * 72)
+    typer.echo("EAs DE PRECO — dump M15 (ficha ORB v0: range 09:00-09:30, D = amplitude)")
+    typer.echo("=" * 72)
+    typer.echo(f"  {m['barras']} barras | {m['pregoes']} pregoes | {m['inicio']} a {m['fim']}")
+    eq = r["equivalencia"]
+    falhas = [k for k, v in eq.items() if not v["bate"]]
+    eq_txt = "todas BATEM" if not falhas else "NAO BATE: " + ", ".join(falhas)
+    typer.echo(f"  equivalencia: {eq_txt}")
+    typer.echo("\n--- FUNIL DA FICHA ORB (7.4) -- uma linha por PREGAO ---")
+    typer.echo(r["funil"].to_string(index=False))
+    typer.echo("\n--- EM PONTOS (7.5) ---")
+    typer.echo(f"  A (amplitude do range) p10/p50/p90, todos os pregoes: "
+               f"{pt['A_pts_todos_os_pregoes']}")
+    typer.echo(f"  D = A ao tick, nos sinais: {pt['D_pts_nos_sinais']}")
+    typer.echo(f"  p1 que empata 11 pts com D mediano: {pt['p1_que_empata_custo_com_D_mediano']}")
+    typer.echo(f"  hora do gatilho p10/p50/p90 (HHMM): {pt['gatilho_hhmm']}")
+    typer.echo("\n--- ESTIMADOR BINARIO ---")
+    typer.echo(f"  classes={pt['classes']}  fracao_ambigua={pt['fracao_ambigua']}  "
+               f"barras ate' resolver={pt['barras_ate_resolver']}")
+    n, preg = r["n_sinais"], max(int(m["pregoes"]), 1)
+    if n:
+        taxa = n / preg
+        typer.echo(f"\n  HORIZONTE: {taxa:.2f} sinais/pregao -> n=1.070 precisa de "
+                   f"~{1070 / taxa:.0f} pregoes (este dump tem {preg}). Com {n} sinais a "
+                   f"meia-largura e' "
+                   f"+-{1.96 * (0.25 / n) ** 0.5 * 100:.1f} pp.")
+        if (pt["fracao_ambigua"] or 0) > 0.10:
+            typer.echo("  AVISO: fracao ambigua > 10% -- estimador binario nao serve sem o tape.")
+    typer.echo(f"\n  Saida: {saida}/resumo_orb.json e pregoes_orb.parquet")
 
 
 @app.command(name="eas-preco-teste")

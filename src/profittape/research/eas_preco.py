@@ -83,6 +83,13 @@ HORA_ULTIMO_FECHAMENTO = 1630      # HHMM, inclusivo
 MINUTOS_BARRA = 15
 CUSTO_PONTOS = 11.0            # ida e volta, por contrato
 
+# FICHA ORB v0 (docs/EAS_DE_PRECO.md, 4) -- declarados, nao calibrados.
+ORB_BARRAS_RANGE = (900, 915)      # hhmm das barras que formam o range
+ORB_PRIMEIRA_ENTRADA = 930         # ordens armadas a partir desta barra
+ORB_ULTIMA_ENTRADA = 1145          # ultima barra em que a ordem vale (< 12:00)
+ORB_AMPLITUDE_MINIMA = 4 * TICK_WIN   # 20 pts: abaixo, range degenerado
+ORB_REGIME_NA_CLAUSULA = True      # v0: so' o lado da MME80 fica armado
+
 
 def arredondar_ao_tick(pts: float, tick: float = TICK_WIN) -> float:
     """Meio-tick vai para CIMA (mesma funcao do bollinger_scalp: `round()`
@@ -535,3 +542,173 @@ def rodar(log_path: Path, saida: Path) -> dict[str, Any]:
     log.info("eas_preco.rodada", **meta, sinais=amb["n_sinais"], saida=str(saida))
     return {"meta": meta, "equivalencia": eq, "funil": funil,
             "pontos": pontos, "ambiguidade": amb, "barras": x}
+
+
+# ---------------------------------------------------------------------
+# 8. Ficha ORB v0 -- funil por PREGAO (docs/EAS_DE_PRECO.md, 4)
+# ---------------------------------------------------------------------
+def marcar_orb(d: pd.DataFrame, col_mme80: str = "mme80_ntsl") -> pd.DataFrame:
+    """
+    Uma linha por PREGAO. Clausulas, na ordem do funil:
+        range       as duas barras 09:00 e 09:15 existem no dump
+        amplitude   A = R_high - R_low >= 20 pts
+        armado      lado da MME80 no close da barra 09:15 (v0: so' esse
+                    lado tem ordem; o outro nem existe)
+        rompimento  primeira barra 09:30..11:45 em que high >= R_high +
+                    tick (compra) ou low <= R_low - tick (venda), no lado
+                    armado = SINAL
+    Entrada = nivel rompido. D = A ao tick. Alvo = entrada + D, stop =
+    entrada - D (espelho na venda). Informacao (nao clausula): o outro
+    lado rompeu antes? e' o custo do regime, medido, nao escolhido.
+
+    Ambiguidade: a barra de resolucao contem alvo E stop; OU a barra do
+    gatilho toca o stop (= R_low + tick na compra, dentro do range) --
+    o OHLC nao diz se foi antes ou depois do rompimento. E' o custo de
+    entrar por ordem stop sem tape; a fracao e' medida, nao assumida.
+    """
+    linhas = []
+    for dia, g in d.groupby("dia", sort=True):
+        g = g.sort_values("current_bar")
+        r = g[g["hhmm"].isin(ORB_BARRAS_RANGE)]
+        linha: dict[str, Any] = {"dia": dia, "range_ok": len(r) == 2}
+        if len(r) != 2:
+            linhas.append(linha)
+            continue
+        r_high, r_low = float(r["high"].max()), float(r["low"].min())
+        a = r_high - r_low
+        close_915 = float(r.iloc[-1]["close"])
+        mme80 = float(r.iloc[-1][col_mme80])
+        linha.update({"R_high": r_high, "R_low": r_low, "A_pts": a,
+                      "amplitude_ok": a >= ORB_AMPLITUDE_MINIMA,
+                      "regime_compra": close_915 > mme80,
+                      "regime_venda": close_915 < mme80})
+        janela = g[(g["hhmm"] >= ORB_PRIMEIRA_ENTRADA) & (g["hhmm"] <= ORB_ULTIMA_ENTRADA)]
+        gat_c = janela[janela["high"] >= r_high + TICK_WIN]
+        gat_v = janela[janela["low"] <= r_low - TICK_WIN]
+        hh_c = int(gat_c.iloc[0]["hhmm"]) if len(gat_c) else None
+        hh_v = int(gat_v.iloc[0]["hhmm"]) if len(gat_v) else None
+        linha.update({"rompeu_compra_hhmm": hh_c, "rompeu_venda_hhmm": hh_v,
+                      "rompeu_algum": (hh_c is not None) or (hh_v is not None)})
+
+        # lado armado (v0: so' o da MME80; sem regime, o primeiro que romper)
+        lado: str | None
+        if ORB_REGIME_NA_CLAUSULA:
+            lado = ("compra" if linha["regime_compra"] and hh_c is not None else
+                    "venda" if linha["regime_venda"] and hh_v is not None else None)
+            outro_antes = bool(
+                (lado == "compra" and hh_v is not None and hh_c is not None and hh_v < hh_c)
+                or (lado == "venda" and hh_c is not None and hh_v is not None and hh_c < hh_v))
+        else:
+            if hh_c is None and hh_v is None:
+                lado = None
+            elif hh_v is None or (hh_c is not None and hh_c < hh_v):
+                lado = "compra"
+            elif hh_c is None or hh_v < hh_c:
+                lado = "venda"
+            else:
+                lado = "gatilho_ambiguo"     # os dois na mesma barra
+            outro_antes = False
+        linha["outro_lado_rompeu_antes"] = bool(outro_antes)
+        linha["sinal"] = bool(lado in ("compra", "venda") and linha["amplitude_ok"])
+        linha["lado"] = lado if linha["sinal"] else None
+        if not linha["sinal"]:
+            linhas.append(linha)
+            continue
+
+        d_pts = arredondar_ao_tick(a)
+        if lado == "compra":
+            entrada = r_high + TICK_WIN
+            alvo, stop, hh_gat = entrada + d_pts, entrada - d_pts, int(hh_c or 0)
+        else:
+            entrada = r_low - TICK_WIN
+            alvo, stop, hh_gat = entrada - d_pts, entrada + d_pts, int(hh_v or 0)
+        linha.update({"gatilho_hhmm": hh_gat, "entrada": entrada, "D_pts": d_pts,
+                      "alvo": alvo, "stop": stop})
+        # resolucao a partir da barra do gatilho (inclusive), ate' o fim do dia
+        resto = g[g["hhmm"] >= hh_gat]
+        classe, barras = "por_tempo", len(resto)
+        for k, (_, b) in enumerate(resto.iterrows()):
+            hi, lo = float(b["high"]), float(b["low"])
+            if lado == "compra":
+                t_alvo, t_stop = hi >= alvo, lo <= stop
+            else:
+                t_alvo, t_stop = lo <= alvo, hi >= stop
+            # Na barra do GATILHO (k == 0) o stop fica dentro do range e o
+            # OHLC nao diz se ele foi tocado ANTES ou DEPOIS do rompimento
+            # (a barra pode ter ido ao fundo, subido e rompido). Alvo, nao:
+            # esta' alem da entrada, so' e' alcancado depois dela. Logo, na
+            # barra do gatilho, stop tocado = AMBIGUA sempre.
+            if k == 0 and t_stop:
+                classe, barras = "ambigua", 1
+                break
+            if t_alvo or t_stop:
+                classe, barras = ("ambigua" if (t_alvo and t_stop) else "resolvida"), k + 1
+                break
+        linha.update({"classe": classe, "barras_ate_resolver": barras})
+        linhas.append(linha)
+    return pd.DataFrame(linhas)
+
+
+def contar_clausulas_orb(o: pd.DataFrame) -> pd.DataFrame:
+    n_preg = max(len(o), 1)
+
+    def col(c: str) -> pd.Series:
+        if c in o:
+            return o[c].fillna(False).astype(bool)
+        return pd.Series(False, index=o.index)
+
+    lado = o["lado"] if "lado" in o else pd.Series(None, index=o.index, dtype=object)
+    etapas = [
+        ("pregoes no dump", pd.Series(True, index=o.index)),
+        ("+range 09:00/09:15 presente", col("range_ok")),
+        ("+amplitude >= 20 pts", col("range_ok") & col("amplitude_ok")),
+        ("+rompeu algum lado ate' 11:45",
+         col("range_ok") & col("amplitude_ok") & col("rompeu_algum")),
+        ("+lado armado (MME80) rompeu = SINAL", col("sinal")),
+        ("(info) o outro lado rompeu ANTES", col("sinal") & col("outro_lado_rompeu_antes")),
+        ("(estrato) sinal de compra", col("sinal") & (lado == "compra")),
+        ("(estrato) sinal de venda", col("sinal") & (lado == "venda")),
+    ]
+    return pd.DataFrame([{"clausula": nome, "n": int(m.sum()),
+                          "por_pregao": round(int(m.sum()) / n_preg, 3)} for nome, m in etapas])
+
+
+def em_pontos_orb(o: pd.DataFrame) -> dict[str, Any]:
+    def q(s: pd.Series) -> dict[str, float]:
+        s = s.dropna()
+        if s.empty:
+            return {}
+        return {"p10": round(float(s.quantile(0.1)), 1), "p50": round(float(s.median()), 1),
+                "p90": round(float(s.quantile(0.9)), 1)}
+    sin = o[o.get("sinal", pd.Series(False, index=o.index)).fillna(False).astype(bool)]
+    a_all = o["A_pts"] if "A_pts" in o else pd.Series(dtype=float)
+    d50 = float(sin["D_pts"].median()) if len(sin) else float("nan")
+    gat = sin["gatilho_hhmm"].dropna() if "gatilho_hhmm" in sin else pd.Series(dtype=float)
+    cls = sin["classe"].value_counts().to_dict() if "classe" in sin else {}
+    n = len(sin)
+    return {"A_pts_todos_os_pregoes": q(a_all), "D_pts_nos_sinais": q(sin["D_pts"]) if n else {},
+            "p1_que_empata_custo_com_D_mediano": (round(0.5 + CUSTO_PONTOS / (2 * d50), 3)
+                                                  if n and d50 else None),
+            "gatilho_hhmm": q(gat) if len(gat) else {},
+            "classes": cls,
+            "fracao_ambigua": (round(cls.get("ambigua", 0) / n, 3) if n else None),
+            "barras_ate_resolver": q(sin["barras_ate_resolver"]) if n else {}}
+
+
+def rodar_orb(log_path: Path, saida: Path) -> dict[str, Any]:
+    df, meta = carregar_log(log_path)
+    d = indicadores(df)
+    eq = equivalencia(d)
+    o = marcar_orb(d)
+    funil = contar_clausulas_orb(o)
+    pontos = em_pontos_orb(o)
+    saida.mkdir(parents=True, exist_ok=True)
+    o.to_parquet(saida / "pregoes_orb.parquet", index=False)
+    resumo = {"dump": meta, "equivalencia": eq, "pontos": pontos,
+              "funil_orb": funil.to_dict(orient="records")}
+    (saida / "resumo_orb.json").write_text(json.dumps(resumo, indent=2, default=str),
+                                           encoding="utf-8")
+    n_sin = int(o["sinal"].sum()) if "sinal" in o else 0
+    log.info("eas_preco.rodada_orb", **meta, sinais=n_sin, saida=str(saida))
+    return {"meta": meta, "equivalencia": eq, "funil": funil, "pontos": pontos,
+            "pregoes": o, "n_sinais": n_sin}

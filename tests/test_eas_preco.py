@@ -297,3 +297,86 @@ def test_equivalencia_aquecimento_e_por_campo_exato(tmp_path: Path) -> None:
     assert eq["mme80_ntsl"]["detalhe"]["mme80_close"]["comparaveis"] == 700 - 400
     assert eq["rsi_ntsl"]["bate"]
     assert "dif_max_em" in eq["rsi_ntsl"]["detalhe"]["rsi_wilder"]
+
+
+# ---------------------------------------------------------------------
+# Ficha ORB v0: funil por pregao
+# ---------------------------------------------------------------------
+def _dia_orb(data: int, cb0: int, mme80: float, **mod: dict) -> list[dict]:
+    """Range 09:00/09:15 = [139900, 140100] (A = 200). Resto do dia dentro
+    do range, salvo o que `mod` alterar por indice."""
+    d = _dia(data, cb0)
+    for b in d:
+        b["high"], b["low"], b["mme80_ntsl"] = 140000.0, 139990.0, mme80
+    d[0].update({"high": 140100.0, "low": 139950.0, "close": 140050.0})
+    d[1].update({"high": 140050.0, "low": 139900.0, "close": 140020.0})
+    for i, v in mod.items():
+        d[int(i)].update(v)
+    return d
+
+
+def test_orb_compra_rompe_e_resolve(tmp_path: Path) -> None:
+    # close(09:15)=140020 > MME80 139000 -> so' compra armada.
+    # 10:00 (idx 4): high 140110 >= 140105 -> gatilho. entrada 140105,
+    # D=200, alvo 140305, stop 139905. 10:30 (idx 6): high 140310 -> resolvida.
+    d = _dia_orb(1250901, 1, 139000.0, **{"4": {"high": 140110.0}, "6": {"high": 140310.0}})
+    df, _ = ep.carregar_log(_dump(tmp_path, d))
+    o = ep.marcar_orb(ep.indicadores(df))
+    assert len(o) == 1
+    ln = o.iloc[0]
+    assert ln["A_pts"] == 200.0 and bool(ln["amplitude_ok"])
+    assert bool(ln["sinal"]) and ln["lado"] == "compra" and ln["gatilho_hhmm"] == 1000
+    assert ln["entrada"] == 140105.0 and ln["alvo"] == 140305.0 and ln["stop"] == 139905.0
+    assert ln["classe"] == "resolvida" and ln["barras_ate_resolver"] == 3
+
+
+def test_orb_regime_desarma_o_outro_lado(tmp_path: Path) -> None:
+    # MME80 acima do close(09:15): so' venda armada. O preco rompe por
+    # CIMA as 10:00 (nao conta) e por baixo as 11:00 -> sinal de venda,
+    # e "outro lado rompeu antes" = True.
+    d = _dia_orb(1250901, 1, 141000.0, **{"4": {"high": 140110.0}, "8": {"low": 139890.0}})
+    df, _ = ep.carregar_log(_dump(tmp_path, d))
+    o = ep.marcar_orb(ep.indicadores(df))
+    ln = o.iloc[0]
+    assert ln["lado"] == "venda" and ln["gatilho_hhmm"] == 1100
+    assert bool(ln["outro_lado_rompeu_antes"])
+    assert ln["rompeu_compra_hhmm"] == 1000 and ln["rompeu_venda_hhmm"] == 1100
+
+
+def test_orb_sem_rompimento_ate_1145_nao_e_sinal(tmp_path: Path) -> None:
+    d = _dia_orb(1250901, 1, 139000.0, **{"12": {"high": 140110.0}})   # 12:00: tarde demais
+    df, _ = ep.carregar_log(_dump(tmp_path, d))
+    o = ep.marcar_orb(ep.indicadores(df))
+    assert not bool(o.iloc[0]["sinal"]) and not bool(o.iloc[0]["rompeu_algum"])
+
+
+def test_orb_amplitude_degenerada_e_range_ausente(tmp_path: Path) -> None:
+    d = _dia_orb(1250901, 1, 139000.0, **{"4": {"high": 140110.0}})
+    d[0].update({"high": 140010.0, "low": 140000.0})
+    d[1].update({"high": 140010.0, "low": 140000.0})
+    d2 = _dia_orb(1250902, 38, 139000.0)[2:]           # sem as barras 09:00/09:15
+    df, _ = ep.carregar_log(_dump(tmp_path, d + d2))
+    o = ep.marcar_orb(ep.indicadores(df))
+    assert not bool(o.iloc[0]["amplitude_ok"]) and not bool(o.iloc[0]["sinal"])
+    assert not bool(o.iloc[1]["range_ok"])
+    f = ep.contar_clausulas_orb(o).set_index("clausula")["n"]
+    assert f["pregoes no dump"] == 2 and f["+range 09:00/09:15 presente"] == 1
+    assert f["+amplitude >= 20 pts"] == 0
+
+
+def test_orb_gatilho_ambiguo_na_propria_barra(tmp_path: Path) -> None:
+    # barra do gatilho rompe por cima E volta ao stop (139905) -> ambigua
+    d = _dia_orb(1250901, 1, 139000.0, **{"4": {"high": 140110.0, "low": 139900.0}})
+    df, _ = ep.carregar_log(_dump(tmp_path, d))
+    o = ep.marcar_orb(ep.indicadores(df))
+    assert o.iloc[0]["classe"] == "ambigua" and o.iloc[0]["barras_ate_resolver"] == 1
+    pt = ep.em_pontos_orb(o)
+    assert pt["fracao_ambigua"] == 1.0 and pt["D_pts_nos_sinais"]["p50"] == 200.0
+    # p1 de empate com D=200: 0,5 + 11/400 = 0,5275
+    assert pt["p1_que_empata_custo_com_D_mediano"] == pytest.approx(0.5275, abs=1e-3)
+
+
+def test_rodar_orb_escreve_saida(tmp_path: Path) -> None:
+    d = _dia_orb(1250901, 1, 139000.0, **{"4": {"high": 140110.0}})
+    r = ep.rodar_orb(_dump(tmp_path, d), tmp_path / "s")
+    assert (tmp_path / "s" / "resumo_orb.json").exists() and r["n_sinais"] == 1

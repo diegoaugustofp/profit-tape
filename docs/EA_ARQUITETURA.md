@@ -51,8 +51,8 @@ E0-E4 esta' pronta e serve a QUALQUER estrategia que chegue em F5.
 | **DeepScalper Fase 2** (classificador) | **F3->F4** | forward LIGADO em 2026-09-09; placar fechado ate' n=50 | rodar `fase2-score` nos dias pendentes (offline) e esperar n |
 | **Scalp de Bollinger** (retorno) | **F4 — REPROVADO** | p1=0,480 IC(0,432-0,528), bruto -4,7 pts/op: null | nenhum. Capitulo fechado (2026-09-11) |
 | **Scalp de Bollinger** (rompimento) | **F4 — REPROVADO** | p1=0,415 IC(0,360-0,473), bruto -22,0: borda NEGATIVA | nenhum. Capitulo fechado (2026-09-11) |
-| **IFR2 M15** (preco, exaustao imediata) | **F3 — CONGELADA** | ficha 3.2 de `docs/EAS_DE_PRECO.md`: 923 pregoes medidos, amostras por data, `eas-preco-teste` entregue; nenhum p1 calculado | F4 na ordem da ficha: DEPURACAO (dump >= 14/08/2026, barras olhadas, ambiguas no tape) -> TESTE (2023-25, uma rodada) -> REPLICACAO (2026) |
-| **ORB M15** (preco, rompimento da abertura) | **F0** | ficha em RASCUNHO (`EAS_DE_PRECO.md` 4); risco de HORIZONTE (<= 1 op/pregao) | funil no mesmo dump; decidir efeito (0,56 vs 0,60) antes de congelar |
+| **IFR2 M15** (preco, exaustao imediata) | **F4 — REPROVADO** | p1=0,492 IC(0,472-0,512) n=2.452 (2023-25); replicacao 2026 0,482: nulo a custo zero | nenhum. Capitulo fechado (2026-09-14, `EAS_DE_PRECO.md` 3.3) |
+| **ORB M15** (preco, rompimento da abertura) | **F1** | ficha em RASCUNHO (`EAS_DE_PRECO.md` 4); `eas-preco --ficha orb` entregue (v2.62) | rodar o funil nos dois dumps (2023-25 e 2026); com 923 pregoes o horizonte pode fechar; medir a fracao ambigua na barra do gatilho |
 | **123 M15** (preco, continuacao) | **F0** | ficha em RASCUNHO (`EAS_DE_PRECO.md` 5) | funil no mesmo dump, depois do IFR2 |
 
 ### z_agf_3 — o unico vivo em execucao
@@ -471,8 +471,8 @@ seriam um EA com tres nomes):
 
 | EA | Mecanismo em uma frase | Porta de volume (declarada, nao implementada) | Fase |
 |---|---|---|---|
-| **IFR2** | RSI(2) em extremo e' exaustao imediata: a primeira excursao de 0,5 x ATR14 da barra seguinte vai a favor (regime MME80 = estrato reportado) | `absorcao` na barra de sinal (gate) | **F3 — CONGELADA** |
-| **ORB** | primeiro rompimento do range 09:00-09:30, lado da MME80; D = amplitude do range | agressao no rompimento vs. mediana do horario | F0 |
+| **IFR2** | RSI(2) em extremo e' exaustao imediata: a primeira excursao de 0,5 x ATR14 da barra seguinte vai a favor | `absorcao` na barra de sinal (gate) | **F4 — REPROVADO** (2026-09-14) |
+| **ORB** | primeiro rompimento do range 09:00-09:30, lado da MME80; D = amplitude do range | agressao no rompimento vs. mediana do horario | **F1** |
 | **123** | fundo de 3 barras a favor da MME80; stop de compra acima da 3a, stop na minima da 2a; alvo simetrico | agressao/delta na barra de rompimento (mesma porta do ORB) | F0 |
 
 Ordem: IFR2 -> ORB -> 123.

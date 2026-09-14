@@ -1965,3 +1965,17 @@ imediata -- a primeira excursao de 0,5 x ATR14 da barra seguinte".
   intrabarra pelo tape na depuracao).
 - EA_ARQUITETURA: IFR2 em **F3 — CONGELADA**, proximo passo = F4 na
   ordem da ficha. 11 testes novos; 789 no total, ruff e mypy limpos.
+
+### Continuacao (2026-09-14) — IFR2 REPROVADO; ORB entra em F1 (v2.62)
+
+- IFR2 rodado na ordem da ficha. TESTE (2023-25, n=2.452): p1 = 0,492
+  IC95 [0,472; 0,512] -> CONTRA; replicacao 2026: 0,482. Nenhum estrato
+  com IC fora de 0,50. Nulo a custo zero. Fechamento em
+  `EAS_DE_PRECO.md` 3.3, com o que NAO se faz (variantes sobre amostra
+  ja' queimada). Tabela: F4 -- REPROVADO.
+- ORB: `eas-preco --ficha orb` -- funil por PREGAO, custo do regime
+  medido ("outro lado rompeu antes"), A/D em pontos, hora do gatilho,
+  classes. Decisao de estimador antes de medir: stop tocado na barra do
+  gatilho e' AMBIGUA sempre (o OHLC nao ordena contra o rompimento). O
+  teste do cenario pegou essa lacuna na primeira versao do codigo.
+- 6 testes novos; 795 no total, ruff e mypy limpos.
