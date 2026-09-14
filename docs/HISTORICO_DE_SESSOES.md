@@ -2041,3 +2041,15 @@ ambigua 5-7%; por tempo 13-17%; D p50 430-620. Regime fica como
 clausula (sem razao do 7.4; e' o mecanismo). Ficha congelada sem mudar
 numero; sequencia inteira declarada (depuracao -> teste -> replicacao
 -> historico -> combinado), veredito no combinado, trial 1.
+
+### Continuacao (2026-09-14, noite) — 123: borda pequena e real; F5 desenhado (v2.68, so' docs)
+
+- 123 combinado 2015-26: p1 = 0,5285 IC95 [0,515; 0,542] n = 5.444 — o
+  IC EXCLUI 0,50; onze de doze anos acima. Inconclusivo pelo criterio
+  (0,56) e o P&L (+17 bruto [-4; +38], +6 liquido) explica por que.
+  Errata: a expectativa "provavelmente nulo" estava errada.
+- Operador decidiu: 123 vai para F5 como PORTADOR da estrutura
+  multi-EA, medindo EXECUCAO (slippage <= 6 pts, n = 100, ~50
+  pregoes) e gravando a amostra da porta de volume. Ficha de forward
+  de seis linhas e os 7 passos de implementacao em `EAS_DE_PRECO.md`
+  5.4; pendencia 10 no EA_ARQUITETURA. Codigo comeca na proxima sessao.

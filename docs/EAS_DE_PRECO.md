@@ -1,9 +1,11 @@
 # EAs de PRECO — linha paralela enquanto o tape acumula (2026-09-13)
 
 Estado (2026-09-14, noite): **IFR2 FECHADA (familia CONTRA). ORB FECHADO
-— CONTRA no combinado de 10 anos (4.5).** **123 CONGELADA (5.2)**: funil medido em
-2.705 pregoes, regime fica como clausula, sequencia inteira declarada.
-Ultimo dos tres candidatos.
+— CONTRA no combinado de 10 anos (4.5).** **123: borda PEQUENA e REAL (5.3)** — p1 = 0,5285 IC95 [0,515;
+0,542] em 5.444, onze de doze anos acima de 0,50; abaixo do 0,56
+operacional. **Desenho de F5 em 5.4**: o 123 vai para forward como
+PORTADOR da estrutura multi-EA, medindo EXECUCAO, e acumulando a amostra
+da porta de volume.
 
 **Regra da linha inteira (2026-09-14, apos erro meu, duas vezes):
 capital NUNCA restringe uma ficha.** E' a decisao 4.9 do
@@ -619,7 +621,7 @@ limpo: nulos. Evidencia sobre a CATEGORIA — o que existe de graca em
 preco no WIN M15 ja' foi arbitrado. O 123 (5) e' da mesma categoria e
 roda com essa expectativa dita antes.
 
-## 5. Ficha 123 — CONGELADA (2026-09-14, 5.2) — continuacao em pullback
+## 5. Ficha 123 — borda pequena e real; F5 desenhado (5.4) — continuacao em pullback
 
 > **F1 (2026-09-14, `entregue-v2.66`):** `eas-preco --ficha 123` faz o
 > funil por barra (padrao -> regime -> janela -> D >= 20 -> gatilho em
@@ -724,6 +726,123 @@ segunda implementacao para conferir deteccao. So' isso.
     EXPECTATIVA (dita antes, 4.5): provavelmente nulo. Se nao for, e' a
                primeira borda de preco da linha, e o proximo passo e'
                a ficha de F5 com a porta de volume — hipotese nova.
+
+### 5.3 RESULTADO — INCONCLUSIVO pelo criterio; borda PEQUENA e REAL (2026-09-14, `entregue-v2.67` / `5daf43b4afba`)
+
+| amostra | pregoes | resolvidas | ambiguas | por tempo (zeragem) | ignorados | p1 | IC95 | P&L bruto/op |
+|---|---|---|---|---|---|---|---|---|
+| DEPURACAO | 20 | 39 | 2 | 8 (+148) | 12 | 0,410 | [0,27; 0,57] | -85 |
+| TESTE 2023-25 | 749 | 1.467 | 129 (5,1%) | 371 (+20) | 564 | 0,520 | [0,495; 0,546] | +17 |
+| REPLICACAO 2026 | 154 | 302 | 21 | 80 (-42) | 112 | 0,556 | [0,500; 0,611] | +51 |
+| HISTORICO 2015-22 | 1.782 | 3.675 | 330 (5,3%) | 683 (+31) | 1.488 | 0,530 | [0,513; 0,546] | +14 |
+| **COMBINADO** | 2.685 | **5.444** | 480 (5,2%) | 1.134 (+22) | 2.164 | **0,5285** | **[0,515; 0,542]** | **+17 [-4; +38]** |
+
+Por ano: 2016-2026 todos entre 0,507 e 0,560; so' 2015 (tres meses, n
+= 136) abaixo de 0,50. Compra 0,528, venda 0,529.
+
+**O que e':** o IC do combinado EXCLUI 0,50 — efeito pequeno, estavel em
+onze anos, estatisticamente real. O primeiro da linha. **O que nao e':**
+uma borda que vale operar como esta'. O criterio era 0,56, e os pontos
+mostram por que: P&L bruto +17 pts/op com IC [-4; +38], liquido +6 —
+o p1 exclui 0,50 mas o P&L nao exclui zero, porque os vencedores tem D
+menor que os perdedores (padrao grande falha mais). Com as por tempo
+(+22 na zeragem): ~7 pts liquidos por sinal, ~2 sinais/pregao, R$2,80
+por dia por contrato sobre ~R$6.000 recomendados. Real, marginal.
+
+**Errata:** a expectativa que declarei antes de medir ("provavelmente
+nulo", 4.5) estava errada. Fica registrado.
+
+**Veredito pela ficha:** INCONCLUSIVO -> fecha como EA de preco PURO.
+**O que abre:** e' exatamente o caso para o qual a porta de volume foi
+declarada no dia 1 — borda pequena e real que um gate de fluxo pode
+concentrar. Hipotese nova, ficha propria, amostra que estes testes nao
+tocaram: o tape (24/07/2026 em diante) e o forward. E' o desenho 5.4.
+
+### 5.4 DESENHO DE F5 — o 123 como PORTADOR (2026-09-14, decidido pelo operador)
+
+**Papel.** O 123 vai para forward em demo (E4) nao como aposta de P&L,
+mas como (a) o primeiro EA com sinal REAL a atravessar a estrutura
+multi-EA em producao, (b) a medicao de EXECUCAO que decide se 7 pts
+liquidos sobrevivem a` execucao, e (c) o gerador da amostra da porta
+de volume — cada sinal gravado com as features de fluxo da barra do
+gatilho, para a ficha do gate nascer de dado que nenhum teste tocou.
+
+**O que o forward NAO consegue em 6 meses:** re-verificar p1 = 0,53.
+Distinguir 0,53 de 0,50 pede n ~4.300 (+-1,5 pp) — a 2 resolvidas por
+pregao, seis anos. Nao e' o objetivo, e esta' escrito para ninguem
+"esperar o forward confirmar".
+
+**Ficha de forward (seis linhas):**
+
+    HIPOTESE   A borda de 0,53 do 123 (~17 pts brutos/op) sobrevive a`
+               execucao real: slippage de entrada + saida <= 6 pts.
+    EVENTO     O mesmo da ficha 5.2, com a execucao definida: gatilho
+               = primeiro TRADE do tape com preco >= entrada (compra)
+               durante a barra t+1 -> ordem a MERCADO; alvo/stop =
+               primeiro trade que toca o nivel -> ordem a mercado
+               (OCO emulado no EA, trade a trade, nao no fechamento
+               da barra); zeragem 17:30 (a que ja' existe no risco).
+               Regime, janela, D >= 20, posicao aberta ignora sinal:
+               identicos. 1 contrato. `filtro_fluxo: null`.
+    TAXA       ~3,4 sinais/pregao antes da regra sequencial; ~2
+               operacoes resolvidas/pregao (medido em 2.685 pregoes).
+    EFEITO     Slippage medio (fill real - nivel teorico, entrada e
+               saida somados) com meia-largura +-3 pts. Com desvio
+               esperado ~15 pts: n = 100 operacoes.
+    HORIZONTE  ~50 pregoes (2,5 meses). Reportados junto, sem
+               veredito: p1 acumulado com IC, P&L liquido REAL em
+               pontos, fracao ambigua RESOLVIDA PELO TAPE, latencia
+               sinal->fill, `sinais_sem_vaga` do modo exclusivo.
+    CRITERIO   slippage <= 6 pts: o 123 paga a execucao (e vira
+               candidato a F6 com o gate); > 12 pts: nao paga, o 123
+               so' vive com o gate; entre: inconclusivo, continua ate'
+               n = 200. Parada: olho em n = 50 SO' para defeito de
+               execucao (ordem nao saiu, fill fora da barra); decido
+               em n = 100. Perdas seguidas nao autorizam nada.
+
+**Carimbo.** Tag do codigo + hash do YAML (`ea_123.yaml`) em cada
+observacao. Trocar emulacao por ordem STOP real da DLL e' mudanca de
+execucao: carimbo novo, contagem nova.
+
+**O que precisa existir (nesta ordem, cada passo entregue e testado):**
+
+1. **Barra de TEMPO no EA** — `ConstrutorDeBarraDeTempo(periodo_s=900)`
+   ao lado do de volume: alinhado em hh:00/15/30/45 no horario da
+   bolsa, fecha no primeiro trade que cruza a fronteira. Mesmo
+   `BarraFechada`; `agf` vazio (o 123 nao usa) — mas `vol_agr` e as
+   agressoes da barra ficam gravadas: e' a amostra do gate.
+2. **Semente dos indicadores** — MME80 continua entre pregoes e leva
+   400 barras (~11 pregoes) para esquecer a semente. O EA carrega as
+   ultimas 400 barras M15 do dump mais recente (`barras_123.parquet`)
+   ANTES do primeiro trade do dia; sem semente valida, nao arma sinal
+   e loga `ea.sem_semente`. Quando `RequestSerieHistory` existir,
+   substitui o parquet — mesmo contrato.
+3. **`SinalPreco123`** — no fechamento de t: padrao, regime, janela, D;
+   arma `OrdemPendente(lado, entrada, stop, alvo, valida_ate=fim de
+   t+1)`. Python identico a `eas_preco.marcar_123` — mesma funcao,
+   importada, nao reescrita (regra 7.3: dois lados, uma formula).
+4. **Gatilho e OCO por TRADE** — `processar_trade` checa a pendente
+   (preco cruza entrada -> mercado) e a posicao (alvo/stop tocado ->
+   mercado). Registra `nivel_teorico`, `fill`, `slippage_pts`,
+   `latencia_ms` por ordem. E' aqui que o forward mede o que mede.
+5. **`GateDeFluxo`** — protocolo com `permite(barra_gatilho) -> bool`;
+   `SemFiltro` default; `filtro_fluxo: null` no YAML, `extra="forbid"`.
+   Sem conteudo. So' a porta.
+6. **Registro do sinal para a porta de volume** — por sinal: dia, hora,
+   lado, D, classe, resultado, e as features de fluxo da barra t e da
+   barra do gatilho (`vol_agr`, delta comprador-vendedor, `absorcao`
+   se calculavel). Parquet proprio, carimbado. E' F1 do gate.
+7. **`ea_123.yaml`** + entrada na esteira multi-EA com
+   `--ea-modo-ticker exclusivo` ao lado do EA da Rota B; um pregao em
+   `dry_run`, barras marcadas olhadas uma a uma (checklist do forward);
+   depois E4 real com 1 contrato.
+
+**O que reinicia a contagem:** qualquer numero da ficha 5.2; a
+execucao (emulacao -> stop real); ligar o gate. **O que nao reinicia:**
+bug que faz o codigo passar a fazer o que a ficha ja' diz.
+
+**Capital:** informativo, por sinal, no log: D x R$0,20 / 2%. Mediano
+~R$6.000 por contrato; p90 ~R$12.000.
 
 ## 6. A porta de volume — interface, nao conteudo
 
