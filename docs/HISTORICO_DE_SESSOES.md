@@ -2010,3 +2010,13 @@ imediata -- a primeira excursao de 0,5 x ATR14 da barra seguinte".
   como no IFR2) reporta o P&L na zeragem 17:30 das operacoes por tempo;
   arquivos `resultado_<ficha>_<amostra>.json`; `--ficha orb` na CLI;
   placar tolera zero sinais. 799 testes, ruff e mypy limpos.
+
+### Continuacao (2026-09-14, tarde) — ORB inconclusivo; replicacao 2 declarada (v2.65)
+
+- ORB teste 2023-25: p1 = 0,524 IC95 [0,485; 0,562] n=636 -> INCONCLUSIVO;
+  replicacao 2026 0,496 [0,406; 0,586]. Estrato contra-MME80 0,557 no
+  teste, 0,442 na replicacao: registrado como o caso de manual.
+- Replicacao 2 declarada ANTES de rodar: todo o historico nao tocado
+  (out/2015-dez/2022) como UMA amostra; veredito final no combinado;
+  por-ano reportado. `AMOSTRAS["historico_2015_22"]`, `combinar()` com
+  recusa de hash diferente, `eas-preco-combinar` na CLI. 801 testes.

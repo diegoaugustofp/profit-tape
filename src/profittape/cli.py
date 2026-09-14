@@ -1332,7 +1332,8 @@ def _eas_preco_orb(log: Path, saida: Path, rodar_orb: Any) -> None:
 @app.command(name="eas-preco-teste")
 def eas_preco_teste(
     log: Path = typer.Argument(..., help="Dump PRCBARRA| contendo SO' os dias da amostra pedida"),
-    amostra: str = typer.Option(..., "--amostra", help="teste | replicacao | depuracao"),
+    amostra: str = typer.Option(
+        ..., "--amostra", help="teste | replicacao | depuracao | historico_2015_22"),
     ficha: str = typer.Option("ifr2", "--ficha", help="ifr2 (fechada) | orb"),
     saida: Path = typer.Option(Path("data/research/eas_preco_teste"), "--saida"),
     forcar: str | None = typer.Option(
@@ -1390,6 +1391,44 @@ def eas_preco_teste(
     typer.echo(f"\n  Ambiguas para conferir no tape: {pl['ambiguas_para_conferir_no_tape']} "
                f"(lista em sinais_{ficha}_{amostra}.csv, classe=ambigua)")
     typer.echo(f"  Saida: {r['arquivo']}")
+
+
+@app.command(name="eas-preco-combinar")
+def eas_preco_combinar(
+    saida: Path = typer.Argument(..., help="Pasta com os sinais_<ficha>_<amostra>.csv"),
+    ficha: str = typer.Option("orb", "--ficha"),
+    log_level: str = typer.Option("INFO", "--log-level"),
+) -> None:
+    """
+    Placar COMBINADO das amostras (teste + replicacao + historico_2015_22)
+    de uma ficha, com o por-ano reportado. Depuracao nunca entra. Recusa
+    misturar hashes de ficha.
+    """
+    configurar(log_level)
+    from .research.eas_preco_teste import combinar
+
+    pl = combinar(saida, ficha)
+    pr = pl["primario"]
+    typer.echo("=" * 72)
+    typer.echo(f"{ficha.upper()} M15 — COMBINADO {pl['amostras']}  ficha={pl['hash_ficha']}")
+    typer.echo("=" * 72)
+    typer.echo(
+        f"  sinais={pr['n_sinais']}  resolvidas={pr['n_resolvidas']}  "
+        f"ambiguas={pr['n_ambiguas']}  por_tempo={pr['n_por_tempo']}"
+    )
+    typer.echo(f"  p1 = {pr['p1']}  IC{int(pr['ic_confianca'] * 100)}% = {pr['ic95']}")
+    typer.echo(f"  P&L bruto/op = {pr['pnl_bruto_pts_medio']} pts  IC = {pr['pnl_bruto_pts_ic95']}"
+               f"  | liquido = {pr['pnl_liquido_pts_medio']} pts"
+               f"  | zeragem por tempo = {pr['pnl_zeragem_por_tempo_pts_medio']} pts")
+    typer.echo(f"\n  VEREDITO (combinado): {pr['veredito']}")
+    typer.echo("\n--- POR ANO (reportado, sem veredito) ---")
+    for ano, e in pl["por_ano_reportado"].items():
+        typer.echo(f"  {ano}  n={e['n_resolvidas']:4d}  p1={e['p1']}  IC={e['ic95']}"
+                   f"  pnl_bruto={e['pnl_bruto_pts_medio']}  por_tempo={e['n_por_tempo']}")
+    typer.echo("\n--- ESTRATOS (reportados) ---")
+    for nome, e in pl["estratos_reportados"].items():
+        typer.echo(f"  {nome:16} n={e['n_resolvidas']:5d}  p1={e['p1']}  IC={e['ic95']}")
+    typer.echo(f"\n  Saida: {saida}/resultado_{ficha}_COMBINADO.json")
 
 
 @app.command()

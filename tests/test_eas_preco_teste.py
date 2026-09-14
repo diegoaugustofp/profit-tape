@@ -157,3 +157,37 @@ def test_rodar_orb_usa_arquivo_por_ficha(tmp_path: Path) -> None:
     with pytest.raises(SystemExit, match="UMA"):
         et.rodar(dump, tmp_path / "s", "teste", ficha="orb")
     et.rodar(dump, tmp_path / "s", "teste", ficha="ifr2")      # outra ficha, outro arquivo
+
+
+def test_historico_2015_22_e_amostra_valida_e_combinar_soma(tmp_path: Path) -> None:
+    from tests.test_eas_preco import _dia_orb
+    # 2021: compra resolve a favor; 2025 (teste): compra resolve contra
+    d21 = _dia_orb(1210301, 1, 139000.0, **{"4": {"high": 140110.0}, "6": {"high": 140310.0}})
+    d25 = _dia_orb(1250901, 38, 139000.0, **{"4": {"high": 140110.0}, "6": {"low": 139900.0}})
+    s = tmp_path / "s"
+    et.rodar(_dump(tmp_path, d21, "h.txt"), s, "historico_2015_22", ficha="orb")
+    et.rodar(_dump(tmp_path, d25, "t.txt"), s, "teste", ficha="orb")
+    with pytest.raises(SystemExit, match="FORA da amostra 'historico_2015_22'"):
+        et.rodar(_dump(tmp_path, d25, "x.txt"), s, "historico_2015_22", ficha="orb")
+    pl = et.combinar(s, "orb")
+    assert pl["amostras"] == ["teste", "historico_2015_22"]
+    assert pl["primario"]["n_resolvidas"] == 2 and pl["primario"]["p1"] == 0.5
+    assert set(pl["por_ano_reportado"]) == {"2021", "2025"}
+    assert pl["por_ano_reportado"]["2021"]["p1"] == 1.0
+    assert (s / "resultado_orb_COMBINADO.json").exists()
+
+
+def test_combinar_recusa_hash_diferente(tmp_path: Path) -> None:
+    import json
+
+    from tests.test_eas_preco import _dia_orb
+    d = _dia_orb(1250901, 1, 139000.0, **{"4": {"high": 140110.0}})
+    s = tmp_path / "s"
+    et.rodar(_dump(tmp_path, d, "t.txt"), s, "teste", ficha="orb")
+    # forja uma replicacao com outro hash
+    (s / "sinais_orb_replicacao.csv").write_text(
+        (s / "sinais_orb_teste.csv").read_text(encoding="utf-8"), encoding="utf-8")
+    (s / "resultado_orb_replicacao.json").write_text(
+        json.dumps({"carimbo": {"hash_ficha": "outro"}}), encoding="utf-8")
+    with pytest.raises(SystemExit, match="hashes de ficha diferentes"):
+        et.combinar(s, "orb")

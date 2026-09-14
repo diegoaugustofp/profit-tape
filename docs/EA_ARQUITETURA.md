@@ -52,7 +52,7 @@ E0-E4 esta' pronta e serve a QUALQUER estrategia que chegue em F5.
 | **Scalp de Bollinger** (retorno) | **F4 — REPROVADO** | p1=0,480 IC(0,432-0,528), bruto -4,7 pts/op: null | nenhum. Capitulo fechado (2026-09-11) |
 | **Scalp de Bollinger** (rompimento) | **F4 — REPROVADO** | p1=0,415 IC(0,360-0,473), bruto -22,0: borda NEGATIVA | nenhum. Capitulo fechado (2026-09-11) |
 | **IFR2 M15** (preco) | **F4 — REPROVADO (familia)** | trial 1 K=0,5: 0,492; trial 2 K=1: 0,486 IC97,5%(0,464-0,509) n=2.478. Nulo | nenhum. Familia fechada sobre 2023-26 (`EAS_DE_PRECO.md` 3.5) |
-| **ORB M15** (preco, rompimento da abertura) | **F3 — CONGELADA** | ficha 4.1/4.2: 0,96-0,98 sinais/pregao, ambigua ~0, por tempo 12-24% (P&L na zeragem reportado); `eas-preco-teste --ficha orb` entregue (v2.64) | F4 na ordem: depuracao -> teste (2023-25, uma rodada) -> replicacao |
+| **ORB M15** (preco, rompimento da abertura) | **F4 — INCONCLUSIVO** | teste 2023-25 p1=0,524 IC(0,485-0,562) n=636; replicacao 2026 0,496. Estrato contra-MME80 brilhou (0,557) e apagou (0,442) | replicacao 2 declarada (`EAS_DE_PRECO.md` 4.4): dump out/2015-dez/2022 -> `--amostra historico_2015_22` -> `eas-preco-combinar`. Veredito final no combinado; inconclusivo = fecha |
 | **123 M15** (preco, continuacao) | **F0** | ficha em RASCUNHO (`EAS_DE_PRECO.md` 5) | funil no mesmo dump, depois do IFR2 |
 
 ### z_agf_3 — o unico vivo em execucao
@@ -472,7 +472,7 @@ seriam um EA com tres nomes):
 | EA | Mecanismo em uma frase | Porta de volume (declarada, nao implementada) | Fase |
 |---|---|---|---|
 | **IFR2** | RSI(2) em extremo e' exaustao; barreiras simetricas a K x ATR14 | `absorcao` na barra de sinal (gate) | **F4 — REPROVADO** (2 trials, familia fechada) |
-| **ORB** | primeiro rompimento do range 09:00-09:30, qualquer lado (MME80 = estrato); D = amplitude do range | agressao no rompimento vs. mediana do horario | **F3 — CONGELADA** |
+| **ORB** | primeiro rompimento do range 09:00-09:30, qualquer lado (MME80 = estrato); D = amplitude do range | agressao no rompimento vs. mediana do horario | **F4 — INCONCLUSIVO**, replicacao 2 declarada |
 | **123** | fundo de 3 barras a favor da MME80; stop de compra acima da 3a, stop na minima da 2a; alvo simetrico | agressao/delta na barra de rompimento (mesma porta do ORB) | F0 |
 
 Ordem: IFR2 -> ORB -> 123.

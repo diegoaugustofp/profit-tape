@@ -46,7 +46,13 @@ AMOSTRAS: dict[str, tuple[dt.date, dt.date]] = {
     "teste": (dt.date(2023, 1, 1), dt.date(2025, 12, 31)),
     "replicacao": (dt.date(2026, 1, 1), dt.date(2026, 8, 13)),
     "depuracao": (dt.date(2026, 8, 14), dt.date(2099, 12, 31)),
+    # Declarada 2026-09-14 (ORB inconclusivo em teste + replicacao): TODO
+    # o historico que o teste nao tocou, como UMA amostra. Veredito final
+    # sobre o combinado (`combinar`); por-ano so' reportado.
+    "historico_2015_22": (dt.date(2015, 1, 1), dt.date(2022, 12, 31)),
 }
+# Amostras que entram no veredito COMBINADO (depuracao nunca entra).
+AMOSTRAS_COMBINAVEIS = ("teste", "replicacao", "historico_2015_22")
 
 # CRITERIO das fichas (ponto estimado; IC sempre reportado).
 P1_FAVORAVEL = 0.56
@@ -311,6 +317,50 @@ def placar(r: pd.DataFrame, ficha: str = "ifr2") -> dict[str, Any]:
     amb = r[r["classe"] == "ambigua"]
     return {"primario": total, "estratos_reportados": estratos,
             "ambiguas_para_conferir_no_tape": len(amb)}
+
+
+def por_ano(r: pd.DataFrame, z: float) -> dict[str, Any]:
+    """Estrato por ano: reportado, sem veredito. E' onde um ano atipico
+    (2020) aparece sem que ninguem escolha tira-lo."""
+    if r.empty:
+        return {}
+    anos = pd.to_datetime(r["dia"].astype(str)).dt.year
+    return {str(a): _placar(r[anos == a], z) for a in sorted(anos.unique())}
+
+
+def combinar(saida: Path, ficha: str) -> dict[str, Any]:
+    """
+    Le `sinais_<ficha>_<amostra>.csv` de todas as amostras combinaveis
+    presentes em `saida` e devolve o placar do CONJUNTO, com o por-ano.
+    Recusa se um arquivo tiver hash de ficha diferente (resultados com
+    hash diferente nunca se somam) -- o hash vem do resultado_*.json ao
+    lado do CSV.
+    """
+    partes, hashes, presentes = [], set(), []
+    for amostra in AMOSTRAS_COMBINAVEIS:
+        csv = saida / f"sinais_{ficha}_{amostra}.csv"
+        js = saida / f"resultado_{ficha}_{amostra}.json"
+        if not csv.exists():
+            continue
+        if js.exists():
+            hashes.add(json.loads(js.read_text(encoding="utf-8"))["carimbo"]["hash_ficha"])
+        df = pd.read_csv(csv)
+        df["amostra"] = amostra
+        partes.append(df)
+        presentes.append(amostra)
+    if not partes:
+        raise SystemExit(f"nenhum sinais_{ficha}_<amostra>.csv em {saida}")
+    if len(hashes) > 1:
+        raise SystemExit(f"hashes de ficha diferentes em {saida}: {sorted(hashes)} -- "
+                         "resultados de fichas diferentes nunca se somam.")
+    r = pd.concat(partes, ignore_index=True)
+    pl = placar(r, ficha)
+    pl["por_ano_reportado"] = por_ano(r, z_ic(int(FICHAS[ficha]["TRIAL"])))
+    pl["amostras"] = presentes
+    pl["hash_ficha"] = next(iter(hashes)) if hashes else None
+    (saida / f"resultado_{ficha}_COMBINADO.json").write_text(
+        json.dumps(pl, indent=2, default=str), encoding="utf-8")
+    return pl
 
 
 # ---------------------------------------------------------------------

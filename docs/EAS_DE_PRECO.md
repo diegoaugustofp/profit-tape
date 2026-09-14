@@ -2,9 +2,9 @@
 
 Estado (2026-09-14, manha): **IFR2 FECHADA — familia inteira CONTRA**
 (trial 1 K=0,5: 0,492; trial 2 K=1: 0,486 IC97,5% [0,464; 0,509]).
-**ORB CONGELADA (4.2)**: funil v1 medido em 923 pregoes, trial 1 da
-familia, `eas-preco-teste --ficha orb` entregue. Nenhum p1 do ORB
-calculado. 123 em rascunho.
+**ORB: teste INCONCLUSIVO (4.3: 0,524 [0,485; 0,562]); replicacao 2
+declarada = todo o historico 2015-2022 (4.4), veredito final no
+combinado.** 123 em rascunho.
 
 **Regra da linha inteira (2026-09-14, apos erro meu, duas vezes):
 capital NUNCA restringe uma ficha.** E' a decisao 4.9 do
@@ -554,6 +554,41 @@ Ordem: DEPURACAO (dias >= 14/08/2026) -> TESTE (2023-25, uma rodada)
 depois (foi clausula na v0, virou estrato por 7.4, e o funil v0 ja'
 mostrou o que ele custa); D diferente de A; janela diferente; trial 2
 sem declaracao previa e criterio deflacionado.
+
+### 4.3 TESTE e REPLICACAO — INCONCLUSIVO (2026-09-14, `entregue-v2.64` / `7ae066bb3efb`)
+
+| amostra | pregoes | sinais | resolvidas | por tempo (zeragem) | p1 | IC95 | P&L bruto/op | veredito |
+|---|---|---|---|---|---|---|---|---|
+| DEPURACAO | 20 | 20 | 15 | 5 (-347) | 0,600 | [0,36; 0,80] | +324 | nao interpretavel |
+| **TESTE 2023-25** | 749 | 722 | 636 | 84 (-47) | **0,524** | **[0,485; 0,562]** | +37 [-26; +100] | **INCONCLUSIVO** |
+| REPLICACAO 2026 | 154 | 149 | 115 | 34 (-10) | 0,496 | [0,406; 0,586] | -9 | CONTRA (reportada) |
+| combinado | 903 | 871 | 751 | 118 | 0,519 | ~[0,483; 0,555] | | inconclusivo |
+
+Estratos no teste: a favor MME80 0,503; **contra 0,557 [0,494; 0,617]**;
+compra 0,544; venda 0,503. Na replicacao o "contra" virou **0,442**
+(-153 pts/op). Caso de manual: estrato que brilha numa amostra e apaga
+na outra. Ficou escrito antes que ele nao decidia — e nao decidiu.
+
+**Leitura:** o primeiro candidato da linha que nao morreu. Se o ORB tem
+borda, ela esta' entre 0 e ~5 pp — abaixo do 0,56 declarado como
+minimo que vale operar. Forward a ~1 op/pregao nao resolve (4 anos).
+
+### 4.4 REPLICACAO 2 — declarada ANTES de rodar (2026-09-14, `entregue-v2.65`)
+
+O grafico carrega desde out/2015. **Todo o historico que o teste nao
+tocou — out/2015 a dez/2022 — entra como UMA amostra
+(`--amostra historico_2015_22`), declarada agora, inteira.** Nao e'
+"rodo 2020-22 e vejo": parada opcional e' p-hacking. Veredito FINAL do
+ORB sobre o COMBINADO teste + replicacao + historico
+(`eas-preco-combinar`), ~2.400 resolvidas esperadas, +-2 pp: enxerga
+0,53. Por-ano REPORTADO como estrato — 2020 (pandemia, circuit
+breakers) aparece la', sem que ninguem o tire depois. Dia sem as barras
+09:00/09:15 cai em `range_ok = False`, contado, fora.
+
+Mesma ficha (4.1/4.2), mesmo hash `7ae066bb3efb`; o combinar recusa
+hash diferente. Criterio: p1 >= 0,56 e IC acima de 0,50 = FAVORAVEL; <=
+0,50 = CONTRA; entre = INCONCLUSIVO, e ai' o ORB FECHA como "borda, se
+existe, menor do que a que vale operar". Nao ha' terceira replicacao.
 
 ## 5. Ficha 123 (rascunho v0) — continuacao em pullback
 
