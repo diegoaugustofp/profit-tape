@@ -1979,3 +1979,21 @@ imediata -- a primeira excursao de 0,5 x ATR14 da barra seguinte".
   gatilho e' AMBIGUA sempre (o OHLC nao ordena contra o rompimento). O
   teste do cenario pegou essa lacuna na primeira versao do codigo.
 - 6 testes novos; 795 no total, ruff e mypy limpos.
+
+### Continuacao (2026-09-14) — correcao contra 4.9; IFR2 trial 2 (K=1); ORB v1 (v2.63)
+
+- **Erro meu, duas vezes:** encolhi D pelo stop catastrofico (K = 0,5 no
+  IFR2; proposta de 0,25 x A no ORB). Contraria a decisao 4.9 (risco e'
+  informativo, nunca limita). Corrigido: capital RECOMENDADO por
+  contrato passa a ser calculado e reportado nos dois funis (D x R$0,20
+  / 2%); regra 5 da secao 5 do EA_ARQUITETURA registra o incidente.
+- **IFR2 trial 2, K = 1**, declarado ANTES de rodar (`EAS_DE_PRECO.md`
+  3.4): unica mudanca e' K; IC de 97,5% (Bonferroni por 2 trials) e
+  FAVORAVEL exige IC acima de 0,50. Ultimo trial da familia neste
+  historico. `eas_preco_teste.TRIAL = 2`.
+- **ORB v1** (4.1): regime vira estrato (decisao do operador), os dois
+  lados armados OCO, gatilho dos dois lados na mesma barra = fora,
+  D = A. Funil v0 medido em 923 pregoes registrado em 4.0 (98% rompem,
+  gatilho mediano na primeira barra, A dobrou em 2026, ambiguidade
+  6,8% / 2,4%). Congela depois de remedir com o regime como estrato.
+- 797 testes, ruff e mypy limpos.

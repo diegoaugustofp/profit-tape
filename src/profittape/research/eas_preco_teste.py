@@ -48,10 +48,17 @@ AMOSTRAS: dict[str, tuple[dt.date, dt.date]] = {
     "depuracao": (dt.date(2026, 8, 14), dt.date(2099, 12, 31)),
 }
 
-# CRITERIO da ficha (ponto estimado; IC95 sempre reportado).
+# CRITERIO da ficha (ponto estimado; IC sempre reportado).
 P1_FAVORAVEL = 0.56
 P1_CONTRA = 0.50
+# TRIAL: quantas vezes a amostra 2023-2025 foi usada por esta familia.
+# Trial 1 = K 0,5 (CONTRA, 2026-09-14). Trial 2 = K 1,0. O IC e' de
+# (1 - 0,05/TRIAL): Bonferroni sobre os trials da familia -- o preco
+# honesto de usar a mesma amostra duas vezes. FAVORAVEL exige, alem de
+# p1 >= 0,56, que o limite inferior do IC fique acima de 0,50.
+TRIAL = 2
 Z95 = 1.959963984540054
+Z_IC = 2.2414027276049473 if TRIAL == 2 else Z95   # 97,5% bicaudal
 
 PARAMETROS_FICHA: dict[str, Any] = {
     "RSI_PERIODO": ep.RSI_PERIODO,
@@ -67,6 +74,7 @@ PARAMETROS_FICHA: dict[str, Any] = {
     "CUSTO_PONTOS": ep.CUSTO_PONTOS,
     "P1_FAVORAVEL": P1_FAVORAVEL,
     "P1_CONTRA": P1_CONTRA,
+    "TRIAL": TRIAL,
 }
 
 
@@ -170,10 +178,10 @@ def wilson(k: int, n: int, z: float = Z95) -> tuple[float, float]:
     return (centro - meia, centro + meia)
 
 
-def veredito(p1: float) -> str:
+def veredito(p1: float, ic_inferior: float | None = None) -> str:
     if math.isnan(p1):
         return "sem amostra"
-    if p1 >= P1_FAVORAVEL:
+    if p1 >= P1_FAVORAVEL and (ic_inferior is None or ic_inferior > P1_CONTRA):
         return "FAVORAVEL"
     if p1 <= P1_CONTRA:
         return "CONTRA"
@@ -185,10 +193,10 @@ def _placar(r: pd.DataFrame) -> dict[str, Any]:
     n = len(res)
     k = int((res["resultado"] > 0).sum())
     p1 = (k / n) if n else float("nan")
-    lo, hi = wilson(k, n)
+    lo, hi = wilson(k, n, Z_IC)
     pnl = res["pnl_bruto_pts"]
     if n > 1:
-        meia = Z95 * float(pnl.std(ddof=1)) / math.sqrt(n)
+        meia = Z_IC * float(pnl.std(ddof=1)) / math.sqrt(n)
         pnl_ic: list[float] | None = [round(float(pnl.mean()) - meia, 1),
                                       round(float(pnl.mean()) + meia, 1)]
     else:
@@ -199,7 +207,7 @@ def _placar(r: pd.DataFrame) -> dict[str, Any]:
         "n_por_tempo": int((r["classe"] == "por_tempo").sum()),
         "fracao_ambigua": (round(n_amb / len(r), 4) if len(r) else None),
         "p1": (round(p1, 4) if n else None),
-        "ic95": ([round(lo, 4), round(hi, 4)] if n else None),
+        "ic95": ([round(lo, 4), round(hi, 4)] if n else None),   # nivel = ic_confianca
         "pnl_bruto_pts_medio": (round(float(pnl.mean()), 1) if n else None),
         "pnl_bruto_pts_ic95": pnl_ic,
         "pnl_liquido_pts_medio": (round(float(pnl.mean()) - ep.CUSTO_PONTOS, 1) if n else None),
@@ -210,7 +218,9 @@ def placar(r: pd.DataFrame) -> dict[str, Any]:
     """Primario = total. Estratos so' REPORTADOS (a favor/contra a MME80,
     compra/venda): nao tem veredito proprio, de proposito."""
     total = _placar(r)
-    total["veredito"] = veredito(total["p1"] if total["p1"] is not None else float("nan"))
+    total["veredito"] = veredito(total["p1"] if total["p1"] is not None else float("nan"),
+                                 total["ic95"][0] if total["ic95"] else None)
+    total["ic_confianca"] = round(1 - 0.05 / TRIAL, 4)
     estratos = {
         "a_favor_mme80": _placar(r[r["a_favor_mme80"]]),
         "contra_mme80": _placar(r[~r["a_favor_mme80"]]),

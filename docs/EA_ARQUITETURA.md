@@ -51,8 +51,8 @@ E0-E4 esta' pronta e serve a QUALQUER estrategia que chegue em F5.
 | **DeepScalper Fase 2** (classificador) | **F3->F4** | forward LIGADO em 2026-09-09; placar fechado ate' n=50 | rodar `fase2-score` nos dias pendentes (offline) e esperar n |
 | **Scalp de Bollinger** (retorno) | **F4 — REPROVADO** | p1=0,480 IC(0,432-0,528), bruto -4,7 pts/op: null | nenhum. Capitulo fechado (2026-09-11) |
 | **Scalp de Bollinger** (rompimento) | **F4 — REPROVADO** | p1=0,415 IC(0,360-0,473), bruto -22,0: borda NEGATIVA | nenhum. Capitulo fechado (2026-09-11) |
-| **IFR2 M15** (preco, exaustao imediata) | **F4 — REPROVADO** | p1=0,492 IC(0,472-0,512) n=2.452 (2023-25); replicacao 2026 0,482: nulo a custo zero | nenhum. Capitulo fechado (2026-09-14, `EAS_DE_PRECO.md` 3.3) |
-| **ORB M15** (preco, rompimento da abertura) | **F1** | ficha em RASCUNHO (`EAS_DE_PRECO.md` 4); `eas-preco --ficha orb` entregue (v2.62) | rodar o funil nos dois dumps (2023-25 e 2026); com 923 pregoes o horizonte pode fechar; medir a fracao ambigua na barra do gatilho |
+| **IFR2 M15** (preco) | **trial 1 (K=0,5) F4 — REPROVADO; trial 2 (K=1) F3** | trial 1: p1=0,492 IC(0,472-0,512) n=2.452. K=0,5 tinha nascido de premissa contra 4.9; trial 2 declarado (`EAS_DE_PRECO.md` 3.4) com IC 97,5% | rodar trial 2 na ordem: depuracao -> teste (`--saida` nova) -> replicacao. Ultimo trial da familia neste historico |
+| **ORB M15** (preco, rompimento da abertura) | **F2->F3** | ficha v1 (`EAS_DE_PRECO.md` 4.1): D = A, regime = estrato; funil v0 medido em 923 pregoes | remedir o funil com a v2.63 (regime como estrato) -> congelar -> estender `eas-preco-teste` ao ORB |
 | **123 M15** (preco, continuacao) | **F0** | ficha em RASCUNHO (`EAS_DE_PRECO.md` 5) | funil no mesmo dump, depois do IFR2 |
 
 ### z_agf_3 — o unico vivo em execucao
@@ -471,8 +471,8 @@ seriam um EA com tres nomes):
 
 | EA | Mecanismo em uma frase | Porta de volume (declarada, nao implementada) | Fase |
 |---|---|---|---|
-| **IFR2** | RSI(2) em extremo e' exaustao imediata: a primeira excursao de 0,5 x ATR14 da barra seguinte vai a favor | `absorcao` na barra de sinal (gate) | **F4 — REPROVADO** (2026-09-14) |
-| **ORB** | primeiro rompimento do range 09:00-09:30, lado da MME80; D = amplitude do range | agressao no rompimento vs. mediana do horario | **F1** |
+| **IFR2** | RSI(2) em extremo e' exaustao; barreiras simetricas a K x ATR14 | `absorcao` na barra de sinal (gate) | trial 1 (K=0,5) **REPROVADO**; trial 2 (K=1) **F3** |
+| **ORB** | primeiro rompimento do range 09:00-09:30, qualquer lado (MME80 = estrato); D = amplitude do range | agressao no rompimento vs. mediana do horario | **F2->F3** |
 | **123** | fundo de 3 barras a favor da MME80; stop de compra acima da 3a, stop na minima da 2a; alvo simetrico | agressao/delta na barra de rompimento (mesma porta do ORB) | F0 |
 
 Ordem: IFR2 -> ORB -> 123.
@@ -497,6 +497,10 @@ anterior, uma rodada. Tudo em `EAS_DE_PRECO.md` 1.
    "so' um filtro".
 4. Os tres operam WIN: em F5/F6 e' `--ea-modo-ticker exclusivo`, e o
    custo estatistico disso (`sinais_sem_vaga`) fica no log.
+5. **Capital NUNCA restringe uma ficha** (4.9). O funil calcula e
+   reporta o capital recomendado por contrato; D vem do mecanismo. Em
+   2026-09-14 isso foi violado duas vezes (K = 0,5 do IFR2; proposta de
+   0,25 x A no ORB) e corrigido — fica aqui para nao repetir.
 
 **Entregue nesta sessao (v2.59):** `ntsl/preco_m15.ntsl` (dump M15 com
 OHLC, RSI2, MME8, MME80, ATR14, TR calculados pelo Profit) e

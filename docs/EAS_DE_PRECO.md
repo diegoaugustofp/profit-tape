@@ -1,10 +1,14 @@
 # EAs de PRECO — linha paralela enquanto o tape acumula (2026-09-13)
 
-Estado (2026-09-14): **IFR2 FECHADA — CONTRA (3.3).** p1 = 0,492 IC95
-[0,472; 0,512] em n = 2.452 (2023-2025); replicacao 2026 0,482. Sem
-borda a custo zero. **ORB em F1**: funil por pregao entregue
-(`eas-preco --ficha orb`), ficha continua em RASCUNHO ate' a TAXA ser
-medida. 123 em rascunho.
+Estado (2026-09-14): **IFR2 trial 1 (K = 0,5) CONTRA; trial 2 (K = 1)
+DECLARADO (3.4), a rodar.** **ORB em ficha v1** (regime = estrato, D = A),
+a congelar depois de remedir o funil. 123 em rascunho.
+
+**Regra da linha inteira (2026-09-14, apos erro meu, duas vezes):
+capital NUNCA restringe uma ficha.** E' a decisao 4.9 do
+`EA_ARQUITETURA.md` — risco e' informativo. O funil CALCULA o capital
+recomendado por contrato (D x R$0,20 / 2%) e apresenta; o operador
+decide. D vem do mecanismo, nunca do stop catastrofico.
 
 Ordem decidida pelo operador: **IFR2 primeiro**, ORB em seguida, 123
 depois. Fase de cada uma na tabela da secao 1 do `EA_ARQUITETURA.md`.
@@ -109,13 +113,16 @@ corrige e imprime ONDE esta' o `dif_max`; a confirmacao final e' com a
 rodada nova.
 
 **Em pontos:** ATR14 p10/p50/p90 = 258 / 465 / 742. Com K = 1, D nos
-sinais = 265 / 510 / 806. O stop catastrofico do `risco.py` e' **500 pts**
-(2% de R$5.000 a R$0,20) — com K = 1 o seguro de cauda dispararia antes
-do stop da estrategia em mais da metade dos sinais, e o teste mediria o
-`risco.py`, nao o IFR2. **Decisao: K = 0,5** -> D mediano ~255 pts
-(R$51/contrato), p90 ~400, dentro dos 500. E 255 e' o stop mediano da
-Rota B: "so' arrisco o que ja' arrisco". Incompatibilidade de mecanismo,
-nao calibracao — nenhum resultado foi olhado.
+sinais = 265 / 510 / 806.
+
+> **ERRO, corrigido em 2026-09-14.** Aqui eu decidi K = 0,5 porque D
+> passava do stop catastrofico de 500 pts do `risco.py`. Isso contraria
+> a decisao 4.9 do `EA_ARQUITETURA.md` (risco e' INFORMATIVO, nunca
+> limita a estrategia), que o operador ja' tinha tomado. O trial 1 foi
+> rodado com K = 0,5 e vale para K = 0,5. O trial 2 (3.4) testa K = 1,
+> como a ficha v0 pedia. O que o sistema faz com o capital e' CALCULAR
+> e reportar (D x R$0,20 / 2%: K = 1 -> ~R$5.100 por contrato no D
+> mediano de 2026).
 
 **Funil (7.4), compra + venda por pregao:**
 
@@ -369,71 +376,120 @@ pregoes, sem gastar um dia de calendario. Um forward disso levaria ~14
 meses para dizer o que o historico disse em dois minutos. Esse e' o
 argumento da linha: **reprovar rapido**.
 
-## 4. Ficha ORB (rascunho v0) — rompimento da abertura
+### 3.4 TRIAL 2 — K = 1 (declarado 2026-09-14, ANTES de rodar; `entregue-v2.63`)
 
-> **F1 (2026-09-14, `entregue-v2.62`):** `profit-tape eas-preco <dump>
-> --ficha orb` faz o funil POR PREGAO (range presente -> A >= 20 pts ->
-> rompeu ate' 11:45 -> lado da MME80 rompeu = SINAL), reporta o custo
-> do regime ("o outro lado rompeu antes"), A e D em pontos, hora do
-> gatilho, classes de resolucao e fracao ambigua. Sem p1.
->
-> **Ambiguidade especifica do ORB, decidida antes de medir:** na barra
-> do GATILHO o stop (= R_low + tick na compra) fica dentro do range, e
-> o OHLC nao diz se foi tocado antes ou depois do rompimento. Stop
-> tocado na barra do gatilho = AMBIGUA sempre; alvo, nao (esta' alem da
-> entrada). Se a fracao passar de 10%, o ORB so' se valida com o tape
-> (e o tape so' tem 2026 a partir de 24/07). E' o risco principal da
-> ficha, junto com o horizonte — os dois saem do mesmo funil.
+**Por que existe:** o K = 0,5 do trial 1 nasceu de uma premissa errada
+(3.0c). A ficha como foi desenhada (v0, K = 1) nunca foi testada. O
+funil de K = 1 ja' foi medido na v0 (2026): 9,5% por tempo, 1,1%
+ambiguo, duracao maior — mecanismo diferente do trial 1: reversao que se
+DESENVOLVE, nao excursao imediata.
 
+**O que muda em relacao a 3.2:** so' K (0,5 -> 1,0). Regime continua
+estrato; janela, excursao, amostras, ordem, tudo identico. `hash_ficha`
+muda; resultados dos dois trials nunca se somam.
 
-    HIPOTESE   O range das duas primeiras barras M15 (09:00-09:30) do
-               WIN concentra a decisao do dia: o primeiro rompimento
-               dele, a favor do regime, continua ate' a barreira
-               favoravel a 1 x amplitude do range antes de voltar a
-               barreira desfavoravel, em mais de 50% das vezes.
+**O preco de usar 2023-2025 pela segunda vez:** IC de **97,5%**
+(Bonferroni, 0,05 / 2 trials) em vez de 95%, e FAVORAVEL exige, alem de
+p1 >= 0,56, que o limite inferior desse IC fique acima de 0,50. CONTRA
+e INCONCLUSIVO como antes. `eas-preco-teste` ja' aplica (`TRIAL = 2`).
 
-    EVENTO     R_high / R_low = max/min das barras 09:00-09:15 e
-               09:15-09:30. A = R_high - R_low. A partir de 09:30:
-               ordem STOP de compra em R_high + 1 tick e de venda em
-               R_low - 1 tick, OCO, valida ate' 12:00. Regime: so' o
-               lado da MME80 fica armado (close(09:30) > MME80 arma
-               so' a compra; < MME80 so' a venda). Executou uma,
-               cancela a outra. D = A ao tick. Alvo = entrada + D, stop
-               = entrada - D. UMA operacao por pregao. Sem entrada se A
-               < 4 ticks (20 pts) — range degenerado.
+**O que este trial NAO autoriza:** um trial 3. Se K = 1 der CONTRA ou
+INCONCLUSIVO, a familia IFR2 em M15 fecha sobre este historico —
+qualquer variante futura precisa de amostra nova (2022 para tras, ou
+forward).
 
-    TAXA       <= 1 / pregao por construcao. A MEDIR: fracao de pregoes
-               em que o rompimento acontece ate' 12:00.
+**Ordem (a mesma):** depuracao (14/08+) -> teste (2023-25, `--saida`
+NOVA, ex.: `eas_preco_teste_k1`) -> replicacao (2026 ate' 13/08).
 
-    EFEITO     Mesmo estimador: p1 >= 0,56 vs <= 0,50 -> n = 1.070.
-               **Problema conhecido:** a <= 1/pregao, n = 1.070 sao
-               4+ anos de M15. Alternativas, a decidir ANTES de
-               congelar: (a) efeito maior, p1 >= 0,60 -> n = 600 (~3
-               anos); (b) aceitar o historico que o grafico tiver e
-               declarar a meia-largura que ele permite (270 pregoes ->
-               +-6 pp, so' enxerga p1 >= 0,60). Nenhuma das duas e'
-               gratis; a (b) afirma menos e diz isso.
+## 4. Ficha ORB — v1 (2026-09-14, a congelar apos remedir) — rompimento da abertura
 
-    CUSTO      D x (2 p1 - 1). Com D = A, o `eas-preco` reporta p50 de
-    MAXIMO     A em pontos. Se p50(A) < 92 pts, mesma ressalva do IFR2.
+### 4.0 O que o funil v0 mediu (`eas-preco --ficha orb`, `entregue-v2.62`)
 
-    HORIZONTE  = pregoes de historico disponiveis. E' a ficha com MAIOR
-               risco de nao fechar; se o grafico nao tiver >= 3 anos de
-               M15, ela vai para forward em F5 com a meia-largura que o
-               historico deu, e diz isso na propria ficha.
+| | 2023–2025 | 2026 |
+|---|---|---|
+| pregoes | 749 | 174 |
+| range presente / A >= 20 pts / rompeu ate' 11:45 | 99,5% / 99,5% / **98,5%** | 98,9% / 98,9% / 97,7% |
+| lado da MME80 rompeu (v0, regime na clausula) | 74,1% | 71,8% |
+| "o outro lado rompeu antes" (custo do regime) | 12,7% dos sinais | 12,1% |
+| A p10/p50/p90 (pts) | 474 / 726 / 1.198 | 813 / **1.333** / 2.067 |
+| gatilho p10/p50/p90 (HHMM) | 09:30 / 09:30 / 10:30 | 09:30 / 09:45 / 10:39 |
+| classes: resolvida / por tempo / ambigua | 82% / 11% / 6,8% | 75% / 22% / 2,4% |
+| barras ate' resolver p50 / p90 | 5 / 32 | 7 / 34 |
 
-    CRITERIO   como IFR2.
-    PARADA     como IFR2.
+**Leituras:** (1) o rompimento e' quase certo (98%) e mediano na
+PRIMEIRA barra depois do range — a aposta e' "a direcao da excursao de
+A a partir do rompimento"; (2) o regime custa 25% dos pregoes e em 12%
+dos sinais faz entrar depois de um rompimento contrario ja' falhado —
+caso 7.4, **decisao do operador: regime vira ESTRATO**; (3) A dobrou de
+2023-25 para 2026 — D = A acompanha a vol, e o capital recomendado
+acompanha D (2026: ~R$13.250 por contrato no p50, ~R$20.300 no p90;
+informativo, 4.9); (4) 22% por tempo em 2026 com D = 1.333 pts e' o
+dia nao andar 1 range depois do rompimento — reportado, nao decisivo;
+(5) ambiguidade 6,8% / 2,4%: o estimador serve; a regra "stop na barra
+do gatilho = ambigua" nao estourou.
 
-**Porta de volume:** volume agredido acumulado no rompimento vs. mediana
-do horario (o `perfil-volume-horario` ja' existe): so' entra se a barra
-de rompimento tem agressao acima da mediana da faixa 09:30-10:00.
+**Erro corrigido:** propus D = 0,25 x A para caber no stop catastrofico.
+Contra 4.9. D = A, como a ficha v0 diz.
 
-**Em pontos:** amplitude A p10/p50/p90 — a medir. Fracao de pregoes com
-rompimento ate' 12:00 — a medir.
+### 4.1 A ficha (v1, congela apos `eas-preco --ficha orb` remedido)
 
-**Fora da v0:** range de 09:00-10:00 (outra hipotese), segundo
-rompimento, trailing.
+    HIPOTESE   O range das duas primeiras barras M15 do WIN (09:00-09:30)
+               concentra a decisao do dia: o primeiro rompimento dele,
+               para qualquer lado, continua por mais uma amplitude do
+               range antes de voltar a amplitude oposta, em mais de 50%
+               das vezes.
+
+    EVENTO     R_high / R_low = max/min das barras 09:00 e 09:15; A =
+               R_high - R_low >= 20 pts. Das 09:30 ate' a barra 11:45
+               inclusive: ordem STOP de compra em R_high + tick e de
+               venda em R_low - tick, OCO. A primeira barra que toca um
+               dos niveis e' o gatilho; se toca os DOIS na mesma barra,
+               gatilho ambiguo, pregao fora (reportado). Entrada = nivel
+               rompido. D = A ao tick. Alvo = entrada + D, stop = entrada
+               - D (espelho na venda). UMA operacao por pregao. Regime
+               (close(09:15) vs MME80) = ESTRATO reportado. Resolucao:
+               a partir da barra do gatilho, inclusive; stop tocado NA
+               barra do gatilho = AMBIGUA (o OHLC nao ordena contra o
+               rompimento); alvo tocado nela = favoravel; depois, a
+               primeira barra que toca alvo ou stop (os dois = ambigua);
+               17:30 sem tocar = POR TEMPO. Ambigua e por tempo:
+               excluidas do p1, reportadas.
+
+    TAXA       A MEDIR com o regime como estrato. Esperado ~0,95-0,98
+               por pregao (98% rompem; menos os gatilhos ambiguos).
+
+    EFEITO     p1 >= 0,56 contra <= 0,50. Com ~900 sinais (923 pregoes)
+               a meia-largura e' ~+-3,3 pp: um pouco acima dos 3 pp.
+               Aceito, declarado.
+
+    CUSTO      D x (2 p1 - 1). D mediano 725-1.325 pts: p1 de empate
+    MAXIMO     0,504-0,508. Irrelevante.
+
+    CAPITAL    Reportado, nunca limitante (4.9): D x R$0,20 / 2%.
+               2023-25 p50 ~R$7.250; 2026 p50 ~R$13.250, p90 ~R$20.300.
+
+    AMOSTRAS   As mesmas por data: TESTE 2023-25 (primario, uma
+               rodada); REPLICACAO 2026 ate' 13/08; DEPURACAO 14/08+.
+               (O ORB e' familia DIFERENTE do IFR2: trial 1 nesta
+               amostra para esta familia.)
+
+    HORIZONTE  Historico: ~900 sinais. Forward: ~1 op/pregao -> n =
+               1.070 em ~4 anos. O forward do ORB NAO fecha sozinho: se
+               for para F5, e' com o n do historico como base e o
+               forward como replicacao continua, declarado assim.
+
+    CRITERIO   como IFR2 (p1 >= 0,56 favoravel; <= 0,50 contra; IC95
+               sempre); estratos (a favor/contra MME80, compra/venda)
+               reportados, sem veredito.
+
+    PARADA     depuracao -> teste -> replicacao; nada autoriza parar
+               antes; qualquer numero mudado reinicia.
+
+**Porta de volume:** agressao acumulada na barra do gatilho vs. mediana
+da faixa 09:30-10:00 (`perfil-volume-horario`), como gate.
+
+**Fora da v1:** range de 09:00-10:00; segundo rompimento; trailing;
+regime na clausula (v0, medido e descartado por 7.4); D diferente de A.
 
 ## 5. Ficha 123 (rascunho v0) — continuacao em pullback
 

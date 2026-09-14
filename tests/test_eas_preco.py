@@ -172,11 +172,11 @@ def test_sinal_tem_barreiras_simetricas_em_pontos(tmp_path: Path) -> None:
     x = _cenario(tmp_path)
     c = x[x["sinal_compra"]].iloc[0]
     assert c["hhmm"] == 930
-    assert c["D_pts"] == 50.0                        # 0.5 x ATR14=100, ao tick (v1)
+    assert c["D_pts"] == 100.0                       # 1.0 x ATR14=100, ao tick (trial 2)
     assert c["entrada_ref"] == 140000.0              # open de t+1
-    assert c["alvo"] == 140050.0 and c["stop"] == 139950.0
+    assert c["alvo"] == 140100.0 and c["stop"] == 139900.0
     v = x[x["sinal_venda"]].iloc[0]
-    assert v["alvo"] == 139950.0 and v["stop"] == 140050.0
+    assert v["alvo"] == 139900.0 and v["stop"] == 140100.0
 
 
 def test_ultima_barra_do_dia_nao_gera_sinal_sem_t1(tmp_path: Path) -> None:
@@ -197,18 +197,15 @@ def test_ambiguidade_classifica_as_tres_saidas(tmp_path: Path) -> None:
     d1 = _dia(1260901, 1)
     for b in d1:
         b["mme80_ntsl"] = 139000.0
-    # barras do cenario tem high/low = base +- 50; para +-50 nao contar
-    # como toque, estreita tudo para +-20 (alvo/stop v1 = +-50)
-    for b in d1:
-        b["high"], b["low"] = 140020.0, 139980.0
-    # sinal em 09:30 (idx 2), entrada open(09:45)=140000, alvo 140050 / stop 139950
+    # barras do cenario tem high/low = base +- 50, abaixo de alvo/stop +-100
+    # sinal em 09:30 (idx 2), entrada open(09:45)=140000, alvo 140100 / stop 139900
     d1[2]["rsi_ntsl"] = 5.0
     # 10:00 (idx 4): barra contem os DOIS -> ambigua
-    d1[4]["high"], d1[4]["low"] = 140080.0, 139920.0
+    d1[4]["high"], d1[4]["low"] = 140150.0, 139850.0
     # segundo sinal em 11:00 (idx 8); 11:30 (idx 10) so' toca o alvo -> resolvida
     d1[8]["rsi_ntsl"] = 5.0
-    d1[10]["high"] = 140060.0
-    # terceiro sinal em 14:00 (idx 20): resto do dia dentro de +-20 -> por_tempo
+    d1[10]["high"] = 140120.0
+    # terceiro sinal em 14:00 (idx 20): resto do dia dentro de +-50 -> por_tempo
     d1[20]["rsi_ntsl"] = 5.0
     df, _ = ep.carregar_log(_dump(tmp_path, d1))
     x = ep.marcar_ifr2(ep.indicadores(df))
@@ -221,10 +218,12 @@ def test_ambiguidade_classifica_as_tres_saidas(tmp_path: Path) -> None:
 def test_em_pontos_reporta_custo_maximo(tmp_path: Path) -> None:
     x = _cenario(tmp_path)
     pt = ep.em_pontos(x)
-    assert pt["D_pts"]["p50"] == 50.0
+    assert pt["D_pts"]["p50"] == 100.0
     assert pt["D_minimo_para_pagar_custo_a_p1_056_pts"] == pytest.approx(91.7, abs=0.1)
-    # p1 que empata 11 pts com D=50: 0,5 + 11/100 = 0,61
-    assert pt["p1_que_empata_custo_com_D_mediano"] == pytest.approx(0.61, abs=1e-3)
+    # p1 que empata 11 pts com D=100: 0,5 + 11/200 = 0,555
+    assert pt["p1_que_empata_custo_com_D_mediano"] == pytest.approx(0.555, abs=1e-3)
+    # capital recomendado: 100 pts x 0,20 / 0,02 = R$1.000 (informativo)
+    assert pt["capital_recomendado_por_contrato_reais"]["em_D_p50"] == 1000.0
 
 
 # ---------------------------------------------------------------------
@@ -330,17 +329,28 @@ def test_orb_compra_rompe_e_resolve(tmp_path: Path) -> None:
     assert ln["classe"] == "resolvida" and ln["barras_ate_resolver"] == 3
 
 
-def test_orb_regime_desarma_o_outro_lado(tmp_path: Path) -> None:
-    # MME80 acima do close(09:15): so' venda armada. O preco rompe por
-    # CIMA as 10:00 (nao conta) e por baixo as 11:00 -> sinal de venda,
-    # e "outro lado rompeu antes" = True.
+def test_orb_primeiro_rompimento_vence_e_regime_e_estrato(tmp_path: Path) -> None:
+    # MME80 acima do close(09:15) (regime de venda). O preco rompe por
+    # CIMA as 10:00 e por baixo as 11:00 -> v1: o primeiro (compra) e' o
+    # sinal, CONTRA a MME80 -- estrato, nao clausula.
     d = _dia_orb(1250901, 1, 141000.0, **{"4": {"high": 140110.0}, "8": {"low": 139890.0}})
     df, _ = ep.carregar_log(_dump(tmp_path, d))
     o = ep.marcar_orb(ep.indicadores(df))
     ln = o.iloc[0]
-    assert ln["lado"] == "venda" and ln["gatilho_hhmm"] == 1100
-    assert bool(ln["outro_lado_rompeu_antes"])
+    assert ln["lado"] == "compra" and ln["gatilho_hhmm"] == 1000
+    assert not bool(ln["a_favor_mme80"])
     assert ln["rompeu_compra_hhmm"] == 1000 and ln["rompeu_venda_hhmm"] == 1100
+    f = ep.contar_clausulas_orb(o).set_index("clausula")["n"]
+    assert f["(estrato) sinal contra a MME80"] == 1 and f["(estrato) sinal a favor da MME80"] == 0
+
+
+def test_orb_gatilho_dos_dois_lados_na_mesma_barra_fica_fora(tmp_path: Path) -> None:
+    d = _dia_orb(1250901, 1, 139000.0, **{"4": {"high": 140110.0, "low": 139890.0}})
+    df, _ = ep.carregar_log(_dump(tmp_path, d))
+    o = ep.marcar_orb(ep.indicadores(df))
+    assert not bool(o.iloc[0]["sinal"]) and bool(o.iloc[0]["rompeu_algum"])
+    f = ep.contar_clausulas_orb(o).set_index("clausula")["n"]
+    assert f["(info) os dois lados na MESMA barra: gatilho ambiguo, fora"] == 1
 
 
 def test_orb_sem_rompimento_ate_1145_nao_e_sinal(tmp_path: Path) -> None:

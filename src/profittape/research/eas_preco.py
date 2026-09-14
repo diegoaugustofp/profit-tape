@@ -66,13 +66,15 @@ RSI_SOBRECOMPRADO = 90.0
 MME_CURTA = 8
 MME_LONGA = 80
 ATR_PERIODO = 14
-# FICHA v1 (2026-09-13, docs/EAS_DE_PRECO.md 3): K = 0,5. O v0 (K = 1)
-# dava D mediano de 510 pts com p90 de 805 -- acima do stop catastrofico
-# de 500 pts do risco.py; o teste mediria o seguro de cauda, nao o IFR2.
-# Com 0,5: D mediano ~255 pts, o mesmo stop mediano da Rota B.
-# Incompatibilidade de MECANISMO, decidida antes de congelar; nao e'
-# calibracao por resultado (nenhum p1 foi olhado).
-K_ATR = 0.5                    # D = K_ATR x ATR14(t), ao tick
+# K = 1 (TRIAL 2, 2026-09-14). A v1 usou K = 0,5 justificando pelo stop
+# catastrofico do risco.py -- premissa ERRADA: a decisao 4.9 do
+# EA_ARQUITETURA diz que risco e' informativo e nunca limita a
+# estrategia. O trial 1 (K = 0,5) deu CONTRA e vale para K = 0,5. O
+# trial 2 testa a ficha como foi desenhada (K = 1) -- e' o SEGUNDO uso
+# da amostra 2023-2025, declarado antes, com criterio mais exigente
+# (ver eas_preco_teste.TRIAL). Capital necessario e' CALCULADO e
+# reportado (em_pontos), nunca usado para encolher D.
+K_ATR = 1.0                    # D = K_ATR x ATR14(t), ao tick
 # FICHA v1: o regime MME80 SAIU da clausula (7.4: cortava 70% dos sinais,
 # 1,09/pregao -> ~980 pregoes para n=1.070). Passa a ESTRATIFICACAO
 # reportada -- o primario e' o total; o regime nunca e' escolhido depois.
@@ -82,13 +84,22 @@ HORA_PRIMEIRO_FECHAMENTO = 915     # HHMM, inclusivo: t fecha a partir daqui
 HORA_ULTIMO_FECHAMENTO = 1630      # HHMM, inclusivo
 MINUTOS_BARRA = 15
 CUSTO_PONTOS = 11.0            # ida e volta, por contrato
+# Capital RECOMENDADO por contrato (EA_ARQUITETURA 4.9: risco e'
+# informativo, nunca limita a ficha): D x valor do ponto / risco por
+# operacao. Reportado em p50 e p90 de D; o operador decide.
+VALOR_PONTO_REAIS = 0.20
+RISCO_MAX_PCT = 0.02
+
+
+def capital_recomendado(d_pts: float) -> float:
+    return round(d_pts * VALOR_PONTO_REAIS / RISCO_MAX_PCT, 0)
 
 # FICHA ORB v0 (docs/EAS_DE_PRECO.md, 4) -- declarados, nao calibrados.
 ORB_BARRAS_RANGE = (900, 915)      # hhmm das barras que formam o range
 ORB_PRIMEIRA_ENTRADA = 930         # ordens armadas a partir desta barra
 ORB_ULTIMA_ENTRADA = 1145          # ultima barra em que a ordem vale (< 12:00)
 ORB_AMPLITUDE_MINIMA = 4 * TICK_WIN   # 20 pts: abaixo, range degenerado
-ORB_REGIME_NA_CLAUSULA = True      # v0: so' o lado da MME80 fica armado
+ORB_REGIME_NA_CLAUSULA = False     # v1 (2026-09-14): regime e' ESTRATO; os dois lados armados, OCO
 
 
 def arredondar_ao_tick(pts: float, tick: float = TICK_WIN) -> float:
@@ -472,7 +483,11 @@ def em_pontos(x: pd.DataFrame, col_atr: str = "atr_ntsl") -> dict[str, Any]:
     # empata o custo? p1_empate = 0,5 + custo / (2 D).
     d50 = float(dd.median()) if not dd.empty else float("nan")
     p1_empate = (0.5 + CUSTO_PONTOS / (2.0 * d50)) if d50 and not math.isnan(d50) else float("nan")
-    return {"atr14_pts": q(atr), "D_pts": q(dd),
+    dq = q(dd)
+    return {"atr14_pts": q(atr), "D_pts": dq,
+            "capital_recomendado_por_contrato_reais": (
+                {"em_D_p50": capital_recomendado(dq["p50"]),
+                 "em_D_p90": capital_recomendado(dq["p90"])} if dq else {}),
             "D_minimo_para_pagar_custo_a_p1_056_pts": round(CUSTO_PONTOS / (2 * 0.56 - 1), 1),
             "p1_que_empata_custo_com_D_mediano": (round(p1_empate, 3)
                                                   if not math.isnan(p1_empate) else None)}
@@ -552,14 +567,15 @@ def marcar_orb(d: pd.DataFrame, col_mme80: str = "mme80_ntsl") -> pd.DataFrame:
     Uma linha por PREGAO. Clausulas, na ordem do funil:
         range       as duas barras 09:00 e 09:15 existem no dump
         amplitude   A = R_high - R_low >= 20 pts
-        armado      lado da MME80 no close da barra 09:15 (v0: so' esse
-                    lado tem ordem; o outro nem existe)
         rompimento  primeira barra 09:30..11:45 em que high >= R_high +
-                    tick (compra) ou low <= R_low - tick (venda), no lado
-                    armado = SINAL
+                    tick (compra) ou low <= R_low - tick (venda). Os
+                    dois lados armados, OCO (v1): o primeiro que rompe
+                    e' o SINAL; os dois na MESMA barra = gatilho
+                    ambiguo, fora (o OHLC nao ordena).
     Entrada = nivel rompido. D = A ao tick. Alvo = entrada + D, stop =
-    entrada - D (espelho na venda). Informacao (nao clausula): o outro
-    lado rompeu antes? e' o custo do regime, medido, nao escolhido.
+    entrada - D (espelho na venda). Regime (lado da MME80 no close de
+    09:15) e' ESTRATO reportado (v1); com ORB_REGIME_NA_CLAUSULA=True
+    (v0) so' o lado da MME80 ficava armado.
 
     Ambiguidade: a barra de resolucao contem alvo E stop; OU a barra do
     gatilho toca o stop (= R_low + tick na compra, dentro do range) --
@@ -611,6 +627,8 @@ def marcar_orb(d: pd.DataFrame, col_mme80: str = "mme80_ntsl") -> pd.DataFrame:
         linha["outro_lado_rompeu_antes"] = bool(outro_antes)
         linha["sinal"] = bool(lado in ("compra", "venda") and linha["amplitude_ok"])
         linha["lado"] = lado if linha["sinal"] else None
+        linha["a_favor_mme80"] = bool(linha["sinal"] and (
+            linha["regime_compra"] if lado == "compra" else linha["regime_venda"]))
         if not linha["sinal"]:
             linhas.append(linha)
             continue
@@ -664,10 +682,13 @@ def contar_clausulas_orb(o: pd.DataFrame) -> pd.DataFrame:
         ("+amplitude >= 20 pts", col("range_ok") & col("amplitude_ok")),
         ("+rompeu algum lado ate' 11:45",
          col("range_ok") & col("amplitude_ok") & col("rompeu_algum")),
-        ("+lado armado (MME80) rompeu = SINAL", col("sinal")),
-        ("(info) o outro lado rompeu ANTES", col("sinal") & col("outro_lado_rompeu_antes")),
+        ("+primeiro rompimento (um lado so' na barra) = SINAL", col("sinal")),
+        ("(info) os dois lados na MESMA barra: gatilho ambiguo, fora",
+         col("range_ok") & col("amplitude_ok") & col("rompeu_algum") & ~col("sinal")),
         ("(estrato) sinal de compra", col("sinal") & (lado == "compra")),
         ("(estrato) sinal de venda", col("sinal") & (lado == "venda")),
+        ("(estrato) sinal a favor da MME80", col("sinal") & col("a_favor_mme80")),
+        ("(estrato) sinal contra a MME80", col("sinal") & ~col("a_favor_mme80")),
     ]
     return pd.DataFrame([{"clausula": nome, "n": int(m.sum()),
                           "por_pregao": round(int(m.sum()) / n_preg, 3)} for nome, m in etapas])
@@ -686,7 +707,11 @@ def em_pontos_orb(o: pd.DataFrame) -> dict[str, Any]:
     gat = sin["gatilho_hhmm"].dropna() if "gatilho_hhmm" in sin else pd.Series(dtype=float)
     cls = sin["classe"].value_counts().to_dict() if "classe" in sin else {}
     n = len(sin)
-    return {"A_pts_todos_os_pregoes": q(a_all), "D_pts_nos_sinais": q(sin["D_pts"]) if n else {},
+    dq = q(sin["D_pts"]) if n else {}
+    return {"A_pts_todos_os_pregoes": q(a_all), "D_pts_nos_sinais": dq,
+            "capital_recomendado_por_contrato_reais": (
+                {"em_D_p50": capital_recomendado(dq["p50"]),
+                 "em_D_p90": capital_recomendado(dq["p90"])} if dq else {}),
             "p1_que_empata_custo_com_D_mediano": (round(0.5 + CUSTO_PONTOS / (2 * d50), 3)
                                                   if n and d50 else None),
             "gatilho_hhmm": q(gat) if len(gat) else {},

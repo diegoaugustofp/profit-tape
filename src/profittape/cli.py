@@ -1244,7 +1244,7 @@ def eas_preco(
         r["equivalencia"] = equivalencia(r["barras"], tolerancia)
     m = r["meta"]
     typer.echo("=" * 72)
-    typer.echo("EAs DE PRECO — dump do grafico M15 (ficha IFR2 v1: K=0,5, regime = estrato)")
+    typer.echo("EAs DE PRECO — dump do grafico M15 (ficha IFR2, trial 2: K=1, regime = estrato)")
     typer.echo("=" * 72)
     typer.echo(
         f"  {m['barras']} barras | {m['pregoes']} pregoes | {m['blocos']} bloco(s) "
@@ -1266,6 +1266,8 @@ def eas_preco(
     typer.echo("\n--- EM PONTOS (7.5) ---")
     typer.echo(f"  ATR14 p10/p50/p90: {pt['atr14_pts']}")
     typer.echo(f"  D = {K_ATR} x ATR14 ao tick, nos sinais: {pt['D_pts']}")
+    typer.echo(f"  capital RECOMENDADO por contrato (2% por op, R$0,20/pt; informativo, 4.9): "
+               f"{pt['capital_recomendado_por_contrato_reais']}")
     typer.echo(
         f"  Para pagar 11 pts a p1=0,56, D precisa ser >= "
         f"{pt['D_minimo_para_pagar_custo_a_p1_056_pts']} pts; com o D mediano, o p1 que "
@@ -1295,7 +1297,7 @@ def _eas_preco_orb(log: Path, saida: Path, rodar_orb: Any) -> None:
     r = rodar_orb(log, saida)
     m, pt = r["meta"], r["pontos"]
     typer.echo("=" * 72)
-    typer.echo("EAs DE PRECO — dump M15 (ficha ORB v0: range 09:00-09:30, D = amplitude)")
+    typer.echo("EAs DE PRECO — dump M15 (ficha ORB v1: range 09:00-09:30, D = A, regime = estrato)")
     typer.echo("=" * 72)
     typer.echo(f"  {m['barras']} barras | {m['pregoes']} pregoes | {m['inicio']} a {m['fim']}")
     eq = r["equivalencia"]
@@ -1308,6 +1310,8 @@ def _eas_preco_orb(log: Path, saida: Path, rodar_orb: Any) -> None:
     typer.echo(f"  A (amplitude do range) p10/p50/p90, todos os pregoes: "
                f"{pt['A_pts_todos_os_pregoes']}")
     typer.echo(f"  D = A ao tick, nos sinais: {pt['D_pts_nos_sinais']}")
+    typer.echo(f"  capital RECOMENDADO por contrato (2% por op, R$0,20/pt; informativo, 4.9): "
+               f"{pt['capital_recomendado_por_contrato_reais']}")
     typer.echo(f"  p1 que empata 11 pts com D mediano: {pt['p1_que_empata_custo_com_D_mediano']}")
     typer.echo(f"  hora do gatilho p10/p50/p90 (HHMM): {pt['gatilho_hhmm']}")
     typer.echo("\n--- ESTIMADOR BINARIO ---")
@@ -1363,14 +1367,15 @@ def eas_preco_teste(
         f"  sinais={pr['n_sinais']}  resolvidas={pr['n_resolvidas']}  "
         f"ambiguas={pr['n_ambiguas']} ({pr['fracao_ambigua']})  por_tempo={pr['n_por_tempo']}"
     )
-    typer.echo(f"  p1 = {pr['p1']}  IC95 = {pr['ic95']}")
+    typer.echo(f"  p1 = {pr['p1']}  IC{int(pr['ic_confianca'] * 100)}% = {pr['ic95']}  "
+               f"(trial {c['parametros']['TRIAL']} da familia; IC deflacionado por Bonferroni)")
     typer.echo(
         f"  P&L bruto/op = {pr['pnl_bruto_pts_medio']} pts  IC95 = {pr['pnl_bruto_pts_ic95']}"
         f"  | liquido (-{11.0}) = {pr['pnl_liquido_pts_medio']} pts"
     )
     if amostra != "depuracao":
         typer.echo(f"\n  VEREDITO ({amostra}): {pr['veredito']}   "
-                   "(favoravel >= 0,56 | contra <= 0,50 | entre: inconclusivo)")
+                   "(favoravel >= 0,56 e IC acima de 0,50 | contra <= 0,50 | entre: inconclusivo)")
         if amostra == "replicacao":
             typer.echo("  A replicacao e' REPORTADA; nao tem veto sobre o teste primario.")
     typer.echo("\n--- ESTRATOS (so' reportados, sem veredito proprio) ---")
