@@ -840,10 +840,10 @@ observacao.
    mercado (E2) e zeragem (E3). Entram: STOP de compra/venda
    (`SendStopBuyOrder`/`SendStopSellOrder`, existem na DLL, faltam no
    `bindings.py`), LIMITADA (`SendBuyOrder`/`SendSellOrder`, declaradas,
-   nunca usadas) e CANCELAMENTO (`SendCancelOrder`). Mesmo ciclo da E2
-   para cada uma: assinatura conferida contra o manual, uma ordem real
-   na demo, evento no callback, `resultado=ok` ao vivo. Exige pregao e
-   o operador. Independente do passo 1, que pode andar antes.
+   nunca usadas) e CANCELAMENTO (`SendCancelOrder`). **CODIGO PRONTO
+   (v2.70)**: `record --ordem-teste-b-em HH:MM` roda a sequencia inteira
+   na demo (mercado -> stop longe + cancel -> OCO -> cancela a outra),
+   ver EA_ARQUITETURA "E2b". Falta rodar ao vivo.
 4. **Ciclo de ordens do 123** — fechou t: STOP de entrada; t+1 sem
    execucao: cancela. Entrada executou: STOP de protecao + LIMITADA de
    alvo, juntos; um executou: cancela o outro. Registra `nivel_teorico`,

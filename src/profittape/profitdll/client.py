@@ -90,6 +90,12 @@ class EventoOrdem:
     status: str
     texto: str
     data: str
+    # E2b (2026-09-14): o ClOrdID e' a chave do SendCancelOrder legado; o
+    # tipo e o stop vem do mesmo callback. Defaults para os construtores
+    # antigos (testes do E2) continuarem validos.
+    cl_ord_id: str = ""
+    tipo: str = ""
+    stop_preco: float = 0.0
 
 
 class ProfitClient:
@@ -762,7 +768,9 @@ class ProfitClient:
                 qtd=int(qtd), executada=int(traded), restante=int(leaves),
                 lado=int(side), preco=float(preco), preco_medio=float(medio),
                 status=str(status or ""), texto=str(texto or ""),
-                data=str(data or "")))
+                data=str(data or ""),
+                cl_ord_id=str(cl_ord_id or ""), tipo=str(tipo or ""),
+                stop_preco=float(stop)))
 
         @b.THistoryCallback
         def _ordem_historico(*_: object) -> None:

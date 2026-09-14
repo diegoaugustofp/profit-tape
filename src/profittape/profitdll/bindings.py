@@ -386,6 +386,28 @@ def _declare(dll: Any) -> None:
             c_wchar_p,                     # senha (5o lugar — ver aviso acima)
         ]
         dll.SendZeroPositionAtMarket.restype = c_int64
+        # E2b (2026-09-14): STOP e CANCELAMENTO legados, para o ciclo de
+        # ordens do 123 (EAS_DE_PRECO.md 5.4): stop de entrada, stop de
+        # protecao, limitada de alvo, cancelamento pelo EA.
+        # Assinaturas do `profit_dll.py` oficial da Nelogica:
+        #   SendStopBuyOrder(conta, corretora, senha, ticker, bolsa,
+        #                    dPrice [limite], dStopPrice [gatilho], nAmount)
+        #   SendCancelOrder(conta, corretora, pwcClOrdId, senha)
+        # ATENCAO: no cancelamento a senha vem em 4o (ultimo), e a chave e'
+        # o ClOrdID do OrderChangeCallback, NAO o ProfitID que o Send*
+        # devolve. A CONFERIR contra o manual instalado antes do primeiro
+        # envio -- e' o que o E2b faz na demo.
+        for nome in ("SendStopBuyOrder", "SendStopSellOrder"):
+            if hasattr(dll, nome):
+                fn = getattr(dll, nome)
+                fn.argtypes = [c_wchar_p, c_wchar_p, c_wchar_p,
+                               c_wchar_p, c_wchar_p,
+                               c_double, c_double,             # limite, gatilho
+                               c_int]
+                fn.restype = c_int64
+        if hasattr(dll, "SendCancelOrder"):
+            dll.SendCancelOrder.argtypes = [c_wchar_p, c_wchar_p, c_wchar_p, c_wchar_p]
+            dll.SendCancelOrder.restype = c_int64
 
     for nome in ("SubscribeTicker", "UnsubscribeTicker",
                  "SubscribeOfferBook", "UnsubscribeOfferBook",

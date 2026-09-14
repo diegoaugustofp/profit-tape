@@ -2059,3 +2059,18 @@ numero; sequencia inteira declarada (depuracao -> teste -> replicacao
   orfao, entrada nao cancelada) mitigado por reconciliacao de ORDENS
   ao reconectar (passo 4b). E2b (stop/limitada/cancel na demo) entra
   antes do passo 4. Passo 1 (barra de tempo) comeca na proxima sessao.
+
+### Continuacao (2026-09-14, noite) — E2b: stop / limitada / cancel / OCO na demo (v2.70)
+
+- `EventoOrdem` ganha `cl_ord_id`, `tipo`, `stop_preco` (o callback ja'
+  entregava; ninguem lia). `bindings.py`: `SendStopBuyOrder`/
+  `SendStopSellOrder` (limite, gatilho, qtd) e `SendCancelOrder` (conta,
+  corretora, ClOrdID, senha em 4o) — assinaturas do profit_dll.py
+  oficial, a conferir ao vivo.
+- `ea/ordem_teste_b.py`: `OrdemDeTesteB`, maquina de estados ticada
+  pelo record: mercado -> stop longe aceita e cancelada -> OCO de saida
+  (stop venda + limitada venda) -> cancela a outra. Zera em qualquer
+  falha; trava do E2 antes de cada Send*. `record --ordem-teste-b-em`.
+- Fake DLL: ordens pendentes, cancelamento por ClOrdID, execucao
+  automatica de uma perna. 7 testes (ciclo completo, timeout do OCO
+  cancela as duas e zera, trava, stop mudo zera). 815 no total.

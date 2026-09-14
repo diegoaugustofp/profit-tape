@@ -85,6 +85,7 @@ em dia sem pregao.
 | **E1** | record sobe com login completo (roteamento) sem prejudicar captura | FECHADO (v2.08, testes A e B ao vivo) |
 | **E2** | uma ordem real (compra + zeragem) na conta demo | FECHADO (v2.41, `resultado=ok` ao vivo 2026-09-11 12:30) |
 | **E3** | reconciliacao de posicao EA x corretora, zeragem na divergencia | FECHADO (v2.48, confirmado com posicao ZERADA **e** ABERTA real) |
+| **E2b** | STOP, LIMITADA e CANCELAMENTO na demo + OCO pelo EA (ciclo de ordens do 123) | CODIGO (v2.70): `record --ordem-teste-b-em HH:MM`; **a rodar ao vivo** |
 | **E4** | forward em demo com ordens reais, 1 contrato, mede slippage/latencia | MONTADO (v2.47) -- **nunca viu sinal real disparar** |
 | **E5** | **multi-EA dinamico** (inclusao/remocao SEM parar o record) | CODIGO COMPLETO (v2.50-v2.57); falta so' validar ao vivo (E5.5/E5.6) |
 
@@ -690,6 +691,38 @@ ea/
   service.py     IMPLEMENTADO — EAService, forward-test via CLI `ea` — orquestracao (equivalente ao recorder/service.py)
 ```
 
+
+### E2b — CODIGO PRONTO (v2.70), a rodar ao vivo
+
+O ciclo de ordens do 123 (`EAS_DE_PRECO.md` 5.4) precisa de tres coisas
+que o executor nunca mandou: STOP, LIMITADA e CANCELAMENTO — e do OCO
+feito pelo EA. `OrdemDeTesteB` (`ea/ordem_teste_b.py`) prova tudo numa
+sequencia, na conta de simulacao, com a mesma trava do E2:
+
+    compra a mercado (E2) -> fill = ref
+    -> STOP de compra em ref+300 (aceita, ClOrdID no callback) -> SendCancelOrder(ClOrdID)
+       -> callback de cancelamento
+    -> OCO de saida: STOP de venda em ref-15 + LIMITADA de venda em ref+15
+    -> uma executa -> cancela a outra -> confirma
+    (sem execucao em 180 s: cancela as duas e ZERA; qualquer cancel nao
+     confirmado: ZERA e "CONFIRA AS ORDENS NO PROFIT")
+
+O que muda no codigo: `EventoOrdem` passa a carregar `cl_ord_id`, `tipo`
+e `stop_preco` (o callback ja' entregava, ninguem lia); `bindings.py`
+declara `SendStopBuyOrder`/`SendStopSellOrder` (8 args: limite, gatilho,
+quantidade) e `SendCancelOrder` (conta, corretora, **ClOrdID**, senha —
+senha em 4o). As assinaturas vem do `profit_dll.py` oficial; **o E2b
+ao vivo e' a conferencia**. A fake DLL ganhou ordens pendentes,
+cancelamento e execucao de uma perna do OCO.
+
+Como rodar (pregao, login completo, contrato especifico):
+
+    profit-tape record --login-completo --ordem-teste-b-em 10:30 --ordem-teste-ticker WINV26
+
+Saida: `ea.ordem_teste_b.concluida` com `resultado`, `preco_ref`,
+`perna_oco_executada` e, por perna, ClOrdID, tipo, status (as strings
+que a DLL usa para aceite / cancelamento — e' o que o passo 4 vai
+consumir), latencias de callback, fill e cancelamento.
 
 ### E3 dentro do record — ENTREGUE (v2.45, 2026-09-11), structs confirmadas contra exemplo oficial da Nelogica
 

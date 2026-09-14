@@ -40,6 +40,7 @@ from ..storage.parquet_sink import ParquetSink
 if TYPE_CHECKING:
     from ..ea.config import EAConfig
     from ..ea.ordem_teste import OrdemDeTeste
+    from ..ea.ordem_teste_b import OrdemDeTesteB
     from ..ea.reconciliacao import ReconciliadorPosicao
 
 log = structlog.get_logger(__name__)
@@ -59,6 +60,9 @@ class RecorderService:
         ea_config_path: Path | None = None,
         ordem_teste_em: str | None = None,
         ordem_teste_ticker: str = "WINFUT",
+        ordem_teste_b_em: str | None = None,
+        ordem_teste_b_distancia: float = 15.0,
+        ordem_teste_b_longe: float = 300.0,
         reconciliar_em: str | None = None,
         reconciliar_ticker: str = "WINFUT",
         reconciliar_esperado: int = 0,
@@ -74,6 +78,7 @@ class RecorderService:
         # login_completo. Construida DEPOIS do client (precisa dele).
         self._ordem_teste_em = ordem_teste_em
         self.ordem_teste: OrdemDeTeste | None = None
+        self.ordem_teste_b: OrdemDeTesteB | None = None
         # E3 dentro do record (2026-09-11): reconciliacao de posicao no
         # horario dado -- consulta a corretora e zera se divergir do
         # esperado. Mesmo padrao do E2: ticada pela thread principal,
@@ -207,6 +212,36 @@ class RecorderService:
                 ticker=ordem_teste_ticker,
                 nota="E2: 1 contrato a mercado na conta de SIMULACAO "
                 "(trava pela DLL) e zeragem em seguida.",
+            )
+        if ordem_teste_b_em is not None:
+            if not cfg.runtime.login_completo:
+                raise SystemExit(
+                    "--ordem-teste-b-em exige login completo (--login-completo "
+                    "ou runtime.login_completo: true)."
+                )
+            from ..ea.config import RoteamentoConfig
+            from ..ea.ordem_teste import TickerAgregadorInvalido
+            from ..ea.ordem_teste_b import OrdemDeTesteB
+
+            try:
+                self.ordem_teste_b = OrdemDeTesteB(
+                    self.client,
+                    RoteamentoConfig(),
+                    horario_hhmm=ordem_teste_b_em,
+                    ticker=ordem_teste_ticker,
+                    longe_pts=ordem_teste_b_longe,
+                    distancia_pts=ordem_teste_b_distancia,
+                )
+            except TickerAgregadorInvalido as exc:
+                raise SystemExit(
+                    f"{exc}\n--ordem-teste-ticker recebeu {ordem_teste_ticker!r}."
+                ) from exc
+            log.warning(
+                "recorder.ordem_teste_b_agendada",
+                horario=ordem_teste_b_em,
+                ticker=ordem_teste_ticker,
+                nota="E2b: mercado -> stop longe + cancel -> OCO (stop venda + "
+                "limitada venda) -> cancela a outra. SIMULACAO (trava pela DLL).",
             )
         if reconciliar_em is not None:
             if not cfg.runtime.login_completo:
@@ -457,6 +492,8 @@ class RecorderService:
             time.sleep(0.5)
             if self.ordem_teste is not None and not self.ordem_teste.concluida:
                 self.ordem_teste.tick()  # thread principal, nunca callback
+            if self.ordem_teste_b is not None and not self.ordem_teste_b.concluida:
+                self.ordem_teste_b.tick()  # thread principal, nunca callback
             if self.reconciliador is not None and not self.reconciliador.concluida:
                 self.reconciliador.tick()  # thread principal, nunca callback
             if self._ea_dir is not None and time.monotonic() >= self._proxima_varredura:

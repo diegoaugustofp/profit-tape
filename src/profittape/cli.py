@@ -93,6 +93,24 @@ def record(
         "Exige login completo. Roda na conexao de producao, no "
         "pregao, sem parar a captura.",
     ),
+    ordem_teste_b_em: str | None = typer.Option(
+        None,
+        "--ordem-teste-b-em",
+        help="E2b dentro do record (2026-09-14): no horario HH:MM, prova as "
+        "familias de ordem do ciclo do 123 na conta de SIMULACAO: compra a "
+        "mercado (ref) -> STOP de compra longe + CANCELAMENTO -> OCO de "
+        "saida (STOP de venda em ref-d, LIMITADA de venda em ref+d) -> "
+        "cancela a outra perna. Zera a mercado em qualquer falha. Usa "
+        "--ordem-teste-ticker (contrato ESPECIFICO). Exige login completo.",
+    ),
+    ordem_teste_b_distancia: float = typer.Option(
+        15.0, "--ordem-teste-b-distancia-pts",
+        help="E2b: distancia das pernas do OCO ao preco de referencia (pts).",
+    ),
+    ordem_teste_b_longe: float = typer.Option(
+        300.0, "--ordem-teste-b-longe-pts",
+        help="E2b: distancia do stop de compra 'longe' (aceita e cancelada, nunca executa).",
+    ),
     ordem_teste_ticker: str = typer.Option(
         "WINFUT",
         "--ordem-teste-ticker",
@@ -147,6 +165,10 @@ def record(
         if ordem_teste_em:
             typer.echo(f"  E2: ordem de teste (1 {ordem_teste_ticker}, SIMULACAO) "
                        f"as {ordem_teste_em}")
+        if ordem_teste_b_em:
+            typer.echo(f"  E2b: stop/limitada/cancel + OCO (1 {ordem_teste_ticker}, SIMULACAO) "
+                       f"as {ordem_teste_b_em}, d={ordem_teste_b_distancia} "
+                       f"longe={ordem_teste_b_longe}")
         if reconciliar_em:
             typer.echo(f"  E3: reconciliacao ({reconciliar_ticker}, esperado="
                        f"{reconciliar_esperado}) as {reconciliar_em}")
@@ -165,6 +187,9 @@ def record(
             ea_config_path=ea_config,
             ordem_teste_em=ordem_teste_em,
             ordem_teste_ticker=ordem_teste_ticker,
+            ordem_teste_b_em=ordem_teste_b_em,
+            ordem_teste_b_distancia=ordem_teste_b_distancia,
+            ordem_teste_b_longe=ordem_teste_b_longe,
             reconciliar_em=reconciliar_em,
             reconciliar_ticker=reconciliar_ticker,
             reconciliar_esperado=reconciliar_esperado,

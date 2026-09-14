@@ -257,6 +257,88 @@ class FakeProfitDLL:
             self._threads.append(t)
         return oid
 
+    # ---- E2b (2026-09-14): ordens PENDENTES (stop / limitada), cancelamento
+    # e o preenchimento de uma perna do OCO. Uma pendente emite
+    # ClientCreated -> HadesCreated e PARA (fica viva). `SendCancelOrder`
+    # emite "Cancelled" com leaves=0 para o ClOrdID pedido. Se
+    # `fill_pendente_apos_s` estiver definido, a PRIMEIRA pendente de
+    # VENDA enviada preenche sozinha depois desse tempo -- simula o
+    # mercado tocar uma perna do OCO.
+    def _ordem_pendente(self, nome: str, args: tuple[object, ...], lado: int) -> int:
+        self._prox_ordem = getattr(self, "_prox_ordem", 1000) + 1
+        oid = self._prox_ordem
+        self.ordens_enviadas.append((nome, args))
+        pend = getattr(self, "pendentes", None)
+        if pend is None:
+            self.pendentes = pend = {}
+        conta, corretora, ticker = str(args[0]), int(str(args[1])), str(args[3])
+        preco = float(str(args[5])) if len(args) > 5 else 0.0
+        stop = float(str(args[6])) if len(args) > 7 else 0.0
+        tipo = "Stop" if "Stop" in nome else "Limit"
+        pend[f"CL{oid}"] = {"oid": oid, "conta": conta, "corretora": corretora,
+                            "ticker": ticker, "lado": lado, "preco": preco,
+                            "stop": stop, "tipo": tipo, "viva": True}
+        cb = self._cb.get("ordem_mudanca")
+        if cb is None:
+            return oid
+
+        def _cb(status: str, traded: int, leaves: int, texto: str = "") -> None:
+            cb(_ativo(ticker, "F"), corretora, 1, traded, leaves, lado, preco, stop,
+               preco if traded else 0.0, oid, tipo, conta, "TITULAR", f"CL{oid}",
+               status, "01/01/2026 10:00:00", texto)
+
+        def _emitir() -> None:
+            passo = self.atraso_fill_s / 4
+            time.sleep(passo)
+            _cb("ClientCreated", 0, 1, "Enviando ordem ao HadesProxy")
+            time.sleep(passo)
+            _cb("HadesCreated", 0, 1, "Criação")
+            auto = getattr(self, "fill_pendente_apos_s", None)
+            if auto is not None and lado == 2 and not getattr(self, "_auto_fill_usado", False):
+                self._auto_fill_usado = True
+                time.sleep(auto)
+                if pend[f"CL{oid}"]["viva"]:
+                    pend[f"CL{oid}"]["viva"] = False
+                    _cb("Filled", 1, 0)
+
+        t = threading.Thread(target=_emitir, daemon=True)
+        t.start()
+        self._threads.append(t)
+        return oid
+
+    def SendBuyOrder(self, *args: object) -> int:
+        return self._ordem_pendente("SendBuyOrder", args, 1)
+
+    def SendSellOrder(self, *args: object) -> int:
+        return self._ordem_pendente("SendSellOrder", args, 2)
+
+    def SendStopBuyOrder(self, *args: object) -> int:
+        return self._ordem_pendente("SendStopBuyOrder", args, 1)
+
+    def SendStopSellOrder(self, *args: object) -> int:
+        return self._ordem_pendente("SendStopSellOrder", args, 2)
+
+    def SendCancelOrder(self, *args: object) -> int:
+        # (conta, corretora, ClOrdID, senha)
+        self.ordens_enviadas.append(("SendCancelOrder", args))
+        cl = str(args[2])
+        pend = getattr(self, "pendentes", {})
+        o = pend.get(cl)
+        if o is None or not o["viva"]:
+            return -1
+        o["viva"] = False
+        cb = self._cb.get("ordem_mudanca")
+        if cb is not None:
+            def _emitir() -> None:
+                time.sleep(self.atraso_fill_s / 4)
+                cb(_ativo(o["ticker"], "F"), o["corretora"], 1, 0, 0, o["lado"],
+                   o["preco"], o["stop"], 0.0, o["oid"], o["tipo"], o["conta"],
+                   "TITULAR", cl, "Cancelled", "01/01/2026 10:00:00", "")
+            t = threading.Thread(target=_emitir, daemon=True)
+            t.start()
+            self._threads.append(t)
+        return 0
+
     def SendMarketBuyOrder(self, *args: object) -> int:
         return self._ordem("SendMarketBuyOrder", args, 1)
 
