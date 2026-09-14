@@ -2074,7 +2074,15 @@ numero; sequencia inteira declarada (depuracao -> teste -> replicacao
 - Fake DLL: ordens pendentes, cancelamento por ClOrdID, execucao
   automatica de uma perna. 7 testes (ciclo completo, timeout do OCO
   cancela as duas e zera, trava, stop mudo zera). 815 no total.
-### 2026-09-14 (pregao) — E5.5 VALIDADO ao vivo; erro repetido corrigido (v2.59)
+### 2026-09-14 (pregao) — E5.5 VALIDADO ao vivo; erro repetido corrigido (v2.71)
+
+> NOTA DE NUMERACAO: esta entrega nasceu como v2.59 numa sessao que
+> trabalhava em paralelo com outra (a dos EAs de PRECO). As duas
+> partiram da v2.58 e a outra chegou primeiro ao remoto, ocupando as
+> tags v2.59 a v2.70. Este trabalho foi rebaseado sobre a v2.70 e
+> renumerado para **v2.71**. Licao: com duas sessoes no mesmo
+> repositorio, conferir `git ls-remote --tags` ANTES de escolher o
+> numero da tag.
 
 **E5.5 validado por completo.** `z_agf_win` (WINFUT) subiu junto com o
 record e rodou 5 horas; `venda_apenas` (WDOFUT) foi incluido A QUENTE
