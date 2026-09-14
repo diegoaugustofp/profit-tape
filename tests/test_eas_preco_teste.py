@@ -100,7 +100,7 @@ def test_amostra_desconhecida(tmp_path: Path) -> None:
 def test_teste_e_uma_rodada_so(tmp_path: Path) -> None:
     dump = _cenario_teste(tmp_path)
     r = et.rodar(dump, tmp_path / "s", "teste")
-    assert r["arquivo"].exists() and (tmp_path / "s" / "sinais_teste.csv").exists()
+    assert r["arquivo"].exists() and (tmp_path / "s" / "sinais_ifr2_teste.csv").exists()
     with pytest.raises(SystemExit, match="UMA"):
         et.rodar(dump, tmp_path / "s", "teste")
     r2 = et.rodar(dump, tmp_path / "s", "teste", forcar_motivo="bug X corrigido")
@@ -120,6 +120,40 @@ def test_barra_fixture_continua_igual() -> None:
     assert set(b) == set(ep.CAMPOS)
 
 
-def test_trial_2_usa_ic_deflacionado() -> None:
-    assert et.TRIAL == 2 and et.Z_IC > et.Z95
-    assert "TRIAL" in et.PARAMETROS_FICHA
+def test_trial_por_ficha_e_z_deflacionado() -> None:
+    assert et.FICHAS["ifr2"]["TRIAL"] == 2 and et.FICHAS["orb"]["TRIAL"] == 1
+    assert et.z_ic(1) == pytest.approx(et.Z95, abs=1e-6)
+    assert et.z_ic(2) == pytest.approx(2.2414, abs=1e-4)
+    assert et.hash_ficha("ifr2") != et.hash_ficha("orb")
+
+
+def test_orb_resolve_e_reporta_zeragem(tmp_path: Path) -> None:
+    from tests.test_eas_preco import _dia_orb
+    # dia 1: compra rompe 10:00 (entrada 140105, D=200), alvo 140305 em 10:30 -> +1
+    d1 = _dia_orb(1250901, 1, 139000.0, **{"4": {"high": 140110.0}, "6": {"high": 140310.0}})
+    # dia 2: venda rompe 10:00 (entrada 139895), nada mais -> por tempo;
+    # close final 139990 -> zeragem = (139990 - 139895) * -1 = -95
+    d2 = _dia_orb(1250902, 38, 141000.0, **{"4": {"low": 139890.0}})
+    for b in d2[5:]:
+        b["close"] = 139990.0
+    df, _ = ep.carregar_log(_dump(tmp_path, d1 + d2))
+    r = et.resolver_orb(ep.indicadores(df))
+    assert list(r["classe"]) == ["resolvida", "por_tempo"]
+    assert r["resultado"].iloc[0] == 1.0 and r["pnl_bruto_pts"].iloc[0] == 200.0
+    assert r["pnl_zeragem_pts"].iloc[1] == pytest.approx(-95.0)
+    pl = et.placar(r, "orb")
+    assert pl["primario"]["n_resolvidas"] == 1 and pl["primario"]["n_por_tempo"] == 1
+    assert pl["primario"]["pnl_zeragem_por_tempo_pts_medio"] == -95.0
+    assert pl["primario"]["ic_confianca"] == 0.95
+
+
+def test_rodar_orb_usa_arquivo_por_ficha(tmp_path: Path) -> None:
+    from tests.test_eas_preco import _dia_orb
+    d1 = _dia_orb(1250901, 1, 139000.0, **{"4": {"high": 140110.0}})
+    dump = _dump(tmp_path, d1)
+    r = et.rodar(dump, tmp_path / "s", "teste", ficha="orb")
+    assert r["arquivo"].name == "resultado_orb_teste.json"
+    assert r["carimbo"]["parametros"]["TRIAL"] == 1
+    with pytest.raises(SystemExit, match="UMA"):
+        et.rodar(dump, tmp_path / "s", "teste", ficha="orb")
+    et.rodar(dump, tmp_path / "s", "teste", ficha="ifr2")      # outra ficha, outro arquivo

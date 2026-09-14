@@ -48,38 +48,49 @@ AMOSTRAS: dict[str, tuple[dt.date, dt.date]] = {
     "depuracao": (dt.date(2026, 8, 14), dt.date(2099, 12, 31)),
 }
 
-# CRITERIO da ficha (ponto estimado; IC sempre reportado).
+# CRITERIO das fichas (ponto estimado; IC sempre reportado).
 P1_FAVORAVEL = 0.56
 P1_CONTRA = 0.50
-# TRIAL: quantas vezes a amostra 2023-2025 foi usada por esta familia.
-# Trial 1 = K 0,5 (CONTRA, 2026-09-14). Trial 2 = K 1,0. O IC e' de
-# (1 - 0,05/TRIAL): Bonferroni sobre os trials da familia -- o preco
-# honesto de usar a mesma amostra duas vezes. FAVORAVEL exige, alem de
-# p1 >= 0,56, que o limite inferior do IC fique acima de 0,50.
-TRIAL = 2
 Z95 = 1.959963984540054
-Z_IC = 2.2414027276049473 if TRIAL == 2 else Z95   # 97,5% bicaudal
 
-PARAMETROS_FICHA: dict[str, Any] = {
-    "RSI_PERIODO": ep.RSI_PERIODO,
-    "RSI_SOBREVENDIDO": ep.RSI_SOBREVENDIDO,
-    "RSI_SOBRECOMPRADO": ep.RSI_SOBRECOMPRADO,
-    "MME_LONGA": ep.MME_LONGA,
-    "ATR_PERIODO": ep.ATR_PERIODO,
-    "K_ATR": ep.K_ATR,
-    "REGIME_NA_CLAUSULA": ep.REGIME_NA_CLAUSULA,
-    "HORA_PRIMEIRO_FECHAMENTO": ep.HORA_PRIMEIRO_FECHAMENTO,
-    "HORA_ULTIMO_FECHAMENTO": ep.HORA_ULTIMO_FECHAMENTO,
-    "TICK_WIN": ep.TICK_WIN,
-    "CUSTO_PONTOS": ep.CUSTO_PONTOS,
-    "P1_FAVORAVEL": P1_FAVORAVEL,
-    "P1_CONTRA": P1_CONTRA,
-    "TRIAL": TRIAL,
+
+def z_ic(trial: int) -> float:
+    """IC de (1 - 0,05/trial): Bonferroni sobre os trials da FAMILIA na
+    mesma amostra -- o preco honesto de usar 2023-2025 mais de uma vez.
+    trial 1 -> 1,960 (95%); trial 2 -> 2,241 (97,5%)."""
+    from statistics import NormalDist
+    return float(NormalDist().inv_cdf(1 - 0.05 / (2 * trial)))
+
+
+# TRIAL: quantas vezes a amostra 2023-2025 foi usada pela familia.
+#   ifr2: trial 1 = K 0,5 (CONTRA); trial 2 = K 1,0 (CONTRA). FECHADA.
+#   orb : trial 1 (v1: regime estrato, D = A).
+_COMUM: dict[str, Any] = {
+    "MME_LONGA": ep.MME_LONGA, "TICK_WIN": ep.TICK_WIN, "CUSTO_PONTOS": ep.CUSTO_PONTOS,
+    "P1_FAVORAVEL": P1_FAVORAVEL, "P1_CONTRA": P1_CONTRA,
 }
+FICHAS: dict[str, dict[str, Any]] = {
+    "ifr2": {**_COMUM, "TRIAL": 2,
+             "RSI_PERIODO": ep.RSI_PERIODO, "RSI_SOBREVENDIDO": ep.RSI_SOBREVENDIDO,
+             "RSI_SOBRECOMPRADO": ep.RSI_SOBRECOMPRADO, "ATR_PERIODO": ep.ATR_PERIODO,
+             "K_ATR": ep.K_ATR, "REGIME_NA_CLAUSULA": ep.REGIME_NA_CLAUSULA,
+             "HORA_PRIMEIRO_FECHAMENTO": ep.HORA_PRIMEIRO_FECHAMENTO,
+             "HORA_ULTIMO_FECHAMENTO": ep.HORA_ULTIMO_FECHAMENTO},
+    "orb": {**_COMUM, "TRIAL": 1,
+            "ORB_BARRAS_RANGE": list(ep.ORB_BARRAS_RANGE),
+            "ORB_PRIMEIRA_ENTRADA": ep.ORB_PRIMEIRA_ENTRADA,
+            "ORB_ULTIMA_ENTRADA": ep.ORB_ULTIMA_ENTRADA,
+            "ORB_AMPLITUDE_MINIMA": ep.ORB_AMPLITUDE_MINIMA,
+            "ORB_REGIME_NA_CLAUSULA": ep.ORB_REGIME_NA_CLAUSULA},
+}
+# Compatibilidade com quem importa os nomes antigos (IFR2).
+PARAMETROS_FICHA = FICHAS["ifr2"]
+TRIAL = FICHAS["ifr2"]["TRIAL"]
+Z_IC = z_ic(TRIAL)
 
 
-def hash_ficha() -> str:
-    return hashlib.sha256(json.dumps(PARAMETROS_FICHA, sort_keys=True).encode()).hexdigest()[:12]
+def hash_ficha(ficha: str = "ifr2") -> str:
+    return hashlib.sha256(json.dumps(FICHAS[ficha], sort_keys=True).encode()).hexdigest()[:12]
 
 
 # ---------------------------------------------------------------------
@@ -159,6 +170,61 @@ def resolver_sinais(x: pd.DataFrame, max_barras: int = 400) -> pd.DataFrame:
     return pd.DataFrame(linhas)
 
 
+def resolver_orb(d: pd.DataFrame) -> pd.DataFrame:
+    """
+    Resultado por PREGAO da ficha ORB v1 (docs/EAS_DE_PRECO.md 4.1). A
+    classificacao (gatilho, classe) vem de `eas_preco.marcar_orb`; o
+    RESULTADO (+1/-1) e' calculado aqui, de proposito fora do funil.
+
+    Alem das classes do IFR2, o ORB reporta o P&L de ZERAGEM das
+    operacoes por tempo (close da ultima barra do dia - entrada): elas
+    sao 12-24% dos pregoes e excluir sem dizer o que valeram nao e'
+    neutro. Fica fora do p1 (que e' binario) e entra so' no P&L
+    reportado.
+    """
+    o = ep.marcar_orb(d)
+    o = o[o["sinal"].fillna(False).astype(bool)].copy()
+    linhas = []
+    for _, ln in o.iterrows():
+        g = d[d["dia"] == ln["dia"]].sort_values("current_bar")
+        lado = ln["lado"]
+        alvo, stop, entrada = float(ln["alvo"]), float(ln["stop"]), float(ln["entrada"])
+        resto = g[g["hhmm"] >= int(ln["gatilho_hhmm"])]
+        classe, res, k_res = "por_tempo", float("nan"), len(resto)
+        for k, (_, b) in enumerate(resto.iterrows()):
+            hi, lo = float(b["high"]), float(b["low"])
+            t_alvo = (hi >= alvo) if lado == "compra" else (lo <= alvo)
+            t_stop = (lo <= stop) if lado == "compra" else (hi >= stop)
+            if k == 0 and t_stop:
+                classe, res, k_res = "ambigua", 0.0, 1
+                break
+            if t_alvo and t_stop:
+                classe, res, k_res = "ambigua", 0.0, k + 1
+                break
+            if t_alvo:
+                classe, res, k_res = "resolvida", 1.0, k + 1
+                break
+            if t_stop:
+                classe, res, k_res = "resolvida", -1.0, k + 1
+                break
+        d_pts = float(ln["D_pts"])
+        close_final = float(g.iloc[-1]["close"])
+        sinal_lado = 1.0 if lado == "compra" else -1.0
+        pnl_zeragem = ((close_final - entrada) * sinal_lado if classe == "por_tempo"
+                       else float("nan"))
+        linhas.append({
+            "dia": ln["dia"], "hhmm": int(ln["gatilho_hhmm"]),
+            "current_bar": int(g.iloc[0]["current_bar"]),
+            "lado": lado, "a_favor_mme80": bool(ln["a_favor_mme80"]),
+            "entrada": entrada, "alvo": alvo, "stop": stop, "D_pts": d_pts,
+            "classe": classe, "resultado": res, "barras": k_res,
+            "pnl_bruto_pts": (res * d_pts) if classe == "resolvida" else float("nan"),
+            "pnl_zeragem_pts": pnl_zeragem,
+            "barra_resolucao_hhmm": None,
+        })
+    return pd.DataFrame(linhas)
+
+
 # ---------------------------------------------------------------------
 # 3. p1, IC de Wilson, veredito
 # ---------------------------------------------------------------------
@@ -188,15 +254,21 @@ def veredito(p1: float, ic_inferior: float | None = None) -> str:
     return "INCONCLUSIVO"
 
 
-def _placar(r: pd.DataFrame) -> dict[str, Any]:
+_COLUNAS = ["dia", "hhmm", "current_bar", "lado", "a_favor_mme80", "entrada", "alvo", "stop",
+            "D_pts", "classe", "resultado", "barras", "pnl_bruto_pts", "barra_resolucao_hhmm"]
+
+
+def _placar(r: pd.DataFrame, z: float = Z95) -> dict[str, Any]:
+    if r.empty:
+        r = pd.DataFrame(columns=_COLUNAS)
     res = r[r["classe"] == "resolvida"]
     n = len(res)
     k = int((res["resultado"] > 0).sum())
     p1 = (k / n) if n else float("nan")
-    lo, hi = wilson(k, n, Z_IC)
+    lo, hi = wilson(k, n, z)
     pnl = res["pnl_bruto_pts"]
     if n > 1:
-        meia = Z_IC * float(pnl.std(ddof=1)) / math.sqrt(n)
+        meia = z * float(pnl.std(ddof=1)) / math.sqrt(n)
         pnl_ic: list[float] | None = [round(float(pnl.mean()) - meia, 1),
                                       round(float(pnl.mean()) + meia, 1)]
     else:
@@ -211,21 +283,28 @@ def _placar(r: pd.DataFrame) -> dict[str, Any]:
         "pnl_bruto_pts_medio": (round(float(pnl.mean()), 1) if n else None),
         "pnl_bruto_pts_ic95": pnl_ic,
         "pnl_liquido_pts_medio": (round(float(pnl.mean()) - ep.CUSTO_PONTOS, 1) if n else None),
+        "pnl_zeragem_por_tempo_pts_medio": (
+            round(float(r["pnl_zeragem_pts"].dropna().mean()), 1)
+            if "pnl_zeragem_pts" in r and r["pnl_zeragem_pts"].notna().any() else None),
     }
 
 
-def placar(r: pd.DataFrame) -> dict[str, Any]:
+def placar(r: pd.DataFrame, ficha: str = "ifr2") -> dict[str, Any]:
     """Primario = total. Estratos so' REPORTADOS (a favor/contra a MME80,
     compra/venda): nao tem veredito proprio, de proposito."""
-    total = _placar(r)
+    trial = int(FICHAS[ficha]["TRIAL"])
+    z = z_ic(trial)
+    if r.empty:
+        r = pd.DataFrame(columns=_COLUNAS)
+    total = _placar(r, z)
     total["veredito"] = veredito(total["p1"] if total["p1"] is not None else float("nan"),
                                  total["ic95"][0] if total["ic95"] else None)
-    total["ic_confianca"] = round(1 - 0.05 / TRIAL, 4)
+    total["ic_confianca"] = round(1 - 0.05 / trial, 4)
     estratos = {
-        "a_favor_mme80": _placar(r[r["a_favor_mme80"]]),
-        "contra_mme80": _placar(r[~r["a_favor_mme80"]]),
-        "compra": _placar(r[r["lado"] == "compra"]),
-        "venda": _placar(r[r["lado"] == "venda"]),
+        "a_favor_mme80": _placar(r[r["a_favor_mme80"]], z),
+        "contra_mme80": _placar(r[~r["a_favor_mme80"]], z),
+        "compra": _placar(r[r["lado"] == "compra"], z),
+        "venda": _placar(r[r["lado"] == "venda"], z),
     }
     # Tendencia das ambiguas: SO' a lista para conferir no tape. Sem
     # resultado aqui, porque o OHLC nao o tem.
@@ -238,12 +317,14 @@ def placar(r: pd.DataFrame) -> dict[str, Any]:
 # 4. Orquestracao, com o lock de UMA rodada
 # ---------------------------------------------------------------------
 def rodar(dump: Path, saida: Path, amostra: str,
-          forcar_motivo: str | None = None) -> dict[str, Any]:
+          forcar_motivo: str | None = None, ficha: str = "ifr2") -> dict[str, Any]:
+    if ficha not in FICHAS:
+        raise SystemExit(f"ficha '{ficha}' nao existe; use {sorted(FICHAS)}")
     df, meta = ep.carregar_log(dump)
-    x = ep.marcar_ifr2(ep.indicadores(df))
-    x = recortar_amostra(x, amostra)
+    d = ep.indicadores(df)
+    d = recortar_amostra(d, amostra)
 
-    arquivo = saida / f"resultado_{amostra}.json"
+    arquivo = saida / f"resultado_{ficha}_{amostra}.json"
     if amostra == "teste" and arquivo.exists():
         if not forcar_motivo:
             raise SystemExit(
@@ -253,18 +334,19 @@ def rodar(dump: Path, saida: Path, amostra: str,
                 "--forcar \"motivo\" e ele fica gravado na saida.")
         log.warning("eas_preco_teste.forcado", motivo=forcar_motivo, arquivo=str(arquivo))
 
-    r = resolver_sinais(x)
-    pl = placar(r)
-    carimbo = {"codigo": _carimbo(), "hash_ficha": hash_ficha(),
-               "parametros": PARAMETROS_FICHA,
+    r = resolver_sinais(ep.marcar_ifr2(d)) if ficha == "ifr2" else resolver_orb(d)
+    pl = placar(r, ficha)
+    carimbo = {"codigo": _carimbo(), "hash_ficha": hash_ficha(ficha), "ficha": ficha,
+               "parametros": FICHAS[ficha],
                "rodado_em": dt.datetime.now().isoformat(timespec="seconds"),
                "forcado_motivo": forcar_motivo}
     saida.mkdir(parents=True, exist_ok=True)
-    r.to_csv(saida / f"sinais_{amostra}.csv", index=False)
-    resumo = {"amostra": amostra, "janela": [str(d) for d in AMOSTRAS[amostra]],
+    r.to_csv(saida / f"sinais_{ficha}_{amostra}.csv", index=False)
+    resumo = {"ficha": ficha, "amostra": amostra,
+              "janela": [str(x) for x in AMOSTRAS[amostra]],
               "dump": meta, "carimbo": carimbo, **pl}
     arquivo.write_text(json.dumps(resumo, indent=2, default=str), encoding="utf-8")
-    log.info("eas_preco_teste.rodada", amostra=amostra, pregoes=meta["pregoes"],
+    log.info("eas_preco_teste.rodada", ficha=ficha, amostra=amostra, pregoes=meta["pregoes"],
              n_resolvidas=pl["primario"]["n_resolvidas"], p1=pl["primario"]["p1"],
              veredito=pl["primario"]["veredito"], codigo=carimbo["codigo"],
              hash_ficha=carimbo["hash_ficha"])

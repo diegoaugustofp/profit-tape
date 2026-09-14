@@ -51,8 +51,8 @@ E0-E4 esta' pronta e serve a QUALQUER estrategia que chegue em F5.
 | **DeepScalper Fase 2** (classificador) | **F3->F4** | forward LIGADO em 2026-09-09; placar fechado ate' n=50 | rodar `fase2-score` nos dias pendentes (offline) e esperar n |
 | **Scalp de Bollinger** (retorno) | **F4 — REPROVADO** | p1=0,480 IC(0,432-0,528), bruto -4,7 pts/op: null | nenhum. Capitulo fechado (2026-09-11) |
 | **Scalp de Bollinger** (rompimento) | **F4 — REPROVADO** | p1=0,415 IC(0,360-0,473), bruto -22,0: borda NEGATIVA | nenhum. Capitulo fechado (2026-09-11) |
-| **IFR2 M15** (preco) | **trial 1 (K=0,5) F4 — REPROVADO; trial 2 (K=1) F3** | trial 1: p1=0,492 IC(0,472-0,512) n=2.452. K=0,5 tinha nascido de premissa contra 4.9; trial 2 declarado (`EAS_DE_PRECO.md` 3.4) com IC 97,5% | rodar trial 2 na ordem: depuracao -> teste (`--saida` nova) -> replicacao. Ultimo trial da familia neste historico |
-| **ORB M15** (preco, rompimento da abertura) | **F2->F3** | ficha v1 (`EAS_DE_PRECO.md` 4.1): D = A, regime = estrato; funil v0 medido em 923 pregoes | remedir o funil com a v2.63 (regime como estrato) -> congelar -> estender `eas-preco-teste` ao ORB |
+| **IFR2 M15** (preco) | **F4 — REPROVADO (familia)** | trial 1 K=0,5: 0,492; trial 2 K=1: 0,486 IC97,5%(0,464-0,509) n=2.478. Nulo | nenhum. Familia fechada sobre 2023-26 (`EAS_DE_PRECO.md` 3.5) |
+| **ORB M15** (preco, rompimento da abertura) | **F3 — CONGELADA** | ficha 4.1/4.2: 0,96-0,98 sinais/pregao, ambigua ~0, por tempo 12-24% (P&L na zeragem reportado); `eas-preco-teste --ficha orb` entregue (v2.64) | F4 na ordem: depuracao -> teste (2023-25, uma rodada) -> replicacao |
 | **123 M15** (preco, continuacao) | **F0** | ficha em RASCUNHO (`EAS_DE_PRECO.md` 5) | funil no mesmo dump, depois do IFR2 |
 
 ### z_agf_3 — o unico vivo em execucao
@@ -471,8 +471,8 @@ seriam um EA com tres nomes):
 
 | EA | Mecanismo em uma frase | Porta de volume (declarada, nao implementada) | Fase |
 |---|---|---|---|
-| **IFR2** | RSI(2) em extremo e' exaustao; barreiras simetricas a K x ATR14 | `absorcao` na barra de sinal (gate) | trial 1 (K=0,5) **REPROVADO**; trial 2 (K=1) **F3** |
-| **ORB** | primeiro rompimento do range 09:00-09:30, qualquer lado (MME80 = estrato); D = amplitude do range | agressao no rompimento vs. mediana do horario | **F2->F3** |
+| **IFR2** | RSI(2) em extremo e' exaustao; barreiras simetricas a K x ATR14 | `absorcao` na barra de sinal (gate) | **F4 — REPROVADO** (2 trials, familia fechada) |
+| **ORB** | primeiro rompimento do range 09:00-09:30, qualquer lado (MME80 = estrato); D = amplitude do range | agressao no rompimento vs. mediana do horario | **F3 — CONGELADA** |
 | **123** | fundo de 3 barras a favor da MME80; stop de compra acima da 3a, stop na minima da 2a; alvo simetrico | agressao/delta na barra de rompimento (mesma porta do ORB) | F0 |
 
 Ordem: IFR2 -> ORB -> 123.

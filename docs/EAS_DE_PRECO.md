@@ -1,8 +1,10 @@
 # EAs de PRECO — linha paralela enquanto o tape acumula (2026-09-13)
 
-Estado (2026-09-14): **IFR2 trial 1 (K = 0,5) CONTRA; trial 2 (K = 1)
-DECLARADO (3.4), a rodar.** **ORB em ficha v1** (regime = estrato, D = A),
-a congelar depois de remedir o funil. 123 em rascunho.
+Estado (2026-09-14, manha): **IFR2 FECHADA — familia inteira CONTRA**
+(trial 1 K=0,5: 0,492; trial 2 K=1: 0,486 IC97,5% [0,464; 0,509]).
+**ORB CONGELADA (4.2)**: funil v1 medido em 923 pregoes, trial 1 da
+familia, `eas-preco-teste --ficha orb` entregue. Nenhum p1 do ORB
+calculado. 123 em rascunho.
 
 **Regra da linha inteira (2026-09-14, apos erro meu, duas vezes):
 capital NUNCA restringe uma ficha.** E' a decisao 4.9 do
@@ -401,7 +403,24 @@ forward).
 **Ordem (a mesma):** depuracao (14/08+) -> teste (2023-25, `--saida`
 NOVA, ex.: `eas_preco_teste_k1`) -> replicacao (2026 ate' 13/08).
 
-## 4. Ficha ORB — v1 (2026-09-14, a congelar apos remedir) — rompimento da abertura
+### 3.5 FECHAMENTO DO TRIAL 2 — CONTRA (2026-09-14, `entregue-v2.63` / `a0ee1342c69e`)
+
+| amostra | resolvidas | ambiguas | por tempo | p1 | IC 97,5% | P&L bruto/op |
+|---|---|---|---|---|---|---|
+| DEPURACAO | 68 | 0 | 9 | 0,412 | [0,289; 0,547] | -94 |
+| **TESTE 2023-25** | 2.478 | 0,9% | 5,6% | **0,486** | **[0,464; 0,509]** | -9,5 |
+| REPLICACAO 2026 | 491 | 0,4% | 7,7% | 0,479 | [0,429; 0,529] | -13 |
+
+Estratos: nenhum com IC fora de 0,50 (a favor da MME80 no teste: 0,509
+[0,468; 0,549]). Com K = 1 a ambiguidade cai a 0,9% e a duracao sobe —
+mecanismo "reversao que se desenvolve" medido limpo. E' nulo tambem.
+
+**A familia IFR2 em M15 esta' FECHADA sobre este historico.** Dois
+trials, dois CONTRA, o segundo com criterio deflacionado. Nao ha' trial
+3. Qualquer variante (RSI <= 5, saida por RSI 50, outro timeframe) e'
+familia nova, com amostra que estes dois nao tocaram.
+
+## 4. Ficha ORB — CONGELADA (2026-09-14, 4.2) — rompimento da abertura
 
 ### 4.0 O que o funil v0 mediu (`eas-preco --ficha orb`, `entregue-v2.62`)
 
@@ -431,7 +450,31 @@ do gatilho = ambigua" nao estourou.
 **Erro corrigido:** propus D = 0,25 x A para caber no stop catastrofico.
 Contra 4.9. D = A, como a ficha v0 diz.
 
-### 4.1 A ficha (v1, congela apos `eas-preco --ficha orb` remedido)
+### 4.0b Funil v1 remedido (regime = estrato, `entregue-v2.63`)
+
+| | 2023–2025 | 2026 |
+|---|---|---|
+| SINAL (primeiro rompimento, um lado so' na barra) | **722 / 749 = 0,964** | **170 / 174 = 0,977** |
+| gatilho dos dois lados na mesma barra (fora) | 16 (2,1%) | 0 |
+| estrato compra / venda | 49% / 51% | 48% / 52% |
+| estrato a favor / contra MME80 | 59% / 41% | 60% / 40% |
+| classes: resolvida / por tempo / ambigua | 636 / 84 / **2** | 130 / 40 / **0** |
+| por tempo (fracao) | 11,6% | **23,5%** |
+| gatilho p50 / p90 | 09:30 / 10:15 | 09:30 / 10:15 |
+| capital recomendado p50 / p90 (R$/contrato, informativo) | 7.250 / 11.950 | 13.275 / 20.650 |
+
+Ambiguidade praticamente zero (a regra "stop na barra do gatilho" nao
+custa nada com D = A: o stop fica a uma amplitude inteira). O que pesa
+e' o **por tempo**: 12–24% dos pregoes nao andam uma amplitude para
+nenhum lado depois do rompimento. Excluir do p1 (binario) e' correto;
+excluir sem dizer o que valeram, nao — o `eas-preco-teste --ficha orb`
+reporta o P&L medio dessas operacoes na zeragem de 17:30 (close da
+ultima barra − entrada), fora do p1 e dentro do P&L reportado.
+
+Resolvidas: 636 + 130 = **766** -> meia-largura +-3,5 pp no total;
++-3,9 pp so' no teste (636). Declarado.
+
+### 4.1 A ficha (texto da v1, congelado em 4.2 sem alteracao)
 
     HIPOTESE   O range das duas primeiras barras M15 do WIN (09:00-09:30)
                concentra a decisao do dia: o primeiro rompimento dele,
@@ -490,6 +533,27 @@ da faixa 09:30-10:00 (`perfil-volume-horario`), como gate.
 
 **Fora da v1:** range de 09:00-10:00; segundo rompimento; trailing;
 regime na clausula (v0, medido e descartado por 7.4); D diferente de A.
+
+### 4.2 CONGELAMENTO (2026-09-14, `entregue-v2.64`)
+
+A ficha 4.1 congela como esta', com estes numeros preenchidos:
+
+    TAXA       0,964 (2023-25) / 0,977 (2026) sinais por pregao.
+    EFEITO     +-3,9 pp no teste (636 resolvidas); +-3,5 pp somando a
+               replicacao (766). Enxerga p1 >= 0,56 contra 0,50 com
+               folga; nao enxerga 0,53.
+    POR TEMPO  11,6% / 23,5%. Fora do p1; P&L na zeragem reportado.
+    AMBIGUA    0,3% / 0%.
+    TRIAL      1 da familia ORB nesta amostra. IC 95%.
+    CARIMBO    hash da ficha em `resultado_orb_<amostra>.json`.
+
+Ordem: DEPURACAO (dias >= 14/08/2026) -> TESTE (2023-25, uma rodada)
+-> REPLICACAO (2026 ate' 13/08). Mesmos dumps do IFR2.
+
+**O que a ficha NAO autoriza:** escolher o estrato a favor da MME80
+depois (foi clausula na v0, virou estrato por 7.4, e o funil v0 ja'
+mostrou o que ele custa); D diferente de A; janela diferente; trial 2
+sem declaracao previa e criterio deflacionado.
 
 ## 5. Ficha 123 (rascunho v0) — continuacao em pullback
 

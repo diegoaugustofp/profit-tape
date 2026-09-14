@@ -1333,6 +1333,7 @@ def _eas_preco_orb(log: Path, saida: Path, rodar_orb: Any) -> None:
 def eas_preco_teste(
     log: Path = typer.Argument(..., help="Dump PRCBARRA| contendo SO' os dias da amostra pedida"),
     amostra: str = typer.Option(..., "--amostra", help="teste | replicacao | depuracao"),
+    ficha: str = typer.Option("ifr2", "--ficha", help="ifr2 (fechada) | orb"),
     saida: Path = typer.Option(Path("data/research/eas_preco_teste"), "--saida"),
     forcar: str | None = typer.Option(
         None, "--forcar", help="Motivo para repetir a rodada de TESTE (fica gravado)"),
@@ -1350,11 +1351,12 @@ def eas_preco_teste(
     configurar(log_level)
     from .research.eas_preco_teste import AMOSTRAS, rodar
 
-    r = rodar(log, saida, amostra, forcar)
+    r = rodar(log, saida, amostra, forcar, ficha)
     m, pl, c = r["meta"], r["placar"], r["carimbo"]
     pr = pl["primario"]
     typer.echo("=" * 72)
-    typer.echo(f"IFR2 M15 — {amostra.upper()} ({AMOSTRAS[amostra][0]} .. {AMOSTRAS[amostra][1]})")
+    typer.echo(f"{ficha.upper()} M15 — {amostra.upper()} "
+               f"({AMOSTRAS[amostra][0]} .. {AMOSTRAS[amostra][1]})")
     typer.echo("=" * 72)
     typer.echo(f"  {m['barras']} barras | {m['pregoes']} pregoes | {m['inicio']} a {m['fim']}")
     typer.echo(f"  carimbo: codigo={c['codigo']} ficha={c['hash_ficha']}")
@@ -1373,6 +1375,9 @@ def eas_preco_teste(
         f"  P&L bruto/op = {pr['pnl_bruto_pts_medio']} pts  IC95 = {pr['pnl_bruto_pts_ic95']}"
         f"  | liquido (-{11.0}) = {pr['pnl_liquido_pts_medio']} pts"
     )
+    if pr.get("pnl_zeragem_por_tempo_pts_medio") is not None:
+        typer.echo(f"  por tempo ({pr['n_por_tempo']}): P&L medio na ZERAGEM 17:30 = "
+                   f"{pr['pnl_zeragem_por_tempo_pts_medio']} pts (fora do p1; reportado)")
     if amostra != "depuracao":
         typer.echo(f"\n  VEREDITO ({amostra}): {pr['veredito']}   "
                    "(favoravel >= 0,56 e IC acima de 0,50 | contra <= 0,50 | entre: inconclusivo)")
@@ -1383,7 +1388,7 @@ def eas_preco_teste(
         typer.echo(f"  {nome:16} n={e['n_resolvidas']:5d}  p1={e['p1']}  IC95={e['ic95']}"
                    f"  pnl_bruto={e['pnl_bruto_pts_medio']}")
     typer.echo(f"\n  Ambiguas para conferir no tape: {pl['ambiguas_para_conferir_no_tape']} "
-               f"(lista em sinais_{amostra}.csv, classe=ambigua)")
+               f"(lista em sinais_{ficha}_{amostra}.csv, classe=ambigua)")
     typer.echo(f"  Saida: {r['arquivo']}")
 
 

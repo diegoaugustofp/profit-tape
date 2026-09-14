@@ -1997,3 +1997,16 @@ imediata -- a primeira excursao de 0,5 x ATR14 da barra seguinte".
   gatilho mediano na primeira barra, A dobrou em 2026, ambiguidade
   6,8% / 2,4%). Congela depois de remedir com o regime como estrato.
 - 797 testes, ruff e mypy limpos.
+
+### Continuacao (2026-09-14, manha) — IFR2 familia fechada; ORB CONGELADA; teste por ficha (v2.64)
+
+- IFR2 trial 2 (K = 1): teste 0,486 IC97,5% [0,464; 0,509] -> CONTRA;
+  replicacao 0,479. Familia fechada sobre este historico
+  (`EAS_DE_PRECO.md` 3.5). Sem trial 3.
+- ORB funil v1 remedido: 0,96-0,98 sinais/pregao, gatilho ambiguo 2%/0,
+  ambigua 0,3%/0, por tempo 11,6%/23,5%. Ficha CONGELADA (4.2), trial 1.
+- `eas_preco_teste`: parametros, TRIAL e hash POR FICHA (`FICHAS`);
+  `z_ic(trial)` por Bonferroni; `resolver_orb` (resultado fora do funil,
+  como no IFR2) reporta o P&L na zeragem 17:30 das operacoes por tempo;
+  arquivos `resultado_<ficha>_<amostra>.json`; `--ficha orb` na CLI;
+  placar tolera zero sinais. 799 testes, ruff e mypy limpos.
