@@ -102,11 +102,14 @@ class _AcumuladorTempo:
     n_trades: int = 0
     ts_ultimo_ns: int = field(default=0)
     ts_primeiro_ns: int = field(default=0)
+    maior_lacuna_ns: int = 0        # maior intervalo sem negocio dentro da barra
 
     def registrar(self, ts_ns: int, price: float, quantidade: int, trade_type: int) -> None:
         if self.open is None:
             self.open = price
             self.ts_primeiro_ns = ts_ns
+        else:
+            self.maior_lacuna_ns = max(self.maior_lacuna_ns, ts_ns - self.ts_ultimo_ns)
         self.high = max(self.high, price)
         self.low = min(self.low, price)
         self.close = price
@@ -126,7 +129,7 @@ class ConstrutorDeBarraDeTempo:
     no tick. Os dois devolvem BarraFechada ou None."""
 
     def __init__(self, periodo_s: int = 900, fim_sessao_hhmm: int | None = 1830,
-                 tolerancia_parcial_s: int = 60) -> None:
+                 tolerancia_parcial_s: int = 60, lacuna_maxima_s: int = 5) -> None:
         if periodo_s <= 0 or 3600 % periodo_s != 0:
             raise ValueError(
                 f"periodo_s={periodo_s}: precisa dividir uma hora (5, 15, 30, 60 min), "
@@ -134,6 +137,12 @@ class ConstrutorDeBarraDeTempo:
         self.periodo_ns = periodo_s * _NS_POR_S
         self.fim_sessao_hhmm = fim_sessao_hhmm
         self.tolerancia_parcial_ns = tolerancia_parcial_s * _NS_POR_S
+        # VOLUME CONFIAVEL (medido 11/09/2026): tape com buraco subconta volume
+        # com OHLC identico -- e subcontar empurra o gate de volume para
+        # "baixo". No WIN ha' negocio a cada segundo no pregao: lacuna > 5 s
+        # dentro da barra marca volume_confiavel=False (o gate trata como
+        # indefinido). Parcial tambem e' nao confiavel (faltou o comeco).
+        self.lacuna_maxima_ns = lacuna_maxima_s * _NS_POR_S
         self._acc: _AcumuladorTempo | None = None
         self.barras_fechadas = 0
 
@@ -170,7 +179,10 @@ class ConstrutorDeBarraDeTempo:
             ts_primeiro_ns=acc.ts_primeiro_ns,
             parcial=(self.barras_fechadas == 1
                      and acc.ts_primeiro_ns - acc.ts_open_ns > self.tolerancia_parcial_ns),
+            maior_lacuna_s=round(acc.maior_lacuna_ns / _NS_POR_S, 3),
         )
+        barra.volume_confiavel = (not barra.parcial
+                                  and acc.maior_lacuna_ns <= self.lacuna_maxima_ns)
         self._acc = None
         return barra
 

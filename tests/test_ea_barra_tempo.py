@@ -204,3 +204,21 @@ def test_primeira_barra_e_parcial_so_se_o_primeiro_trade_veio_tarde() -> None:
     c2.processar_trade(_t(7), 140000.0, 1, 2)            # 09:00:07
     b = c2.processar_trade(_t(900), 140000.0, 1, 2)
     assert b is not None and not b.parcial
+
+
+def test_volume_confiavel_cai_com_lacuna_ou_parcial() -> None:
+    c = ConstrutorDeBarraDeTempo(900, lacuna_maxima_s=5)
+    c.processar_trade(_t(1), 140000.0, 1, 2)
+    c.processar_trade(_t(3), 140000.0, 1, 2)
+    c.processar_trade(_t(20), 140000.0, 1, 2)            # lacuna de 17 s
+    b = c.avancar_relogio(_t(900))
+    assert b is not None and not b.volume_confiavel and b.maior_lacuna_s == 17.0
+    c2 = ConstrutorDeBarraDeTempo(900, lacuna_maxima_s=5)
+    for k in range(0, 900, 2):
+        c2.processar_trade(_t(k), 140000.0, 1, 2)         # negocio a cada 2 s
+    b2 = c2.avancar_relogio(_t(900))
+    assert b2 is not None and b2.volume_confiavel and b2.maior_lacuna_s == 2.0
+    c3 = ConstrutorDeBarraDeTempo(900)
+    c3.processar_trade(_t(600), 140000.0, 1, 2)          # primeira barra, 1o trade tarde
+    b3 = c3.avancar_relogio(_t(900))
+    assert b3 is not None and b3.parcial and not b3.volume_confiavel

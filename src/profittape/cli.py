@@ -1435,7 +1435,11 @@ def barra_tempo_conferir(
         if d["parciais_excluidas"]:
             typer.echo(f"      parcial (primeira barra depois de ligar, fora da conta): "
                        f"{d['parciais_excluidas']}")
-        typer.echo(f"      volume (reportado; gate de volume): {d['volume']}")
+        vol = dict(d["volume"])
+        vdifs = vol.pop("barras_diferentes", [])
+        typer.echo(f"      volume (reportado; gate de volume): {vol}")
+        for b in vdifs:
+            typer.echo(f"        volume difere: {b}")
         for b in d["barras_diferentes"]:
             typer.echo(f"      {b}")
     typer.echo("\n  Veredito: BATE se identicas == em comum em todos os dias e nenhuma barra "

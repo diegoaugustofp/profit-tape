@@ -81,6 +81,14 @@ def conferir(curated: Path, dump: Path, symbol: str, dias: list[str],
         vol_ok = ambos["vol_total_ea"].notna() & ambos["vol_total_grafico"].notna()
         vol_dif = (ambos.loc[vol_ok, "vol_total_ea"] - ambos.loc[vol_ok, "vol_total_grafico"])
         vol_rel = (vol_dif.abs() / ambos.loc[vol_ok, "vol_total_grafico"].replace(0, np.nan))
+        vol_difs = [
+            {"hhmm": int(ambos.loc[i, "hhmm"]), "ea": int(ambos.loc[i, "vol_total_ea"]),
+             "grafico": int(ambos.loc[i, "vol_total_grafico"]),
+             "dif": int(vol_dif.loc[i]),
+             "maior_lacuna_s": (float(ambos.loc[i, "maior_lacuna_s"])
+                                if "maior_lacuna_s" in ambos else None)}
+            for i in vol_dif.index if vol_dif.loc[i] != 0
+        ][:20]
         piores: dict[str, tuple[float, int | None]] = {}
         for c, d in difs.items():
             if len(d):
@@ -99,7 +107,10 @@ def conferir(curated: Path, dump: Path, symbol: str, dias: list[str],
                        "identicos": int((vol_dif == 0).sum()),
                        "dif_rel_mediana": (round(float(vol_rel.median()), 4)
                                            if vol_ok.any() else None),
-                       "dif_rel_max": (round(float(vol_rel.max()), 4) if vol_ok.any() else None)},
+                       "dif_rel_max": (round(float(vol_rel.max()), 4) if vol_ok.any() else None),
+                       "barras_diferentes": vol_difs,
+                       "nao_confiaveis_ea": (ea[~ea["volume_confiavel"]]["hhmm"].tolist()
+                                             if "volume_confiavel" in ea else [])},
             "barras_diferentes": [
                 {"hhmm": int(r["hhmm"]),
                  **{c: (float(r[f"{c}_ea"]), float(r[f"{c}_grafico"])) for c in difs

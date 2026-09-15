@@ -2271,3 +2271,8 @@ operador. 829 testes.
   IC acima de zero. INCONCLUSIVO pelo 0,56; real como efeito em dois
   instrumentos. Proximo: conferencia de volume tape x grafico, depois o
   gate no EA. Rotulo do contraste no combinar corrigido.
+- v2.88: volume tape x grafico: 28/08 37/37 identicos (QuantityVol = soma
+  do tape); 11/09 27/32, cinco barras diferentes com OHLC igual = tape
+  com buraco. Barra de tempo mede `maior_lacuna_s` e marca
+  `volume_confiavel=False` (parcial ou lacuna > 5 s); o comparador lista
+  as barras com volume diferente e as nao confiaveis. 870 testes.

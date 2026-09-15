@@ -47,6 +47,8 @@ class BarraFechada:
     parcial: bool = False      # primeira barra depois de ligar E o 1o trade veio tarde
     ts_primeiro_ns: int = 0    # quando o primeiro trade da barra chegou
     vol_total: int = 0         # TODOS os trades (RLP inclusive) -- e' o QuantityVol do grafico
+    maior_lacuna_s: float = 0.0    # maior intervalo sem negocio dentro da barra
+    volume_confiavel: bool = True  # False: parcial ou lacuna > limite (feed com buraco)
 
 
 @dataclass
