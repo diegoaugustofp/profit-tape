@@ -959,3 +959,65 @@ hipotese inteira.
 - Preencher `filtro_fluxo` em qualquer EA sem ficha propria.
 - Rodar `eas-preco-teste --amostra teste` antes da depuracao, ou mais
   de uma vez.
+
+## 8. Outros instrumentos — WDO declarado; acoes registradas (2026-09-15)
+
+**Regra:** a ficha e' POR INSTRUMENTO. O mecanismo (IFR2, ORB, 123) e' o
+mesmo; os numeros que ela congela — tick, custo, sessao, D minimo — sao
+do instrumento, e cada instrumento reinicia a contagem de trials. O
+`eas_preco` tem PERFIS (`usar_instrumento`, `--instrumento` nos tres
+comandos); o hash da ficha inclui o perfil, entao resultado de WIN e de
+WDO nunca se somam. O default e' o WIN com os valores dos 10 anos: nada
+mudou para quem nao passa `--instrumento`.
+
+**Multiplicidade, declarada antes:** 3 setups x N instrumentos. A lista
+e' FECHADA aqui; nao se acrescenta instrumento depois de olhar
+resultado. O que convence nao e' um p1 acima de 0,56 num teste — e' o
+que convenceu no 123: por-ano consistente (11 de 12). Cada instrumento
+segue a sequencia inteira (depuracao -> teste -> replicacao ->
+historico -> combinado) com o criterio de sempre.
+
+### 8.1 WDO (mini-dolar) — DECLARADO, tres fichas, a medir
+
+Perfil (`PERFIS["wdo"]`): tick 0,5 pt; 1 pt = R$10/contrato; custo
+ida-e-volta 0,30 pt (~R$3, a conferir na nota); janela 09:15-16:30 (IFR2)
+/ 09:30-16:30 (123); range ORB 09:00 e 09:15, entradas ate' 11:45;
+zeragem 17:30; fim de sessao 18:00 (ultima barra 17:45 — a confirmar
+no dump: ~36 barras/pregao). D minimo 4 ticks = 2 pts.
+
+Ordem: as tres fichas como estao (v0 do IFR2 com K = 1 e regime
+estrato? NAO — para o WDO cada ficha comeca da versao que foi
+CONGELADA no WIN: IFR2 = 3.2 com K = 1, ORB = 4.1, 123 = 5.2). Funil
+nos tres dumps (2015-22, 2023-25, 2026) -> congelar com os pontos do
+WDO -> sequencia. Expectativa dita antes: IFR2 e ORB provavelmente
+nulos (foram nulos no WIN por dez anos e o dolar e' tao arbitrado
+quanto); o 123 e' a pergunta.
+
+Por que WDO primeiro: mesma DLL, mesmo executor provado (bolsa "F"),
+tape acumulando desde 24/07, e ticker DIFERENTE do WIN — caminho B
+puro, sem modo exclusivo: e' o E5.6 como foi desenhado (123 no WIN e
+o que sobreviver no WDO, ordens reais, sem netting).
+
+O que o operador faz: dumps do grafico M15 do WDOFUT (mesmo
+`preco_m15.ntsl`, mesmas janelas de data) e
+`profit-tape eas-preco <dump> --ficha 123 --instrumento wdo --saida ...`
+(idem `orb`, `ifr2`).
+
+### 8.2 Acoes — REGISTRADO, nao agora
+
+Lista fechada (liquidez e spread apertado em M15): **PETR4, VALE3,
+ITUB4, BBDC4, BBAS3**. Nada de small caps: com tick de R$0,01 o custo
+proporcional come uma borda de 0,53.
+
+O que muda, e por que fica para depois: nao ha' tape (o record captura
+so' WIN e WDO) — sem porta de volume, sem semente por ponte, sem
+ambigua resolvida pelo tape: preco puro do comeco ao fim; pregao
+10:00-17:00, lote de 100, preco em centavos, custo em % e nao em pontos;
+o executor foi provado em bolsa "F" — bolsa "B" exige refazer a E2 (uma
+ordem real na demo) antes de qualquer E4. Perfil de instrumento por
+acao a escrever quando chegar a vez. Expectativa dita antes:
+provavelmente nulo na maioria; se uma sobreviver com onze anos
+consistentes, ai' se refaz a E2 para bolsa B.
+
+**Fora da lista, declarado:** BIT, ouro, contratos cheios (INDFUT,
+DOLFUT — mesma exposicao dos minis com menos liquidez para 1 lote).

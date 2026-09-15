@@ -465,3 +465,43 @@ def test_rodar_123_escreve_saida(tmp_path: Path) -> None:
     d = _dia_123(1250901, 1)
     r = ep.rodar_123(_dump(tmp_path, d), tmp_path / "s")
     assert (tmp_path / "s" / "resumo_123.json").exists() and r["ambiguidade"]["n_sinais"] == 0
+
+
+# ---------------------------------------------------------------------
+# Perfis de instrumento (2026-09-15): WIN default intacto; WDO religa
+# ---------------------------------------------------------------------
+def test_perfil_default_e_win_e_wdo_religa(monkeypatch: pytest.MonkeyPatch) -> None:
+    import importlib
+
+    assert ep.INSTRUMENTO.nome == "win" and ep.TICK_WIN == 5.0 and ep.P123_D_MINIMO == 20.0
+    assert ep.arredondar_ao_tick(162.5) == 165.0
+    try:
+        i = ep.usar_instrumento("wdo")
+        assert i.tick == 0.5 and ep.TICK_WIN == 0.5 and ep.CUSTO_PONTOS == 0.30
+        assert ep.P123_D_MINIMO == 2.0 and ep.ORB_AMPLITUDE_MINIMA == 2.0
+        assert ep.arredondar_ao_tick(3.26) == 3.5            # meio-tick de 0,5 sobe
+        assert ep.capital_recomendado(60.0) == 30000.0       # 60 pts x R$10 / 2%
+        r = ep.avaliar_123(100.0, 99.0, 100.5, 98.0, 100.2, 99.5, 100.1, 95.0, 1000)
+        assert r is not None and r["entrada"] == 100.7 and r["D_pts"] == 3.0   # 3,2 -> 3,0 ao tick
+        assert r["stop"] == 97.7 and r["alvo"] == 103.7
+        with pytest.raises(SystemExit, match="perfil"):
+            ep.usar_instrumento("btc")
+    finally:
+        ep.usar_instrumento("win")
+        importlib.reload(ep)
+    assert ep.TICK_WIN == 5.0 and ep.INSTRUMENTO.nome == "win"
+
+
+def test_hash_da_ficha_muda_com_o_instrumento() -> None:
+    import importlib
+
+    from profittape.research import eas_preco_teste as et
+    h_win = et.hash_ficha("123")
+    try:
+        ep.usar_instrumento("wdo")
+        h_wdo = et.hash_ficha("123")
+        assert h_wdo != h_win
+        assert et.parametros_da_ficha("123")["INSTRUMENTO"]["nome"] == "wdo"
+    finally:
+        ep.usar_instrumento("win")
+        importlib.reload(ep)

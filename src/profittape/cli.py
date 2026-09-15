@@ -1237,6 +1237,8 @@ def eas_preco(
         ..., help="Dump do console com linhas PRCBARRA| (grafico M15 do WINFUT)"),
     saida: Path = typer.Option(Path("data/research/eas_preco"), "--saida"),
     ficha: str = typer.Option("ifr2", "--ficha", help="ifr2 (fechada) | orb (fechada) | 123"),
+    instrumento: str = typer.Option(
+        "win", "--instrumento", help="win | wdo (perfil de tick/custo/sessao)"),
     tolerancia: float = typer.Option(
         0.5, "--tolerancia",
         help="Diferenca maxima Python x Profit para considerar a variante equivalente",
@@ -1257,8 +1259,9 @@ def eas_preco(
     de docs/EAS_DE_PRECO.md antes de congelar.
     """
     configurar(log_level)
-    from .research.eas_preco import K_ATR, equivalencia, rodar, rodar_orb
+    from .research.eas_preco import K_ATR, equivalencia, rodar, rodar_orb, usar_instrumento
 
+    usar_instrumento(instrumento)
     if ficha == "orb":
         _eas_preco_orb(log, saida, rodar_orb)
         return
@@ -1477,6 +1480,7 @@ def eas_preco_teste(
     amostra: str = typer.Option(
         ..., "--amostra", help="teste | replicacao | depuracao | historico_2015_22"),
     ficha: str = typer.Option("ifr2", "--ficha", help="ifr2 (fechada) | orb (fechada) | 123"),
+    instrumento: str = typer.Option("win", "--instrumento", help="win | wdo"),
     saida: Path = typer.Option(Path("data/research/eas_preco_teste"), "--saida"),
     forcar: str | None = typer.Option(
         None, "--forcar", help="Motivo para repetir a rodada de TESTE (fica gravado)"),
@@ -1492,8 +1496,10 @@ def eas_preco_teste(
     fora da amostra. Carimba com a tag do codigo e o hash da ficha.
     """
     configurar(log_level)
+    from .research.eas_preco import usar_instrumento
     from .research.eas_preco_teste import AMOSTRAS, rodar
 
+    usar_instrumento(instrumento)
     r = rodar(log, saida, amostra, forcar, ficha)
     m, pl, c = r["meta"], r["placar"], r["carimbo"]
     pr = pl["primario"]
@@ -1541,6 +1547,7 @@ def eas_preco_teste(
 def eas_preco_combinar(
     saida: Path = typer.Argument(..., help="Pasta com os sinais_<ficha>_<amostra>.csv"),
     ficha: str = typer.Option("orb", "--ficha"),
+    instrumento: str = typer.Option("win", "--instrumento", help="win | wdo"),
     log_level: str = typer.Option("INFO", "--log-level"),
 ) -> None:
     """
@@ -1549,8 +1556,10 @@ def eas_preco_combinar(
     misturar hashes de ficha.
     """
     configurar(log_level)
+    from .research.eas_preco import usar_instrumento
     from .research.eas_preco_teste import combinar
 
+    usar_instrumento(instrumento)
     pl = combinar(saida, ficha)
     pr = pl["primario"]
     typer.echo("=" * 72)

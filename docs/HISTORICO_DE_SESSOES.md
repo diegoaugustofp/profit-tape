@@ -2207,3 +2207,15 @@ operador. 829 testes.
   quebrava com KeyError('dif') depois de a semente ja' ter saido valida.
   Agora devolve so' a semente e uma nota. Semente de 15/09 conferida:
   187.995,23, ponte pelo 14/09 (34 barras; faltam 18:00/18:15).
+
+### 2026-09-15 — perfis de instrumento; WDO declarado; acoes registradas (v2.80)
+
+- `eas_preco.PERFIS` / `usar_instrumento` (WIN default intacto; WDO:
+  tick 0,5, 1 pt = R$10, custo 0,30 pt, fim de sessao 18:00);
+  `arredondar_ao_tick` le o tick em tempo de chamada (default de
+  funcao capturava TICK_WIN na importacao); hash da ficha inclui o
+  perfil (`parametros_da_ficha`); `--instrumento` em `eas-preco`,
+  `eas-preco-teste`, `eas-preco-combinar`.
+- `EAS_DE_PRECO.md` 8: ficha por instrumento, multiplicidade declarada,
+  WDO com as tres fichas na versao congelada do WIN, acoes com lista
+  fechada e o que muda (sem tape, bolsa B, E2 a refazer). 862 testes.

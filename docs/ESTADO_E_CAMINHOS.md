@@ -73,6 +73,14 @@ ou `venda_apenas` no outro ticker).
 - **DeepScalper fase 2**: `fase2-score` nos dias pendentes até n = 50.
 - **z_agf_3 / Rota B**: espera um sinal real disparar no forward.
 
+### B2. Outros instrumentos (declarado 15/09, `EAS_DE_PRECO.md` 8)
+
+- **WDO**: as três fichas, na versão congelada do WIN, com o perfil do
+  WDO (`--instrumento wdo`). Dumps do WDOFUT pelo operador; uma noite.
+  Motivo da ordem: ticker diferente do WIN = caminho B puro = E5.6.
+- **Ações**: lista fechada (PETR4, VALE3, ITUB4, BBDC4, BBAS3),
+  registrada, não agora — sem tape, bolsa "B" exige refazer a E2.
+
 ### C. O que fica no backlog, declarado, sem ação
 
 - Porta de volume do 123 (ficha própria quando o forward tiver n de

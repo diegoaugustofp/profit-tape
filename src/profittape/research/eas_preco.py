@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import json
 import math
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -102,12 +103,15 @@ ORB_AMPLITUDE_MINIMA = 4 * TICK_WIN   # 20 pts: abaixo, range degenerado
 ORB_REGIME_NA_CLAUSULA = False     # v1 (2026-09-14): regime e' ESTRATO; os dois lados armados, OCO
 
 
-def arredondar_ao_tick(pts: float, tick: float = TICK_WIN) -> float:
+def arredondar_ao_tick(pts: float, tick: float | None = None) -> float:
     """Meio-tick vai para CIMA (mesma funcao do bollinger_scalp: `round()`
-    do Python arredonda 32,5 para 32 -- pego na conferencia a mao)."""
+    do Python arredonda 32,5 para 32 -- pego na conferencia a mao).
+    `tick=None` le o do INSTRUMENTO em vigor (nao capturar TICK_WIN como
+    default: default e' avaliado na definicao, antes de `usar_instrumento`)."""
     if pd.isna(pts):
         return float("nan")
-    return float(max(tick, math.floor(pts / tick + 0.5) * tick))
+    t = TICK_WIN if tick is None else tick
+    return float(max(t, math.floor(pts / t + 0.5) * t))
 
 
 # ---------------------------------------------------------------------
@@ -747,6 +751,78 @@ P123_REGIME_NA_CLAUSULA = True       # v0: a favor da MME80 (pullback em tendenc
 P123_PRIMEIRO_FECHAMENTO = 930       # t fecha a partir daqui (3 barras formadas)
 P123_ULTIMO_FECHAMENTO = 1630
 P123_D_MINIMO = 4 * TICK_WIN         # 20 pts
+
+
+# ---------------------------------------------------------------------
+# PERFIS DE INSTRUMENTO (2026-09-15, EAS_DE_PRECO.md 8)
+# ---------------------------------------------------------------------
+# As fichas sao por instrumento: o MECANISMO e' o mesmo, os NUMEROS que
+# elas congelam (tick, custo, sessao, D minimo) sao do instrumento. Os
+# modulos de research e o EA leem estes globais em tempo de chamada;
+# `usar_instrumento("wdo")` religa todos de uma vez, e loga. O default
+# (nunca chamado) e' o WIN, com os valores com que as tres fichas foram
+# testadas em 10 anos -- nada muda para quem nao chama.
+#
+# WDO (mini-dolar): tick 0,5 pt; 1 pt = R$10 por contrato; custo
+# ida-e-volta ~R$3 = 0,30 pt (declarado, a conferir na nota de
+# corretagem); pregao 09:00-18:00 (ultima barra M15 17:45); zeragem e
+# janela iguais ao WIN. A CONFIRMAR NO DUMP: barras/pregao (~36) e o
+# rotulo da ultima barra.
+@dataclass(frozen=True)
+class Instrumento:
+    nome: str
+    tick: float
+    custo_pontos: float
+    valor_ponto_reais: float
+    hora_primeiro_fechamento: int
+    hora_ultimo_fechamento: int
+    orb_barras_range: tuple[int, int]
+    orb_primeira_entrada: int
+    orb_ultima_entrada: int
+    fim_sessao_hhmm: int
+
+    @property
+    def d_minimo(self) -> float:
+        return 4 * self.tick
+
+    def resumo(self) -> dict[str, Any]:
+        return {"nome": self.nome, "tick": self.tick, "custo_pontos": self.custo_pontos,
+                "valor_ponto_reais": self.valor_ponto_reais,
+                "janela": [self.hora_primeiro_fechamento, self.hora_ultimo_fechamento],
+                "orb_range": list(self.orb_barras_range),
+                "orb_entrada": [self.orb_primeira_entrada, self.orb_ultima_entrada],
+                "fim_sessao": self.fim_sessao_hhmm, "d_minimo": self.d_minimo}
+
+
+PERFIS: dict[str, Instrumento] = {
+    "win": Instrumento("win", 5.0, 11.0, 0.20, 915, 1630, (900, 915), 930, 1145, 1830),
+    "wdo": Instrumento("wdo", 0.5, 0.30, 10.0, 915, 1630, (900, 915), 930, 1145, 1800),
+}
+INSTRUMENTO: Instrumento = PERFIS["win"]
+
+
+def usar_instrumento(nome: str) -> Instrumento:
+    """Religa os globais deste modulo para o instrumento. Chamar UMA vez,
+    antes de qualquer funil/teste; o hash da ficha inclui o perfil."""
+    global TICK_WIN, CUSTO_PONTOS, VALOR_PONTO_REAIS, HORA_PRIMEIRO_FECHAMENTO
+    global HORA_ULTIMO_FECHAMENTO, ORB_BARRAS_RANGE, ORB_PRIMEIRA_ENTRADA
+    global ORB_ULTIMA_ENTRADA, ORB_AMPLITUDE_MINIMA, P123_PRIMEIRO_FECHAMENTO
+    global P123_ULTIMO_FECHAMENTO, P123_D_MINIMO, INSTRUMENTO
+    if nome not in PERFIS:
+        raise SystemExit(f"instrumento {nome!r} nao tem perfil; use {sorted(PERFIS)}")
+    i = PERFIS[nome]
+    TICK_WIN, CUSTO_PONTOS, VALOR_PONTO_REAIS = i.tick, i.custo_pontos, i.valor_ponto_reais
+    HORA_PRIMEIRO_FECHAMENTO, HORA_ULTIMO_FECHAMENTO = (i.hora_primeiro_fechamento,
+                                                       i.hora_ultimo_fechamento)
+    ORB_BARRAS_RANGE = i.orb_barras_range
+    ORB_PRIMEIRA_ENTRADA, ORB_ULTIMA_ENTRADA = i.orb_primeira_entrada, i.orb_ultima_entrada
+    ORB_AMPLITUDE_MINIMA = i.d_minimo
+    P123_PRIMEIRO_FECHAMENTO = 930
+    P123_ULTIMO_FECHAMENTO = i.hora_ultimo_fechamento
+    P123_D_MINIMO = i.d_minimo
+    INSTRUMENTO = i
+    log.info("eas_preco.instrumento", **i.resumo())
+    return i
 
 
 def avaliar_123(hi2: float, lo2: float, hi1: float, lo1: float,

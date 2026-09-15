@@ -100,8 +100,30 @@ TRIAL = FICHAS["ifr2"]["TRIAL"]
 Z_IC = z_ic(TRIAL)
 
 
+def parametros_da_ficha(ficha: str) -> dict[str, Any]:
+    """Parametros CONGELADOS + o perfil do instrumento em vigor. Os valores
+    dependentes de instrumento sao lidos AGORA (apos `usar_instrumento`),
+    nao na importacao."""
+    base = dict(FICHAS[ficha])
+    base.update({"TICK_WIN": ep.TICK_WIN, "CUSTO_PONTOS": ep.CUSTO_PONTOS,
+                 "INSTRUMENTO": ep.INSTRUMENTO.resumo()})
+    if ficha == "ifr2":
+        base.update({"HORA_PRIMEIRO_FECHAMENTO": ep.HORA_PRIMEIRO_FECHAMENTO,
+                     "HORA_ULTIMO_FECHAMENTO": ep.HORA_ULTIMO_FECHAMENTO})
+    elif ficha == "orb":
+        base.update({"ORB_BARRAS_RANGE": list(ep.ORB_BARRAS_RANGE),
+                     "ORB_PRIMEIRA_ENTRADA": ep.ORB_PRIMEIRA_ENTRADA,
+                     "ORB_ULTIMA_ENTRADA": ep.ORB_ULTIMA_ENTRADA,
+                     "ORB_AMPLITUDE_MINIMA": ep.ORB_AMPLITUDE_MINIMA})
+    elif ficha == "123":
+        base.update({"P123_ULTIMO_FECHAMENTO": ep.P123_ULTIMO_FECHAMENTO,
+                     "P123_D_MINIMO": ep.P123_D_MINIMO})
+    return base
+
+
 def hash_ficha(ficha: str = "ifr2") -> str:
-    return hashlib.sha256(json.dumps(FICHAS[ficha], sort_keys=True).encode()).hexdigest()[:12]
+    return hashlib.sha256(json.dumps(parametros_da_ficha(ficha), sort_keys=True,
+                                     default=str).encode()).hexdigest()[:12]
 
 
 # ---------------------------------------------------------------------
@@ -453,7 +475,7 @@ def rodar(dump: Path, saida: Path, amostra: str,
          "123": lambda: resolver_123(d)}[ficha]()
     pl = placar(r, ficha)
     carimbo = {"codigo": _carimbo(), "hash_ficha": hash_ficha(ficha), "ficha": ficha,
-               "parametros": FICHAS[ficha],
+               "parametros": parametros_da_ficha(ficha),
                "rodado_em": dt.datetime.now().isoformat(timespec="seconds"),
                "forcado_motivo": forcar_motivo}
     saida.mkdir(parents=True, exist_ok=True)
