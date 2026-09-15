@@ -2144,3 +2144,14 @@ identicas ao tick. As duas diferencas viraram regra no construtor:
 as ~09:50: open/low 75 e 155 pts fora) -> excluida da conta e, no EA, de
 sinal e indicador. 10/09: sem tape por queda de conexao; backfill do
 operador. 829 testes.
+
+### 2026-09-15 — passo 2 do F5 do 123: semente da MME80 (v2.75)
+
+- `ea/semente.py`: `IndicadorMME` (alpha 2/(n+1), semeado em valor
+  dado), `construir_semente` (mme80_ntsl da ultima barra do parquet +
+  ponte pelo tape com o construtor do EA; dia util sem >= 30 barras e
+  nao declarado feriado -> INVALIDA com o dia no motivo), `conferir_no_dia`
+  (recursao pelo tape de D contra o mme80_ntsl do grafico em D).
+- `profit-tape semente-conferir <parquet> --dia D [--feriado ...]`.
+- 7 testes (semente exata, ponte, dia faltando / feriado, tape fino,
+  sem parquet, recursao reproduz o grafico ao centesimo). 836 no total.

@@ -1429,6 +1429,45 @@ def barra_tempo_conferir(
                "foi tirado, e as do comeco do dia se o record entrou tarde).")
 
 
+@app.command(name="semente-conferir")
+def semente_conferir(
+    parquet: Path = typer.Argument(..., help="barras_123.parquet (saida do eas-preco --ficha 123)"),
+    dia: str = typer.Option(
+        ..., "--dia", help="YYYY-MM-DD: dia a operar (a semente usa so' o que vem ANTES)"),
+    curated: Path = typer.Option(Path("data/curated"), "--curated"),
+    symbol: str = typer.Option("WINFUT", "--symbol"),
+    feriado: list[str] = typer.Option([], "--feriado", help="YYYY-MM-DD sem pregao (repetivel)"),
+    log_level: str = typer.Option("INFO", "--log-level"),
+) -> None:
+    """
+    Passo 2 do F5 do 123: semente da MME80 (parquet do grafico + ponte
+    pelo tape) e a recursao ao longo do dia, comparada barra a barra com
+    o mme80_ntsl do grafico no mesmo dia. Diferenca esperada: < 0,5 pt.
+    """
+    import datetime as dt
+
+    configurar(log_level)
+    from .ea.semente import conferir_no_dia
+
+    r = conferir_no_dia(parquet, dt.date.fromisoformat(dia), curated, symbol,
+                        feriados=tuple(dt.date.fromisoformat(f) for f in feriado))
+    typer.echo("=" * 72)
+    typer.echo(f"SEMENTE DA MME80 — {dia}")
+    typer.echo("=" * 72)
+    s = r["semente"]
+    typer.echo(f"  valida={s['valida']}  valor={s['valor']}  ultima barra={s['ultima_barra']}")
+    typer.echo(f"  parquet ate'={s['parquet_ate']}  ponte pelo tape={s['ponte_dias']} "
+               f"{s['barras_por_dia_ponte']}")
+    if "erro" in r:
+        typer.echo(f"  SEM SEMENTE: {r['erro']}")
+        return
+    typer.echo(f"\n  barras do dia={r['barras']}  comparaveis={r['comparaveis']}  "
+               f"dif_max={r['dif_max']} pt  primeira={r['dif_primeira']}  ultima={r['dif_ultima']}")
+    for ln in r["detalhe"][:3] + r["detalhe"][-2:]:
+        typer.echo(f"      {ln}")
+    typer.echo("\n  Veredito: BATE se dif_max < 0,5 pt.")
+
+
 @app.command(name="eas-preco-teste")
 def eas_preco_teste(
     log: Path = typer.Argument(..., help="Dump PRCBARRA| contendo SO' os dias da amostra pedida"),

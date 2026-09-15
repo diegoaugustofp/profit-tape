@@ -53,7 +53,7 @@ Passos, cada um uma entrega:
 | # | passo | estado |
 |---|---|---|
 | 1 | barra de TEMPO no EA (`ConstrutorDeBarraDeTempo`, M15 alinhado à bolsa) | **FECHADO (v2.74)**: 69/69 barras identicas ao grafico no dado real; dobra no fim de sessao e barra parcial viraram regra |
-| 2 | semente da MME80 (400 barras do parquet antes do 1º trade; sem semente não arma) | |
+| 2 | semente da MME80 (parquet do gráfico + ponte pelo tape; sem semente não arma) | **entregue (v2.75)**; falta `semente-conferir` no dado real |
 | 3 | `SinalPreco123` importando `marcar_123` do research (uma fórmula, dois lados) | |
 | 3b | E2b — stop / limitada / cancel / OCO na demo | **FECHADO 14/09** |
 | 4 | ciclo de ordens do 123 (stop de entrada → cancela no fim de t+1; fill → stop + limitada; um executa → cancela o outro), slippage e latência por ordem | |

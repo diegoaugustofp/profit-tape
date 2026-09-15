@@ -838,12 +838,20 @@ observacao.
    na barra 18:15 (`fim_sessao_hhmm=1830`); (b) a primeira barra depois
    de ligar pode ser PARCIAL (`BarraFechada.parcial=True`, o EA nao a
    usa). 10/09 sem tape por queda de conexao — backfill do operador.
-2. **Semente dos indicadores** — MME80 continua entre pregoes e leva
-   400 barras (~11 pregoes) para esquecer a semente. O EA carrega as
-   ultimas 400 barras M15 do dump mais recente (`barras_123.parquet`)
-   ANTES do primeiro trade do dia; sem semente valida, nao arma sinal
-   e loga `ea.sem_semente`. Quando `RequestSerieHistory` existir,
-   substitui o parquet — mesmo contrato.
+2. **Semente dos indicadores** — **ENTREGUE (v2.75)**: `ea/semente.py`.
+   A MME80 e' semeada no `mme80_ntsl` da ULTIMA barra do parquet do
+   grafico (valor do proprio Profit, sem aquecimento) e, se o parquet
+   parar antes da vespera, a PONTE vem do tape: os dias que faltam sao
+   reconstruidos com o `ConstrutorDeBarraDeTempo` e a recursao continua
+   barra a barra. Validade: todo dia util entre o fim do parquet e a
+   vespera precisa de >= 30 barras de tape ou estar declarado feriado
+   — senao a semente e' INVALIDA com o dia no motivo, e o EA nao arma.
+   A barra parcial entra na MME (o close esta' certo); o que ela
+   invalida e' geometria. `profit-tape semente-conferir <parquet> --dia
+   D` mede, no dado real, a recursao do dia inteiro contra o
+   `mme80_ntsl` do grafico. Quando `RequestSerieHistory` existir,
+   substitui o parquet — mesmo contrato. O 123 nao usa ATR (D e'
+   geometrico), entao so' a MME80 precisa de semente.
 3. **`SinalPreco123`** — no fechamento de t: padrao, regime, janela, D;
    arma `OrdemPendente(lado, entrada, stop, alvo, valida_ate=fim de
    t+1)`. Python identico a `eas_preco.marcar_123` — mesma funcao,
