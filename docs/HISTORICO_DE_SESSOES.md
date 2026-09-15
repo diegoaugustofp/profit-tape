@@ -2254,3 +2254,15 @@ operador. 829 testes.
   485 — confundidor volume x tamanho); estrato por quartil de D
   declarado ANTES do teste (`por_quartil_de_d`, no resultado e no
   combinado). Ficha 9 CONGELADA. 869 testes.
+
+### 2026-09-15 — ficha 9 FECHADA (volume alto nulo); complemento 0,552; ficha 12 declarada (v2.86)
+
+- Combinado: gate (volume acima) 0,506 [0,487; 0,525] -> fecha. Complemento
+  (volume abaixo) 0,552 [0,535; 0,569], n=3.366, dez de onze anos, +39
+  pts/op; separa DENTRO dos quartis de D (Q1 0,575 vs 0,526; Q2 0,564 vs
+  0,538; Q3 0,525 vs 0,495). Nao se declara vencedor: era estrato, e o
+  WIN esta' queimado para a familia.
+- Ficha 12 "123 em volume BAIXO" (`123gate_baixo`): primario = volume
+  abaixo, contraste = acima; `eas-preco-teste` RECUSA `--instrumento win`
+  para ela; testa-se no WDO (dez anos virgens de volume) e no forward.
+- 869 testes (uma falha intermitente numa rodada, verde nas duas seguintes: teste com sleep; a investigar se repetir).

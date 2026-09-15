@@ -101,6 +101,17 @@ FICHAS: dict[str, dict[str, Any]] = {
                 "P123_D_MINIMO": ep.P123_D_MINIMO,
                 "GATE": "vol_total(t) >= mediana(hhmm, 20 pregoes anteriores)",
                 "GATE_JANELA_PREGOES": ep.GATE_JANELA_PREGOES},
+    # ficha 12 (docs): hipotese GERADA no WIN pelo complemento da ficha 9;
+    # so' pode ser testada onde nenhum teste de volume tocou (WDO) e no
+    # forward. Primario = volume ABAIXO da mediana; contraste = acima.
+    "123gate_baixo": {**_COMUM, "TRIAL": 1,
+                      "P123_REGIME_NA_CLAUSULA": ep.P123_REGIME_NA_CLAUSULA,
+                      "P123_PRIMEIRO_FECHAMENTO": ep.P123_PRIMEIRO_FECHAMENTO,
+                      "P123_ULTIMO_FECHAMENTO": ep.P123_ULTIMO_FECHAMENTO,
+                      "P123_D_MINIMO": ep.P123_D_MINIMO,
+                      "GATE": "vol_total(t) < mediana(hhmm, 20 pregoes anteriores)",
+                      "GATE_JANELA_PREGOES": ep.GATE_JANELA_PREGOES,
+                      "ORIGEM": "complemento da ficha 9 no WIN (2026-09-15); WIN queimado"},
 }
 # Compatibilidade com quem importa os nomes antigos (IFR2).
 PARAMETROS_FICHA = FICHAS["ifr2"]
@@ -500,7 +511,7 @@ def combinar(saida: Path, ficha: str) -> dict[str, Any]:
     pl = placar(r, ficha)
     pl["por_ano_reportado"] = por_ano(r, z_ic(trial_de(ficha)))
     comps = [saida / f"sinais_{ficha}_{a}_complemento.csv" for a in presentes]
-    if ficha == "123gate" and all(c.exists() for c in comps):
+    if ficha in ("123gate", "123gate_baixo") and all(c.exists() for c in comps):
         rc = pd.concat([pd.read_csv(c) for c in comps], ignore_index=True)
         pl["complemento_reportado"] = _placar(rc, z_ic(trial_de(ficha)))
         pl["complemento_por_ano"] = por_ano(rc, z_ic(trial_de(ficha)))
@@ -519,6 +530,10 @@ def rodar(dump: Path, saida: Path, amostra: str,
           forcar_motivo: str | None = None, ficha: str = "ifr2") -> dict[str, Any]:
     if ficha not in FICHAS:
         raise SystemExit(f"ficha '{ficha}' nao existe; use {sorted(FICHAS)}")
+    if ficha == "123gate_baixo" and ep.INSTRUMENTO.nome == "win":
+        raise SystemExit("ficha 123gate_baixo foi GERADA no WIN (complemento da ficha 9): "
+                         "2015-2026 do WIN esta' queimado para ela. Teste no WDO "
+                         "(--instrumento wdo) ou no forward.")
     df, meta = ep.carregar_log(dump)
     d = ep.indicadores(df)
     d = recortar_amostra(d, amostra)
@@ -536,12 +551,13 @@ def rodar(dump: Path, saida: Path, amostra: str,
     r = {"ifr2": lambda: resolver_sinais(ep.marcar_ifr2(d)),
          "orb": lambda: resolver_orb(d),
          "123": lambda: resolver_123(d),
-         "123gate": lambda: resolver_123(d, gate=True)}[ficha]()
+         "123gate": lambda: resolver_123(d, gate=True),
+         "123gate_baixo": lambda: resolver_123(d, gate=False)}[ficha]()
     pl = placar(r, ficha)
     saida.mkdir(parents=True, exist_ok=True)
-    if ficha == "123gate":
+    if ficha in ("123gate", "123gate_baixo"):
         # o COMPLEMENTO e' o contraste que diz se o gate SEPARA -- reportado
-        r_comp = resolver_123(d, gate=False)
+        r_comp = resolver_123(d, gate=(ficha == "123gate_baixo"))
         pl["complemento_reportado"] = _placar(r_comp, z_ic(trial_de(ficha)))
         pl["por_quartil_de_D_reportado"] = por_quartil_de_d(r, r_comp, z_ic(trial_de(ficha)))
         r_comp.to_csv(saida / f"sinais_{ficha}_{amostra}_complemento.csv", index=False)

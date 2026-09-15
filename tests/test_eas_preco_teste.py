@@ -264,3 +264,23 @@ def test_por_quartil_de_d_separa_gate_e_complemento() -> None:
     assert total == 400
     # D pequeno = complemento
     assert pq["Q1"]["complemento"]["n_resolvidas"] > pq["Q1"]["gate"]["n_resolvidas"]
+
+
+def test_ficha_123gate_baixo_recusa_win_e_roda_no_wdo(tmp_path: Path) -> None:
+    import importlib
+
+    from tests.test_eas_preco import _dia, _dump
+    d = _dia(1250901, 1)
+    for b in d:
+        b["vol_total"] = 100
+    dump = _dump(tmp_path, d)
+    with pytest.raises(SystemExit, match="queimado"):
+        et.rodar(dump, tmp_path / "s", "teste", ficha="123gate_baixo")
+    try:
+        ep.usar_instrumento("wdo")
+        r = et.rodar(dump, tmp_path / "s", "teste", ficha="123gate_baixo")
+        assert r["arquivo"].name == "resultado_123gate_baixo_teste.json"
+        assert r["carimbo"]["parametros"]["TRIAL"] == 1 and "complemento_reportado" in r["placar"]
+    finally:
+        ep.usar_instrumento("win")
+        importlib.reload(ep)

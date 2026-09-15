@@ -83,8 +83,10 @@ ou `venda_apenas` no outro ticker).
 
 ### B3. Depois do WDO — ordem decidida pelo operador (15/09)
 
-1. **123 + gate de volume de candle** (`EAS_DE_PRECO.md` 9): a porta,
-   testável hoje com 10 anos de `vol_total`; funil entregue (v2.84).
+1. **123 + gate de volume** (`EAS_DE_PRECO.md` 9): FECHADA no sentido
+   declarado (volume alto = nulo). O COMPLEMENTO — volume baixo — deu
+   0,552 [0,535; 0,569], dez anos consistentes, e separa dentro dos
+   quartis de D. Vira **ficha 12**, testada no WDO (v2.86) e no forward.
 2. Gap de abertura (10) e máx/mín da véspera (11): declaradas, a escrever.
 3. Ações por último.
 

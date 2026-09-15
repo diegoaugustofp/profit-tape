@@ -1181,6 +1181,59 @@ grande nao resolvendo no dia — reportado com a zeragem, como sempre.
 **CONGELADA (2026-09-15)** com a clausula da v0, este estrato a mais, e a
 sequencia declarada. Nenhum p1 calculado.
 
+### 9.2 RESULTADO — a hipotese e' FALSA no sentido declarado; o COMPLEMENTO e' o achado (2026-09-15, `a9abff26ba21`)
+
+| conjunto | resolvidas | p1 | IC95 | P&L bruto/op | por-ano |
+|---|---|---|---|---|---|
+| gate (volume ACIMA da mediana) — primario | 2.581 | 0,506 | [0,487; 0,525] | -7 | 2016 e 2022 > 0,54; 2021 0,46; 2026 0,62 (n=104) |
+| complemento (volume ABAIXO) — reportado | 3.366 | **0,552** | **[0,535; 0,569]** | **+39** | 2016-2026: dez de onze anos entre 0,52 e 0,59 |
+
+Por quartil de D (declarado para separar volume de tamanho):
+
+| quartil de D | gate | complemento |
+|---|---|---|
+| Q1 (< 390) | 0,526 (n=234) | **0,575** (n=1.285) |
+| Q2 (390-565) | 0,538 (517) | **0,564** (961) |
+| Q3 (565-825) | 0,495 (753) | **0,525** (712) |
+| Q4 (> 825) | 0,494 (1.077) | 0,498 (408) |
+
+**Leitura:** o gate como declarado (volume alto) e' nulo — a ficha 9
+FECHA. Volume SEPARA dentro dos quartis (3-5 pp, Q1-Q3), no sentido
+CONTRARIO ao declarado: o 123 que se forma em volume BAIXO continua
+mais. Tamanho tambem importa (Q1 > Q4 nos dois lados) — observacao
+registrada, sem acao. Mecanismo, dito depois de ver (por isso nao
+vale como evidencia): recuo sem conviccao continua; recuo com briga
+vira qualquer coisa.
+
+**O que NAO se faz:** declarar o complemento vencedor. Era estrato
+reportado, a hipotese tinha direcao, e 2015-2026 do WIN esta' queimado
+para a familia 123 — escolher o estrato bom depois de ver e' o erro que
+a disciplina existe para evitar, mesmo com IC a 97,5% [0,532; 0,572] e
+dez anos consistentes.
+
+## 12. Ficha "123 em volume BAIXO" — DECLARADA (2026-09-15, `entregue-v2.86`)
+
+**Origem:** complemento da ficha 9 no WIN. Hipotese GERADA la'; o WIN
+2015-2026 nao pode testa-la (`eas-preco-teste` recusa `--instrumento
+win` para esta ficha). Familia "123gate_baixo", trial 1.
+
+    HIPOTESE   Um 123 cuja barra t fecha com volume ABAIXO da mediana do
+               horario (20 pregoes anteriores) continua mais do que um
+               com volume acima: p1 >= 0,56 no conjunto de volume baixo,
+               e o contraste (volume acima) fica abaixo.
+    EVENTO     Ficha 5.2 E vol_total(t) < mediana. Tudo o mais igual.
+    ONDE       (a) WDO, dez anos, onde nenhum teste de volume tocou e o
+               123 puro deu 0,514 — replicacao em OUTRO instrumento,
+               gerada no WIN e confirmada (ou nao) no dolar; (b) FORWARD
+               no WIN: o gate do EA (`filtro_fluxo`) passa a ser volume
+               abaixo da mediana, medido daqui para a frente, depois da
+               conferencia tape x grafico do volume (pendente).
+    CRITERIO   No WDO: como sempre, com o contraste e o por-quartil
+               reportados. Se o WDO nao separar, o achado do WIN fica
+               "interessante, nao replicado", registrado assim.
+    AMOSTRAS   WDO: depuracao -> teste -> replicacao -> historico ->
+               combinado, `--instrumento wdo`, `--ficha 123gate_baixo`.
+
 ## 10. Ficha "gap de abertura" — DECLARADA, rascunho (a escrever antes do funil)
 
 Informacao que nenhuma das tres usa: a NOITE. Gap = open(09:00) do dia

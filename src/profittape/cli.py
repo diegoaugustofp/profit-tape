@@ -1236,7 +1236,7 @@ def eas_preco(
     log: Path = typer.Argument(
         ..., help="Dump do console com linhas PRCBARRA| (grafico M15 do WINFUT)"),
     saida: Path = typer.Option(Path("data/research/eas_preco"), "--saida"),
-    ficha: str = typer.Option("ifr2", "--ficha", help="ifr2 | orb | 123 | 123gate"),
+    ficha: str = typer.Option("ifr2", "--ficha", help="ifr2 | orb | 123 | 123gate | 123gate_baixo"),
     instrumento: str = typer.Option(
         "win", "--instrumento", help="win | wdo (perfil de tick/custo/sessao)"),
     tolerancia: float = typer.Option(
@@ -1516,7 +1516,7 @@ def eas_preco_teste(
     log: Path = typer.Argument(..., help="Dump PRCBARRA| contendo SO' os dias da amostra pedida"),
     amostra: str = typer.Option(
         ..., "--amostra", help="teste | replicacao | depuracao | historico_2015_22"),
-    ficha: str = typer.Option("ifr2", "--ficha", help="ifr2 | orb | 123 | 123gate"),
+    ficha: str = typer.Option("ifr2", "--ficha", help="ifr2 | orb | 123 | 123gate | 123gate_baixo"),
     instrumento: str = typer.Option("win", "--instrumento", help="win | wdo"),
     saida: Path = typer.Option(Path("data/research/eas_preco_teste"), "--saida"),
     forcar: str | None = typer.Option(
