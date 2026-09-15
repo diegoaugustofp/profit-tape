@@ -1625,7 +1625,8 @@ def eas_preco_combinar(
         typer.echo(f"  {nome:16} n={e['n_resolvidas']:5d}  p1={e['p1']}  IC={e['ic95']}")
     if "complemento_reportado" in pl:
         cp = pl["complemento_reportado"]
-        typer.echo("\n--- COMPLEMENTO (sinal 123 com volume ABAIXO da mediana; reportado) ---")
+        lado = "ACIMA" if ficha == "123gate_baixo" else "ABAIXO"
+        typer.echo(f"\n--- COMPLEMENTO (sinal 123 com volume {lado} da mediana; reportado) ---")
         typer.echo(f"  n={cp['n_resolvidas']}  p1={cp['p1']}  IC={cp['ic95']}  "
                    f"pnl_bruto={cp['pnl_bruto_pts_medio']}")
         for ano, e in pl["complemento_por_ano"].items():

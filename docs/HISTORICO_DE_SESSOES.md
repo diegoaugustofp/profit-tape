@@ -2266,3 +2266,8 @@ operador. 829 testes.
   abaixo, contraste = acima; `eas-preco-teste` RECUSA `--instrumento win`
   para ela; testa-se no WDO (dez anos virgens de volume) e no forward.
 - 869 testes (uma falha intermitente numa rodada, verde nas duas seguintes: teste com sleep; a investigar se repetir).
+- v2.87: ficha 12 no WDO — volume baixo 0,534 [0,516; 0,552] n=2.863,
+  contraste 0,5005, 11/12 anos, mesma forma por quartil do WIN, P&L com
+  IC acima de zero. INCONCLUSIVO pelo 0,56; real como efeito em dois
+  instrumentos. Proximo: conferencia de volume tape x grafico, depois o
+  gate no EA. Rotulo do contraste no combinar corrigido.

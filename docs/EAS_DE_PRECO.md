@@ -1234,6 +1234,32 @@ win` para esta ficha). Familia "123gate_baixo", trial 1.
     AMOSTRAS   WDO: depuracao -> teste -> replicacao -> historico ->
                combinado, `--instrumento wdo`, `--ficha 123gate_baixo`.
 
+### 12.1 RESULTADO NO WDO — replica a estrutura; INCONCLUSIVO pelo criterio (2026-09-15, `d744e7d4ad26`)
+
+| | resolvidas | p1 | IC95 | P&L bruto/op (pts WDO) |
+|---|---|---|---|---|
+| primario: volume ABAIXO | 2.863 | **0,534** | **[0,516; 0,552]** | **+0,8 [0,1; 1,4]** |
+| contraste: volume ACIMA | 1.950 | 0,5005 | [0,478; 0,523] | -0,5 |
+
+Por-ano: onze de doze acima de 0,50 (2021: 0,503). Por quartil de D:
+Q1 0,534 vs 0,50; Q2 0,559 vs 0,513; Q3 0,541 vs 0,517; Q4 ambos < 0,50
+— o MESMO desenho do WIN (9.2). P&L com IC inteiro acima de zero, o
+primeiro da linha. Direcao, magnitude (3-4 pp de separacao) e forma por
+quartil replicadas em outro instrumento.
+
+**Pelo criterio: INCONCLUSIVO** (0,534 < 0,56). O criterio nao muda — e'
+"efeito que vale operar como esta'". O que os dois instrumentos dizem
+juntos: *o 123 em volume baixo e' um efeito real e pequeno, 0,53-0,55,
+presente em WIN e WDO por dez anos.* Pequeno demais para EA proprio;
+suficiente para ser o GATE do 123 no forward — o caminho declarado no
+dia 1, agora com evidencia atras.
+
+**Proximo (decidido 15/09):** (1) conferencia tape x grafico do VOLUME
+(`barra-tempo-conferir`, pendente) — sem ela o gate nao existe ao vivo;
+(2) se bater, `GateVolumeBaixo` no EA (perfil de 20 pregoes por horario
+do parquet + ponte pelo tape, como a semente) e `filtro_fluxo:
+{tipo: volume_baixo}` no `ea_123.yaml` — carimbo novo, contagem nova.
+
 ## 10. Ficha "gap de abertura" — DECLARADA, rascunho (a escrever antes do funil)
 
 Informacao que nenhuma das tres usa: a NOITE. Gap = open(09:00) do dia

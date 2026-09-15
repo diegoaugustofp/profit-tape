@@ -86,7 +86,9 @@ ou `venda_apenas` no outro ticker).
 1. **123 + gate de volume** (`EAS_DE_PRECO.md` 9): FECHADA no sentido
    declarado (volume alto = nulo). O COMPLEMENTO — volume baixo — deu
    0,552 [0,535; 0,569], dez anos consistentes, e separa dentro dos
-   quartis de D. Vira **ficha 12**, testada no WDO (v2.86) e no forward.
+   quartis de D. **Ficha 12 replicou no WDO** (0,534 [0,516; 0,552], mesma
+   forma por quartil, 11/12 anos) — inconclusivo pelo 0,56, real como
+   efeito. Vira o gate do 123 no forward, depois da conferência de volume.
 2. Gap de abertura (10) e máx/mín da véspera (11): declaradas, a escrever.
 3. Ações por último.
 
