@@ -444,6 +444,33 @@ def por_ano(r: pd.DataFrame, z: float) -> dict[str, Any]:
     return {str(a): _placar(r[anos == a], z) for a in sorted(anos.unique())}
 
 
+def por_quartil_de_d(r_gate: pd.DataFrame, r_comp: pd.DataFrame, z: float) -> dict[str, Any]:
+    """
+    Estrato DECLARADO antes do teste (ficha 9, 2026-09-15): o gate de volume
+    seleciona padroes MAIORES (D mediano 825 vs 485 pts no funil). Se o p1
+    do gate diferir do complemento, pode ser volume ou pode ser tamanho.
+    Quartis de D definidos no conjunto TOTAL (gate + complemento); p1 de
+    cada lado DENTRO de cada quartil. Separa dentro = volume; so' entre =
+    tamanho. Reportado, sem veredito.
+    """
+    if r_gate.empty and r_comp.empty:
+        return {}
+    todos = pd.concat([r_gate.assign(_g=True), r_comp.assign(_g=False)], ignore_index=True)
+    if "classe" not in todos:
+        return {}
+    todos = todos[todos["classe"] == "resolvida"]
+    if todos.empty or todos["D_pts"].nunique() < 4:
+        return {}
+    cortes = todos["D_pts"].quantile([0.25, 0.5, 0.75]).tolist()
+    todos["q"] = pd.cut(todos["D_pts"], [-float("inf"), *cortes, float("inf")],
+                        labels=["Q1", "Q2", "Q3", "Q4"])
+    out: dict[str, Any] = {"cortes_D_pts": [round(c, 1) for c in cortes]}
+    for q in ["Q1", "Q2", "Q3", "Q4"]:
+        sub = todos[todos["q"] == q]
+        out[q] = {"gate": _placar(sub[sub["_g"]], z), "complemento": _placar(sub[~sub["_g"]], z)}
+    return out
+
+
 def combinar(saida: Path, ficha: str) -> dict[str, Any]:
     """
     Le `sinais_<ficha>_<amostra>.csv` de todas as amostras combinaveis
@@ -477,6 +504,7 @@ def combinar(saida: Path, ficha: str) -> dict[str, Any]:
         rc = pd.concat([pd.read_csv(c) for c in comps], ignore_index=True)
         pl["complemento_reportado"] = _placar(rc, z_ic(trial_de(ficha)))
         pl["complemento_por_ano"] = por_ano(rc, z_ic(trial_de(ficha)))
+        pl["por_quartil_de_D_reportado"] = por_quartil_de_d(r, rc, z_ic(trial_de(ficha)))
     pl["amostras"] = presentes
     pl["hash_ficha"] = next(iter(hashes)) if hashes else None
     (saida / f"resultado_{ficha}_COMBINADO.json").write_text(
@@ -515,6 +543,7 @@ def rodar(dump: Path, saida: Path, amostra: str,
         # o COMPLEMENTO e' o contraste que diz se o gate SEPARA -- reportado
         r_comp = resolver_123(d, gate=False)
         pl["complemento_reportado"] = _placar(r_comp, z_ic(trial_de(ficha)))
+        pl["por_quartil_de_D_reportado"] = por_quartil_de_d(r, r_comp, z_ic(trial_de(ficha)))
         r_comp.to_csv(saida / f"sinais_{ficha}_{amostra}_complemento.csv", index=False)
     carimbo = {"codigo": _carimbo(), "hash_ficha": hash_ficha(ficha), "ficha": ficha,
                "parametros": parametros_da_ficha(ficha),

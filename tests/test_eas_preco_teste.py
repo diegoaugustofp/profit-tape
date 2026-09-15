@@ -1,9 +1,11 @@
+
 """research/eas_preco_teste.py -- o teste da ficha IFR2 congelada."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
 from profittape.research import eas_preco as ep
@@ -246,3 +248,19 @@ def test_ficha_123gate_tem_trial_1_hash_proprio_e_complemento(tmp_path: Path) ->
     assert r["arquivo"].name == "resultado_123gate_teste.json"
     assert "complemento_reportado" in r["placar"]
     assert (tmp_path / "s" / "sinais_123gate_teste_complemento.csv").exists()
+
+
+def test_por_quartil_de_d_separa_gate_e_complemento() -> None:
+    import numpy as np
+    rng = np.random.default_rng(1)
+    def _r(n: int, base_d: float) -> pd.DataFrame:
+        return pd.DataFrame({"classe": "resolvida", "D_pts": base_d + rng.integers(0, 400, n) * 5.0,
+                             "resultado": rng.choice([1.0, -1.0], n), "pnl_bruto_pts": 0.0,
+                             "lado": "compra", "a_favor_mme80": True})
+    pq = et.por_quartil_de_d(_r(200, 500.0), _r(200, 100.0), et.Z95)
+    assert set(pq) == {"cortes_D_pts", "Q1", "Q2", "Q3", "Q4"} and len(pq["cortes_D_pts"]) == 3
+    total = sum(pq[q]["gate"]["n_resolvidas"] + pq[q]["complemento"]["n_resolvidas"]
+                for q in ("Q1", "Q2", "Q3", "Q4"))
+    assert total == 400
+    # D pequeno = complemento
+    assert pq["Q1"]["complemento"]["n_resolvidas"] > pq["Q1"]["gate"]["n_resolvidas"]

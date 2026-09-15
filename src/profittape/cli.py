@@ -1630,6 +1630,14 @@ def eas_preco_combinar(
                    f"pnl_bruto={cp['pnl_bruto_pts_medio']}")
         for ano, e in pl["complemento_por_ano"].items():
             typer.echo(f"  {ano}  n={e['n_resolvidas']:4d}  p1={e['p1']}")
+    if pl.get("por_quartil_de_D_reportado"):
+        pq = pl["por_quartil_de_D_reportado"]
+        typer.echo(f"\n--- POR QUARTIL DE D (reportado; volume ou tamanho?) "
+                   f"cortes={pq['cortes_D_pts']} ---")
+        for q in ("Q1", "Q2", "Q3", "Q4"):
+            g, cpl = pq[q]["gate"], pq[q]["complemento"]
+            typer.echo(f"  {q}  gate n={g['n_resolvidas']:4d} p1={g['p1']}  |  "
+                       f"complemento n={cpl['n_resolvidas']:4d} p1={cpl['p1']}")
     typer.echo(f"\n  Saida: {saida}/resultado_{ficha}_COMBINADO.json")
 
 

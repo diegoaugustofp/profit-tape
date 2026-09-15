@@ -2250,3 +2250,7 @@ operador. 829 testes.
 - Barra de tempo ganha `vol_total` (todos os trades); `barra-tempo-conferir`
   reporta a diferenca de volume EA x grafico (equivalencia que o gate
   ao vivo precisa). 4 testes novos; 867 no total.
+- v2.85: funil do gate nos tres dumps (41-47% passam; D com gate 825 vs
+  485 — confundidor volume x tamanho); estrato por quartil de D
+  declarado ANTES do teste (`por_quartil_de_d`, no resultado e no
+  combinado). Ficha 9 CONGELADA. 869 testes.

@@ -1154,6 +1154,33 @@ RLP inclusive; medir, nao assumir).
 outra janela (10, 40 pregoes) se este nao separar — cada um e' familia
 nova sobre amostra ja' queimada por esta. Um gate, um numero, declarado.
 
+### 9.1 Funil (`entregue-v2.84`, tres dumps do WIN) e CONGELAMENTO (`entregue-v2.85`)
+
+| | 2015-22 | 2023-25 | 2026 |
+|---|---|---|---|
+| fracao dos sinais 123 que passam | 47% | 44% | 41% |
+| sinais com gate / pregao | 1,62 | 1,46 | 1,21 |
+| D p50 com gate / sem gate (pts) | 825 / 485 | 575 / 330 | 790 / 500 |
+| vol(t)/mediana p50 nos que passam | 1,2 | 1,2 | 1,2 |
+| ambigua / por tempo (com gate) | 3,6% / 19% | 2,7% / 26% | 4,3% / 25% |
+
+Estacionario. Combinado 2015-26: ~3.100 resolvidas, +-1,8 pp.
+
+**Confundidor, visto no funil e declarado ANTES do teste:** o gate
+seleciona padroes MAIORES — D mediano 825 contra 485. Volume e amplitude
+andam juntos. E o teste do 123 mostrou que os vencedores tinham D menor
+que os perdedores. Se o gate der p1 diferente do complemento, pode ser
+volume ou pode ser tamanho; o contraste sozinho nao separa. **Estrato
+acrescentado, de reporte, sem mudar clausula:** p1 do gate e do
+complemento DENTRO de cada quartil de D (quartis do conjunto total).
+Separa dentro dos quartis = volume; so' entre = tamanho, e a hipotese
+e' falsa mesmo com p1 alto no total. (`por_quartil_de_D_reportado` no
+resultado e no combinado.) O "por tempo" alto (19-26%) e' o padrao
+grande nao resolvendo no dia — reportado com a zeragem, como sempre.
+
+**CONGELADA (2026-09-15)** com a clausula da v0, este estrato a mais, e a
+sequencia declarada. Nenhum p1 calculado.
+
 ## 10. Ficha "gap de abertura" — DECLARADA, rascunho (a escrever antes do funil)
 
 Informacao que nenhuma das tres usa: a NOITE. Gap = open(09:00) do dia
