@@ -408,6 +408,13 @@ def _declare(dll: Any) -> None:
         if hasattr(dll, "SendCancelOrder"):
             dll.SendCancelOrder.argtypes = [c_wchar_p, c_wchar_p, c_wchar_p, c_wchar_p]
             dll.SendCancelOrder.restype = c_int64
+        # 4b (2026-09-15): cancela TODAS as ordens vivas de um ticker --
+        # SendCancelOrders(conta, corretora, senha, ticker, bolsa). Usada na
+        # reconciliacao de ordens ao reconectar. A conferir ao vivo (mesmo
+        # metodo do E2b: uma chamada na demo).
+        if hasattr(dll, "SendCancelOrders"):
+            dll.SendCancelOrders.argtypes = [c_wchar_p, c_wchar_p, c_wchar_p, c_wchar_p, c_wchar_p]
+            dll.SendCancelOrders.restype = c_int64
 
     for nome in ("SubscribeTicker", "UnsubscribeTicker",
                  "SubscribeOfferBook", "UnsubscribeOfferBook",

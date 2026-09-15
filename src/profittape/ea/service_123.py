@@ -1,0 +1,145 @@
+"""
+EA do 123 (passo 7 do F5, EAS_DE_PRECO.md 5.4): o servico que a esteira
+multi-EA (E5) liga por YAML, com a MESMA interface duck-typed que o
+`EABridge` e o `RegistroDeEAs` esperam do `EAService`:
+`config.symbol`, `processar_trade_bruto`, `encerrar_dia`, `_hb`, e --
+novidade -- `tick()` (chamado pelo bridge a cada ~0,5 s), porque o 123
+tem duas coisas que o EA de fluxo nao tem: barra que fecha pelo
+relogio e ordens vivas na corretora cujos callbacks chegam fora do
+fluxo de trades.
+
+ARRANQUE
+--------
+1. Semente da MME80 (`semente.construir_semente`) para o dia de HOJE
+   com o parquet + ponte pelo tape. Invalida -> o EA sobe SEM armar
+   (`ea.123.sem_semente`) e so' atualiza a MME. E' regra da ficha.
+2. `SinalPreco123` com a MME semeada; `CicloDeOrdens123` com o executor
+   (None em dry_run), o gate (`filtro_fluxo`), as vagas do modo
+   exclusivo e o registro JSONL (passo 6).
+3. Carimbo: tag do codigo + sha256 do YAML, em cada linha do registro.
+
+RECONEXAO (4b)
+--------------
+`tick()` observa `client.corretora_pronta`; na transicao False -> True
+(a corretora voltou) chama `ciclo.reconciliar_apos_reconexao()`. Em
+dry_run o client pode nao existir (replay) -- nada a reconciliar.
+"""
+
+from __future__ import annotations
+
+import datetime as dt
+import time
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+from zoneinfo import ZoneInfo
+
+import structlog
+
+from ..research.fase2 import _carimbo
+from .barra_tempo import ConstrutorDeBarraDeTempo
+from .ciclo_123 import CicloDeOrdens123
+from .config_123 import EA123Config
+from .gate_fluxo import construir_gate
+from .registro_123 import RegistroDeSinais123
+from .semente import IndicadorMME, Semente, construir_semente
+from .sinal_123 import SinalPreco123
+
+log = structlog.get_logger(__name__)
+_TZ = ZoneInfo("America/Sao_Paulo")
+_NS = 1_000_000_000
+
+
+@dataclass
+class _TradeBruto:
+    ts_ns: int
+    price: float
+    quantidade: int
+    trade_type: int
+    agente_comprador: int = 0
+    agente_vendedor: int = 0
+
+
+class EA123Service:
+    def __init__(self, config: EA123Config, executor: Any | None = None,
+                 vagas: Any | None = None, nome: str | None = None,
+                 client: Any | None = None, dia: dt.date | None = None,
+                 curated: Path | None = None) -> None:
+        if not config.dry_run and executor is None:
+            raise SystemExit("dry_run=False exige um ExecutorDeOrdens construido")
+        self.config = config
+        self.nome = nome or config.nome or "ea_123"
+        self.client = client
+        self.dia = dia or dt.datetime.now(_TZ).date()
+        self.construtor = ConstrutorDeBarraDeTempo(config.periodo_barra_s,
+                                                    fim_sessao_hhmm=config.fim_sessao_hhmm)
+        self.carimbo = {"codigo": _carimbo(), "yaml_sha256": config.sha256(),
+                        "nome": self.nome, "dry_run": config.dry_run}
+        self.semente: Semente = construir_semente(
+            Path(config.semente_parquet), self.dia,
+            curated if curated is not None else Path(config.curated),
+            symbol=config.symbol, periodo_s=config.periodo_barra_s,
+            feriados=tuple(dt.date.fromisoformat(f) for f in config.feriados))
+        valor = self.semente.valor if self.semente.valida and self.semente.valor else 0.0
+        self.sinal = SinalPreco123(IndicadorMME(80, valor), config.periodo_barra_s)
+        if not self.semente.valida:
+            log.error("ea.123.sem_semente", motivo=self.semente.motivo, **self.carimbo,
+                      nota="EA sobe SEM armar sinal; a MME so' e' atualizada")
+            self.sinal.dia_completo = False
+        registro = None
+        if config.registro_dir:
+            registro = RegistroDeSinais123(Path(config.registro_dir), self.carimbo)
+        self.ciclo = CicloDeOrdens123(
+            self.sinal, executor=None if config.dry_run else executor,
+            quantidade=config.tamanho_posicao, zeragem_hhmm=config.zeragem_hhmm,
+            slack_limite_pts=config.slack_limite_pts, gate=construir_gate(config.filtro_fluxo),
+            vagas=vagas, symbol=config.symbol, nome=self.nome, registro=registro)
+        self._corretora_pronta_antes: bool | None = None
+        self._ultimo_tick = 0.0
+        self.trades = 0
+        self.barras = 0
+        log.warning("ea.123.iniciado", **self.carimbo, semente=self.semente.resumo(),
+                    symbol=config.symbol, periodo_s=config.periodo_barra_s,
+                    capital_recomendado_informativo=config.capital_recomendado_informativo())
+
+    # ------------------------------------------------------------------
+    def processar_trade_bruto(self, t: _TradeBruto) -> None:
+        self.trades += 1
+        b = self.construtor.processar_trade(t.ts_ns, t.price, t.quantidade, t.trade_type)
+        if b is not None:
+            self._barra(b)
+        self.ciclo.on_trade(t.ts_ns, t.price)
+
+    def _barra(self, b: Any) -> None:
+        self.barras += 1
+        if not self.semente.valida:
+            self.sinal.mme.atualizar(b.close)          # so' converge; nao arma
+            return
+        self.ciclo.on_barra(b)
+
+    def tick(self) -> None:
+        """A cada ~0,5 s (bridge): fecha barra pelo relogio, le callbacks das
+        ordens, detecta reconexao."""
+        agora = time.time()
+        if agora - self._ultimo_tick < 0.4:
+            return
+        self._ultimo_tick = agora
+        b = self.construtor.avancar_relogio(int(agora * _NS))
+        if b is not None:
+            self._barra(b)
+        if self.client is not None and not self.config.dry_run:
+            pronta = bool(getattr(self.client, "corretora_pronta", True))
+            if self._corretora_pronta_antes is False and pronta:
+                log.warning("ea.123.reconectado", nota="reconciliando ordens e posicao")
+                self.ciclo.reconciliar_apos_reconexao()
+            self._corretora_pronta_antes = pronta
+        self.ciclo.tick()
+
+    def encerrar_dia(self) -> None:
+        self.ciclo.encerrar_dia()
+        log.info("ea.123.encerramento_dia", **self._hb())
+
+    def _hb(self) -> dict[str, Any]:
+        return {"trades": self.trades, "barras": self.barras, "semente_valida": self.semente.valida,
+                "mme80": round(self.sinal.mme.valor, 1), "dia_completo": self.sinal.dia_completo,
+                **self.ciclo.hb()}

@@ -81,12 +81,26 @@ class EABridge:
                  filtrados_outro_simbolo=self._filtrados_outro_simbolo,
                  **self.ea_service._hb())
 
+    def _tick(self) -> None:
+        """EA com `tick()` (o 123: barra pelo relogio, callbacks de ordem,
+        reconexao). Chamado a cada volta do laco; o servico decide a
+        cadencia. Protegido: um erro no tick nao derruba a thread."""
+        tick = getattr(self.ea_service, "tick", None)
+        if tick is None:
+            return
+        try:
+            tick()
+        except Exception:
+            log.exception("ea_bridge.erro_no_tick")
+
     def _loop(self) -> None:
         while not self._parar_evento.is_set():
             try:
                 trade = self._fila.get(timeout=0.5)
             except queue.Empty:
+                self._tick()
                 continue
+            self._tick()
             try:
                 self.ea_service.processar_trade_bruto(_TradeBruto(
                     ts_ns=trade.ts_ns, price=trade.price,

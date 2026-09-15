@@ -45,6 +45,7 @@ from zoneinfo import ZoneInfo
 
 import structlog
 
+from .gate_fluxo import GateDeFluxo, SemFiltro
 from .sinal import BarraFechada
 from .sinal_123 import Candidato123, SinalPreco123
 
@@ -114,24 +115,35 @@ class OperacaoRegistrada:
     stop: OrdemViva | None = None
     alvo: OrdemViva | None = None
     zeragem: OrdemViva | None = None
-    desfecho: str = ""             # nao_executou | alvo | stop | zeragem | erro
+    desfecho: str = ""             # nao_executou | alvo | stop | zeragem | erro | reconciliado
     pnl_pts: float | None = None
     avisos: list[str] = field(default_factory=list)
+    barra_gatilho: dict[str, Any] | None = None    # fluxo de t+1 (passo 6)
 
     def resumo(self) -> dict[str, Any]:
         ordens = {k: v.resumo() for k, v in
                   (("entrada", self.entrada), ("stop", self.stop), ("alvo", self.alvo),
                    ("zeragem", self.zeragem)) if v is not None}
         return {"candidato": self.candidato.resumo(), "desfecho": self.desfecho,
-                "pnl_pts": self.pnl_pts, "avisos": self.avisos, "ordens": ordens}
+                "pnl_pts": self.pnl_pts, "avisos": self.avisos, "ordens": ordens,
+                "barra_gatilho": self.barra_gatilho}
 
 
 class CicloDeOrdens123:
     def __init__(self, sinal: SinalPreco123, executor: Any | None = None,
                  quantidade: int = 1, zeragem_hhmm: int = 1730,
-                 slack_limite_pts: float = 50.0, timeout_s: float = 10.0) -> None:
+                 slack_limite_pts: float = 50.0, timeout_s: float = 10.0,
+                 gate: GateDeFluxo | None = None,
+                 vagas: Any | None = None, symbol: str = "", nome: str = "",
+                 registro: Any | None = None) -> None:
         self.sinal = sinal
         self.executor = executor
+        self.gate: GateDeFluxo = gate or SemFiltro()
+        self.vagas, self.symbol, self.nome = vagas, symbol, nome
+        self.registro = registro                 # passo 6: grava cada operacao
+        self.rejeitados_gate = 0
+        self.sinais_sem_vaga = 0
+        self.reconciliacoes = 0
         self.dry_run = executor is None
         self.quantidade = quantidade
         self.zeragem_hhmm = zeragem_hhmm
@@ -209,10 +221,25 @@ class CicloDeOrdens123:
 
     # ------------------------------------------------------------ eventos
     def on_barra(self, b: BarraFechada) -> None:
+        # passo 6: a primeira barra fechada depois de armar e' a barra do
+        # GATILHO (t+1) -- o fluxo dela e' a amostra da porta de volume.
+        if (self.op is not None and self.op.barra_gatilho is None
+                and b.bar_id > self.op.candidato.barra_sinal_id):
+            self.op.barra_gatilho = {"bar_id": b.bar_id, "vol_agr_compra": b.vol_agr_compra,
+                                     "vol_agr_venda": b.vol_agr_venda, "n_trades": b.n_trades,
+                                     "high": b.high, "low": b.low, "close": b.close}
         c = self.sinal.barra_fechada(b)
         if c is None:
             return
         if self.estado == "livre":
+            if not self.gate.permite(c, b):
+                self.rejeitados_gate += 1
+                log.info("ea.123.rejeitado_gate", gate=type(self.gate).__name__, **c.resumo())
+                return
+            if self.vagas is not None and not self.vagas.tentar_ocupar(self.symbol, self.nome):
+                self.sinais_sem_vaga += 1
+                log.info("ea.123.sinal_sem_vaga", **c.resumo())
+                return
             self._armar(c)
         elif self.estado == "posicionado" or self.estado == "saindo":
             self.ignorados_posicao += 1
@@ -382,6 +409,8 @@ class CicloDeOrdens123:
         assert self.op is not None
         op = self.op
         op.desfecho = desfecho
+        if self.vagas is not None:
+            self.vagas.liberar(self.symbol, self.nome)
         e = op.entrada
         saida = {"alvo": op.alvo, "stop": op.stop, "zeragem": op.zeragem}.get(desfecho)
         if e.fill is not None and saida is not None and saida.fill is not None:
@@ -390,8 +419,72 @@ class CicloDeOrdens123:
             op.avisos.append(nota)
         self.operacoes.append(op)
         log.info("ea.123.operacao_fechada", **op.resumo())
+        if self.registro is not None:
+            try:
+                self.registro.gravar(op)
+            except Exception:
+                log.exception("ea.123.registro_falhou")
         self.op = None
         self.estado = "livre"
+
+    # ------------------------------------------------- 4b: reconciliacao
+    def reconciliar_apos_reconexao(self) -> dict[str, Any]:
+        """
+        Chamado quando a corretora volta a ficar pronta (ou no arranque com
+        posicao desconhecida). Politica, decidida em 2026-09-14 (5.4):
+
+          1. cancela TODAS as ordens vivas do ticker (as que sobreviveram
+             a` queda: entrada fora de t+1, par orfao);
+          2. consulta a POSICAO real;
+          3. compara com o que o ciclo acha que tem:
+             - ciclo posicionado e posicao real igual  -> re-arma stop + alvo;
+             - ciclo posicionado e posicao real zero   -> uma perna executou na
+               queda: fecha a operacao como `reconciliado` (P&L desconhecido);
+             - ciclo nao posicionado e posicao real != 0 -> orfa: ZERA a mercado;
+             - ciclo com entrada pendente e posicao zero -> `nao_executou`.
+        Em dry_run so' reseta o que estiver pendente.
+        """
+        self.reconciliacoes += 1
+        rel: dict[str, Any] = {"estado_antes": self.estado}
+        if self.dry_run:
+            if self.op is not None and self.estado == "entrada_pendente":
+                self._fechar_op("nao_executou", "reconexao (dry_run)")
+            rel["estado_depois"] = self.estado
+            return rel
+        assert self.executor is not None
+        rel["cancel_todas"] = self.executor.cancelar_todas()
+        pos = self.executor.consultar_posicao()
+        real = int(pos.quantidade_liquida) if pos.plausivel else None
+        rel["posicao_real"] = real
+        esperado = 0
+        if self.op is not None and self.estado in ("posicionado", "saindo"):
+            esperado = self.quantidade if self.op.candidato.lado == "compra" else -self.quantidade
+        rel["posicao_esperada"] = esperado
+        if real is None:
+            self._aviso("posicao implausivel na reconciliacao -- CONFIRA NO PROFIT")
+        elif esperado != 0 and real == esperado:
+            assert self.op is not None
+            for o in (self.op.entrada, self.op.stop, self.op.alvo):
+                if o is not None:
+                    o.viva = False
+            self._apos_fill_entrada()                     # re-arma stop + alvo
+            rel["acao"] = "rearmou_saida"
+        elif esperado != 0 and real == 0:
+            self._fechar_op("reconciliado", "posicao zerada durante a queda: uma perna executou")
+            rel["acao"] = "fechou_reconciliado"
+        elif esperado == 0 and real != 0:
+            log.error("ea.123.posicao_orfa", real=real)
+            self.executor.zerar()
+            if self.op is not None:
+                self._fechar_op("erro", "posicao orfa zerada na reconciliacao")
+            rel["acao"] = "zerou_orfa"
+        else:
+            if self.op is not None:
+                self._fechar_op("nao_executou", "reconexao: ordens canceladas")
+            rel["acao"] = "limpou_pendentes"
+        rel["estado_depois"] = self.estado
+        log.warning("ea.123.reconciliado", **rel)
+        return rel
 
     def encerrar_dia(self) -> None:
         if self.estado != "livre":
@@ -401,5 +494,8 @@ class CicloDeOrdens123:
         return {"estado": self.estado, "operacoes": len(self.operacoes),
                 "ignorados_posicao": self.ignorados_posicao,
                 "ignorados_pendente": self.ignorados_pendente,
+                "rejeitados_gate": self.rejeitados_gate,
+                "sinais_sem_vaga": self.sinais_sem_vaga,
+                "reconciliacoes": self.reconciliacoes,
                 "candidatos": self.sinal.candidatos_armados,
                 "dry_run": self.dry_run}

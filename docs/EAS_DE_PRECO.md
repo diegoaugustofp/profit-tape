@@ -889,21 +889,34 @@ observacao.
    `OperacaoRegistrada` com desfecho e P&L em pontos. Timeouts e
    cancelamento nao confirmado deixam AVISO ("CONFIRA NO PROFIT") e
    liberam o ciclo — a limpeza e' do 4b.
-4b. **Reconciliacao de ORDENS ao reconectar** — o EA lista as ordens
-   vivas (`GetOrders`), cancela as que nao deveriam existir (entrada
-   fora de t+1; par orfao sem posicao) e loga. O `OrderChangeCallback`
-   ja' e' contado desde a E1; aqui passa a ser lido.
-5. **`GateDeFluxo`** — protocolo com `permite(barra_gatilho) -> bool`;
-   `SemFiltro` default; `filtro_fluxo: null` no YAML, `extra="forbid"`.
-   Sem conteudo. So' a porta.
-6. **Registro do sinal para a porta de volume** — por sinal: dia, hora,
-   lado, D, classe, resultado, e as features de fluxo da barra t e da
-   barra do gatilho (`vol_agr`, delta comprador-vendedor, `absorcao`
-   se calculavel). Parquet proprio, carimbado. E' F1 do gate.
-7. **`ea_123.yaml`** + entrada na esteira multi-EA com
-   `--ea-modo-ticker exclusivo` ao lado do EA da Rota B; um pregao em
-   `dry_run`, barras marcadas olhadas uma a uma (checklist do forward);
-   depois E4 real com 1 contrato.
+4b. **Reconciliacao de ORDENS ao reconectar** — **ENTREGUE (v2.78)**:
+   `CicloDeOrdens123.reconciliar_apos_reconexao()`, disparada pelo
+   servico na transicao `corretora_pronta` False -> True. Politica: (1)
+   `SendCancelOrders` do ticker (todas as vivas — em vez de enumerar
+   com `GetOrders`, que exigiria mais uma ida a` DLL); (2) consulta a
+   posicao (`GetPositionV2`, E3); (3) posicionado e posicao igual ->
+   re-arma stop + alvo; posicionado e zero -> `reconciliado` (uma perna
+   executou na queda, P&L desconhecido); livre e posicao != 0 -> ZERA a
+   orfa; pendente e zero -> `nao_executou`. `SendCancelOrders`
+   declarada no bindings, a conferir ao vivo como o E2b.
+5. **`GateDeFluxo`** — **ENTREGUE (v2.78)**: `ea/gate_fluxo.py`,
+   protocolo `permite(candidato, barra_t)`, `SemFiltro` default;
+   `filtro_fluxo: null` no YAML (`extra="forbid"`); qualquer conteudo
+   e' RECUSADO por `construir_gate` ate' existir ficha. O ciclo conta
+   `rejeitados_gate`.
+6. **Registro do sinal** — **ENTREGUE (v2.78)**: `ea/registro_123.py`,
+   JSONL por dia (`data/forward/ea_123/sinais_123_<dia>.jsonl`), uma
+   linha por operacao fechada: carimbo (tag + sha256 do YAML),
+   candidato, fluxo da barra t (`vol_agr_compra/venda`, `n_trades`) e
+   da barra do GATILHO (t+1), ordens com nivel/fill/slippage/latencias,
+   desfecho, P&L. E' o F1 do gate.
+7. **`ea_123.yaml` + esteira** — **ENTREGUE (v2.78)**: `config/ea_123.yaml`
+   (`tipo: "123"`, `dry_run: true`); `ea/config_123.py` (`EA123Config`,
+   `carregar_config_ea` escolhe pelo tipo); `ea/service_123.py`
+   (`EA123Service`: semente no arranque, sem semente sobe sem armar,
+   barra de tempo, `tick()` para relogio/callbacks/reconexao); registro
+   e recorder aceitam os dois tipos; o bridge chama `tick()` quando
+   existe. **Falta o pregao em dry_run** (7a) e depois o E4 (7b).
 
 **O que reinicia a contagem:** qualquer numero da ficha 5.2; mudar
 o tipo de ordem de qualquer perna; ligar o gate. **O que nao reinicia:**

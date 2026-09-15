@@ -226,3 +226,92 @@ def test_real_stop_recusada_fecha_com_erro() -> None:
     _armar_compra_sem_assert(_b(1, 140050.0, 140080.0, 139800.0, 140000.0))
     _armar_compra_sem_assert(_b(2, 140000.0, 140050.0, 139900.0, 140020.0))
     assert c.estado == "livre" and c.operacoes[0].desfecho == "erro"
+
+
+# ---------------------------------------------------------------- 4b
+@dataclass
+class _Pos:
+    quantidade_liquida: int
+    plausivel: bool = True
+
+
+class ExecutorFakeReconc(ExecutorFake):
+    def __init__(self, posicao: int) -> None:
+        super().__init__()
+        self.posicao = posicao
+
+    def cancelar_todas(self) -> int:
+        self.chamadas.append(("cancelar_todas", {}))
+        return 0
+
+    def consultar_posicao(self) -> _Pos:
+        return _Pos(self.posicao)
+
+
+def test_reconciliacao_posicionado_e_posicao_igual_rearma_saida() -> None:
+    ex = ExecutorFakeReconc(posicao=1)
+    c = _ciclo(ex)
+    _armar_compra(c)
+    c.tick()
+    ex.preencher(101, 140060.0)
+    c.tick()
+    assert c.estado == "posicionado"
+    rel = c.reconciliar_apos_reconexao()
+    assert rel["acao"] == "rearmou_saida" and c.estado == "posicionado"
+    nomes = [n for n, _ in ex.chamadas]
+    assert nomes[-3:] == ["cancelar_todas", "enviar_stop", "enviar_limitada"]
+
+
+def test_reconciliacao_posicionado_mas_zero_fecha_reconciliado() -> None:
+    ex = ExecutorFakeReconc(posicao=0)
+    c = _ciclo(ex)
+    _armar_compra(c)
+    c.tick()
+    ex.preencher(101, 140060.0)
+    c.tick()
+    rel = c.reconciliar_apos_reconexao()
+    assert rel["acao"] == "fechou_reconciliado" and c.estado == "livre"
+    assert c.operacoes[0].desfecho == "reconciliado" and c.operacoes[0].pnl_pts is None
+
+
+def test_reconciliacao_orfa_zera_e_pendente_limpa() -> None:
+    ex = ExecutorFakeReconc(posicao=-1)
+    c = _ciclo(ex)
+    rel = c.reconciliar_apos_reconexao()                     # livre, mas ha' posicao
+    assert rel["acao"] == "zerou_orfa" and ("zerar", {}) in ex.chamadas
+    ex2 = ExecutorFakeReconc(posicao=0)
+    c2 = _ciclo(ex2)
+    _armar_compra(c2)
+    rel2 = c2.reconciliar_apos_reconexao()                   # entrada pendente, sem posicao
+    assert rel2["acao"] == "limpou_pendentes" and c2.estado == "livre"
+    assert c2.operacoes[0].desfecho == "nao_executou"
+
+
+def test_gate_e_vagas_no_ciclo() -> None:
+    class Nega:
+        def permite(self, c: Any, b: Any) -> bool:
+            return False
+
+    c = CicloDeOrdens123(SinalPreco123(IndicadorMME(80, 139000.0)), gate=Nega())
+    _armar_compra_sem = c.on_barra
+    _armar_compra_sem(_b(0, 140000.0, 140100.0, 139900.0, 140050.0))
+    _armar_compra_sem(_b(1, 140050.0, 140080.0, 139800.0, 140000.0))
+    _armar_compra_sem(_b(2, 140000.0, 140050.0, 139900.0, 140020.0))
+    assert c.estado == "livre" and c.rejeitados_gate == 1
+
+    from profittape.ea.vagas import VagasPorTicker
+    v = VagasPorTicker()
+    assert v.tentar_ocupar("WINFUT", "outro")
+    c2 = CicloDeOrdens123(SinalPreco123(IndicadorMME(80, 139000.0)), vagas=v,
+                          symbol="WINFUT", nome="ea_123")
+    c2.on_barra(_b(0, 140000.0, 140100.0, 139900.0, 140050.0))
+    c2.on_barra(_b(1, 140050.0, 140080.0, 139800.0, 140000.0))
+    c2.on_barra(_b(2, 140000.0, 140050.0, 139900.0, 140020.0))
+    assert c2.estado == "livre" and c2.sinais_sem_vaga == 1
+    v.liberar("WINFUT", "outro")
+    c2.on_barra(_b(3, 140020.0, 140060.0, 139700.0, 140000.0))
+    c2.on_barra(_b(4, 140000.0, 140050.0, 139900.0, 140030.0))
+    c2.on_barra(_b(5, 140030.0, 140050.0, 139950.0, 140040.0))
+    assert c2.estado == "entrada_pendente" and v.dono("WINFUT") == "ea_123"
+    c2.on_trade(T0900 + 7 * P15, 140000.0)                  # fim de t+1: cancela, libera
+    assert c2.estado == "livre" and v.dono("WINFUT") is None

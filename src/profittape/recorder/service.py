@@ -20,13 +20,12 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
 from ..alertas import ConfigAlertas, enviar
 from ..config import Credenciais, RecorderConfig
-from ..ea.config import EAConfig
 from ..ea.despachante import DespachanteDeEAs
 from ..ea.livro import LivroDePosicoes
 from ..ea.registro import RegistroDeEAs
@@ -38,7 +37,6 @@ from ..profitdll.client import ProfitClient
 from ..storage.parquet_sink import ParquetSink
 
 if TYPE_CHECKING:
-    from ..ea.config import EAConfig
     from ..ea.ordem_teste import OrdemDeTeste
     from ..ea.ordem_teste_b import OrdemDeTesteB
     from ..ea.reconciliacao import ReconciliadorPosicao
@@ -155,7 +153,8 @@ class RecorderService:
         if ea_config_path is not None:
             # Validacao CEDO (antes de qualquer captura comecar): config
             # invalida derruba o processo aqui, nao no meio do pregao.
-            ea_cfg = EAConfig.from_yaml(ea_config_path)
+            from ..ea.config_123 import carregar_config_ea
+            ea_cfg = carregar_config_ea(ea_config_path)
             self._exigir_pre_requisitos_de_ordem_real(ea_cfg, ea_config_path)
 
         self.client = ProfitClient(
@@ -170,6 +169,7 @@ class RecorderService:
             dll=dll_injetada,
             login_completo=cfg.runtime.login_completo,
         )
+        self.registro._client = self.client     # o 123 observa reconexao por ele
         if cfg.runtime.login_completo:
             log.warning(
                 "recorder.login_completo",
@@ -285,7 +285,7 @@ class RecorderService:
     # EAs a quente (E5.4b) -- tudo roda na THREAD PRINCIPAL (construcao ou
     # laco de monitoramento), nunca de dentro de um callback da DLL.
     # ------------------------------------------------------------------
-    def _exigir_pre_requisitos_de_ordem_real(self, ea_cfg: EAConfig,
+    def _exigir_pre_requisitos_de_ordem_real(self, ea_cfg: Any,
                                             origem: Path) -> None:
         """Falha ALTO e cedo se o EA pede ordem real sem o necessario.
         Chamado na construcao (EA inicial) e antes de incluir a quente."""
@@ -315,13 +315,14 @@ class RecorderService:
         unica excecao e' `SystemExit` de pre-requisito de ordem real, e
         so' na construcao (onde ainda nao ha' captura a perder).
         """
-        from ..ea.config import EAConfig, RoteamentoConfig
+        from ..ea.config import RoteamentoConfig
+        from ..ea.config_123 import carregar_config_ea
         from ..ea.execucao import ExecutorDeOrdens
         from ..ea.ordem_teste import TickerAgregadorInvalido
         from ..ea.registro import InclusaoRecusada
 
         try:
-            ea_cfg = EAConfig.from_yaml(caminho)
+            ea_cfg = carregar_config_ea(caminho)
         except Exception as exc:
             log.error("recorder.ea_yaml_invalido", origem=str(caminho), erro=repr(exc))
             return False

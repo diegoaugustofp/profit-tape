@@ -256,6 +256,19 @@ class ExecutorDeOrdens:
         log.info("ea.cancel_enviado", cl_ord_id=cl_ord_id, retorno=r, ticker=self._ticker)
         return r
 
+    def cancelar_todas(self) -> int:
+        """SendCancelOrders(conta, corretora, senha, ticker, bolsa): todas as
+        ordens vivas deste ticker. Reconciliacao de ordens (4b)."""
+        dll = self._trava()
+        r = int(dll.SendCancelOrders(self._conta, self._corretora, self._rot.senha_roteamento,
+                                     self._ticker, self._bolsa))
+        log.warning("ea.cancel_todas_enviado", retorno=r, ticker=self._ticker)
+        return r
+
+    def consultar_posicao(self) -> Any:
+        return self._client.consultar_posicao(self._corretora, self._conta,
+                                              self._ticker, self._bolsa)
+
     def zerar(self) -> int:
         dll = self._trava()
         oid = int(dll.SendZeroPositionAtMarket(self._conta, self._corretora,

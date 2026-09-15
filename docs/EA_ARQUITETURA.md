@@ -101,7 +101,7 @@ em dia sem pregao.
 | E5.4b | `--ea-dir`: incluir/remover EA com o record rodando | ENTREGUE v2.56 |
 | E5.4c | `--ea-modo-ticker exclusivo`: 2 EAs num ticker, so' 1 posicionado | ENTREGUE v2.57 |
 | E5.5 | 2 EAs em dry_run, pregao inteiro, 1 incluido a quente | **VALIDADO AO VIVO 2026-09-14** (5h, 47,6M linhas, descartados=0) |
-| E5.6 | 2 EAs em demo com ordens reais | **pendente -- exige pregao** |
+| E5.6 | 2 EAs em demo com ordens reais | **pendente -- exige pregao**; fecha junto com o E4 do 123 (`config/ea_123.yaml`, EAS_DE_PRECO.md 5.4 passo 7b) |
 
 ### Licoes da escada que valem para sempre
 

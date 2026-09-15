@@ -32,6 +32,7 @@ import structlog
 
 from .bridge import EABridge
 from .config import EAConfig
+from .config_123 import EA123Config
 from .despachante import DespachanteDeEAs
 from .livro import LivroDePosicoes
 from .service import EAService
@@ -67,7 +68,8 @@ class RegistroDeEAs:
     def __init__(self, despachante: DespachanteDeEAs,
                  supervisor: SupervisorDeRisco | None = None,
                  livro: LivroDePosicoes | None = None,
-                 modo_ticker: str = "unico") -> None:
+                 modo_ticker: str = "unico",
+                 client: object | None = None) -> None:
         """
         `modo_ticker` (E5.4c, decisao do operador 2026-09-13):
 
@@ -82,6 +84,7 @@ class RegistroDeEAs:
         """
         if modo_ticker not in ("unico", "exclusivo"):
             raise ValueError("modo_ticker deve ser 'unico' ou 'exclusivo'")
+        self._client = client            # o 123 observa reconexao por ele
         self._despachante = despachante
         self._supervisor = supervisor
         self._livro = livro
@@ -106,7 +109,7 @@ class RegistroDeEAs:
         return None
 
     # ------------------------------------------------------------------
-    def validar(self, cfg: EAConfig, nome: str) -> None:
+    def validar(self, cfg: EAConfig | EA123Config, nome: str) -> None:
         """
         Levanta `InclusaoRecusada` se o EA nao puder entrar. Separado de
         `incluir` para dar para checar sem efeito colateral (teste, CLI,
@@ -131,7 +134,7 @@ class RegistroDeEAs:
                 "reconciliacao nao sabe de quem e' a divergencia). Use um "
                 "ativo diferente -- ver EA_ARQUITETURA 4.2.")
 
-    def incluir(self, cfg: EAConfig, nome: str | None = None,
+    def incluir(self, cfg: EAConfig | EA123Config, nome: str | None = None,
                origem: Path | None = None,
                executor: object | None = None) -> EARegistrado:
         """
@@ -142,9 +145,15 @@ class RegistroDeEAs:
         nome_final = nome or cfg.nome or (origem.stem if origem else cfg.symbol)
         self.validar(cfg, nome_final)
 
-        servico = EAService(cfg, executor=executor,  # type: ignore[arg-type]
-                           vagas=self.vagas, nome=nome_final)
-        bridge = EABridge(servico)
+        servico: object
+        if isinstance(cfg, EA123Config):
+            from .service_123 import EA123Service
+            servico = EA123Service(cfg, executor=executor, vagas=self.vagas,
+                                   nome=nome_final, client=self._client)
+        else:
+            servico = EAService(cfg, executor=executor,  # type: ignore[arg-type]
+                               vagas=self.vagas, nome=nome_final)
+        bridge = EABridge(servico)  # type: ignore[arg-type]
         registrado = EARegistrado(nome=nome_final, symbol=cfg.symbol,
                                  origem=origem.resolve() if origem else None,
                                  bridge=bridge)
@@ -167,10 +176,12 @@ class RegistroDeEAs:
                 # configurado; aqui fazemos o caminho inverso (dado o stop
                 # que o EA usa de fato, qual capital o sustenta) para que a
                 # soma de N EAs seja comparavel ao que o operador tem.
-                capital_recomendado=capital_recomendado_para(
-                    cfg.risco.stop_catastrofico_pontos,
-                    cfg.tamanho_posicao, cfg.risco.valor_ponto_reais,
-                    cfg.risco.risco_max_pct),
+                capital_recomendado=(
+                    cfg.capital_recomendado_informativo() if isinstance(cfg, EA123Config)
+                    else capital_recomendado_para(
+                        cfg.risco.stop_catastrofico_pontos,
+                        cfg.tamanho_posicao, cfg.risco.valor_ponto_reais,
+                        cfg.risco.risco_max_pct)),
                 contratos=cfg.tamanho_posicao, ticker=cfg.symbol, subconta=None))
             self._supervisor.logar()
         self._despachante.incluir(bridge)

@@ -2184,3 +2184,22 @@ operador. 829 testes.
 - 9 testes (dry: alvo, stop, nao executou, zeragem, ignorados; real:
   ciclo completo por callbacks, cancel no fim de t+1, cancel nao
   confirmado, stop recusada). 849 no total.
+
+### 2026-09-15 — F5 do 123: passos 4b, 5, 6 e 7 (codigo) (v2.78)
+
+- 4b: `CicloDeOrdens123.reconciliar_apos_reconexao()` (cancela todas as
+  ordens do ticker, consulta posicao, re-arma saida / fecha
+  `reconciliado` / zera orfa / limpa pendente); `SendCancelOrders` no
+  bindings e `cancelar_todas`/`consultar_posicao` no executor; o
+  servico dispara na transicao `corretora_pronta` False -> True.
+- 5: `ea/gate_fluxo.py` — `GateDeFluxo`, `SemFiltro`, `construir_gate`
+  recusa qualquer conteudo sem ficha.
+- 6: `ea/registro_123.py` — JSONL por dia, uma linha por operacao, com
+  carimbo, fluxo da barra t e da barra do gatilho, ordens e desfecho.
+- 7: `ea/config_123.py` (`EA123Config`, `carregar_config_ea` por tipo),
+  `ea/service_123.py` (`EA123Service` com `tick()`), `config/ea_123.yaml`
+  (dry_run: true), registro/recorder aceitam os dois tipos, bridge
+  chama `tick()`. Modo exclusivo: o 123 ocupa a vaga ao armar e libera
+  ao fechar (`sinais_sem_vaga` contado).
+- 15 testes novos; 859 no total, ruff e mypy limpos. Falta: pregao em
+  dry_run (7a) com barras e ordens olhadas; depois E4 (7b).

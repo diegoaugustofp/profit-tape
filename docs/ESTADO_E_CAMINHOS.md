@@ -56,11 +56,11 @@ Passos, cada um uma entrega:
 | 2 | semente da MME80 (parquet do gráfico + ponte pelo tape; sem semente não arma) | **FECHADO (v2.75)**: 28/08 dif 0,0 em 38 barras; 11/09 −15 pts decaindo (3 closes sem tape) → regra do dia incompleto |
 | 3 | `SinalPreco123` sobre a barra de tempo, fórmula importada do research | **FECHADO (v2.76)**: equivalência EA × research testada |
 | 3b | E2b — stop / limitada / cancel / OCO na demo | **FECHADO 14/09** |
-| 4 | ciclo de ordens do 123 (stop de entrada → cancela no fim de t+1; fill → stop + limitada; um executa → cancela o outro), slippage e latência por ordem | **entregue (v2.77)**: real por callbacks + dry_run pelo tape, 9 testes |
-| 4b | reconciliação de ORDENS ao reconectar (`GetOrders`, cancela órfãs) | |
-| 5 | `GateDeFluxo` / `SemFiltro`, `filtro_fluxo: null` | |
-| 6 | registro do sinal com features de fluxo (F1 do gate) | |
-| 7 | `ea_123.yaml` na esteira exclusiva; um pregão em dry_run com barras olhadas; depois E4 real | |
+| 4 | ciclo de ordens do 123 (stop de entrada → cancela no fim de t+1; fill → stop + limitada; um executa → cancela o outro), slippage e latência por ordem | **FECHADO (v2.77)** |
+| 4b | reconciliação de ORDENS ao reconectar (cancela todas, confere posição, re‑arma ou zera) | **entregue (v2.78)**; `SendCancelOrders` a conferir ao vivo |
+| 5 | `GateDeFluxo` / `SemFiltro`, `filtro_fluxo: null` | **entregue (v2.78)** |
+| 6 | registro do sinal com features de fluxo (F1 do gate) | **entregue (v2.78)**: JSONL carimbado por operação |
+| 7 | `ea_123.yaml` na esteira exclusiva; um pregão em dry_run com barras olhadas; depois E4 real | **código entregue (v2.78)**; falta o pregão em dry_run (7a) e o E4 (7b) |
 
 Depois do passo 7 o 123 é o **primeiro EA com sinal real** a atravessar a
 escada, e E5.6 fecha junto (dois EAs com ordens reais: 123 no WIN, Rota B
