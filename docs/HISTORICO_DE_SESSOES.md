@@ -2170,3 +2170,17 @@ operador. 829 testes.
   depois do inicio da barra (`ts_primeiro_ns` na BarraFechada).
 - 4 testes novos (equivalencia EA x research em barras aleatorias, dia
   incompleto, parcial, niveis/validade/fluxo). 840 no total.
+
+### 2026-09-15 — passo 4 do F5 do 123: ciclo de ordens (v2.77)
+
+- `ea/execucao.py`: `enviar_stop`, `enviar_limitada`, `cancelar`, `zerar`,
+  `eventos_de` — assincronos, mesmas travas (`_trava`), assinaturas e
+  esteira do E2b.
+- `ea/ciclo_123.py`: `CicloDeOrdens123` — a maquina do 5.4 com os dois
+  modos (real por callbacks no tick; dry_run com fills pelo tape no
+  on_trade), um candidato por vez, validade da entrada ate' o fim de
+  t+1, OCO pelo EA, zeragem 17:30, slippage/latencia por ordem e
+  `OperacaoRegistrada` por operacao; avisos CONFIRA em timeout.
+- 9 testes (dry: alvo, stop, nao executou, zeragem, ignorados; real:
+  ciclo completo por callbacks, cancel no fim de t+1, cancel nao
+  confirmado, stop recusada). 849 no total.

@@ -873,11 +873,22 @@ observacao.
    (v2.70)**: `record --ordem-teste-b-em HH:MM` roda a sequencia inteira
    na demo (mercado -> stop longe + cancel -> OCO -> cancela a outra),
    ver EA_ARQUITETURA "E2b". Falta rodar ao vivo.
-4. **Ciclo de ordens do 123** — fechou t: STOP de entrada; t+1 sem
-   execucao: cancela. Entrada executou: STOP de protecao + LIMITADA de
-   alvo, juntos; um executou: cancela o outro. Registra `nivel_teorico`,
-   `fill`, `slippage_pts`, `latencia_ms` por ordem. E' aqui que o
-   forward mede o que mede.
+4. **Ciclo de ordens do 123** — **ENTREGUE (v2.77)**: `ea/ciclo_123.py`,
+   `CicloDeOrdens123` — livre -> entrada_pendente (STOP, vale ate' o
+   fim de t+1) -> posicionado (STOP de protecao + LIMITADA de alvo,
+   juntas) -> saindo (cancela a outra perna) -> livre; cancelando_entrada
+   no fim de t+1; zeragem 17:30 cancela o que estiver vivo e zera a
+   mercado. Um candidato por vez: `ignorados_posicao` e
+   `ignorados_pendente` contados. Dois modos, um ciclo: REAL (executor
+   estendido com `enviar_stop` / `enviar_limitada` / `cancelar` /
+   `zerar`, assincronos; fills e cancelamentos lidos dos callbacks no
+   `tick`, status do E2b) e DRY_RUN (fills simulados pelo tape no
+   `on_trade`: stop no primeiro trade que cruza, limitada AO NIVEL).
+   Por ordem: nivel, fill, `slippage_pts` (sinal do lado; positivo =
+   contra o EA), latencias de aceite, fill e cancelamento; por operacao,
+   `OperacaoRegistrada` com desfecho e P&L em pontos. Timeouts e
+   cancelamento nao confirmado deixam AVISO ("CONFIRA NO PROFIT") e
+   liberam o ciclo — a limpeza e' do 4b.
 4b. **Reconciliacao de ORDENS ao reconectar** — o EA lista as ordens
    vivas (`GetOrders`), cancela as que nao deveriam existir (entrada
    fora de t+1; par orfao sem posicao) e loga. O `OrderChangeCallback`

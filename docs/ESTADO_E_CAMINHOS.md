@@ -54,9 +54,9 @@ Passos, cada um uma entrega:
 |---|---|---|
 | 1 | barra de TEMPO no EA (`ConstrutorDeBarraDeTempo`, M15 alinhado à bolsa) | **FECHADO (v2.74)**: 69/69 barras identicas ao grafico no dado real; dobra no fim de sessao e barra parcial viraram regra |
 | 2 | semente da MME80 (parquet do gráfico + ponte pelo tape; sem semente não arma) | **FECHADO (v2.75)**: 28/08 dif 0,0 em 38 barras; 11/09 −15 pts decaindo (3 closes sem tape) → regra do dia incompleto |
-| 3 | `SinalPreco123` sobre a barra de tempo, fórmula importada do research | **entregue (v2.76)** com equivalência testada; dia incompleto e parcial como regras |
+| 3 | `SinalPreco123` sobre a barra de tempo, fórmula importada do research | **FECHADO (v2.76)**: equivalência EA × research testada |
 | 3b | E2b — stop / limitada / cancel / OCO na demo | **FECHADO 14/09** |
-| 4 | ciclo de ordens do 123 (stop de entrada → cancela no fim de t+1; fill → stop + limitada; um executa → cancela o outro), slippage e latência por ordem | |
+| 4 | ciclo de ordens do 123 (stop de entrada → cancela no fim de t+1; fill → stop + limitada; um executa → cancela o outro), slippage e latência por ordem | **entregue (v2.77)**: real por callbacks + dry_run pelo tape, 9 testes |
 | 4b | reconciliação de ORDENS ao reconectar (`GetOrders`, cancela órfãs) | |
 | 5 | `GateDeFluxo` / `SemFiltro`, `filtro_fluxo: null` | |
 | 6 | registro do sinal com features de fluxo (F1 do gate) | |

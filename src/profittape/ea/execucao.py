@@ -212,6 +212,63 @@ class ExecutorDeOrdens:
                               fill_confirmado=confirmado)
 
 
+    # ------------------------------------------------------------------
+    # E2b / passo 4 do F5 do 123 (2026-09-15): STOP, LIMITADA, CANCELAMENTO.
+    # Assincronos por design -- devolvem o profit_id e NAO esperam fill:
+    # o ciclo de ordens (ciclo_123.py) le os callbacks no tick, porque uma
+    # stop de entrada pode ficar viva 15 min e um alvo o dia inteiro.
+    # Assinaturas e esteira de status medidas ao vivo em 2026-09-14
+    # (EA_ARQUITETURA, "E2b"). Mesmas travas do executar().
+    # ------------------------------------------------------------------
+    def _trava(self) -> Any:
+        if self._apenas_simulador:
+            exigir_simulador(self._client, self._corretora, self._conta)
+        else:
+            exigir_conta_anunciada(self._client, self._corretora, self._conta)
+        return self._client._dll
+
+    def enviar_stop(self, lado: str, gatilho: float, limite: float) -> int:
+        """Stop-limit (a stop legada da DLL e' StopLimit): `gatilho` dispara,
+        `limite` e' o pior preco aceito. Devolve profit_id (> 0) ou <= 0."""
+        dll = self._trava()
+        fn = dll.SendStopBuyOrder if lado == "compra" else dll.SendStopSellOrder
+        oid = int(fn(self._conta, self._corretora, self._rot.senha_roteamento,
+                     self._ticker, self._bolsa, float(limite), float(gatilho), self._quantidade))
+        log.info("ea.ordem_stop_enviada", lado=lado, gatilho=gatilho, limite=limite,
+                 profit_id=oid, ticker=self._ticker, recusada=(oid <= 0))
+        return oid
+
+    def enviar_limitada(self, lado: str, preco: float) -> int:
+        dll = self._trava()
+        fn = dll.SendBuyOrder if lado == "compra" else dll.SendSellOrder
+        oid = int(fn(self._conta, self._corretora, self._rot.senha_roteamento,
+                     self._ticker, self._bolsa, float(preco), self._quantidade))
+        log.info("ea.ordem_limitada_enviada", lado=lado, preco=preco, profit_id=oid,
+                 ticker=self._ticker, recusada=(oid <= 0))
+        return oid
+
+    def cancelar(self, cl_ord_id: str) -> int:
+        """SendCancelOrder(conta, corretora, ClOrdID, senha) -- senha em 4o.
+        Devolve 0 no sucesso (medido)."""
+        dll = self._trava()
+        r = int(dll.SendCancelOrder(self._conta, self._corretora, cl_ord_id,
+                                    self._rot.senha_roteamento))
+        log.info("ea.cancel_enviado", cl_ord_id=cl_ord_id, retorno=r, ticker=self._ticker)
+        return r
+
+    def zerar(self) -> int:
+        dll = self._trava()
+        oid = int(dll.SendZeroPositionAtMarket(self._conta, self._corretora,
+                                                self._ticker, self._bolsa,
+                                                self._rot.senha_roteamento))
+        log.warning("ea.zeragem_enviada", profit_id=oid, ticker=self._ticker,
+                    recusada=(oid <= 0))
+        return oid
+
+    def eventos_de(self, profit_id: int) -> list[Any]:
+        return self._eventos_de(profit_id)
+
+
 def executar(decisao: Decisao, dry_run: bool = True,
             executor: ExecutorDeOrdens | None = None,
             preco_referencia: float | None = None) -> ResultadoOrdem | None:
