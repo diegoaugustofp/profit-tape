@@ -100,11 +100,22 @@ TRIAL = FICHAS["ifr2"]["TRIAL"]
 Z_IC = z_ic(TRIAL)
 
 
+# TRIAL e' por (ficha, instrumento): a familia IFR2 usou 2023-25 duas
+# vezes no WIN; no WDO cada ficha e' trial 1. Bug real (2026-09-15): o
+# IFR2 do WDO saiu com IC 97,5% -- o veredito (CONTRA) nao mudava.
+TRIALS: dict[tuple[str, str], int] = {("ifr2", "win"): 2}
+
+
+def trial_de(ficha: str) -> int:
+    return TRIALS.get((ficha, ep.INSTRUMENTO.nome), 1)
+
+
 def parametros_da_ficha(ficha: str) -> dict[str, Any]:
     """Parametros CONGELADOS + o perfil do instrumento em vigor. Os valores
     dependentes de instrumento sao lidos AGORA (apos `usar_instrumento`),
     nao na importacao."""
     base = dict(FICHAS[ficha])
+    base["TRIAL"] = trial_de(ficha)
     base.update({"TICK_WIN": ep.TICK_WIN, "CUSTO_PONTOS": ep.CUSTO_PONTOS,
                  "INSTRUMENTO": ep.INSTRUMENTO.resumo()})
     if ficha == "ifr2":
@@ -384,7 +395,7 @@ def _placar(r: pd.DataFrame, z: float = Z95) -> dict[str, Any]:
 def placar(r: pd.DataFrame, ficha: str = "ifr2") -> dict[str, Any]:
     """Primario = total. Estratos so' REPORTADOS (a favor/contra a MME80,
     compra/venda): nao tem veredito proprio, de proposito."""
-    trial = int(FICHAS[ficha]["TRIAL"])
+    trial = trial_de(ficha)
     z = z_ic(trial)
     if r.empty:
         r = pd.DataFrame(columns=_COLUNAS)
@@ -441,7 +452,7 @@ def combinar(saida: Path, ficha: str) -> dict[str, Any]:
                          "resultados de fichas diferentes nunca se somam.")
     r = pd.concat(partes, ignore_index=True)
     pl = placar(r, ficha)
-    pl["por_ano_reportado"] = por_ano(r, z_ic(int(FICHAS[ficha]["TRIAL"])))
+    pl["por_ano_reportado"] = por_ano(r, z_ic(trial_de(ficha)))
     pl["amostras"] = presentes
     pl["hash_ficha"] = next(iter(hashes)) if hashes else None
     (saida / f"resultado_{ficha}_COMBINADO.json").write_text(

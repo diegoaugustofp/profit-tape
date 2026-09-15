@@ -2227,3 +2227,13 @@ operador. 829 testes.
   serie ajustada (8 decimais).
 - v2.82 (docs): WDO — funis das tres fichas nos tres dumps registrados;
   fichas CONGELADAS como as do WIN, com o perfil wdo; sequencia declarada.
+
+### 2026-09-15 — WDO fechado (3 fichas, nenhuma sobrevive); trial por instrumento (v2.83)
+
+- WDO combinado 2015-2026: IFR2 0,492 CONTRA; ORB 0,517 inconclusivo;
+  123 0,514 [0,499; 0,528] inconclusivo — nao replica o WIN (por-ano
+  sem o padrao 11/12). Seis testes de preco em dois futuros, todos
+  0,49-0,53: o 123 do WIN fica como portador, nao aposta.
+- `eas_preco_teste.TRIALS` por (ficha, instrumento): IFR2 do WDO saiu
+  com IC 97,5% (trial da familia no WIN); corrigido, veredito igual.
+- 863 testes.

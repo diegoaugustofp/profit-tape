@@ -75,9 +75,9 @@ ou `venda_apenas` no outro ticker).
 
 ### B2. Outros instrumentos (declarado 15/09, `EAS_DE_PRECO.md` 8)
 
-- **WDO**: funis feitos nos três dumps (15/09); **três fichas congeladas**
-  (`EAS_DE_PRECO.md` 8.1b), sequência declarada. Falta rodar os 15
-  comandos de teste com `--instrumento wdo`.
+- **WDO: FECHADO (15/09)** — IFR2 CONTRA (0,492), ORB inconclusivo
+  (0,517), 123 inconclusivo (0,514, IC toca 0,50; não replica o WIN).
+  `EAS_DE_PRECO.md` 8.1c. E5.6 volta a ser 123 + Rota B em exclusivo.
 - **Ações**: lista fechada (PETR4, VALE3, ITUB4, BBDC4, BBAS3),
   registrada, não agora — sem tape, bolsa "B" exige refazer a E2.
 

@@ -220,3 +220,17 @@ def test_rodar_123_por_ficha(tmp_path: Path) -> None:
     r = et.rodar(_dump(tmp_path, d), tmp_path / "s", "teste", ficha="123")
     assert r["arquivo"].name == "resultado_123_teste.json"
     assert r["carimbo"]["parametros"]["TRIAL"] == 1
+
+
+def test_trial_e_por_ficha_e_instrumento() -> None:
+    import importlib
+
+    from profittape.research import eas_preco as ep
+    assert et.trial_de("ifr2") == 2 and et.trial_de("orb") == 1
+    try:
+        ep.usar_instrumento("wdo")
+        assert et.trial_de("ifr2") == 1                      # WDO: trial 1
+        assert et.parametros_da_ficha("ifr2")["TRIAL"] == 1
+    finally:
+        ep.usar_instrumento("win")
+        importlib.reload(ep)

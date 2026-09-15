@@ -1041,7 +1041,38 @@ nulos; o 123 e' a pergunta. Nota: 2015-22 tem 36,4 barras/pregao (o WDO
 fechava mais cedo em parte do periodo) — o funil usa os rotulos, nada
 muda.
 
+### 8.1c WDO — FECHADO: nenhuma das tres sobrevive (2026-09-15, `entregue-v2.82`)
+
+| ficha (hash) | resolvidas | p1 | IC95 | P&L bruto/op (pts) | por-ano | veredito |
+|---|---|---|---|---|---|---|
+| 123 (`5663e5d29f10`) | 4.431 | 0,514 | [0,499; 0,528] | -0,1 | 2016-17 fortes, 2020-23 < 0,50, 2024-25 > 0,50 | INCONCLUSIVO -> fecha |
+| ORB (`fad0bc2bf119`) | 2.171 | 0,517 | [0,496; 0,538] | +0,7 | 0,43 a 0,58, sem padrao | INCONCLUSIVO -> fecha |
+| IFR2 (`5aaa0f6ac7fc`) | 8.612 | 0,492 | [0,482; 0,503]* | -0,3 | nenhum ano com IC fora de 0,50 | **CONTRA** |
+
+*O relatorio saiu com IC 97,5% (TRIAL da familia no WIN); no WDO e'
+trial 1 e o IC95 acima e' o correto — veredito igual. Corrigido na
+v2.83: trial por (ficha, instrumento).
+
+**O que isso diz sobre o 123 do WIN, sem suavizar:** seis testes de
+preco em dois futuros, todos entre 0,49 e 0,53; o unico com IC fora de
+0,50 e' o 123 no WIN. A borda dele continua real (n = 5.444, onze anos
+de doze), mas NAO replicou no dolar — parece mais o topo de uma faixa
+de efeitos pequenos do que um mecanismo geral. Nao reabre nada;
+reforca a decisao ja' tomada: o 123 no WIN e' portador e medidor de
+execucao, nao aposta de P&L. A porta de volume continua sendo a unica
+hipotese com chance de transformar 0,53 em algo que pague.
+
+**Consequencia para o E5.6:** o caminho B com WDO dependia de algo
+sobreviver la'. O segundo EA com ordens reais volta a ser o de fluxo
+(Rota B) no modo exclusivo com o 123, como estava desenhado — ou um EA
+declaradamente nulo no WDO so' para provar dois tickers com ordens
+reais (infra, nao estrategia). Decisao do operador.
+
 ### 8.2 Acoes — REGISTRADO, nao agora
+
+> Com o que a linha de preco mostrou em dois futuros, a expectativa
+> declarada para as acoes fica ainda mais baixa. Continuam registradas.
+
 
 Lista fechada (liquidez e spread apertado em M15): **PETR4, VALE3,
 ITUB4, BBDC4, BBAS3**. Nada de small caps: com tick de R$0,01 o custo
