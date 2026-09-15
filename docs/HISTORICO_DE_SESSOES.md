@@ -2203,3 +2203,7 @@ operador. 829 testes.
   ao fechar (`sinais_sem_vaga` contado).
 - 15 testes novos; 859 no total, ruff e mypy limpos. Falta: pregao em
   dry_run (7a) com barras e ordens olhadas; depois E4 (7b).
+- v2.79: `semente-conferir` com `--dia` sem tape (a vespera do pregao)
+  quebrava com KeyError('dif') depois de a semente ja' ter saido valida.
+  Agora devolve so' a semente e uma nota. Semente de 15/09 conferida:
+  187.995,23, ponte pelo 14/09 (34 barras; faltam 18:00/18:15).

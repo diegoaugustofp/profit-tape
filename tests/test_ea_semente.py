@@ -129,3 +129,14 @@ def test_conferir_no_dia_bate_com_o_grafico(
     r = sm.conferir_no_dia(p, dt.date(2026, 9, 10), curated)
     assert r["semente"]["valida"] and r["comparaveis"] == 37
     assert r["dif_max"] == 0.0
+
+
+def test_conferir_no_dia_sem_tape_devolve_so_a_semente(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Bug real (2026-09-14, `--dia 2026-09-15` na vespera): dia sem tape
+    quebrava com KeyError('dif'). Agora devolve a semente e uma nota."""
+    p, _ = _parquet(tmp_path, [dt.date(2026, 9, 10), dt.date(2026, 9, 11)])
+    curated = _tape_fake(monkeypatch, tmp_path, {dt.date(2026, 9, 14): [140000.0] * 34})
+    r = sm.conferir_no_dia(p, dt.date(2026, 9, 15), curated)
+    assert r["semente"]["valida"] and r["semente"]["ponte_dias"] == ["2026-09-14"]
+    assert r["barras"] == 0 and r["dif_max"] is None and "sem tape" in r["nota"]

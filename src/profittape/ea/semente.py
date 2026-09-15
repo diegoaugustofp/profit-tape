@@ -202,6 +202,12 @@ def conferir_no_dia(parquet: Path, dia: dt.date, curated: Path, symbol: str = "W
                        "mme_ea": round(v, 2), "mme_grafico": round(ref, 2),
                        "dif": round(v - ref, 2) if ref == ref else None})
     df = pd.DataFrame(linhas)
+    if df.empty:
+        # Dia sem tape (ex.: o pregao de amanha): so' a semente importa.
+        return {"semente": s.resumo(), "barras": 0, "comparaveis": 0, "dif_max": None,
+                "dif_primeira": None, "dif_ultima": None, "detalhe": [],
+                "nota": f"sem tape para {dia}: nada a comparar; a semente acima e' a que o "
+                        "EA vai usar"}
     comp = df[df["dif"].notna()]
     return {"semente": s.resumo(), "barras": len(df), "comparaveis": len(comp),
             "dif_max": (round(float(comp["dif"].abs().max()), 2) if len(comp) else None),

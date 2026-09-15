@@ -1461,6 +1461,9 @@ def semente_conferir(
     if "erro" in r:
         typer.echo(f"  SEM SEMENTE: {r['erro']}")
         return
+    if "nota" in r:
+        typer.echo(f"\n  {r['nota']}")
+        return
     typer.echo(f"\n  barras do dia={r['barras']}  comparaveis={r['comparaveis']}  "
                f"dif_max={r['dif_max']} pt  primeira={r['dif_primeira']}  ultima={r['dif_ultima']}")
     for ln in r["detalhe"][:3] + r["detalhe"][-2:]:
