@@ -81,6 +81,13 @@ ou `venda_apenas` no outro ticker).
 - **Ações**: lista fechada (PETR4, VALE3, ITUB4, BBDC4, BBAS3),
   registrada, não agora — sem tape, bolsa "B" exige refazer a E2.
 
+### B3. Depois do WDO — ordem decidida pelo operador (15/09)
+
+1. **123 + gate de volume de candle** (`EAS_DE_PRECO.md` 9): a porta,
+   testável hoje com 10 anos de `vol_total`; funil entregue (v2.84).
+2. Gap de abertura (10) e máx/mín da véspera (11): declaradas, a escrever.
+3. Ações por último.
+
 ### C. O que fica no backlog, declarado, sem ação
 
 - Porta de volume do 123 (ficha própria quando o forward tiver n de

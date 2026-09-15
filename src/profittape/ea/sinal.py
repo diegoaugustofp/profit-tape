@@ -46,6 +46,7 @@ class BarraFechada:
     n_trades: int = 0
     parcial: bool = False      # primeira barra depois de ligar E o 1o trade veio tarde
     ts_primeiro_ns: int = 0    # quando o primeiro trade da barra chegou
+    vol_total: int = 0         # TODOS os trades (RLP inclusive) -- e' o QuantityVol do grafico
 
 
 @dataclass

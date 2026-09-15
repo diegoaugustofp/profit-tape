@@ -93,6 +93,14 @@ FICHAS: dict[str, dict[str, Any]] = {
             "P123_PRIMEIRO_FECHAMENTO": ep.P123_PRIMEIRO_FECHAMENTO,
             "P123_ULTIMO_FECHAMENTO": ep.P123_ULTIMO_FECHAMENTO,
             "P123_D_MINIMO": ep.P123_D_MINIMO},
+    # familia NOVA (docs 9): 123 + gate de volume de candle. Trial 1.
+    "123gate": {**_COMUM, "TRIAL": 1,
+                "P123_REGIME_NA_CLAUSULA": ep.P123_REGIME_NA_CLAUSULA,
+                "P123_PRIMEIRO_FECHAMENTO": ep.P123_PRIMEIRO_FECHAMENTO,
+                "P123_ULTIMO_FECHAMENTO": ep.P123_ULTIMO_FECHAMENTO,
+                "P123_D_MINIMO": ep.P123_D_MINIMO,
+                "GATE": "vol_total(t) >= mediana(hhmm, 20 pregoes anteriores)",
+                "GATE_JANELA_PREGOES": ep.GATE_JANELA_PREGOES},
 }
 # Compatibilidade com quem importa os nomes antigos (IFR2).
 PARAMETROS_FICHA = FICHAS["ifr2"]
@@ -269,15 +277,26 @@ def resolver_orb(d: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(linhas)
 
 
-def resolver_123(d: pd.DataFrame) -> pd.DataFrame:
+def resolver_123(d: pd.DataFrame, gate: bool | None = None) -> pd.DataFrame:
     """
+    `gate=None`: ficha 123 (5.2). `gate=True`: so' os sinais que passam o
+    gate de volume (ficha 9, primario). `gate=False`: o COMPLEMENTO (sinal
+    123 com volume abaixo da mediana) -- reportado, para o contraste. A
+    regra sequencial ("posicao aberta ignora") roda DENTRO do conjunto
+    escolhido, como o EA faria.
+
     Resultado por sinal da ficha 123 (docs/EAS_DE_PRECO.md 5), SEQUENCIAL
     dentro do dia: "posicao aberta ignora sinal" -- um sinal cujo t+1 cai
     dentro de uma operacao ainda aberta e' PULADO (classe=ignorado_posicao,
     contado, fora do p1). Barra do gatilho (t+1): stop tocado = ambigua;
     alvo tocado = favoravel. Por tempo: P&L na zeragem 17:30 reportado.
     """
-    x = ep.marcar_123(d).reset_index(drop=True)
+    if gate is None:
+        x = ep.marcar_123(d).reset_index(drop=True)
+    else:
+        x = ep.marcar_123_gate(d).reset_index(drop=True)
+        pref = "sinal_gate_" if gate else "sinal_semgate_"
+        x["sinal_compra"], x["sinal_venda"] = x[pref + "compra"], x[pref + "venda"]
     highs, lows = x["high"].to_numpy(dtype=float), x["low"].to_numpy(dtype=float)
     closes = x["close"].to_numpy(dtype=float)
     alvos, stops = x["alvo"].to_numpy(dtype=float), x["stop"].to_numpy(dtype=float)
@@ -453,6 +472,11 @@ def combinar(saida: Path, ficha: str) -> dict[str, Any]:
     r = pd.concat(partes, ignore_index=True)
     pl = placar(r, ficha)
     pl["por_ano_reportado"] = por_ano(r, z_ic(trial_de(ficha)))
+    comps = [saida / f"sinais_{ficha}_{a}_complemento.csv" for a in presentes]
+    if ficha == "123gate" and all(c.exists() for c in comps):
+        rc = pd.concat([pd.read_csv(c) for c in comps], ignore_index=True)
+        pl["complemento_reportado"] = _placar(rc, z_ic(trial_de(ficha)))
+        pl["complemento_por_ano"] = por_ano(rc, z_ic(trial_de(ficha)))
     pl["amostras"] = presentes
     pl["hash_ficha"] = next(iter(hashes)) if hashes else None
     (saida / f"resultado_{ficha}_COMBINADO.json").write_text(
@@ -483,8 +507,15 @@ def rodar(dump: Path, saida: Path, amostra: str,
 
     r = {"ifr2": lambda: resolver_sinais(ep.marcar_ifr2(d)),
          "orb": lambda: resolver_orb(d),
-         "123": lambda: resolver_123(d)}[ficha]()
+         "123": lambda: resolver_123(d),
+         "123gate": lambda: resolver_123(d, gate=True)}[ficha]()
     pl = placar(r, ficha)
+    saida.mkdir(parents=True, exist_ok=True)
+    if ficha == "123gate":
+        # o COMPLEMENTO e' o contraste que diz se o gate SEPARA -- reportado
+        r_comp = resolver_123(d, gate=False)
+        pl["complemento_reportado"] = _placar(r_comp, z_ic(trial_de(ficha)))
+        r_comp.to_csv(saida / f"sinais_{ficha}_{amostra}_complemento.csv", index=False)
     carimbo = {"codigo": _carimbo(), "hash_ficha": hash_ficha(ficha), "ficha": ficha,
                "parametros": parametros_da_ficha(ficha),
                "rodado_em": dt.datetime.now().isoformat(timespec="seconds"),

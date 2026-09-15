@@ -1003,3 +1003,94 @@ def rodar_123(log_path: Path, saida: Path) -> dict[str, Any]:
     log.info("eas_preco.rodada_123", **meta, sinais=amb["n_sinais"], saida=str(saida))
     return {"meta": meta, "equivalencia": eq, "funil": funil, "pontos": pontos,
             "ambiguidade": amb, "barras": x}
+
+
+# ---------------------------------------------------------------------
+# 10. Ficha "123 com GATE de volume" v0 (docs/EAS_DE_PRECO.md, 9)
+# ---------------------------------------------------------------------
+# A porta de volume declarada no dia 1, testavel HOJE com volume de
+# CANDLE (`vol_total` = QuantityVol do grafico), disponivel em 10 anos.
+# Uma clausula, declarada antes de olhar qualquer numero:
+#   vol_total(t) >= mediana de vol_total no MESMO horario (hhmm) nos
+#   ultimos GATE_JANELA_PREGOES pregoes ANTERIORES (o dia de t nao entra).
+# Informacao disponivel no fechamento de t, antes da ordem. Tudo o mais
+# e' a ficha 5.2 do 123. O sinal com gate e' SUBCONJUNTO do sinal 123.
+GATE_JANELA_PREGOES = 20
+
+
+def perfil_volume_horario(x: pd.DataFrame, janela_pregoes: int = GATE_JANELA_PREGOES) -> pd.Series:
+    """Mediana de vol_total por (hhmm) nos `janela_pregoes` pregoes ANTERIORES
+    ao dia da barra. NaN enquanto nao houver historico suficiente (os
+    primeiros 20 pregoes do dump nao tem gate: contados, fora)."""
+    x = x.sort_values(["dia", "current_bar"])
+    out = pd.Series(np.nan, index=x.index, dtype=float)
+    for _hhmm, g in x.groupby("hhmm", sort=False):
+        # uma linha por dia para este horario; shift(1) exclui o proprio dia
+        v = g["vol_total"].astype(float)
+        med = v.shift(1).rolling(janela_pregoes, min_periods=janela_pregoes).median()
+        out.loc[g.index] = med
+    return out
+
+
+def marcar_123_gate(d: pd.DataFrame) -> pd.DataFrame:
+    """marcar_123 + as colunas do gate: `vol_mediana_hhmm`, `gate_volume`,
+    `sinal_gate_compra/venda` (sinal 123 E gate) e o COMPLEMENTO
+    (`sinal_semgate_*`: sinal 123 e gate falso) -- reportado, para o
+    contraste. Sinais 123 originais intactos."""
+    x = marcar_123(d)
+    x["vol_mediana_hhmm"] = perfil_volume_horario(x)
+    x["gate_volume"] = x["vol_total"].astype(float) >= x["vol_mediana_hhmm"]
+    x["gate_definido"] = x["vol_mediana_hhmm"].notna()
+    for lado in ("compra", "venda"):
+        x[f"sinal_gate_{lado}"] = x[f"sinal_{lado}"] & x["gate_definido"] & x["gate_volume"]
+        x[f"sinal_semgate_{lado}"] = x[f"sinal_{lado}"] & x["gate_definido"] & ~x["gate_volume"]
+    return x
+
+
+def contar_clausulas_123_gate(x: pd.DataFrame) -> pd.DataFrame:
+    pregoes = max(int(x["dia"].nunique()), 1)
+    linhas = []
+    for lado in ("compra", "venda"):
+        etapas = [
+            ("sinal 123 (ficha 5.2)", x[f"sinal_{lado}"]),
+            ("+gate definido (>= 20 pregoes de perfil)", x[f"sinal_{lado}"] & x["gate_definido"]),
+            ("+vol_total(t) >= mediana do horario = SINAL COM GATE", x[f"sinal_gate_{lado}"]),
+            ("(complemento) sinal 123 com volume ABAIXO da mediana", x[f"sinal_semgate_{lado}"]),
+        ]
+        for nome, m in etapas:
+            n = int(m.sum())
+            linhas.append({"lado": lado, "clausula": nome, "n": n,
+                           "por_pregao": round(n / pregoes, 2)})
+    return pd.DataFrame(linhas)
+
+
+def rodar_123_gate(log_path: Path, saida: Path) -> dict[str, Any]:
+    df, meta = carregar_log(log_path)
+    d = indicadores(df)
+    eq = equivalencia(d)
+    x = marcar_123_gate(d)
+    funil = contar_clausulas_123_gate(x)
+    com = x[x["sinal_gate_compra"] | x["sinal_gate_venda"]]
+    sem = x[x["sinal_semgate_compra"] | x["sinal_semgate_venda"]]
+
+    def q(s: pd.Series) -> dict[str, float]:
+        return ({"p10": round(float(s.quantile(0.1)), 1), "p50": round(float(s.median()), 1),
+                 "p90": round(float(s.quantile(0.9)), 1)} if not s.empty else {})
+    razao = (com["vol_total"] / com["vol_mediana_hhmm"]).dropna()
+    pontos = {"D_pts_com_gate": q(com["D_pts"].dropna()),
+              "D_pts_sem_gate": q(sem["D_pts"].dropna()),
+              "razao_vol_t_sobre_mediana_com_gate": q(razao),
+              "fracao_dos_sinais_123_que_passam": round(len(com) / max(len(com) + len(sem), 1), 3)}
+    # ambiguidade so' do conjunto com gate (e' o primario)
+    xg = x.copy()
+    xg["sinal_compra"], xg["sinal_venda"] = xg["sinal_gate_compra"], xg["sinal_gate_venda"]
+    amb = ambiguidade_123(xg)
+    saida.mkdir(parents=True, exist_ok=True)
+    x.to_parquet(saida / "barras_123gate.parquet", index=False)
+    resumo = {"dump": meta, "equivalencia": eq, "pontos": pontos, "ambiguidade": amb,
+              "funil_123gate": funil.to_dict(orient="records")}
+    (saida / "resumo_123gate.json").write_text(json.dumps(resumo, indent=2, default=str),
+                                               encoding="utf-8")
+    log.info("eas_preco.rodada_123gate", **meta, sinais=amb["n_sinais"], saida=str(saida))
+    return {"meta": meta, "equivalencia": eq, "funil": funil, "pontos": pontos,
+            "ambiguidade": amb, "barras": x}

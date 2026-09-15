@@ -1236,7 +1236,7 @@ def eas_preco(
     log: Path = typer.Argument(
         ..., help="Dump do console com linhas PRCBARRA| (grafico M15 do WINFUT)"),
     saida: Path = typer.Option(Path("data/research/eas_preco"), "--saida"),
-    ficha: str = typer.Option("ifr2", "--ficha", help="ifr2 (fechada) | orb (fechada) | 123"),
+    ficha: str = typer.Option("ifr2", "--ficha", help="ifr2 | orb | 123 | 123gate"),
     instrumento: str = typer.Option(
         "win", "--instrumento", help="win | wdo (perfil de tick/custo/sessao)"),
     tolerancia: float = typer.Option(
@@ -1271,8 +1271,12 @@ def eas_preco(
         from .research.eas_preco import rodar_123
         _eas_preco_123(log, saida, rodar_123)
         return
+    if ficha == "123gate":
+        from .research.eas_preco import rodar_123_gate
+        _eas_preco_123gate(log, saida, rodar_123_gate)
+        return
     if ficha != "ifr2":
-        raise SystemExit("--ficha aceita ifr2, orb ou 123")
+        raise SystemExit("--ficha aceita ifr2, orb, 123 ou 123gate")
     r = rodar(log, saida)
     if tolerancia != 0.5:
         r["equivalencia"] = equivalencia(r["barras"], tolerancia)
@@ -1431,6 +1435,7 @@ def barra_tempo_conferir(
         if d["parciais_excluidas"]:
             typer.echo(f"      parcial (primeira barra depois de ligar, fora da conta): "
                        f"{d['parciais_excluidas']}")
+        typer.echo(f"      volume (reportado; gate de volume): {d['volume']}")
         for b in d["barras_diferentes"]:
             typer.echo(f"      {b}")
     typer.echo("\n  Veredito: BATE se identicas == em comum em todos os dias e nenhuma barra "
@@ -1480,12 +1485,38 @@ def semente_conferir(
     typer.echo("\n  Veredito: BATE se dif_max < 0,5 pt.")
 
 
+def _eas_preco_123gate(log: Path, saida: Path, rodar: Any) -> None:
+    from .research import eas_preco as ep
+    r = rodar(log, saida)
+    m, pt, a = r["meta"], r["pontos"], r["ambiguidade"]
+    typer.echo("=" * 72)
+    typer.echo("EAs DE PRECO — dump M15 (ficha 123 + GATE de volume v0: vol_total(t) >= mediana "
+               "do horario, 20 pregoes)")
+    typer.echo("=" * 72)
+    typer.echo(f"  {m['barras']} barras | {m['pregoes']} pregoes | {m['inicio']} a {m['fim']}")
+    typer.echo("\n--- FUNIL (7.4) ---")
+    typer.echo(r["funil"].to_string(index=False))
+    typer.echo("\n--- EM PONTOS (7.5) ---")
+    typer.echo(f"  fracao dos sinais 123 que passam o gate: "
+               f"{pt['fracao_dos_sinais_123_que_passam']}")
+    typer.echo(f"  D com gate: {pt['D_pts_com_gate']}   D sem gate: {pt['D_pts_sem_gate']}")
+    typer.echo(f"  vol(t)/mediana nos sinais com gate: {pt['razao_vol_t_sobre_mediana_com_gate']}")
+    typer.echo("\n--- ESTIMADOR BINARIO (conjunto COM gate) ---")
+    typer.echo(f"  sinais={a['n_sinais']}  {a['contagem']}  fracao={a['fracao']}  "
+               f"duracao={a['duracao_barras']}")
+    preg = max(int(m["pregoes"]), 1)
+    if a["n_sinais"]:
+        typer.echo(f"\n  HORIZONTE: {a['n_sinais'] / preg:.2f} sinais/pregao "
+                   f"(tick {ep.TICK_WIN:g}, custo {ep.CUSTO_PONTOS:g})")
+    typer.echo(f"\n  Saida: {saida}/resumo_123gate.json e barras_123gate.parquet")
+
+
 @app.command(name="eas-preco-teste")
 def eas_preco_teste(
     log: Path = typer.Argument(..., help="Dump PRCBARRA| contendo SO' os dias da amostra pedida"),
     amostra: str = typer.Option(
         ..., "--amostra", help="teste | replicacao | depuracao | historico_2015_22"),
-    ficha: str = typer.Option("ifr2", "--ficha", help="ifr2 (fechada) | orb (fechada) | 123"),
+    ficha: str = typer.Option("ifr2", "--ficha", help="ifr2 | orb | 123 | 123gate"),
     instrumento: str = typer.Option("win", "--instrumento", help="win | wdo"),
     saida: Path = typer.Option(Path("data/research/eas_preco_teste"), "--saida"),
     forcar: str | None = typer.Option(
@@ -1544,6 +1575,11 @@ def eas_preco_teste(
     for nome, e in pl["estratos_reportados"].items():
         typer.echo(f"  {nome:16} n={e['n_resolvidas']:5d}  p1={e['p1']}  IC95={e['ic95']}"
                    f"  pnl_bruto={e['pnl_bruto_pts_medio']}")
+    if "complemento_reportado" in pl:
+        cp = pl["complemento_reportado"]
+        typer.echo("\n--- COMPLEMENTO (sinal 123 com volume ABAIXO da mediana; reportado) ---")
+        typer.echo(f"  n={cp['n_resolvidas']}  p1={cp['p1']}  IC={cp['ic95']}  "
+                   f"pnl_bruto={cp['pnl_bruto_pts_medio']}")
     typer.echo(f"\n  Ambiguas para conferir no tape: {pl['ambiguas_para_conferir_no_tape']} "
                f"(lista em sinais_{ficha}_{amostra}.csv, classe=ambigua)")
     typer.echo(f"  Saida: {r['arquivo']}")
@@ -1587,6 +1623,13 @@ def eas_preco_combinar(
     typer.echo("\n--- ESTRATOS (reportados) ---")
     for nome, e in pl["estratos_reportados"].items():
         typer.echo(f"  {nome:16} n={e['n_resolvidas']:5d}  p1={e['p1']}  IC={e['ic95']}")
+    if "complemento_reportado" in pl:
+        cp = pl["complemento_reportado"]
+        typer.echo("\n--- COMPLEMENTO (sinal 123 com volume ABAIXO da mediana; reportado) ---")
+        typer.echo(f"  n={cp['n_resolvidas']}  p1={cp['p1']}  IC={cp['ic95']}  "
+                   f"pnl_bruto={cp['pnl_bruto_pts_medio']}")
+        for ano, e in pl["complemento_por_ano"].items():
+            typer.echo(f"  {ano}  n={e['n_resolvidas']:4d}  p1={e['p1']}")
     typer.echo(f"\n  Saida: {saida}/resultado_{ficha}_COMBINADO.json")
 
 

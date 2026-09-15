@@ -1094,3 +1094,88 @@ consistentes, ai' se refaz a E2 para bolsa B.
 
 **Fora da lista, declarado:** BIT, ouro, contratos cheios (INDFUT,
 DOLFUT — mesma exposicao dos minis com menos liquidez para 1 lote).
+
+## 9. Ficha "123 com GATE de volume" (rascunho v0, 2026-09-15, `entregue-v2.84`)
+
+**Por que agora.** A porta de volume foi declarada no dia 1 para features
+de FLUXO do tape (agressao, absorcao), e o tape tem dois meses. Mas o
+dump do grafico traz `vol_total` por barra (`QuantityVol`) desde 2015:
+volume de CANDLE, nao agressao. E' o unico candidato na mesa que usa
+informacao que os padroes de preco nao usam, e' a evolucao pre-declarada
+do unico sobrevivente, tem 10 anos de dado hoje, e muda o que o forward
+do WIN mede. Decidido pelo operador em 15/09, na ordem: gate -> gap de
+abertura -> max/min da vespera -> acoes.
+
+**Familia NOVA** ("123gate"), trial 1, hash proprio. Nao e' variante do
+123: e' o 123 (5.2, intacto) mais UMA clausula, declarada antes de olhar
+qualquer numero.
+
+    HIPOTESE   Um padrao 123 cuja barra t fecha com volume ACIMA do normal
+               daquele horario carrega mais continuacao do que um com
+               volume abaixo: p1 >= 0,56 no conjunto com gate, e o
+               complemento (mesmos sinais, volume abaixo) fica abaixo.
+
+    EVENTO     Tudo da ficha 5.2, E: vol_total(t) >= mediana de
+               vol_total no mesmo hhmm nos 20 pregoes ANTERIORES (o dia
+               de t nao entra; sem 20 pregoes de perfil, o gate e'
+               indefinido e o sinal fica FORA, contado). Informacao
+               disponivel no fechamento de t, antes da ordem. Posicao
+               aberta ignora sinal DENTRO do conjunto com gate (como o
+               EA faria).
+
+    TAXA       A MEDIR (`eas-preco --ficha 123gate`). Esperado ~50% dos
+               sinais 123 (mediana), ~1,7/pregao no WIN.
+
+    EFEITO     p1 >= 0,56 contra 0,50 no conjunto COM gate. Combinado
+               2015-26: ~2.700 resolvidas, +-1,9 pp.
+
+    CONTRASTE  O COMPLEMENTO (sinal 123 com volume abaixo da mediana) e'
+               reportado com o mesmo estimador, e por ano. E' o que diz
+               se o gate SEPARA: gate 0,56 e complemento 0,50 e' o
+               resultado que vale; gate 0,54 e complemento 0,52 e' o 123
+               de novo com metade dos sinais.
+
+    AMOSTRAS / ORDEM / CRITERIO / PARADA: como o 123 (5.2): depuracao ->
+               teste -> replicacao -> historico -> combinado; veredito no
+               combinado; por-ano; inconclusivo = fecha. Sem trial 2.
+
+    CARIMBO    `parametros_da_ficha("123gate")` inclui GATE e a janela;
+               `complemento_reportado` no resultado e no combinado.
+
+**O que muda no EA se sobreviver:** `vol_total` ja' existe na barra de
+tempo (v2.84); o perfil de 20 pregoes por horario vem do parquet +
+ponte pelo tape, como a semente da MME80; `barra-tempo-conferir`
+passou a reportar a diferenca de volume EA x grafico — e' a
+equivalencia que o gate ao vivo precisa antes de existir (o
+`QuantityVol` do grafico tem que ser a soma das quantidades do tape,
+RLP inclusive; medir, nao assumir).
+
+**O que NAO se faz:** testar outro limiar (percentil 60, 75...) ou
+outra janela (10, 40 pregoes) se este nao separar — cada um e' familia
+nova sobre amostra ja' queimada por esta. Um gate, um numero, declarado.
+
+## 10. Ficha "gap de abertura" — DECLARADA, rascunho (a escrever antes do funil)
+
+Informacao que nenhuma das tres usa: a NOITE. Gap = open(09:00) do dia
+menos close da ultima barra da vespera (a serie continua ajustada do
+Profit ja' trata rolagem). Hipotese candidata (a fechar antes de
+qualquer codigo): gap grande (acima de um multiplo do ATR14 diario,
+declarado) tende a fechar parcialmente na primeira hora — entrada
+contra o gap na abertura, alvo no fechamento da vespera, stop
+simetrico. Literatura em indice futuro existe; no WIN, a medir.
+Perfil, estimador, amostras e ordem: os mesmos. Escrever a ficha
+completa quando o gate estiver fechado.
+
+## 11. Ficha "rompimento da maxima/minima da vespera" — DECLARADA, rascunho
+
+Estrutura DIARIA, nao a dos primeiros 30 minutos: nivel = high/low do
+dia anterior (da serie continua); ordem STOP no rompimento, valida o
+dia inteiro (ou ate' 16:30), D = amplitude do dia anterior (ou uma
+fracao declarada). E' o ORB com outro range — a mesma familia de
+execucao (E2b), outra informacao. Escrever a ficha completa depois do
+gap.
+
+**Multiplicidade da linha, atualizada:** 7 familias no WIN quando estas
+tres rodarem (IFR2 x2, ORB, 123, 123gate, gap, vespera). Um unico
+"favoravel" isolado, sem por-ano consistente e sem contraste, nao vale
+nada — esta' escrito aqui antes de qualquer uma rodar.

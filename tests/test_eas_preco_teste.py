@@ -234,3 +234,15 @@ def test_trial_e_por_ficha_e_instrumento() -> None:
     finally:
         ep.usar_instrumento("win")
         importlib.reload(ep)
+
+
+def test_ficha_123gate_tem_trial_1_hash_proprio_e_complemento(tmp_path: Path) -> None:
+    from tests.test_eas_preco import _dia, _dump
+    assert et.trial_de("123gate") == 1 and et.hash_ficha("123gate") != et.hash_ficha("123")
+    d = _dia(1250901, 1)
+    for b in d:
+        b["vol_total"] = 100
+    r = et.rodar(_dump(tmp_path, d), tmp_path / "s", "teste", ficha="123gate")
+    assert r["arquivo"].name == "resultado_123gate_teste.json"
+    assert "complemento_reportado" in r["placar"]
+    assert (tmp_path / "s" / "sinais_123gate_teste_complemento.csv").exists()

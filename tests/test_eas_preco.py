@@ -505,3 +505,68 @@ def test_hash_da_ficha_muda_com_o_instrumento() -> None:
     finally:
         ep.usar_instrumento("win")
         importlib.reload(ep)
+
+
+# ---------------------------------------------------------------------
+# Ficha 9: 123 + gate de volume (candle)
+# ---------------------------------------------------------------------
+def test_perfil_volume_horario_usa_so_pregoes_anteriores(tmp_path: Path) -> None:
+    import datetime as dt
+    barras = []
+    cb = 1
+    for k in range(22):                        # 22 pregoes uteis consecutivos
+        d = dt.date(2025, 1, 6) + dt.timedelta(days=k + (k // 5) * 2)
+        data = 1000000 + (d.year - 1900) * 10000 + d.month * 100 + d.day
+        dia = _dia(data, cb)
+        for b in dia:
+            b["vol_total"] = 100 + k            # volume cresce 1 por dia
+        barras += dia
+        cb += 37
+    df, _ = ep.carregar_log(_dump(tmp_path, barras))
+    x = ep.indicadores(df)
+    med = ep.perfil_volume_horario(x, 20)
+    x["med"] = med
+    # dias 0..19: sem perfil (precisa de 20 anteriores); dia 20: mediana dos dias 0..19 = 109.5
+    assert x[x["dia"] == x["dia"].unique()[19]]["med"].isna().all()
+    assert x[x["dia"] == x["dia"].unique()[20]]["med"].eq(109.5).all()
+    assert x[x["dia"] == x["dia"].unique()[21]]["med"].eq(110.5).all()   # dias 1..20
+
+
+def test_gate_e_subconjunto_do_123_e_complemento_e_o_resto(tmp_path: Path) -> None:
+    import datetime as dt
+    barras = []
+    cb = 1
+    for k in range(23):
+        d = dt.date(2025, 1, 6) + dt.timedelta(days=k + (k // 5) * 2)
+        data = 1000000 + (d.year - 1900) * 10000 + d.month * 100 + d.day
+        dia = _dia(data, cb, base=140000.0)
+        for b in dia:
+            b["vol_total"] = 100
+            b["mme80_ntsl"] = 139000.0
+        # padrao 123 de compra em 10:00 (idx 4) com gatilho em 10:15, todo dia
+        dia[2]["low"], dia[3]["low"] = 139900.0, 139800.0
+        dia[4].update({"low": 139900.0, "high": 140050.0})
+        dia[5]["high"] = 140060.0
+        barras += dia
+        cb += 37
+    # no dia 22 (indice 21) a barra t tem volume alto; no 23 (indice 22), baixo
+    barras[21 * 37 + 4]["vol_total"] = 500
+    barras[22 * 37 + 4]["vol_total"] = 50
+    df, _ = ep.carregar_log(_dump(tmp_path, barras))
+    x = ep.marcar_123_gate(ep.indicadores(df))
+    assert int(x["sinal_compra"].sum()) == 23
+    f = ep.contar_clausulas_123_gate(x).set_index(["lado", "clausula"])["n"]
+    assert f[("compra", "+gate definido (>= 20 pregoes de perfil)")] == 3     # dias 21, 22, 23
+    assert f[("compra", "+vol_total(t) >= mediana do horario = SINAL COM GATE")] == 2
+    assert f[("compra", "(complemento) sinal 123 com volume ABAIXO da mediana")] == 1  # 50
+    assert (x["sinal_gate_compra"] & x["sinal_semgate_compra"]).sum() == 0
+    assert (x["sinal_gate_compra"] | x["sinal_semgate_compra"]).sum() == 3
+
+
+def test_rodar_123_gate_escreve_saida(tmp_path: Path) -> None:
+    d = _dia(1250901, 1)
+    for b in d:
+        b["vol_total"] = 100
+    r = ep.rodar_123_gate(_dump(tmp_path, d), tmp_path / "s")
+    assert (tmp_path / "s" / "resumo_123gate.json").exists()
+    assert r["pontos"]["fracao_dos_sinais_123_que_passam"] == 0.0

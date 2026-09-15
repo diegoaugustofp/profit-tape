@@ -2237,3 +2237,16 @@ operador. 829 testes.
 - `eas_preco_teste.TRIALS` por (ficha, instrumento): IFR2 do WDO saiu
   com IC 97,5% (trial da familia no WIN); corrigido, veredito igual.
 - 863 testes.
+
+### 2026-09-15 — ficha 9: 123 + gate de volume de candle (v2.84)
+
+- Decisao do operador: gate de volume -> gap de abertura -> max/min da
+  vespera -> acoes. Fichas 9 (rascunho v0, a medir), 10 e 11 (declaradas).
+- `eas_preco.perfil_volume_horario` (mediana por hhmm nos 20 pregoes
+  anteriores), `marcar_123_gate` (subconjunto + complemento),
+  `rodar_123_gate`, `--ficha 123gate` no funil; `eas_preco_teste`:
+  familia "123gate" trial 1, `resolver_123(gate=True/False)`,
+  complemento reportado no teste e no combinado.
+- Barra de tempo ganha `vol_total` (todos os trades); `barra-tempo-conferir`
+  reporta a diferenca de volume EA x grafico (equivalencia que o gate
+  ao vivo precisa). 4 testes novos; 867 no total.

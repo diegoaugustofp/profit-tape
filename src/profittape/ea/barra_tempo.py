@@ -98,6 +98,7 @@ class _AcumuladorTempo:
     vol_agr: int = 0
     vol_agr_compra: int = 0
     vol_agr_venda: int = 0
+    vol_total: int = 0
     n_trades: int = 0
     ts_ultimo_ns: int = field(default=0)
     ts_primeiro_ns: int = field(default=0)
@@ -110,6 +111,7 @@ class _AcumuladorTempo:
         self.low = min(self.low, price)
         self.close = price
         self.n_trades += 1
+        self.vol_total += quantidade
         self.ts_ultimo_ns = ts_ns
         if trade_type == _BUY:
             self.vol_agr += quantidade
@@ -164,7 +166,7 @@ class ConstrutorDeBarraDeTempo:
             open=acc.open, high=acc.high, low=acc.low, close=acc.close,
             vol_agr=acc.vol_agr, agf={},
             vol_agr_compra=acc.vol_agr_compra, vol_agr_venda=acc.vol_agr_venda,
-            n_trades=acc.n_trades,
+            n_trades=acc.n_trades, vol_total=acc.vol_total,
             ts_primeiro_ns=acc.ts_primeiro_ns,
             parcial=(self.barras_fechadas == 1
                      and acc.ts_primeiro_ns - acc.ts_open_ns > self.tolerancia_parcial_ns),

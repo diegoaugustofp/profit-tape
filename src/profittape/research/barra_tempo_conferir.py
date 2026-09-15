@@ -19,6 +19,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 import structlog
 
@@ -67,11 +68,19 @@ def conferir(curated: Path, dump: Path, symbol: str, dias: list[str],
         ea = ea[~ea["parcial"]]           # a primeira barra depois de ligar nao conta
         m = ea.merge(g[["hhmm", "open", "high", "low", "close", "vol_total"]],
                      on="hhmm", how="outer", suffixes=("_ea", "_grafico"), indicator=True)
+        if "vol_total_ea" not in m:                   # sem coluna vol_total no lado do EA
+            m["vol_total_ea"] = np.nan
         so_ea = m[m["_merge"] == "left_only"]["hhmm"].tolist()
         so_grafico = m[m["_merge"] == "right_only"]["hhmm"].tolist()
         ambos = m[m["_merge"] == "both"]
         campos = ("open", "high", "low", "close")
         difs = {c: (ambos[f"{c}_ea"] - ambos[f"{c}_grafico"]).abs() for c in campos}
+        # volume: EA soma quantidade de TODOS os trades; o grafico loga QuantityVol.
+        # Reportado (nao entra no veredito de OHLC): e' a conferencia que o gate
+        # de volume (ficha 9) precisa antes de existir ao vivo.
+        vol_ok = ambos["vol_total_ea"].notna() & ambos["vol_total_grafico"].notna()
+        vol_dif = (ambos.loc[vol_ok, "vol_total_ea"] - ambos.loc[vol_ok, "vol_total_grafico"])
+        vol_rel = (vol_dif.abs() / ambos.loc[vol_ok, "vol_total_grafico"].replace(0, np.nan))
         piores: dict[str, tuple[float, int | None]] = {}
         for c, d in difs.items():
             if len(d):
@@ -86,6 +95,11 @@ def conferir(curated: Path, dump: Path, symbol: str, dias: list[str],
             "so_no_ea": so_ea, "so_no_grafico": so_grafico,
             "parciais_excluidas": parciais,
             "dif_max_por_campo": piores,
+            "volume": {"comparaveis": int(vol_ok.sum()),
+                       "identicos": int((vol_dif == 0).sum()),
+                       "dif_rel_mediana": (round(float(vol_rel.median()), 4)
+                                           if vol_ok.any() else None),
+                       "dif_rel_max": (round(float(vol_rel.max()), 4) if vol_ok.any() else None)},
             "barras_diferentes": [
                 {"hhmm": int(r["hhmm"]),
                  **{c: (float(r[f"{c}_ea"]), float(r[f"{c}_grafico"])) for c in difs
