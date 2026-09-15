@@ -1,117 +1,98 @@
-# Onde estamos e para onde dá para ir — 2026-09-14
+# Onde estamos e para onde dá para ir — 2026-09-15 (noite)
 
-> Substitui a versão de 2026-09-04. O que ela dizia (absorção não
-> sobreviveu como formulada; momentum como hipótese nova; acumular tape)
-> continua verdadeiro e está registrado no `RESEARCH_PLANO.md`. Este
-> documento é o estado DEPOIS de duas semanas em que a infraestrutura
-> fechou e uma linha inteira de pesquisa nasceu, correu e se resolveu.
+> Substitui a versão de 2026-09-14. A anterior fechava com "a linha de
+> preço resolveu-se em dois dias"; esta fecha com a linha inteira
+> percorrida em dois instrumentos, um efeito real encontrado, e o EA
+> pronto para levá-lo ao forward.
 
 ## 1. O que existe hoje, em uma tela
 
-**Duas linhas de pesquisa**, uma infraestrutura.
-
 | linha | o que é | estado |
 |---|---|---|
-| **Fluxo** (tape) | a aposta original: absorção, agressão, `z_agf` sobre barras de volume | absorção fechada como formulada; `z_agf_3` + Rota B em forward demo montado, **nunca disparou ordem real**; DeepScalper fase 2 em forward, placar fechado até n=50; **tape acumulando desde 24/07** (o recurso escasso) |
-| **Preço** (M15) | nasceu em 13/09 para ter EA validável HOJE, com 10 anos de candle | três candidatos, três respostas em dois dias: IFR2 **nulo** (2 trials), ORB **nulo** (10 anos), **123 real e pequeno** (p1 0,5285, IC exclui 0,50, +6 pts líquidos/op) — vai a F5 como portador |
+| **Fluxo** (tape) | a aposta original: absorção, agressão, `z_agf` sobre barras de volume | absorção fechada como formulada; Rota B em forward montado, **nunca disparou ordem real**; DeepScalper fase 2 até n=50; **tape acumulando desde 24/07** |
+| **Preço** (M15) | nasceu 13/09 para ter EA validável hoje | **percorrida**: 3 setups × 2 futuros + 2 fichas de volume. Um efeito real e pequeno encontrado (123 em volume baixo) |
+| **Execução** | escada E0–E5 + F5 do 123 | E0–E3, **E2b** e **E5.5** fechados; F5 do 123 com código completo (7 passos + gate); falta pregão |
 
-**Infraestrutura (escada E0–E5):** E0–E3 fechados; **E2b fechado hoje**
-(stop, limitada, cancelamento, OCO pelo EA — tudo na demo, de primeira);
-E4 montado, nunca viu sinal real; **E5.5 validado ao vivo hoje** (2 EAs,
-5 h, 47,6 M linhas, inclusão a quente, `descartados=0`); E5.6 pendente
-(2 EAs com ordens reais).
+## 2. O que a linha de preço concluiu
 
-## 2. O que a linha de preço ensinou (e por que valeu)
+**Nulo, em dez anos, nos dois futuros:** IFR2 (2 trials no WIN, 1 no WDO),
+ORB (WIN e WDO). Categoria arbitrada — é a conclusão mais sólida da linha.
 
-1. **O pipeline reprova em uma noite o que o forward levaria anos.** Do
-   funil ao veredito, sobre 923 → 2.685 pregões, sem gastar um dia de
-   calendário. É a ferramenta que fica para qualquer hipótese futura.
-2. **O que existe de graça em preço no WIN M15 já foi arbitrado.** IFR2 e
-   ORB, os dois setups públicos mais conhecidos, são nulos a custo zero
-   em dez anos. Não negativos — nulos.
-3. **O 123 é diferente**: IC exclui 0,50 em 5.444 operações, onze anos de
-   doze acima de 0,50, compra e venda iguais. Mas +6 pts líquidos por
-   operação, com o IC do P&L tocando zero. É uma borda que existe e não
-   paga a execução sozinha — o caso exato para o qual a porta de volume
-   foi declarada no dia 1.
-4. **Três erros meus, corrigidos e registrados:** verificador com bug de
-   aquecimento (dizia NÃO BATE com mediana 0,0); capital usado para
-   encolher D duas vezes, contra a decisão 4.9; e a expectativa
-   "provavelmente nulo" para o 123. Os três estão no `EAS_DE_PRECO.md`.
+**Pequeno e real:** 123 no WIN, p1 = 0,5285 [0,515; 0,542] em 5.444, onze
+de doze anos acima de 0,50. Não replicou no WDO (0,514, IC toca 0,50).
+
+**O achado da sessão — 123 em volume BAIXO.** A ficha 9 testou o oposto
+(volume alto) e deu nulo; o complemento, que era estrato reportado, deu
+0,552 [0,535; 0,569] no WIN e **separou dentro dos quartis de D** (não é
+só tamanho). Como a hipótese foi gerada ali, o WIN ficou queimado; a
+ficha 12 foi declarada e testada no **WDO**, onde nenhum teste de volume
+tinha tocado: **0,534 [0,516; 0,552]** em 2.863, contraste 0,5005, onze
+de doze anos, mesma forma por quartil, P&L com IC inteiro acima de zero.
+
+Gerado num instrumento, confirmado no outro, com direção, magnitude e
+forma iguais. **Pelo critério (0,56) é inconclusivo** — e o critério não
+muda: 0,53–0,55 é pequeno demais para ser um EA por si. É suficiente
+para ser o **gate do 123 no forward**, que era o caminho declarado no dia 1
+e agora tem evidência atrás em vez de uma porta vazia.
+
+**O que mais ficou provado nesta sessão:** o `QuantityVol` do gráfico é a
+soma das quantidades do tape (28/08 e 11/09, depois do backfill: 35/35
+idênticos) — o gate ao vivo usa `vol_total` direto; e um dia com queda de
+conexão vira um dia perfeito com um comando de `backfill`.
 
 ## 3. O que falta — em ordem
 
-### A. Levar o 123 a F5 (o caminho decidido)
+### A. O forward do 123 (o único caminho com decisão tomada)
 
-Ficha de forward em `EAS_DE_PRECO.md` 5.4. O forward **não** re‑verifica
-o p1 (seis anos a 2 op/dia); mede **execução** — slippage ≤ 6 pts em
-n = 100, ~50 pregões — e grava, por sinal, as features de fluxo da barra
-do gatilho: a amostra da porta de volume, F1 do gate.
+Código completo. Dois EAs prontos, o operador escolhe:
+`config/ea_123.yaml` (sem gate) e `config/ea_123_volume_baixo.yaml`
+(ficha 12, `ea_123_vb`) — recomendação: o com gate.
 
-Passos, cada um uma entrega:
-
-| # | passo | estado |
+| # | falta | quem |
 |---|---|---|
-| 1 | barra de TEMPO no EA (`ConstrutorDeBarraDeTempo`, M15 alinhado à bolsa) | **FECHADO (v2.74)**: 69/69 barras identicas ao grafico no dado real; dobra no fim de sessao e barra parcial viraram regra |
-| 2 | semente da MME80 (parquet do gráfico + ponte pelo tape; sem semente não arma) | **FECHADO (v2.75)**: 28/08 dif 0,0 em 38 barras; 11/09 −15 pts decaindo (3 closes sem tape) → regra do dia incompleto |
-| 3 | `SinalPreco123` sobre a barra de tempo, fórmula importada do research | **FECHADO (v2.76)**: equivalência EA × research testada |
-| 3b | E2b — stop / limitada / cancel / OCO na demo | **FECHADO 14/09** |
-| 4 | ciclo de ordens do 123 (stop de entrada → cancela no fim de t+1; fill → stop + limitada; um executa → cancela o outro), slippage e latência por ordem | **FECHADO (v2.77)** |
-| 4b | reconciliação de ORDENS ao reconectar (cancela todas, confere posição, re‑arma ou zera) | **entregue (v2.78)**; `SendCancelOrders` a conferir ao vivo |
-| 5 | `GateDeFluxo` / `SemFiltro`, `filtro_fluxo: null` | **entregue (v2.78)** |
-| 6 | registro do sinal com features de fluxo (F1 do gate) | **entregue (v2.78)**: JSONL carimbado por operação |
-| 7 | `ea_123.yaml` na esteira exclusiva; um pregão em dry_run com barras olhadas; depois E4 real | **código entregue (v2.78)**; falta o pregão em dry_run (7a) e o E4 (7b) |
+| 7a | **um pregão em dry_run**: ligar antes das 09:00, conferir 2–3 candidatos no gráfico, `perfil_volume` no arranque, JSONL no fim | operador |
+| — | conferir `SendCancelOrders` ao vivo (usada na reconciliação; declarada, não testada) | operador |
+| 7b | **E4**: `dry_run: false` + `--login-completo --ea-ticker-ordem`; E5.6 fecha junto | operador |
+| — | o forward em si: slippage ≤ 6 pts, n = 100, ~50 pregões | calendário |
 
-Depois do passo 7 o 123 é o **primeiro EA com sinal real** a atravessar a
-escada, e E5.6 fecha junto (dois EAs com ordens reais: 123 no WIN, Rota B
-ou `venda_apenas` no outro ticker).
+**Pré-requisito de infra (decidido 15/09):** cabo em vez de Wi-Fi e
+nobreak na máquina e no roteador, antes do E4 real. Pesquisa se cura com
+backfill (30 dias); execução não. VPS só com dinheiro real — muda a
+latência, que é justamente o que o forward mede.
 
-### B. O que continua andando sozinho
+**Rotina diária que passa a valer:** `backfill` do dia anterior + cura,
+no mesmo Agendador que sobe o record. Mantém parquet, perfil de volume e
+semente sempre completos, e faz `gate_indefinidos` significar mercado,
+não infra.
 
-- **Tape acumula** todo pregão (`record`). É o insumo da porta de volume
-  e da linha de fluxo. Nada a fazer além de manter o `record` de pé.
-- **DeepScalper fase 2**: `fase2-score` nos dias pendentes até n = 50.
-- **z_agf_3 / Rota B**: espera um sinal real disparar no forward.
+### B. Fichas declaradas, na ordem, sem data
 
-### B2. Outros instrumentos (declarado 15/09, `EAS_DE_PRECO.md` 8)
+1. **Gap de abertura** (`EAS_DE_PRECO.md` 10) — informação da noite.
+2. **Máx/mín da véspera** (11) — estrutura diária.
+3. **Ações** (8.2) — lista fechada (PETR4, VALE3, ITUB4, BBDC4, BBAS3),
+   M15, os dois lados (day trade não precisa de aluguel), zeragem antes
+   do leilão (16:45), custo em % — e a expectativa mais baixa das três,
+   depois do que os futuros mostraram. Quatro das cinco já têm tape;
+   bolsa "B" exige refazer a E2.
 
-- **WDO: FECHADO (15/09)** — IFR2 CONTRA (0,492), ORB inconclusivo
-  (0,517), 123 inconclusivo (0,514, IC toca 0,50; não replica o WIN).
-  `EAS_DE_PRECO.md` 8.1c. E5.6 volta a ser 123 + Rota B em exclusivo.
-- **Ações**: lista fechada (PETR4, VALE3, ITUB4, BBDC4, BBAS3),
-  registrada, não agora — sem tape, bolsa "B" exige refazer a E2.
+### C. Andando sozinho / backlog
 
-### B3. Depois do WDO — ordem decidida pelo operador (15/09)
-
-1. **123 + gate de volume** (`EAS_DE_PRECO.md` 9): FECHADA no sentido
-   declarado (volume alto = nulo). O COMPLEMENTO — volume baixo — deu
-   0,552 [0,535; 0,569], dez anos consistentes, e separa dentro dos
-   quartis de D. **Ficha 12 replicou no WDO** (0,534 [0,516; 0,552], mesma
-   forma por quartil, 11/12 anos) — inconclusivo pelo 0,56, real como
-   efeito. Vira o gate do 123 no forward, depois da conferência de volume.
-2. Gap de abertura (10) e máx/mín da véspera (11): declaradas, a escrever.
-3. Ações por último.
-
-### C. O que fica no backlog, declarado, sem ação
-
-- Porta de volume do 123 (ficha própria quando o forward tiver n de
-  sinais gravados; a observação do operador nas por tempo do ORB está
-  registrada em 4.5).
-- `RequestSerieHistory` de barras (substitui o parquet da semente).
-- Momentum como hipótese nova (desde 04/09, sem amostra virgem de fluxo).
-- 2015–2022 e 2023–2026 estão QUEIMADOS para as famílias IFR2, ORB e 123.
-  Qualquer variante delas precisa de amostra nova.
+- Tape acumula; DeepScalper espera n = 50; Rota B espera o primeiro sinal.
+- `RequestSerieHistory` de barras (substitui o parquet da semente e
+  resolve o dia incompleto).
+- Momentum como hipótese nova; `FEATURES.md` e a doc do fluxo atrasadas.
+- **Queimado:** 2015–2026 do WIN para IFR2, ORB, 123 e 123gate; do WDO
+  para IFR2, ORB, 123 e 123gate_baixo. Variante dessas famílias precisa
+  de amostra que nenhum desses testes tocou.
 
 ## 4. O que eu faria, e por quê
 
-Seguir a ordem A, sem pular o passo 1 para "chegar logo" no 4. A barra
-de tempo é o único pedaço que o EA de fluxo não tem, e é onde um defeito
-de alinhamento (fronteira de 15 min no horário da bolsa, barra sem
-trade) custaria semanas de forward. Um passo por entrega, cada um com o
-seu teste, é o que permitiu os 815 verdes de hoje.
+Um pregão em dry_run com o `ea_123_vb`, olhando barras e ordens — é o
+único passo que ainda pode revelar defeito de fórmula sem custar
+amostra. Depois cabo e nobreak, depois E4.
 
-E lembrar o que o forward do 123 é: um teste de execução e um gerador de
-amostra, com um sinal pequeno e real por baixo. Se o slippage ficar ≤ 6
-pts, o 123 puro vira candidato a F6 com o gate; se não, ele só vive com
-o gate — e o gate só nasce da amostra que ele mesmo vai gravar. Os dois
-caminhos passam pelo mesmo lugar.
+E uma lembrança do que o forward é: um teste de **execução** e um
+gerador de amostra, com um efeito pequeno e real por baixo. Ele não vai
+confirmar 0,53 (n exigiria anos). Se o slippage ficar ≤ 6 pts, o 123 com
+gate vira candidato a F6; se não, o efeito existe e não paga a execução —
+e isso também é uma resposta.

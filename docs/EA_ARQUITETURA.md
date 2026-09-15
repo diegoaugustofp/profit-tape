@@ -53,7 +53,7 @@ E0-E4 esta' pronta e serve a QUALQUER estrategia que chegue em F5.
 | **Scalp de Bollinger** (rompimento) | **F4 — REPROVADO** | p1=0,415 IC(0,360-0,473), bruto -22,0: borda NEGATIVA | nenhum. Capitulo fechado (2026-09-11) |
 | **IFR2 M15** (preco) | **F4 — REPROVADO (familia)** | trial 1 K=0,5: 0,492; trial 2 K=1: 0,486 IC97,5%(0,464-0,509) n=2.478. Nulo | nenhum. Familia fechada sobre 2023-26 (`EAS_DE_PRECO.md` 3.5) |
 | **ORB M15** (preco, rompimento da abertura) | **F4 — REPROVADO** | combinado 2015-2026: p1=0,491 IC(0,471-0,511) n=2.382; nenhum ano com IC fora de 0,50 | nenhum. Capitulo fechado (`EAS_DE_PRECO.md` 4.5) |
-| **123 M15** (preco, continuacao) | **F4 — borda pequena e REAL; F5 desenhado** | combinado 2015-26: p1=0,5285 IC(0,515-0,542) n=5.444, 11/12 anos > 0,50; P&L +17 bruto [-4; +38], +6 liquido. Inconclusivo pelo 0,56; real pelo IC | F5 como PORTADOR da estrutura, medindo EXECUCAO (slippage <= 6 pts, n=100, ~50 pregoes) e gravando a amostra da porta de volume. 7 passos em `EAS_DE_PRECO.md` 5.4 |
+| **123 M15** (preco, continuacao) | **F4 real-pequeno; F5 COM GATE, codigo pronto** | WIN 0,5285 IC(0,515-0,542) n=5.444; com gate de volume BAIXO (ficha 12) 0,552 no WIN e **0,534 IC(0,516-0,552) no WDO** (replicado) | 7a: pregao em dry_run com `config/ea_123_volume_baixo.yaml`; depois E4 (7b). Infra: cabo + nobreak antes do E4 |
 
 ### z_agf_3 — o unico vivo em execucao
 
@@ -186,8 +186,10 @@ nunca foi atualizado. Especificamente:
     nao no processo), ciclo de ordens com slippage medido,
     reconciliacao de ORDENS ao reconectar, `GateDeFluxo`/`SemFiltro`,
     registro do sinal com features de fluxo (F1 do gate),
-    `ea_123.yaml` na esteira exclusiva. Um passo por entrega. Passo 1
-    (barra de tempo) comeca ja'; E2b espera pregao.
+    `ea_123.yaml` na esteira exclusiva. **CODIGO COMPLETO (v2.89)**,
+    incluindo o gate de volume baixo (ficha 12) e o bloco `infra` no
+    JSONL. Falta: pregao em dry_run (7a), `SendCancelOrders` ao vivo,
+    E4 (7b) -- e cabo + nobreak antes do E4 real.
 
 ### Divida tecnica conhecida, sem urgencia
 

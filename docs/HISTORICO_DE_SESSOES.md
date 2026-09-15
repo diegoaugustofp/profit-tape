@@ -2286,3 +2286,27 @@ operador. 829 testes.
   `{tipo: volume_baixo}`; `config/ea_123_volume_baixo.yaml`.
 - Infra no JSONL (`infra` por operacao) e `vol_total`/`volume_confiavel`/
   lacuna no candidato e na barra do gatilho. 5 testes; 875 no total.
+
+### 2026-09-15 — FECHAMENTO DA SESSAO (v2.71 -> v2.90)
+
+**Percorrido:** WDO inteiro (perfis de instrumento, tres fichas, tres
+fechamentos); ficha 9 (gate de volume alto: nula) e o achado do
+complemento; ficha 12 (volume BAIXO) testada no WDO e replicada; gate
+no EA com perfil por horario; infra no JSONL; barra de tempo com
+`vol_total`, `maior_lacuna_s` e `volume_confiavel`; F5 do 123 completo
+(passos 1, 2, 3, 4, 4b, 5, 6, 7) e E2b fechado ao vivo.
+
+**Concluido:** preco publico em M15 esta' arbitrado nos dois futuros
+(IFR2 e ORB nulos em 10 anos); o 123 tem borda pequena e real no WIN; o
+123 em VOLUME BAIXO replica em WIN e WDO (0,552 / 0,534, separando
+dentro dos quartis de D) -- inconclusivo pelo criterio de 0,56, real
+como efeito, e e' o gate do forward. QuantityVol do grafico = soma do
+tape (conferido em dois dias). Backfill cura tape perdido (11/09
+recuperado: 35/35 barras identicas em OHLC e volume).
+
+**Falta:** pregao em dry_run com `ea_123_vb`; `SendCancelOrders` ao
+vivo; E4 (com cabo + nobreak antes); o forward (slippage, n=100, ~50
+pregoes). Declaradas sem data: gap de abertura, max/min da vespera,
+acoes. Rotina nova: backfill + cura do dia anterior toda manha.
+
+`docs/ESTADO_E_CAMINHOS.md` reescrito para esta data.
