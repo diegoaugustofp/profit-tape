@@ -44,7 +44,8 @@ class BarraFechada:
     vol_agr_compra: int = 0
     vol_agr_venda: int = 0
     n_trades: int = 0
-    parcial: bool = False      # primeira barra depois de ligar: pode faltar o comeco
+    parcial: bool = False      # primeira barra depois de ligar E o 1o trade veio tarde
+    ts_primeiro_ns: int = 0    # quando o primeiro trade da barra chegou
 
 
 @dataclass

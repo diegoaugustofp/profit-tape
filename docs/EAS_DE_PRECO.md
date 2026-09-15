@@ -852,10 +852,19 @@ observacao.
    `mme80_ntsl` do grafico. Quando `RequestSerieHistory` existir,
    substitui o parquet — mesmo contrato. O 123 nao usa ATR (D e'
    geometrico), entao so' a MME80 precisa de semente.
-3. **`SinalPreco123`** — no fechamento de t: padrao, regime, janela, D;
-   arma `OrdemPendente(lado, entrada, stop, alvo, valida_ate=fim de
-   t+1)`. Python identico a `eas_preco.marcar_123` — mesma funcao,
-   importada, nao reescrita (regra 7.3: dois lados, uma formula).
+3. **`SinalPreco123`** — **ENTREGUE (v2.76)**: `ea/sinal_123.py`. No
+   fechamento de t aplica `eas_preco.avaliar_123` (a formula ESCALAR da
+   ficha, nova no research; `marcar_123` vetorizada e' conferida contra
+   ela por teste de equivalencia em barras aleatorias — mesmos
+   candidatos, mesmos niveis, mesma MME) e arma `Candidato123(lado,
+   entrada, stop, alvo, D, valido_ate = fim de t+1, mme80, fluxo da
+   barra t)`. Regras que so' existem ao vivo (decididas 15/09): **dia
+   incompleto** (primeira barra vista nao e' a 09:00 completa -> nenhum
+   sinal no dia, MME segue atualizando, `ea.dia_incompleto`); **barra
+   parcial** alimenta a MME e reinicia a janela de 3 barras; regime com
+   a MME ja' atualizada pelo close de t. Criterio de parcial refinado
+   no construtor: primeira barra E 1o trade > 60 s depois do inicio
+   (09:00 com 1o trade em 09:00:07 e' completa). Posicao nao mora aqui.
 3b. **E2b — familias de ordem que o executor nao tem.** Hoje so'
    mercado (E2) e zeragem (E3). Entram: STOP de compra/venda
    (`SendStopBuyOrder`/`SendStopSellOrder`, existem na DLL, faltam no

@@ -155,10 +155,10 @@ def test_conferir_tape_x_grafico_bate_e_acusa_diferenca(tmp_path, monkeypatch) -
 
     r = btc.conferir(tmp_path / "curated", dump, "WINFUT", ["2026-09-14"])
     d = r["dias"]["2026-09-14"]
-    assert d["barras_grafico"] == len(ohlc) and d["barras_ea"] == len(ohlc) - 1
-    # a primeira barra (09:00) e' parcial por construcao e fica fora da conta
-    assert d["parciais_excluidas"] == [900] and d["so_no_grafico"] == [900]
-    assert d["em_comum"] == len(ohlc) - 1 and d["identicas_ohlc"] == len(ohlc) - 2
+    assert d["barras_grafico"] == len(ohlc) == d["barras_ea"]
+    # o 1o trade esta' em 09:00:00 exato: a barra 09:00 e' completa, nao parcial
+    assert d["parciais_excluidas"] == [] and d["so_no_grafico"] == []
+    assert d["em_comum"] == len(ohlc) and d["identicas_ohlc"] == len(ohlc) - 1
     assert d["so_no_ea"] == []
     assert d["dif_max_por_campo"]["high"] == (25.0, 945)
     assert d["barras_diferentes"][0]["hhmm"] == 945
@@ -191,12 +191,16 @@ def test_sem_fim_de_sessao_abre_barra_normalmente() -> None:
     assert c.processar_trade(t1815 + 905 * NS, 1.0, 1, 2) is not None
 
 
-def test_primeira_barra_e_parcial_as_seguintes_nao() -> None:
+def test_primeira_barra_e_parcial_so_se_o_primeiro_trade_veio_tarde() -> None:
     """Medido em 11/09: record ligado as ~09:50, a 09:45 saiu com open/low
-    errados. A primeira barra fechada depois de ligar e' marcada."""
+    errados. Marcada. Mas 09:00 com o 1o trade em 09:00:07 e' completa."""
     c = ConstrutorDeBarraDeTempo(900)
     c.processar_trade(_t(3000), 140000.0, 1, 2)          # 09:50 -> barra 09:45, parcial
     b1 = c.processar_trade(_t(3600), 140010.0, 1, 2)     # 10:00 fecha a 09:45
     b2 = c.processar_trade(_t(4500), 140020.0, 1, 2)     # 10:15 fecha a 10:00
-    assert b1 is not None and b1.parcial
+    assert b1 is not None and b1.parcial and b1.ts_primeiro_ns == _t(3000)
     assert b2 is not None and not b2.parcial
+    c2 = ConstrutorDeBarraDeTempo(900)
+    c2.processar_trade(_t(7), 140000.0, 1, 2)            # 09:00:07
+    b = c2.processar_trade(_t(900), 140000.0, 1, 2)
+    assert b is not None and not b.parcial

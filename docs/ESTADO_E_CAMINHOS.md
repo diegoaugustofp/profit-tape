@@ -53,8 +53,8 @@ Passos, cada um uma entrega:
 | # | passo | estado |
 |---|---|---|
 | 1 | barra de TEMPO no EA (`ConstrutorDeBarraDeTempo`, M15 alinhado à bolsa) | **FECHADO (v2.74)**: 69/69 barras identicas ao grafico no dado real; dobra no fim de sessao e barra parcial viraram regra |
-| 2 | semente da MME80 (parquet do gráfico + ponte pelo tape; sem semente não arma) | **entregue (v2.75)**; falta `semente-conferir` no dado real |
-| 3 | `SinalPreco123` importando `marcar_123` do research (uma fórmula, dois lados) | |
+| 2 | semente da MME80 (parquet do gráfico + ponte pelo tape; sem semente não arma) | **FECHADO (v2.75)**: 28/08 dif 0,0 em 38 barras; 11/09 −15 pts decaindo (3 closes sem tape) → regra do dia incompleto |
+| 3 | `SinalPreco123` sobre a barra de tempo, fórmula importada do research | **entregue (v2.76)** com equivalência testada; dia incompleto e parcial como regras |
 | 3b | E2b — stop / limitada / cancel / OCO na demo | **FECHADO 14/09** |
 | 4 | ciclo de ordens do 123 (stop de entrada → cancela no fim de t+1; fill → stop + limitada; um executa → cancela o outro), slippage e latência por ordem | |
 | 4b | reconciliação de ORDENS ao reconectar (`GetOrders`, cancela órfãs) | |

@@ -2155,3 +2155,18 @@ operador. 829 testes.
 - `profit-tape semente-conferir <parquet> --dia D [--feriado ...]`.
 - 7 testes (semente exata, ponte, dia faltando / feriado, tape fino,
   sem parquet, recursao reproduz o grafico ao centesimo). 836 no total.
+
+### 2026-09-15 — passo 2 fechado no dado real; passo 3: SinalPreco123 (v2.76)
+
+- `semente-conferir`: 28/08 dif 0,0 em 38 barras; 11/09 -15,5 -> -7 pts
+  ao longo do dia (os 3 closes de 09:00-09:30 sem tape), como previsto.
+  Regra decidida: dia com o EA ligado depois da 09:00 nao arma sinal
+  (`ea.dia_incompleto`); a MME segue para convergir no dia seguinte.
+- `research.eas_preco.avaliar_123`: a formula escalar da ficha;
+  `marcar_123` (10 anos) conferida contra ela por equivalencia.
+- `ea/sinal_123.py`: `SinalPreco123` -> `Candidato123` (niveis, validade
+  ate' o fim de t+1, MME, fluxo da barra t). Parcial: alimenta a MME,
+  reinicia a janela. Criterio de parcial refinado: 1o trade > 60 s
+  depois do inicio da barra (`ts_primeiro_ns` na BarraFechada).
+- 4 testes novos (equivalencia EA x research em barras aleatorias, dia
+  incompleto, parcial, niveis/validade/fluxo). 840 no total.

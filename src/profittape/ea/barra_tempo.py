@@ -50,11 +50,13 @@ continuidade dos indicadores, que e' o que a ficha exige igual ao grafico.
 PRIMEIRA BARRA (medido em 11/09/2026: record ligado as ~09:50)
 ------------------------------------------------------------
 A primeira barra que o construtor fecha depois de instanciado pode
-estar PARCIAL: o processo pode ter subido no meio dela e os trades
-anteriores nao existem para ele. `BarraFechada.parcial=True` nela. O
-EA nao arma sinal com barra parcial nem a usa como completa no
-indicador -- o open/low de uma barra parcial diverge do grafico (75 e
-155 pts no caso medido).
+estar PARCIAL: o processo pode ter subido no meio dela. Criterio: e' a
+primeira barra E o primeiro trade dela chegou mais de
+`tolerancia_parcial_s` (60 s) depois do inicio da barra -- no WIN ha'
+negocio a cada segundo na abertura, entao 09:00 com o 1o trade em
+09:00:07 e' completa, e 09:45 com o 1o trade em 09:50 nao e'. A parcial
+nao serve para GEOMETRIA (open/high/low; 75 e 155 pts fora no caso
+medido); o close dela esta' certo e alimenta a MME normalmente.
 
 ORDEM DOS TRADES
 ----------------
@@ -98,10 +100,12 @@ class _AcumuladorTempo:
     vol_agr_venda: int = 0
     n_trades: int = 0
     ts_ultimo_ns: int = field(default=0)
+    ts_primeiro_ns: int = field(default=0)
 
     def registrar(self, ts_ns: int, price: float, quantidade: int, trade_type: int) -> None:
         if self.open is None:
             self.open = price
+            self.ts_primeiro_ns = ts_ns
         self.high = max(self.high, price)
         self.low = min(self.low, price)
         self.close = price
@@ -119,13 +123,15 @@ class ConstrutorDeBarraDeTempo:
     """Uma instancia por SIMBOLO. `processar_trade` por trade; `avancar_relogio`
     no tick. Os dois devolvem BarraFechada ou None."""
 
-    def __init__(self, periodo_s: int = 900, fim_sessao_hhmm: int | None = 1830) -> None:
+    def __init__(self, periodo_s: int = 900, fim_sessao_hhmm: int | None = 1830,
+                 tolerancia_parcial_s: int = 60) -> None:
         if periodo_s <= 0 or 3600 % periodo_s != 0:
             raise ValueError(
                 f"periodo_s={periodo_s}: precisa dividir uma hora (5, 15, 30, 60 min), "
                 "para a grade UTC coincidir com a da bolsa (fuso inteiro)")
         self.periodo_ns = periodo_s * _NS_POR_S
         self.fim_sessao_hhmm = fim_sessao_hhmm
+        self.tolerancia_parcial_ns = tolerancia_parcial_s * _NS_POR_S
         self._acc: _AcumuladorTempo | None = None
         self.barras_fechadas = 0
 
@@ -159,7 +165,9 @@ class ConstrutorDeBarraDeTempo:
             vol_agr=acc.vol_agr, agf={},
             vol_agr_compra=acc.vol_agr_compra, vol_agr_venda=acc.vol_agr_venda,
             n_trades=acc.n_trades,
-            parcial=(self.barras_fechadas == 1),      # a primeira desde a instanciacao
+            ts_primeiro_ns=acc.ts_primeiro_ns,
+            parcial=(self.barras_fechadas == 1
+                     and acc.ts_primeiro_ns - acc.ts_open_ns > self.tolerancia_parcial_ns),
         )
         self._acc = None
         return barra

@@ -749,6 +749,38 @@ P123_ULTIMO_FECHAMENTO = 1630
 P123_D_MINIMO = 4 * TICK_WIN         # 20 pts
 
 
+def avaliar_123(hi2: float, lo2: float, hi1: float, lo1: float,
+                hi: float, lo: float, close: float, mme80: float, hhmm: int,
+                regime_na_clausula: bool = P123_REGIME_NA_CLAUSULA) -> dict[str, Any] | None:
+    """
+    A FORMULA da ficha 123 no fechamento de t, escalar -- e' a que o EA
+    (`ea/sinal_123.py`) usa ao vivo, e `marcar_123` (vetorizada, usada
+    nos 10 anos de teste) e' conferida contra ela por teste de
+    equivalencia. Uma formula, dois lados (skill disciplina, 7.3).
+
+    Devolve o candidato ARMADO (sem o gatilho, que e' t+1 / a corretora)
+    ou None: {"lado", "entrada", "stop", "alvo", "D_pts", "regime_ok"}.
+    """
+    padrao_c = lo1 < lo2 and lo1 < lo
+    padrao_v = hi1 > hi2 and hi1 > hi
+    janela = P123_PRIMEIRO_FECHAMENTO <= hhmm <= P123_ULTIMO_FECHAMENTO
+    if not janela:
+        return None
+    if padrao_c and (not regime_na_clausula or close > mme80):
+        entrada, stop = hi + TICK_WIN, lo1 - TICK_WIN
+        d_pts = arredondar_ao_tick(entrada - stop)
+        if d_pts >= P123_D_MINIMO:
+            return {"lado": "compra", "entrada": entrada, "stop": entrada - d_pts,
+                    "alvo": entrada + d_pts, "D_pts": d_pts, "regime_ok": close > mme80}
+    if padrao_v and (not regime_na_clausula or close < mme80):
+        entrada, stop = lo - TICK_WIN, hi1 + TICK_WIN
+        d_pts = arredondar_ao_tick(stop - entrada)
+        if d_pts >= P123_D_MINIMO:
+            return {"lado": "venda", "entrada": entrada, "stop": entrada + d_pts,
+                    "alvo": entrada - d_pts, "D_pts": d_pts, "regime_ok": close < mme80}
+    return None
+
+
 def marcar_123(d: pd.DataFrame, col_mme80: str = "mme80_ntsl") -> pd.DataFrame:
     """
     Barra t fecha o padrao (t-2, t-1, t). Clausulas, na ordem do funil:
