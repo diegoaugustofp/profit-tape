@@ -1012,6 +1012,35 @@ O que o operador faz: dumps do grafico M15 do WDOFUT (mesmo
 `profit-tape eas-preco <dump> --ficha 123 --instrumento wdo --saida ...`
 (idem `orb`, `ifr2`).
 
+### 8.1b WDO — TRES FICHAS CONGELADAS (2026-09-15, `entregue-v2.82`)
+
+Funis nos tres dumps (2015-22: 1.715 pregoes; 2023-25: 749; 2026: 175,
+ate' 14/09), equivalencia batendo em todos:
+
+| | 123 | ORB | IFR2 |
+|---|---|---|---|
+| sinais/pregao (15-22 / 23-25 / 26) | 2,76 / 2,84 / 2,75 | 0,96 / 0,94 / 0,97 | 3,50 / 3,45 / 3,54 |
+| D p50 (pts) | 20 / 14 / 12 | 30 / 25 / 18 | 15 / 10,5 / 8 |
+| ambigua | 4,4 / 4,5 / 5,0% | 0,7 / 1,7 / 1,8% | 0,6 / 0,9 / 0,6% |
+| por tempo | 15 / 19 / 17% | 10 / 15 / 12% | 4,5 / 6,3 / 6,8% |
+| capital p50 (R$/contrato, informativo) | 10.000 / 7.000 / 6.000 | 15.250 / 12.750 / 8.900 | 7.500 / 5.250 / 4.000 |
+| p1 de empate (custo 0,30) | 0,507-0,512 | 0,505-0,508 | 0,510-0,519 |
+
+Taxas identicas as do WIN por familia; a vol do dolar caiu pela metade
+de 2015 a 2026 e a taxa nao se mexeu. Nenhuma razao de 7.4 para mudar
+clausula. **Congeladas como as do WIN**: IFR2 = 3.2 com K = 1 e regime
+estrato; ORB = 4.1 (D = A, regime estrato); 123 = 5.2 (regime clausula).
+Perfil `wdo` (tick 0,5; custo 0,30 pt; fim de sessao 18:30). Cada uma
+e' trial 1 da sua familia no WDO; hash da ficha inclui o perfil.
+
+Sequencia, as tres de uma vez, declarada: DEPURACAO (14/08+) -> TESTE
+(2023-25, uma rodada) -> REPLICACAO (2026 ate' 13/08) -> HISTORICO
+(2015-22) -> COMBINADO; veredito no combinado; por-ano reportado;
+inconclusivo = fecha. Expectativa dita antes: IFR2 e ORB provavelmente
+nulos; o 123 e' a pergunta. Nota: 2015-22 tem 36,4 barras/pregao (o WDO
+fechava mais cedo em parte do periodo) — o funil usa os rotulos, nada
+muda.
+
 ### 8.2 Acoes — REGISTRADO, nao agora
 
 Lista fechada (liquidez e spread apertado em M15): **PETR4, VALE3,

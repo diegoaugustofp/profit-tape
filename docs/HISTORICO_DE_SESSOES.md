@@ -2225,3 +2225,5 @@ operador. 829 testes.
   certos); 8.2 corrigido: acoes TEM tape (PETR4/VALE3/ITUB4/BBAS3 no
   record); funil WDO 2023-25 registrado em 8.1. Nota: o dump do WDO e' a
   serie ajustada (8 decimais).
+- v2.82 (docs): WDO — funis das tres fichas nos tres dumps registrados;
+  fichas CONGELADAS como as do WIN, com o perfil wdo; sequencia declarada.

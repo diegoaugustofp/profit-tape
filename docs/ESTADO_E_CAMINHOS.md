@@ -75,9 +75,9 @@ ou `venda_apenas` no outro ticker).
 
 ### B2. Outros instrumentos (declarado 15/09, `EAS_DE_PRECO.md` 8)
 
-- **WDO**: as três fichas, na versão congelada do WIN, com o perfil do
-  WDO (`--instrumento wdo`). Dumps do WDOFUT pelo operador; uma noite.
-  Motivo da ordem: ticker diferente do WIN = caminho B puro = E5.6.
+- **WDO**: funis feitos nos três dumps (15/09); **três fichas congeladas**
+  (`EAS_DE_PRECO.md` 8.1b), sequência declarada. Falta rodar os 15
+  comandos de teste com `--instrumento wdo`.
 - **Ações**: lista fechada (PETR4, VALE3, ITUB4, BBDC4, BBAS3),
   registrada, não agora — sem tape, bolsa "B" exige refazer a E2.
 
