@@ -32,10 +32,54 @@ class SemFiltro:
         return True
 
 
-def construir_gate(cfg: dict[str, Any] | None) -> GateDeFluxo:
-    """`filtro_fluxo: null` -> SemFiltro. Qualquer outra coisa e' recusada
-    ate' existir uma ficha que a autorize (extra=forbid na config)."""
+class GateVolumeBaixo:
+    """
+    Ficha 12 (EAS_DE_PRECO.md): passa o candidato cuja barra t fechou com
+    vol_total ABAIXO da mediana do horario nos 20 pregoes anteriores.
+    Gate INDEFINIDO (barra nao confiavel, ou sem 20 pregoes de perfil no
+    horario) = nao passa, contado separado em `indefinidos`. Depois de
+    decidir, a barra t entra no perfil (vale amanha).
+    """
+
+    def __init__(self, perfil: Any, hoje: Any) -> None:
+        self.perfil = perfil
+        self.hoje = hoje                  # callable -> date do pregao corrente
+        self.indefinidos = 0
+        self.avaliados = 0
+        self.ultimo: dict[str, Any] = {}
+
+    def permite(self, candidato: Candidato123, barra_t: BarraFechada) -> bool:
+        import datetime as dt
+        from zoneinfo import ZoneInfo
+        t = dt.datetime.fromtimestamp(barra_t.ts_open_ns / 1e9, tz=ZoneInfo("America/Sao_Paulo"))
+        dia, hhmm = t.date(), t.hour * 100 + t.minute
+        med = self.perfil.mediana(hhmm, dia)
+        self.avaliados += 1
+        self.ultimo = {"hhmm": hhmm, "vol_total": barra_t.vol_total, "mediana": med,
+                       "confiavel": barra_t.volume_confiavel}
+        if not barra_t.volume_confiavel or med is None:
+            self.indefinidos += 1
+            return False
+        return bool(barra_t.vol_total < med)
+
+    def registrar_barra(self, barra: BarraFechada) -> None:
+        """Toda barra fechada (com ou sem candidato) alimenta o perfil."""
+        import datetime as dt
+        from zoneinfo import ZoneInfo
+        t = dt.datetime.fromtimestamp(barra.ts_open_ns / 1e9, tz=ZoneInfo("America/Sao_Paulo"))
+        self.perfil.registrar(t.date(), t.hour * 100 + t.minute, float(barra.vol_total),
+                              barra.volume_confiavel)
+
+
+def construir_gate(cfg: dict[str, Any] | None, perfil: Any = None, hoje: Any = None) -> GateDeFluxo:
+    """`filtro_fluxo: null` -> SemFiltro. `{tipo: volume_baixo}` (ficha 12,
+    2026-09-15) -> GateVolumeBaixo com o perfil dado. Qualquer outra coisa e'
+    recusada ate' existir ficha (extra=forbid na config)."""
     if cfg is None:
         return SemFiltro()
-    raise ValueError(f"filtro_fluxo={cfg!r}: nenhum gate de fluxo tem ficha congelada; "
-                     "so' `null` e' aceito (EAS_DE_PRECO.md 6)")
+    if cfg.get("tipo") == "volume_baixo":
+        if perfil is None:
+            raise ValueError("filtro_fluxo volume_baixo exige um PerfilVolumeHorario")
+        return GateVolumeBaixo(perfil, hoje)
+    raise ValueError(f"filtro_fluxo={cfg!r}: nenhum gate com esse tipo tem ficha congelada; "
+                     "aceitos: null, {tipo: volume_baixo} (EAS_DE_PRECO.md 6 e 12)")

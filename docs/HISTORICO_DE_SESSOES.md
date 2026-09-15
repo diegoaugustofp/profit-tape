@@ -2276,3 +2276,13 @@ operador. 829 testes.
   com buraco. Barra de tempo mede `maior_lacuna_s` e marca
   `volume_confiavel=False` (parcial ou lacuna > 5 s); o comparador lista
   as barras com volume diferente e as nao confiaveis. 870 testes.
+
+### 2026-09-15 — gate de volume baixo no EA; infra no JSONL (v2.89)
+
+- 11/09: as cinco barras com volume diferente sao todas EA abaixo (buraco)
+  com lacuna 38-211 s; `volume_confiavel` pegou todas.
+- `ea/perfil_volume.py` (perfil por horario, parquet + ponte, equivalente
+  ao research por teste), `GateVolumeBaixo`, `construir_gate` aceita
+  `{tipo: volume_baixo}`; `config/ea_123_volume_baixo.yaml`.
+- Infra no JSONL (`infra` por operacao) e `vol_total`/`volume_confiavel`/
+  lacuna no candidato e na barra do gatilho. 5 testes; 875 no total.

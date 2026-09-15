@@ -1260,6 +1260,30 @@ dia 1, agora com evidencia atras.
 do parquet + ponte pelo tape, como a semente) e `filtro_fluxo:
 {tipo: volume_baixo}` no `ea_123.yaml` — carimbo novo, contagem nova.
 
+### 12.2 O gate no EA (`entregue-v2.89`)
+
+- Volume tape x grafico conferido: 28/08 identico (37/37); 11/09 cinco
+  barras abaixo, TODAS com lacuna de 38-211 s — buraco de feed, nao
+  formula. `volume_confiavel` (parcial ou lacuna > 5 s) pega exatamente
+  essas: barra assim e' gate INDEFINIDO (sinal fora, contado) e NAO
+  entra no perfil.
+- `ea/perfil_volume.py`: `PerfilVolumeHorario` — mediana por hhmm dos 20
+  pregoes anteriores (dia corrente fora), semeado pelo parquet + ponte
+  pelo tape (como a MME80); conferido por teste contra
+  `perfil_volume_horario` do research (mesma mediana em todos os
+  horarios). `ea/gate_fluxo.py`: `GateVolumeBaixo`; `filtro_fluxo:
+  {tipo: volume_baixo, janela_pregoes: 20}`.
+- `config/ea_123_volume_baixo.yaml`: EA separado (`ea_123_vb`), carimbo e
+  registro proprios. O operador escolhe qual roda no forward.
+- INFRA no JSONL de cada operacao: `corretora_pronta`, `dia_completo`,
+  `semente_valida`, `reconciliacoes_ate_aqui`, o gate (vol, mediana,
+  confiavel), `volume_confiavel`/`maior_lacuna_s` da barra t e da barra
+  do gatilho. Separa "execucao" de "minha rede caiu" quando o slippage
+  sair. Preocupacao do operador (15/09): infra domestica sem nobreak e
+  com Wi-Fi oscilando — pesquisa se cura com `backfill` (30 dias);
+  execucao nao. Cabo + nobreak antes do E4 real; VPS so' com dinheiro
+  real.
+
 ## 10. Ficha "gap de abertura" — DECLARADA, rascunho (a escrever antes do funil)
 
 Informacao que nenhuma das tres usa: a NOITE. Gap = open(09:00) do dia

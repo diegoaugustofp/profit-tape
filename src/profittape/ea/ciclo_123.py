@@ -119,6 +119,7 @@ class OperacaoRegistrada:
     pnl_pts: float | None = None
     avisos: list[str] = field(default_factory=list)
     barra_gatilho: dict[str, Any] | None = None    # fluxo de t+1 (passo 6)
+    infra: dict[str, Any] = field(default_factory=dict)   # estado da infra ao armar
 
     def resumo(self) -> dict[str, Any]:
         ordens = {k: v.resumo() for k, v in
@@ -126,7 +127,7 @@ class OperacaoRegistrada:
                    ("zeragem", self.zeragem)) if v is not None}
         return {"candidato": self.candidato.resumo(), "desfecho": self.desfecho,
                 "pnl_pts": self.pnl_pts, "avisos": self.avisos, "ordens": ordens,
-                "barra_gatilho": self.barra_gatilho}
+                "barra_gatilho": self.barra_gatilho, "infra": self.infra}
 
 
 class CicloDeOrdens123:
@@ -135,12 +136,13 @@ class CicloDeOrdens123:
                  slack_limite_pts: float = 50.0, timeout_s: float = 10.0,
                  gate: GateDeFluxo | None = None,
                  vagas: Any | None = None, symbol: str = "", nome: str = "",
-                 registro: Any | None = None) -> None:
+                 registro: Any | None = None, infra_extra: Any | None = None) -> None:
         self.sinal = sinal
         self.executor = executor
         self.gate: GateDeFluxo = gate or SemFiltro()
         self.vagas, self.symbol, self.nome = vagas, symbol, nome
         self.registro = registro                 # passo 6: grava cada operacao
+        self.infra_extra = infra_extra           # callable -> dict do estado da infra
         self.rejeitados_gate = 0
         self.sinais_sem_vaga = 0
         self.reconciliacoes = 0
@@ -227,12 +229,21 @@ class CicloDeOrdens123:
                 and b.bar_id > self.op.candidato.barra_sinal_id):
             self.op.barra_gatilho = {"bar_id": b.bar_id, "vol_agr_compra": b.vol_agr_compra,
                                      "vol_agr_venda": b.vol_agr_venda, "n_trades": b.n_trades,
+                                     "vol_total": b.vol_total,
+                                     "volume_confiavel": b.volume_confiavel,
+                                     "maior_lacuna_s": b.maior_lacuna_s,
                                      "high": b.high, "low": b.low, "close": b.close}
         c = self.sinal.barra_fechada(b)
+        registrar = getattr(self.gate, "registrar_barra", None)
         if c is None:
+            if registrar is not None:
+                registrar(b)
             return
         if self.estado == "livre":
-            if not self.gate.permite(c, b):
+            passou = self.gate.permite(c, b)
+            if registrar is not None:
+                registrar(b)
+            if not passou:
                 self.rejeitados_gate += 1
                 log.info("ea.123.rejeitado_gate", gate=type(self.gate).__name__, **c.resumo())
                 return
@@ -252,6 +263,9 @@ class CicloDeOrdens123:
         o = OrdemViva("entrada", c.lado, c.entrada)
         limite = c.entrada + self.slack if c.lado == "compra" else c.entrada - self.slack
         self.op = OperacaoRegistrada(candidato=c, entrada=o)
+        self.op.infra = {"reconciliacoes_ate_aqui": self.reconciliacoes,
+                         "gate": dict(getattr(self.gate, "ultimo", {}) or {}),
+                         **(self.infra_extra() if self.infra_extra else {})}
         if not self._enviar(o, "enviar_stop", lado=c.lado, gatilho=c.entrada, limite=limite):
             self._fechar_op("erro", "stop de entrada recusada pela DLL")
             return
@@ -495,6 +509,7 @@ class CicloDeOrdens123:
                 "ignorados_posicao": self.ignorados_posicao,
                 "ignorados_pendente": self.ignorados_pendente,
                 "rejeitados_gate": self.rejeitados_gate,
+                "gate_indefinidos": getattr(self.gate, "indefinidos", 0),
                 "sinais_sem_vaga": self.sinais_sem_vaga,
                 "reconciliacoes": self.reconciliacoes,
                 "candidatos": self.sinal.candidatos_armados,

@@ -60,11 +60,16 @@ class Candidato123:
     vol_agr_compra_t: int
     vol_agr_venda_t: int
     n_trades_t: int
+    vol_total_t: int = 0
+    volume_confiavel_t: bool = True
+    maior_lacuna_t_s: float = 0.0
 
     def resumo(self) -> dict[str, Any]:
         return {"lado": self.lado, "entrada": self.entrada, "stop": self.stop,
                 "alvo": self.alvo, "D_pts": self.D_pts, "hhmm": self.hhmm_sinal,
-                "bar_id": self.barra_sinal_id, "mme80": round(self.mme80, 2)}
+                "bar_id": self.barra_sinal_id, "mme80": round(self.mme80, 2),
+                "vol_total_t": self.vol_total_t, "volume_confiavel_t": self.volume_confiavel_t,
+                "maior_lacuna_t_s": self.maior_lacuna_t_s}
 
 
 class SinalPreco123:
@@ -112,7 +117,8 @@ class SinalPreco123:
             valido_ate_ns=b0.ts_close_ns + self.periodo_ns, mme80=mme,
             regime_ok=bool(r["regime_ok"]),
             vol_agr_compra_t=b0.vol_agr_compra, vol_agr_venda_t=b0.vol_agr_venda,
-            n_trades_t=b0.n_trades,
+            n_trades_t=b0.n_trades, vol_total_t=b0.vol_total,
+            volume_confiavel_t=b0.volume_confiavel, maior_lacuna_t_s=b0.maior_lacuna_s,
         )
         log.info("ea.sinal_123.armado", **c.resumo())
         return c

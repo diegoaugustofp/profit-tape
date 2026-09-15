@@ -41,6 +41,7 @@ from .barra_tempo import ConstrutorDeBarraDeTempo
 from .ciclo_123 import CicloDeOrdens123
 from .config_123 import EA123Config
 from .gate_fluxo import construir_gate
+from .perfil_volume import construir_perfil
 from .registro_123 import RegistroDeSinais123
 from .semente import IndicadorMME, Semente, construir_semente
 from .sinal_123 import SinalPreco123
@@ -89,16 +90,28 @@ class EA123Service:
         registro = None
         if config.registro_dir:
             registro = RegistroDeSinais123(Path(config.registro_dir), self.carimbo)
+        perfil = None
+        if config.filtro_fluxo and config.filtro_fluxo.get("tipo") == "volume_baixo":
+            perfil = construir_perfil(
+                Path(config.semente_parquet), self.dia,
+                curated if curated is not None else Path(config.curated),
+                symbol=config.symbol, periodo_s=config.periodo_barra_s,
+                janela_pregoes=int(config.filtro_fluxo.get("janela_pregoes", 20)))
+        self.perfil = perfil
         self.ciclo = CicloDeOrdens123(
             self.sinal, executor=None if config.dry_run else executor,
             quantidade=config.tamanho_posicao, zeragem_hhmm=config.zeragem_hhmm,
-            slack_limite_pts=config.slack_limite_pts, gate=construir_gate(config.filtro_fluxo),
-            vagas=vagas, symbol=config.symbol, nome=self.nome, registro=registro)
+            slack_limite_pts=config.slack_limite_pts,
+            gate=construir_gate(config.filtro_fluxo, perfil, lambda: self.dia),
+            vagas=vagas, symbol=config.symbol, nome=self.nome, registro=registro,
+            infra_extra=self._infra)
         self._corretora_pronta_antes: bool | None = None
         self._ultimo_tick = 0.0
         self.trades = 0
         self.barras = 0
         log.warning("ea.123.iniciado", **self.carimbo, semente=self.semente.resumo(),
+                    filtro_fluxo=config.filtro_fluxo,
+                    perfil_volume=(perfil.resumo() if perfil is not None else None),
                     symbol=config.symbol, periodo_s=config.periodo_barra_s,
                     capital_recomendado_informativo=config.capital_recomendado_informativo())
 
@@ -134,6 +147,15 @@ class EA123Service:
                 self.ciclo.reconciliar_apos_reconexao()
             self._corretora_pronta_antes = pronta
         self.ciclo.tick()
+
+    def _infra(self) -> dict[str, Any]:
+        """Estado da infra no momento de armar (vai para o JSONL): separa
+        "execucao" de "minha rede caiu" quando o slippage sair."""
+        pronta = (bool(getattr(self.client, "corretora_pronta", True))
+                  if self.client is not None else None)
+        return {"corretora_pronta": pronta, "dia_completo": self.sinal.dia_completo,
+                "semente_valida": self.semente.valida, "barras_no_dia": self.barras,
+                "perfil_volume": (self.perfil.resumo() if self.perfil is not None else None)}
 
     def encerrar_dia(self) -> None:
         self.ciclo.encerrar_dia()
