@@ -155,8 +155,48 @@ def test_conferir_tape_x_grafico_bate_e_acusa_diferenca(tmp_path, monkeypatch) -
 
     r = btc.conferir(tmp_path / "curated", dump, "WINFUT", ["2026-09-14"])
     d = r["dias"]["2026-09-14"]
-    assert d["barras_ea"] == len(ohlc) == d["barras_grafico"]
-    assert d["em_comum"] == len(ohlc) and d["identicas_ohlc"] == len(ohlc) - 1
-    assert d["so_no_ea"] == [] and d["so_no_grafico"] == []
+    assert d["barras_grafico"] == len(ohlc) and d["barras_ea"] == len(ohlc) - 1
+    # a primeira barra (09:00) e' parcial por construcao e fica fora da conta
+    assert d["parciais_excluidas"] == [900] and d["so_no_grafico"] == [900]
+    assert d["em_comum"] == len(ohlc) - 1 and d["identicas_ohlc"] == len(ohlc) - 2
+    assert d["so_no_ea"] == []
     assert d["dif_max_por_campo"]["high"] == (25.0, 945)
     assert d["barras_diferentes"][0]["hhmm"] == 945
+
+
+def test_fim_de_sessao_dobra_na_ultima_barra_como_o_grafico() -> None:
+    """Medido em 28/08: o grafico nao abre barra 18:30 -- dobra os negocios
+    do fechamento na 18:15, que fica com o ultimo preco como close."""
+    t1815 = int(pd.Timestamp("2026-08-28 21:15:00", tz="UTC").value)   # 18:15 BRT
+    c = ConstrutorDeBarraDeTempo(900)
+    c.processar_trade(t1815 + 5 * NS, 177700.0, 1, 2)
+    c.processar_trade(t1815 + 600 * NS, 177680.0, 1, 3)                  # 18:25
+    assert c.processar_trade(t1815 + 905 * NS, 177650.0, 1, 2) is None  # 18:30:05 -> dobra
+    assert c.processar_trade(t1815 + 1200 * NS, 177640.0, 1, 3) is None # 18:35
+    b = c.avancar_relogio(t1815 + 2000 * NS)
+    assert b is not None
+    assert b.ts_open_ns == t1815 and (b.low, b.close) == (177640.0, 177640.0)
+    assert b.n_trades == 4 and c.barras_fechadas == 1
+    # dia seguinte: nao dobra (data local diferente)
+    t0900 = int(pd.Timestamp("2026-08-31 12:00:00", tz="UTC").value)
+    c.processar_trade(t0900 + NS, 178000.0, 1, 2)
+    acc = c.em_formacao
+    assert acc is not None and acc.ts_open_ns == t0900
+
+
+def test_sem_fim_de_sessao_abre_barra_normalmente() -> None:
+    t1815 = int(pd.Timestamp("2026-08-28 21:15:00", tz="UTC").value)
+    c = ConstrutorDeBarraDeTempo(900, fim_sessao_hhmm=None)
+    c.processar_trade(t1815 + NS, 1.0, 1, 2)
+    assert c.processar_trade(t1815 + 905 * NS, 1.0, 1, 2) is not None
+
+
+def test_primeira_barra_e_parcial_as_seguintes_nao() -> None:
+    """Medido em 11/09: record ligado as ~09:50, a 09:45 saiu com open/low
+    errados. A primeira barra fechada depois de ligar e' marcada."""
+    c = ConstrutorDeBarraDeTempo(900)
+    c.processar_trade(_t(3000), 140000.0, 1, 2)          # 09:50 -> barra 09:45, parcial
+    b1 = c.processar_trade(_t(3600), 140010.0, 1, 2)     # 10:00 fecha a 09:45
+    b2 = c.processar_trade(_t(4500), 140020.0, 1, 2)     # 10:15 fecha a 10:00
+    assert b1 is not None and b1.parcial
+    assert b2 is not None and not b2.parcial

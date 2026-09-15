@@ -831,11 +831,13 @@ observacao.
    ordem levanta. `BarraFechada` ganhou `vol_agr_compra`,
    `vol_agr_venda`, `n_trades` (insumo do gate). Equivalencia com
    `resample('15min')` do pandas medida em teste (5.000 trades, OHLC e
-   volumes por lado identicos). **Falta a conferencia no dado REAL:**
-   `profit-tape barra-tempo-conferir <dump> --dia YYYY-MM-DD ...` compara
-   as barras do tape com as do grafico, barra a barra — item 2 do
-   checklist do forward; roda em qualquer dia com tape (24/07+) que
-   esteja no dump de 2026.
+   volumes por lado identicos). **Conferido no dado REAL (v2.74):**
+   `barra-tempo-conferir` em 28/08 e 11/09 — 69 de 69 barras com dado
+   completo dos dois lados IDENTICAS ao tick. As duas diferencas
+   viraram regra: (a) o grafico DOBRA os negocios de 18:30 em diante
+   na barra 18:15 (`fim_sessao_hhmm=1830`); (b) a primeira barra depois
+   de ligar pode ser PARCIAL (`BarraFechada.parcial=True`, o EA nao a
+   usa). 10/09 sem tape por queda de conexao — backfill do operador.
 2. **Semente dos indicadores** — MME80 continua entre pregoes e leva
    400 barras (~11 pregoes) para esquecer a semente. O EA carrega as
    ultimas 400 barras M15 do dump mais recente (`barras_123.parquet`)

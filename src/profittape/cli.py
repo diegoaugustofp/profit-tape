@@ -1419,10 +1419,14 @@ def barra_tempo_conferir(
         typer.echo(f"      dif_max (pts, hhmm): {d['dif_max_por_campo']}")
         if d["so_no_ea"] or d["so_no_grafico"]:
             typer.echo(f"      so' no EA: {d['so_no_ea']}   so' no grafico: {d['so_no_grafico']}")
+        if d["parciais_excluidas"]:
+            typer.echo(f"      parcial (primeira barra depois de ligar, fora da conta): "
+                       f"{d['parciais_excluidas']}")
         for b in d["barras_diferentes"]:
             typer.echo(f"      {b}")
     typer.echo("\n  Veredito: BATE se identicas == em comum em todos os dias e nenhuma barra "
-               "so' de um lado (fora a ultima do dia, que o grafico pode nao ter fechado).")
+               "so' de um lado (fora as que o grafico ainda nao tinha fechado quando o dump "
+               "foi tirado, e as do comeco do dia se o record entrou tarde).")
 
 
 @app.command(name="eas-preco-teste")

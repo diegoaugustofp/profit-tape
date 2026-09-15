@@ -36,6 +36,26 @@ plota barra sem negocio no WIN (medido: 37,5 barras/pregao nos dumps,
 nunca 38 com buraco). `bar_id` e' o indice da fronteira (inicio //
 periodo), entao o salto fica visivel em quem consome.
 
+FIM DE SESSAO (medido em 28/08/2026, `barra-tempo-conferir`)
+-----------------------------------------------------------
+O grafico do Profit NAO abre barra nova a partir do fim da sessao: os
+negocios de 18:30 em diante (fechamento, after) sao DOBRADOS na barra
+18:15, que fica com o ultimo preco do dia como close. Sem esta regra o
+EA fechava 38 barras identicas ao grafico e uma 39a que o grafico nao
+tem, e a 18:15 do EA discordava no close. `fim_sessao_hhmm=1830`: trade
+cuja barra comecaria a partir dai' entra na barra em formacao do mesmo
+dia. Para o 123 isso nao muda sinal (ultima entrada 16:30) -- muda a
+continuidade dos indicadores, que e' o que a ficha exige igual ao grafico.
+
+PRIMEIRA BARRA (medido em 11/09/2026: record ligado as ~09:50)
+------------------------------------------------------------
+A primeira barra que o construtor fecha depois de instanciado pode
+estar PARCIAL: o processo pode ter subido no meio dela e os trades
+anteriores nao existem para ele. `BarraFechada.parcial=True` nela. O
+EA nao arma sinal com barra parcial nem a usa como completa no
+indicador -- o open/low de uma barra parcial diverge do grafico (75 e
+155 pts no caso medido).
+
 ORDEM DOS TRADES
 ----------------
 Pre-condicao: ts_ns nao decrescente (a do callback e do parquet). Um
@@ -48,9 +68,13 @@ grafico sem ninguem perceber.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from ..domain.enums import TradeType
 from .sinal import BarraFechada
+
+_TZ_BOLSA = ZoneInfo("America/Sao_Paulo")
 
 _BUY = int(TradeType.AGGRESSOR_BUYER)
 _SELL = int(TradeType.AGGRESSOR_SELLER)
@@ -95,14 +119,29 @@ class ConstrutorDeBarraDeTempo:
     """Uma instancia por SIMBOLO. `processar_trade` por trade; `avancar_relogio`
     no tick. Os dois devolvem BarraFechada ou None."""
 
-    def __init__(self, periodo_s: int = 900) -> None:
+    def __init__(self, periodo_s: int = 900, fim_sessao_hhmm: int | None = 1830) -> None:
         if periodo_s <= 0 or 3600 % periodo_s != 0:
             raise ValueError(
                 f"periodo_s={periodo_s}: precisa dividir uma hora (5, 15, 30, 60 min), "
                 "para a grade UTC coincidir com a da bolsa (fuso inteiro)")
         self.periodo_ns = periodo_s * _NS_POR_S
+        self.fim_sessao_hhmm = fim_sessao_hhmm
         self._acc: _AcumuladorTempo | None = None
         self.barras_fechadas = 0
+
+    @staticmethod
+    def _local(ts_ns: int) -> datetime:
+        return datetime.fromtimestamp(ts_ns / _NS_POR_S, tz=_TZ_BOLSA)
+
+    def _dobra_no_fim_de_sessao(self, ts_ns: int) -> bool:
+        """True se um trade em ts_ns pertence a` barra em formacao por
+        convencao de fim de sessao (mesmo dia local, hora >= fim)."""
+        if self.fim_sessao_hhmm is None or self._acc is None:
+            return False
+        t = self._local(ts_ns)
+        if t.hour * 100 + t.minute < self.fim_sessao_hhmm:
+            return False
+        return t.date() == self._local(self._acc.ts_open_ns).date()
 
     # ------------------------------------------------------------------
     def _inicio_de(self, ts_ns: int) -> int:
@@ -120,6 +159,7 @@ class ConstrutorDeBarraDeTempo:
             vol_agr=acc.vol_agr, agf={},
             vol_agr_compra=acc.vol_agr_compra, vol_agr_venda=acc.vol_agr_venda,
             n_trades=acc.n_trades,
+            parcial=(self.barras_fechadas == 1),      # a primeira desde a instanciacao
         )
         self._acc = None
         return barra
@@ -135,7 +175,10 @@ class ConstrutorDeBarraDeTempo:
                     f"trade ts={ts_ns} anterior ao inicio da barra em formacao "
                     f"({self._acc.ts_open_ns}): feed fora de ordem")
             if ts_ns >= self._acc.ts_close_ns:
-                fechada = self._fechar()
+                if self._dobra_no_fim_de_sessao(ts_ns):
+                    self._acc.ts_close_ns = inicio + self.periodo_ns   # estende a barra
+                else:
+                    fechada = self._fechar()
         if self._acc is None:
             self._acc = _AcumuladorTempo(ts_open_ns=inicio, ts_close_ns=inicio + self.periodo_ns)
         self._acc.registrar(ts_ns, price, quantidade, trade_type)

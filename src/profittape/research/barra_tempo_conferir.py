@@ -63,6 +63,8 @@ def conferir(curated: Path, dump: Path, symbol: str, dias: list[str],
         if g.empty:
             resultado["dias"][dia] = {"erro": "dia nao esta' no dump"}
             continue
+        parciais = ea[ea["parcial"]]["hhmm"].tolist()
+        ea = ea[~ea["parcial"]]           # a primeira barra depois de ligar nao conta
         m = ea.merge(g[["hhmm", "open", "high", "low", "close", "vol_total"]],
                      on="hhmm", how="outer", suffixes=("_ea", "_grafico"), indicator=True)
         so_ea = m[m["_merge"] == "left_only"]["hhmm"].tolist()
@@ -82,6 +84,7 @@ def conferir(curated: Path, dump: Path, symbol: str, dias: list[str],
             "barras_ea": len(ea), "barras_grafico": len(g),
             "em_comum": len(ambos), "identicas_ohlc": n_iguais,
             "so_no_ea": so_ea, "so_no_grafico": so_grafico,
+            "parciais_excluidas": parciais,
             "dif_max_por_campo": piores,
             "barras_diferentes": [
                 {"hhmm": int(r["hhmm"]),

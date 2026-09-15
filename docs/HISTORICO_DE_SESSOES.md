@@ -2134,3 +2134,13 @@ pasta esquece a falha. 3 testes novos. 764 no total.
   barra, por dia — item 2 do checklist do forward no dado real. Teste
   com dump adulterado acusa a barra certa.
 - 8 testes novos; 826 no total, ruff e mypy limpos.
+
+### 2026-09-15 — passo 1 FECHADO no dado real; fim de sessao e barra parcial (v2.74)
+
+`barra-tempo-conferir` em 28/08 e 11/09: 69/69 barras com dado completo
+identicas ao tick. As duas diferencas viraram regra no construtor:
+(a) o grafico dobra os negocios de 18:30+ na barra 18:15 -> `fim_sessao_hhmm`;
+(b) a primeira barra depois de ligar e' `parcial` (record de 11/09 entrou
+as ~09:50: open/low 75 e 155 pts fora) -> excluida da conta e, no EA, de
+sinal e indicador. 10/09: sem tape por queda de conexao; backfill do
+operador. 829 testes.
