@@ -982,8 +982,17 @@ historico -> combinado) com o criterio de sempre.
 Perfil (`PERFIS["wdo"]`): tick 0,5 pt; 1 pt = R$10/contrato; custo
 ida-e-volta 0,30 pt (~R$3, a conferir na nota); janela 09:15-16:30 (IFR2)
 / 09:30-16:30 (123); range ORB 09:00 e 09:15, entradas ate' 11:45;
-zeragem 17:30; fim de sessao 18:00 (ultima barra 17:45 — a confirmar
-no dump: ~36 barras/pregao). D minimo 4 ticks = 2 pts.
+zeragem 17:30; fim de sessao 18:30 (mesma grade do WIN: ultima barra
+18:15, 37,5 barras/pregao — confirmado no dump 2023-25). D minimo 4
+ticks = 2 pts. O dump do WDO e' a serie continua AJUSTADA (precos com 8
+decimais): a geometria e' a mesma; ao vivo os niveis caem na grade de
+0,5, e o EA arredonda ao tick.
+
+**Funil 2023-25 (15/09):** 123 2,84 sinais/pregao, D p50 14 pts, ambigua
+4,5%, por tempo 19%; ORB 0,94/pregao, A p50 25 pts, ambigua 1,7%, por
+tempo 15%; IFR2 3,45/pregao, ATR14 p50 9,9 pts, ambigua 0,9%, por tempo
+6%. Custo irrelevante nos tres (p1 de empate 0,506-0,514). Faltam os
+dumps 2015-22 e 2026 para congelar.
 
 Ordem: as tres fichas como estao (v0 do IFR2 com K = 1 e regime
 estrato? NAO — para o WDO cada ficha comeca da versao que foi
@@ -1009,12 +1018,16 @@ Lista fechada (liquidez e spread apertado em M15): **PETR4, VALE3,
 ITUB4, BBDC4, BBAS3**. Nada de small caps: com tick de R$0,01 o custo
 proporcional come uma borda de 0,53.
 
-O que muda, e por que fica para depois: nao ha' tape (o record captura
-so' WIN e WDO) — sem porta de volume, sem semente por ponte, sem
-ambigua resolvida pelo tape: preco puro do comeco ao fim; pregao
-10:00-17:00, lote de 100, preco em centavos, custo em % e nao em pontos;
-o executor foi provado em bolsa "F" — bolsa "B" exige refazer a E2 (uma
-ordem real na demo) antes de qualquer E4. Perfil de instrumento por
+O que muda, e por que fica para depois — **corrigido em 15/09**: eu
+tinha escrito que acao nao tem tape; o record captura PETR4, VALE3,
+ITUB4, BBAS3 (e BOVA11, MGLU3, WEGE3) desde o inicio. Entao porta de
+volume, semente por ponte e ambigua pelo tape VALEM para quatro das
+cinco da lista (BBDC4 nao e' capturada — a incluir no record quando
+chegar a vez). O que continua diferente: pregao 10:00-17:00, lote de
+100, preco em centavos, custo em % e nao em pontos; o executor foi
+provado em bolsa "F" — bolsa "B" exige refazer a E2 (uma ordem real na
+demo) antes de qualquer E4. A ordem (WDO primeiro) nao muda: o
+argumento dela e' o caminho B, nao o tape. Perfil de instrumento por
 acao a escrever quando chegar a vez. Expectativa dita antes:
 provavelmente nulo na maioria; se uma sobreviver com onze anos
 consistentes, ai' se refaz a E2 para bolsa B.

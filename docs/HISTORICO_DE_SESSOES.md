@@ -2219,3 +2219,9 @@ operador. 829 testes.
 - `EAS_DE_PRECO.md` 8: ficha por instrumento, multiplicidade declarada,
   WDO com as tres fichas na versao congelada do WIN, acoes com lista
   fechada e o que muda (sem tape, bolsa B, E2 a refazer). 862 testes.
+- v2.81: perfil WDO com fim de sessao 18:30 (ultima barra 18:15,
+  confirmada no dump); rotulos do funil e da CLI com os valores do
+  instrumento (estavam fixos em 20/11/0,20 — os calculos ja' eram os
+  certos); 8.2 corrigido: acoes TEM tape (PETR4/VALE3/ITUB4/BBAS3 no
+  record); funil WDO 2023-25 registrado em 8.1. Nota: o dump do WDO e' a
+  serie ajustada (8 decimais).

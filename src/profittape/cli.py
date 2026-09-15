@@ -1259,9 +1259,11 @@ def eas_preco(
     de docs/EAS_DE_PRECO.md antes de congelar.
     """
     configurar(log_level)
-    from .research.eas_preco import K_ATR, equivalencia, rodar, rodar_orb, usar_instrumento
+    from .research import eas_preco as ep
+    from .research.eas_preco import equivalencia, rodar, rodar_orb, usar_instrumento
 
     usar_instrumento(instrumento)
+    K_ATR, CUSTO_PONTOS, VALOR_PONTO_REAIS = ep.K_ATR, ep.CUSTO_PONTOS, ep.VALOR_PONTO_REAIS
     if ficha == "orb":
         _eas_preco_orb(log, saida, rodar_orb)
         return
@@ -1298,10 +1300,10 @@ def eas_preco(
     typer.echo("\n--- EM PONTOS (7.5) ---")
     typer.echo(f"  ATR14 p10/p50/p90: {pt['atr14_pts']}")
     typer.echo(f"  D = {K_ATR} x ATR14 ao tick, nos sinais: {pt['D_pts']}")
-    typer.echo(f"  capital RECOMENDADO por contrato (2% por op, R$0,20/pt; informativo, 4.9): "
-               f"{pt['capital_recomendado_por_contrato_reais']}")
+    typer.echo(f"  capital RECOMENDADO por contrato (2% por op, R${VALOR_PONTO_REAIS}/pt; "
+               f"informativo, 4.9): {pt['capital_recomendado_por_contrato_reais']}")
     typer.echo(
-        f"  Para pagar 11 pts a p1=0,56, D precisa ser >= "
+        f"  Para pagar {CUSTO_PONTOS:g} pts a p1=0,56, D precisa ser >= "
         f"{pt['D_minimo_para_pagar_custo_a_p1_056_pts']} pts; com o D mediano, o p1 que "
         f"EMPATA o custo e' {pt['p1_que_empata_custo_com_D_mediano']}"
     )
@@ -1342,9 +1344,11 @@ def _eas_preco_orb(log: Path, saida: Path, rodar_orb: Any) -> None:
     typer.echo(f"  A (amplitude do range) p10/p50/p90, todos os pregoes: "
                f"{pt['A_pts_todos_os_pregoes']}")
     typer.echo(f"  D = A ao tick, nos sinais: {pt['D_pts_nos_sinais']}")
-    typer.echo(f"  capital RECOMENDADO por contrato (2% por op, R$0,20/pt; informativo, 4.9): "
-               f"{pt['capital_recomendado_por_contrato_reais']}")
-    typer.echo(f"  p1 que empata 11 pts com D mediano: {pt['p1_que_empata_custo_com_D_mediano']}")
+    from .research import eas_preco as ep
+    typer.echo(f"  capital RECOMENDADO por contrato (2% por op, R${ep.VALOR_PONTO_REAIS}/pt; "
+               f"informativo, 4.9): {pt['capital_recomendado_por_contrato_reais']}")
+    typer.echo(f"  p1 que empata {ep.CUSTO_PONTOS:g} pts com D mediano: "
+               f"{pt['p1_que_empata_custo_com_D_mediano']}")
     typer.echo(f"  hora do gatilho p10/p50/p90 (HHMM): {pt['gatilho_hhmm']}")
     typer.echo("\n--- ESTIMADOR BINARIO ---")
     typer.echo(f"  classes={pt['classes']}  fracao_ambigua={pt['fracao_ambigua']}  "
@@ -1375,9 +1379,11 @@ def _eas_preco_123(log: Path, saida: Path, rodar_123: Any) -> None:
     typer.echo(r["funil"].to_string(index=False))
     typer.echo("\n--- EM PONTOS (7.5) ---")
     typer.echo(f"  D = entrada - stop, nos sinais: {pt['D_pts']}")
-    typer.echo(f"  capital RECOMENDADO por contrato (informativo, 4.9): "
-               f"{pt['capital_recomendado_por_contrato_reais']}")
-    typer.echo(f"  p1 que empata 11 pts com D mediano: {pt['p1_que_empata_custo_com_D_mediano']}")
+    from .research import eas_preco as ep
+    typer.echo(f"  capital RECOMENDADO por contrato (R${ep.VALOR_PONTO_REAIS}/pt; "
+               f"informativo, 4.9): {pt['capital_recomendado_por_contrato_reais']}")
+    typer.echo(f"  p1 que empata {ep.CUSTO_PONTOS:g} pts com D mediano: "
+               f"{pt['p1_que_empata_custo_com_D_mediano']}")
     typer.echo("\n--- ESTIMADOR BINARIO ---")
     typer.echo(f"  sinais={a['n_sinais']}  {a['contagem']}  fracao={a['fracao']}  "
                f"duracao={a['duracao_barras']}")

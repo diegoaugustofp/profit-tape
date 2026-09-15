@@ -683,7 +683,7 @@ def contar_clausulas_orb(o: pd.DataFrame) -> pd.DataFrame:
     etapas = [
         ("pregoes no dump", pd.Series(True, index=o.index)),
         ("+range 09:00/09:15 presente", col("range_ok")),
-        ("+amplitude >= 20 pts", col("range_ok") & col("amplitude_ok")),
+        (f"+amplitude >= {ORB_AMPLITUDE_MINIMA:g} pts", col("range_ok") & col("amplitude_ok")),
         ("+rompeu algum lado ate' 11:45",
          col("range_ok") & col("amplitude_ok") & col("rompeu_algum")),
         ("+primeiro rompimento (um lado so' na barra) = SINAL", col("sinal")),
@@ -765,9 +765,10 @@ P123_D_MINIMO = 4 * TICK_WIN         # 20 pts
 #
 # WDO (mini-dolar): tick 0,5 pt; 1 pt = R$10 por contrato; custo
 # ida-e-volta ~R$3 = 0,30 pt (declarado, a conferir na nota de
-# corretagem); pregao 09:00-18:00 (ultima barra M15 17:45); zeragem e
-# janela iguais ao WIN. A CONFIRMAR NO DUMP: barras/pregao (~36) e o
-# rotulo da ultima barra.
+# corretagem); mesma grade do WIN (ultima barra 18:15, 37,5 barras por
+# pregao -- medido no dump 2023-25); zeragem e janela iguais ao WIN. O
+# dump do WDO e' a serie continua AJUSTADA (precos com 8 decimais): a
+# geometria e' a mesma; ao vivo os niveis caem na grade de 0,5.
 @dataclass(frozen=True)
 class Instrumento:
     nome: str
@@ -796,7 +797,9 @@ class Instrumento:
 
 PERFIS: dict[str, Instrumento] = {
     "win": Instrumento("win", 5.0, 11.0, 0.20, 915, 1630, (900, 915), 930, 1145, 1830),
-    "wdo": Instrumento("wdo", 0.5, 0.30, 10.0, 915, 1630, (900, 915), 930, 1145, 1800),
+    # fim de sessao 18:30: ultima barra do dump e' 18:15, mesma grade do WIN
+    # (confirmado 2026-09-15: `PRCBARRA|1221229|1815|...`).
+    "wdo": Instrumento("wdo", 0.5, 0.30, 10.0, 915, 1630, (900, 915), 930, 1145, 1830),
 }
 INSTRUMENTO: Instrumento = PERFIS["win"]
 
@@ -919,7 +922,7 @@ def contar_clausulas_123(x: pd.DataFrame) -> pd.DataFrame:
             ("padrao (3 barras)", p),
             ("+regime MME80" if P123_REGIME_NA_CLAUSULA else "(regime = estrato)", p & reg),
             ("+janela 09:30-16:30", p & reg & j),
-            ("+D >= 20 pts", p & reg & j & dd),
+            (f"+D >= {P123_D_MINIMO:g} pts", p & reg & j & dd),
             ("+gatilho em t+1 = SINAL", x[f"sinal_{lado}"]),
             ("(info) SINAL sem exigir regime", p & j & dd & gt),
             ("(info) sinal com inside bar em t", x[f"sinal_{lado}"] & x["inside_bar"]),
