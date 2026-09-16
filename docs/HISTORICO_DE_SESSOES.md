@@ -2335,3 +2335,24 @@ acoes. Rotina nova: backfill + cura do dia anterior toda manha.
   08:18. Criterio corrigido: parcial = o CONSTRUTOR comecou depois do
   inicio da barra (`inicio_ns`); no servico, so' quando o dia operado e'
   hoje (replay cai no criterio antigo, que conferiu 69/69). 883 testes.
+
+### 2026-09-16 — ficha 11 FECHADA sem p1; ficha 10 (gap) entregue (v2.93)
+
+- Vespera v1 (D = ATR14): por tempo caiu para 0,8-1,5%, mas a
+  AMBIGUIDADE subiu para 54-74% -- o stop a 1 ATR do nivel fica DENTRO
+  da barra que rompe, e o OHLC nao ordena. v0 falhava por D grande
+  (alvo inalcancavel), v1 por D pequeno (stop dentro da barra do
+  gatilho): lados opostos da mesma tensao. **Ficha 11 FECHA sem nunca
+  ter tido p1**; nao ha' v2 (escolher o terceiro desenho depois de dois
+  diagnosticos e' procurar o que passa). Conclusao registrada: o
+  rompimento do nivel da vespera nao e' testavel em M15 com estimador
+  binario simetrico -- precisaria de tape para ordenar a barra do
+  gatilho, e isso e' hipotese nova.
+- APRENDIZADO DE METODO: quando a entrada e' por ROMPIMENTO, D precisa
+  ser maior que a barra do gatilho, ou o OHLC nao resolve. O ORB tinha
+  isso de graca (D = range inteiro, ambiguidade 0,3%).
+- Ficha 10 (GAP) escrita e entregue: fechamento de gap (decisao do
+  operador), lado pelo SINAL do gap, entrada a MERCADO em 09:15 (sem
+  barra de gatilho = estimador limpo), D = |entrada - close_v|, piso
+  |gap| >= 0,5 x ATR14 com a RESSALVA do operador registrada e
+  `alternativas_de_piso` (so' taxa) no funil. 5 testes; 888 no total.

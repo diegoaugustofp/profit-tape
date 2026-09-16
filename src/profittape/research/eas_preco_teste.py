@@ -104,6 +104,12 @@ FICHAS: dict[str, dict[str, Any]] = {
     # ficha 12 (docs): hipotese GERADA no WIN pelo complemento da ficha 9;
     # so' pode ser testada onde nenhum teste de volume tocou (WDO) e no
     # forward. Primario = volume ABAIXO da mediana; contraste = acima.
+    # ficha 10 (docs): GAP de abertura, fechamento de gap. Trial 1.
+    "gap": {**_COMUM, "TRIAL": 1,
+            "GAP_K_MINIMO": ep.GAP_K_MINIMO,
+            "GAP_HHMM_ENTRADA": ep.GAP_HHMM_ENTRADA,
+            "DIRECAO": "fechamento de gap (gap para cima -> venda)",
+            "D": "|entrada - close da vespera|, recalculado da entrada"},
     # ficha 11 (docs): rompimento da maxima/minima da VESPERA. Trial 1.
     "vespera": {**_COMUM, "TRIAL": 1,
                 "VESP_PRIMEIRA_ENTRADA": ep.VESP_PRIMEIRA_ENTRADA,
@@ -235,6 +241,50 @@ def resolver_sinais(x: pd.DataFrame, max_barras: int = 400) -> pd.DataFrame:
             "pnl_bruto_pts": (res * d_pts) if classe == "resolvida" else float("nan"),
             "barra_resolucao_hhmm": (int(hhmm[j]) if j < len(x) and classe != "por_tempo"
                                      else None),
+        })
+    return pd.DataFrame(linhas)
+
+
+def resolver_gap(d: pd.DataFrame) -> pd.DataFrame:
+    """Resultado por PREGAO da ficha 10. Entrada a MERCADO: nao ha' barra
+    de gatilho para ordenar -- a ambiguidade e' so' a normal (os dois na
+    mesma barra de resolucao)."""
+    o = ep.marcar_gap(d)
+    if o.empty or "sinal" not in o:
+        return pd.DataFrame(columns=[*_COLUNAS, "pnl_zeragem_pts"])
+    o = o[o["sinal"].fillna(False).astype(bool)].copy()
+    linhas = []
+    for _, ln in o.iterrows():
+        lado = str(ln["lado"])
+        sinal_lado = 1.0 if lado == "compra" else -1.0
+        entrada, d_pts, classe = float(ln["entrada"]), float(ln["D_pts"]), str(ln["classe"])
+        res = float("nan")
+        if classe == "ambigua":
+            res = 0.0
+        elif classe == "resolvida":
+            g = d[d["dia"] == ln["dia"]].sort_values("current_bar")
+            alvo, stop = float(ln["alvo"]), float(ln["stop"])
+            for _, b in g[g["hhmm"] > ep.GAP_HHMM_ENTRADA].iterrows():
+                hi, lo = float(b["high"]), float(b["low"])
+                t_alvo = (lo <= alvo) if lado == "venda" else (hi >= alvo)
+                t_stop = (hi >= stop) if lado == "venda" else (lo <= stop)
+                if t_alvo and t_stop:
+                    break
+                if t_alvo:
+                    res = 1.0
+                    break
+                if t_stop:
+                    res = -1.0
+                    break
+        pnl_z = ((float(ln["close_final"]) - entrada) * sinal_lado
+                 if classe == "por_tempo" else float("nan"))
+        linhas.append({
+            "dia": ln["dia"], "hhmm": ep.GAP_HHMM_ENTRADA, "current_bar": 0, "lado": lado,
+            "a_favor_mme80": bool(ln["a_favor_mme80"]), "entrada": entrada,
+            "alvo": float(ln["alvo"]), "stop": float(ln["stop"]), "D_pts": d_pts,
+            "classe": classe, "resultado": res, "barras": int(ln["barras_ate_resolver"]),
+            "pnl_bruto_pts": (res * d_pts) if classe == "resolvida" else float("nan"),
+            "pnl_zeragem_pts": pnl_z, "barra_resolucao_hhmm": None,
         })
     return pd.DataFrame(linhas)
 
@@ -604,7 +654,8 @@ def rodar(dump: Path, saida: Path, amostra: str,
          "123": lambda: resolver_123(d),
          "123gate": lambda: resolver_123(d, gate=True),
          "123gate_baixo": lambda: resolver_123(d, gate=False),
-         "vespera": lambda: resolver_vespera(d)}[ficha]()
+         "vespera": lambda: resolver_vespera(d),
+         "gap": lambda: resolver_gap(d)}[ficha]()
     pl = placar(r, ficha)
     saida.mkdir(parents=True, exist_ok=True)
     if ficha in ("123gate", "123gate_baixo"):

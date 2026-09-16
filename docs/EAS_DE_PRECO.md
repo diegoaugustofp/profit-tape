@@ -1284,17 +1284,52 @@ do parquet + ponte pelo tape, como a semente) e `filtro_fluxo:
   execucao nao. Cabo + nobreak antes do E4 real; VPS so' com dinheiro
   real.
 
-## 10. Ficha "gap de abertura" — DECLARADA, rascunho (a escrever antes do funil)
+## 10. Ficha "GAP de abertura" v0 (2026-09-16, `entregue-v2.93`)
 
-Informacao que nenhuma das tres usa: a NOITE. Gap = open(09:00) do dia
-menos close da ultima barra da vespera (a serie continua ajustada do
-Profit ja' trata rolagem). Hipotese candidata (a fechar antes de
-qualquer codigo): gap grande (acima de um multiplo do ATR14 diario,
-declarado) tende a fechar parcialmente na primeira hora — entrada
-contra o gap na abertura, alvo no fechamento da vespera, stop
-simetrico. Literatura em indice futuro existe; no WIN, a medir.
-Perfil, estimador, amostras e ordem: os mesmos. Escrever a ficha
-completa quando o gate estiver fechado.
+Informacao que nenhuma outra usa: a NOITE. Entrada a MERCADO — e' o que
+evita o que matou a ficha 11 (sem barra de gatilho, nao ha' o que
+ordenar dentro dela). Familia nova ("gap"), trial 1.
+
+    HIPOTESE   FECHAMENTO DE GAP (decisao do operador, 16/09, entre as
+               duas leituras da literatura): uma abertura com gap
+               relevante tende a reavaliar o gap durante o dia. Entrando
+               CONTRA o gap na abertura de 09:15, o alvo no fechamento da
+               vespera e' alcancado antes de um stop simetrico em mais de
+               50% das vezes.
+
+    EVENTO     Vespera contigua; close_v e atr_v = close e ATR14 da
+               ULTIMA barra da vespera. gap = open(09:00) - close_v;
+               |gap| >= 0,5 x atr_v. A barra 09:00 nao pode ter fechado o
+               gap (se low <= close_v <= high, o evento acabou antes da
+               entrada -- fora, contado). LADO PELO SINAL DO GAP, nao
+               pela cor da barra: gap para CIMA -> VENDA; para BAIXO ->
+               COMPRA. Entrada a MERCADO na abertura de 09:15; se ela ja'
+               estiver alem do close_v, fora. Alvo = close_v. **D =
+               |entrada - close_v| ao tick** — recalculado da ENTRADA,
+               porque a barra 09:00 ja' andou; stop simetrico. D >= 4
+               ticks. Uma operacao por pregao; resolve ate' a zeragem.
+               Regime (close_v vs MME80) = ESTRATO.
+
+    VERSAO "COM CONFIRMACAO" (entrar so' se a barra 09:00 ja' andou na
+               direcao do fechamento) e' OUTRA ficha: registrada, nao
+               testada. Uma variavel por vez.
+
+    RESSALVA DO OPERADOR (16/09), declarada: o ATR14 da ultima barra e' a
+               media de 14 barras, mas as barras finais do pregao
+               encolhem e puxam a media — o piso de 0,5 pode ser frouxo.
+               O funil REPORTA a distribuicao do ATR de referencia e
+               quantos pregoes cada alternativa deixaria passar (0,25 /
+               0,5 / 1,0 x ATR; e o ATR14 medido as 16:30).
+               `alternativas_de_piso` e' SO' TAXA. Trocar o piso so'
+               ANTES de congelar e por razao de horizonte — nunca depois
+               de qualquer p1.
+
+    TAXA / EFEITO / AMBIGUIDADE: a medir. AMOSTRAS / ORDEM / CRITERIO /
+    PARADA: os de sempre.
+
+    EXPECTATIVA, dita antes: depois de seis fichas de preco, prior baixo.
+    O que muda aqui e' a fonte de informacao (a noite) e o fato de a
+    entrada ser a mercado, o que deixa o estimador limpo.
 
 ## 11. Ficha "rompimento da maxima/minima da VESPERA" v1 (2026-09-16, `entregue-v2.92`)
 

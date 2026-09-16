@@ -1237,7 +1237,7 @@ def eas_preco(
         ..., help="Dump do console com linhas PRCBARRA| (grafico M15 do WINFUT)"),
     saida: Path = typer.Option(Path("data/research/eas_preco"), "--saida"),
     ficha: str = typer.Option(
-        "ifr2", "--ficha", help="ifr2 | orb | 123 | 123gate | 123gate_baixo | vespera"),
+        "ifr2", "--ficha", help="ifr2 | orb | 123 | 123gate | 123gate_baixo | vespera | gap"),
     instrumento: str = typer.Option(
         "win", "--instrumento", help="win | wdo (perfil de tick/custo/sessao)"),
     tolerancia: float = typer.Option(
@@ -1279,6 +1279,10 @@ def eas_preco(
     if ficha == "vespera":
         from .research.eas_preco import rodar_vespera
         _eas_preco_vespera(log, saida, rodar_vespera)
+        return
+    if ficha == "gap":
+        from .research.eas_preco import rodar_gap
+        _eas_preco_gap(log, saida, rodar_gap)
         return
     if ficha != "ifr2":
         raise SystemExit("--ficha aceita ifr2, orb, 123 ou 123gate")
@@ -1557,13 +1561,51 @@ def _eas_preco_vespera(log: Path, saida: Path, rodar: Any) -> None:
     typer.echo(f"\n  Saida: {saida}/resumo_vespera.json e pregoes_vespera.parquet")
 
 
+def _eas_preco_gap(log: Path, saida: Path, rodar: Any) -> None:
+    from .research import eas_preco as ep
+    r = rodar(log, saida)
+    m, pt = r["meta"], r["pontos"]
+    typer.echo("=" * 72)
+    typer.echo("EAs DE PRECO — dump M15 (ficha GAP v0: fechamento de gap, entrada a mercado "
+               "em 09:15, alvo no fechamento da vespera)")
+    typer.echo("=" * 72)
+    typer.echo(f"  {m['barras']} barras | {m['pregoes']} pregoes | {m['inicio']} a {m['fim']}")
+    falhas = [k for k, x in r["equivalencia"].items() if not x["bate"]]
+    eq_txt = "todas BATEM" if not falhas else "NAO BATE: " + ", ".join(falhas)
+    typer.echo(f"  equivalencia: {eq_txt}")
+    typer.echo("\n--- FUNIL (7.4) -- uma linha por PREGAO ---")
+    typer.echo(r["funil"].to_string(index=False))
+    typer.echo("\n--- PISO DO GAP: alternativas (SO' TAXA; ressalva do operador sobre o ATR "
+               "da ultima barra) ---")
+    typer.echo(r["alternativas"].to_string(index=False))
+    typer.echo("\n--- EM PONTOS (7.5) ---")
+    typer.echo(f"  ATR14 de referencia (ultima barra): {pt['atr_ref_pts']}   "
+               f"as 16:30 (info): {pt['atr_1630_pts']}")
+    typer.echo(f"  |gap| p10/p50/p90, todos os pregoes: {pt['gap_abs_pts_todos']}")
+    typer.echo(f"  gap em ATR nos sinais: {pt['gap_em_atr_nos_sinais']}")
+    typer.echo(f"  D = |entrada - close_v| ao tick: {pt['D_pts_nos_sinais']}")
+    typer.echo(f"  capital RECOMENDADO por contrato (R${ep.VALOR_PONTO_REAIS}/pt; informativo): "
+               f"{pt['capital_recomendado_por_contrato_reais']}")
+    typer.echo(f"  p1 que empata {ep.CUSTO_PONTOS:g} pts com D mediano: "
+               f"{pt['p1_que_empata_custo_com_D_mediano']}")
+    typer.echo("\n--- ESTIMADOR BINARIO ---")
+    typer.echo(f"  classes={pt['classes']}  ambigua={pt['fracao_ambigua']}  "
+               f"por_tempo={pt['fracao_por_tempo']}  barras={pt['barras_ate_resolver']}")
+    preg = max(int(m["pregoes"]), 1)
+    if r["n_sinais"]:
+        meia = 1.96 * (0.25 / r["n_sinais"]) ** 0.5 * 100
+        typer.echo(f"\n  HORIZONTE: {r['n_sinais'] / preg:.2f} sinais/pregao; com "
+                   f"{r['n_sinais']} sinais a meia-largura e' +-{meia:.1f} pp.")
+    typer.echo(f"\n  Saida: {saida}/resumo_gap.json e pregoes_gap.parquet")
+
+
 @app.command(name="eas-preco-teste")
 def eas_preco_teste(
     log: Path = typer.Argument(..., help="Dump PRCBARRA| contendo SO' os dias da amostra pedida"),
     amostra: str = typer.Option(
         ..., "--amostra", help="teste | replicacao | depuracao | historico_2015_22"),
     ficha: str = typer.Option(
-        "ifr2", "--ficha", help="ifr2 | orb | 123 | 123gate | 123gate_baixo | vespera"),
+        "ifr2", "--ficha", help="ifr2 | orb | 123 | 123gate | 123gate_baixo | vespera | gap"),
     instrumento: str = typer.Option("win", "--instrumento", help="win | wdo"),
     saida: Path = typer.Option(Path("data/research/eas_preco_teste"), "--saida"),
     forcar: str | None = typer.Option(

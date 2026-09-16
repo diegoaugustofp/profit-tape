@@ -647,3 +647,74 @@ def test_rodar_vespera_escreve_saida(tmp_path: Path) -> None:
     h = _dia_v(1250902, 38, 140150.0, **{"4": {"high": 140210.0}})
     r = ep.rodar_vespera(_dump(tmp_path, v + h), tmp_path / "s")
     assert (tmp_path / "s" / "resumo_vespera.json").exists() and r["n_sinais"] == 1
+
+
+# ---------------------------------------------------------------------
+# Ficha 10: GAP de abertura (fechamento de gap)
+# ---------------------------------------------------------------------
+def test_gap_para_cima_vira_venda_com_alvo_no_fechamento_da_vespera(tmp_path: Path) -> None:
+    v = _dia_v(1250901, 1, 140000.0)                      # fecha 140000, ATR 100
+    # hoje abre 140300 (gap +300 = 3 x ATR), barra 09:00 fica acima de 140000;
+    # 09:15 abre 140250 -> venda, alvo 140000, D 250, stop 140500
+    h = _dia_v(1250902, 38, 140250.0, **{"0": {"open": 140300.0, "high": 140320.0,
+                                               "low": 140240.0, "close": 140260.0},
+                                         "4": {"low": 139990.0}})
+    df, _ = ep.carregar_log(_dump(tmp_path, v + h))
+    o = ep.marcar_gap(ep.indicadores(df))
+    ln = o.iloc[0]
+    assert ln["gap_pts"] == 300.0 and ln["gap_em_atr"] == 3.0 and bool(ln["gap_ok"])
+    assert not bool(ln["fechou_na_b0"]) and bool(ln["sinal"]) and ln["lado"] == "venda"
+    assert ln["entrada"] == 140250.0 and ln["alvo"] == 140000.0
+    assert ln["D_pts"] == 250.0 and ln["stop"] == 140500.0
+    assert ln["classe"] == "resolvida"
+    from profittape.research import eas_preco_teste as et
+    r = et.resolver_gap(ep.indicadores(df))
+    assert r["resultado"].iloc[0] == 1.0 and r["pnl_bruto_pts"].iloc[0] == 250.0
+
+
+def test_gap_para_baixo_vira_compra(tmp_path: Path) -> None:
+    v = _dia_v(1250901, 1, 140000.0)
+    h = _dia_v(1250902, 38, 139750.0, **{"0": {"open": 139700.0, "high": 139760.0,
+                                               "low": 139680.0, "close": 139740.0}})
+    df, _ = ep.carregar_log(_dump(tmp_path, v + h))
+    ln = ep.marcar_gap(ep.indicadores(df)).iloc[0]
+    assert ln["gap_pts"] == -300.0 and ln["lado"] == "compra"
+    assert ln["entrada"] == 139750.0 and ln["alvo"] == 140000.0 and ln["stop"] == 139500.0
+
+
+def test_gap_pequeno_e_gap_fechado_na_b0_ficam_fora(tmp_path: Path) -> None:
+    v = _dia_v(1250901, 1, 140000.0)
+    h = _dia_v(1250902, 38, 140030.0, **{"0": {"open": 140030.0}})      # gap 30 < 0,5 x 100
+    df, _ = ep.carregar_log(_dump(tmp_path, v + h))
+    ln = ep.marcar_gap(ep.indicadores(df)).iloc[0]
+    assert not bool(ln["gap_ok"]) and not bool(ln["sinal"])
+    # gap grande mas a barra 09:00 passa por 140000 -> evento acabou antes
+    v2 = _dia_v(1250903, 75, 140000.0)
+    h2 = _dia_v(1250904, 112, 140250.0, **{"0": {"open": 140300.0, "high": 140320.0,
+                                                 "low": 139950.0, "close": 140100.0}})
+    df2, _ = ep.carregar_log(_dump(tmp_path, v2 + h2, "d2.txt"))
+    ln2 = ep.marcar_gap(ep.indicadores(df2)).iloc[0]
+    assert bool(ln2["gap_ok"]) and bool(ln2["fechou_na_b0"]) and not bool(ln2["sinal"])
+    f = ep.contar_clausulas_gap(ep.marcar_gap(ep.indicadores(df2))).set_index("clausula")["n"]
+    assert f["(info) gap fechado ja' na barra 09:00"] == 1
+
+
+def test_alternativas_de_piso_so_contam(tmp_path: Path) -> None:
+    v = _dia_v(1250901, 1, 140000.0)
+    h = _dia_v(1250902, 38, 140060.0, **{"0": {"open": 140060.0, "high": 140080.0,
+                                               "low": 140050.0, "close": 140070.0}})
+    df, _ = ep.carregar_log(_dump(tmp_path, v + h))
+    o = ep.marcar_gap(ep.indicadores(df))
+    alts = ep.alternativas_de_piso(o)                    # gap 60 = 0,6 x ATR 100
+    decl = alts[alts["referencia"].str.startswith("ATR14 da ultima")]
+    assert int(decl[decl["k"] == 0.25]["pregoes"].iloc[0]) == 1
+    assert int(decl[decl["k"] == 0.5]["pregoes"].iloc[0]) == 1
+    assert int(decl[decl["k"] == 1.0]["pregoes"].iloc[0]) == 0
+
+
+def test_rodar_gap_escreve_saida(tmp_path: Path) -> None:
+    v = _dia_v(1250901, 1, 140000.0)
+    h = _dia_v(1250902, 38, 140250.0, **{"0": {"open": 140300.0, "high": 140320.0,
+                                               "low": 140240.0, "close": 140260.0}})
+    r = ep.rodar_gap(_dump(tmp_path, v + h), tmp_path / "s")
+    assert (tmp_path / "s" / "resumo_gap.json").exists() and r["n_sinais"] == 1

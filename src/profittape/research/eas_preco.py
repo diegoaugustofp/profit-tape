@@ -1287,3 +1287,182 @@ def rodar_vespera(log_path: Path, saida: Path) -> dict[str, Any]:
     log.info("eas_preco.rodada_vespera", **meta, sinais=n_sin, saida=str(saida))
     return {"meta": meta, "equivalencia": eq, "funil": funil, "pontos": pontos,
             "pregoes": o, "n_sinais": n_sin}
+
+
+# ---------------------------------------------------------------------
+# 12. Ficha "GAP de abertura" v0 (docs 10)
+# ---------------------------------------------------------------------
+# Informacao que nenhuma outra usa: a NOITE. Entrada a MERCADO (nao por
+# rompimento) -- e' o que evita o problema que matou a ficha 11: sem
+# barra de gatilho, nao ha' o que ordenar dentro dela.
+GAP_K_MINIMO = 0.5                   # |gap| >= 0,5 x ATR14 da vespera
+GAP_HHMM_ENTRADA = 915               # entra na ABERTURA desta barra
+GAP_HHMM_ATR_ALT = 1630              # so' INFO: ATR14 medido aqui, para a ressalva
+
+
+def marcar_gap(d: pd.DataFrame, col_mme80: str = "mme80_ntsl") -> pd.DataFrame:
+    """
+    Uma linha por PREGAO. Clausulas:
+        vespera     dia anterior contiguo no dump; close_v e atr_v = close
+                    e ATR14 da ULTIMA barra da vespera
+        gap         gap = open(09:00) - close_v; |gap| >= 0,5 x atr_v
+        nao_fechou  a barra 09:00 nao pode ter fechado o gap: se o preco
+                    ja' passou por close_v durante ela (low <= close_v <=
+                    high), ou se o open(09:15) ja' esta' do outro lado do
+                    close_v, o evento acabou antes da entrada -- fora,
+                    contado.
+    Lado: gap > 0 (abriu ACIMA) -> VENDA; gap < 0 -> COMPRA. E' o SINAL
+    DO GAP que decide, nao a cor da barra 09:00 (a versao "com
+    confirmacao" e' outra ficha, registrada e nao testada).
+    Entrada: a MERCADO na abertura de 09:15. Alvo: close_v. D =
+    |entrada - close_v| ao tick (recalculado da ENTRADA, nao do gap --
+    a barra 09:00 ja' andou). Stop: simetrico. Uma operacao por pregao;
+    resolve ate' a zeragem. Regime (close_v vs MME80) e' ESTRATO.
+
+    RESSALVA DECLARADA (operador, 16/09): o ATR14 da ultima barra e' a
+    media de 14 barras, mas as barras finais encolhem e puxam a media --
+    o piso de 0,5 pode ser frouxo demais. O funil REPORTA a distribuicao
+    do ATR de referencia e quantos pregoes cada alternativa deixaria
+    passar (0,25 / 0,5 / 1,0 x ATR; e o ATR14 das 16:30). Trocar so'
+    ANTES de congelar e por razao de TAXA -- nunca depois de um p1.
+    """
+    linhas: list[dict[str, Any]] = []
+    dias = list(d.groupby("dia", sort=True))
+    for k in range(1, len(dias)):
+        dia, g = dias[k]
+        _, v = dias[k - 1]
+        g = g.sort_values("current_bar")
+        if int(g.iloc[0]["bloco"]) != int(v.iloc[-1]["bloco"]):
+            continue
+        b0 = g.iloc[0]
+        close_v, atr_v = float(v.iloc[-1]["close"]), float(v.iloc[-1]["atr_ntsl"])
+        v_1630 = v[v["hhmm"] == GAP_HHMM_ATR_ALT]
+        atr_alt = float(v_1630.iloc[-1]["atr_ntsl"]) if len(v_1630) else float("nan")
+        gap = float(b0["open"]) - close_v
+        linha: dict[str, Any] = {
+            "dia": dia, "close_v": close_v, "atr_ref_pts": atr_v, "atr_1630_pts": atr_alt,
+            "gap_pts": gap, "gap_abs": abs(gap),
+            "gap_em_atr": (abs(gap) / atr_v) if atr_v > 0 else float("nan"),
+            "gap_ok": bool(atr_v > 0 and abs(gap) >= GAP_K_MINIMO * atr_v),
+            "a_favor_mme80": bool(close_v > float(v.iloc[-1][col_mme80])),
+        }
+        # a barra 09:00 fechou o gap?
+        linha["fechou_na_b0"] = bool(float(b0["low"]) <= close_v <= float(b0["high"]))
+        b1 = g[g["hhmm"] == GAP_HHMM_ENTRADA]
+        linha["tem_entrada"] = bool(len(b1))
+        if not (linha["gap_ok"] and linha["tem_entrada"]) or linha["fechou_na_b0"]:
+            linha["sinal"] = False
+            linhas.append(linha)
+            continue
+        entrada = float(b1.iloc[0]["open"])
+        lado = "venda" if gap > 0 else "compra"
+        # o open de 09:15 ja' esta' do outro lado do alvo?
+        passou = (entrada <= close_v) if lado == "venda" else (entrada >= close_v)
+        d_pts = arredondar_ao_tick(abs(entrada - close_v))
+        linha.update({"entrada": entrada, "lado_candidato": lado, "passou_antes_da_entrada": passou,
+                      "D_pts": d_pts})
+        linha["sinal"] = bool(not passou and d_pts >= P123_D_MINIMO)
+        if not linha["sinal"]:
+            linhas.append(linha)
+            continue
+        alvo = close_v
+        stop = entrada + d_pts if lado == "venda" else entrada - d_pts
+        linha.update({"lado": lado, "alvo": alvo, "stop": stop})
+        resto = g[g["hhmm"] > GAP_HHMM_ENTRADA]
+        classe, barras = "por_tempo", len(resto)
+        for i, (_, b) in enumerate(resto.iterrows()):
+            hi, lo = float(b["high"]), float(b["low"])
+            t_alvo = (lo <= alvo) if lado == "venda" else (hi >= alvo)
+            t_stop = (hi >= stop) if lado == "venda" else (lo <= stop)
+            if t_alvo or t_stop:
+                classe, barras = ("ambigua" if (t_alvo and t_stop) else "resolvida"), i + 1
+                break
+        linha.update({"classe": classe, "barras_ate_resolver": barras,
+                      "close_final": float(g.iloc[-1]["close"])})
+        linhas.append(linha)
+    return pd.DataFrame(linhas)
+
+
+def contar_clausulas_gap(o: pd.DataFrame) -> pd.DataFrame:
+    n = max(len(o), 1)
+
+    def col(c: str) -> pd.Series:
+        return o[c].fillna(False).astype(bool) if c in o else pd.Series(False, index=o.index)
+
+    lado = o["lado"] if "lado" in o else pd.Series(None, index=o.index, dtype=object)
+    etapas = [
+        ("pregoes com vespera contigua", pd.Series(True, index=o.index)),
+        (f"+|gap| >= {GAP_K_MINIMO:g} x ATR14 da vespera", col("gap_ok")),
+        ("+barra 09:00 NAO fechou o gap", col("gap_ok") & ~col("fechou_na_b0")),
+        ("+entrada 09:15 existe e nao passou do alvo = SINAL", col("sinal")),
+        ("(info) gap fechado ja' na barra 09:00", col("gap_ok") & col("fechou_na_b0")),
+        ("(estrato) gap para CIMA -> venda", col("sinal") & (lado == "venda")),
+        ("(estrato) gap para BAIXO -> compra", col("sinal") & (lado == "compra")),
+        ("(estrato) vespera fechou acima da MME80", col("sinal") & col("a_favor_mme80")),
+    ]
+    return pd.DataFrame([{"clausula": nome, "n": int(m.sum()),
+                          "por_pregao": round(int(m.sum()) / n, 3)} for nome, m in etapas])
+
+
+def alternativas_de_piso(o: pd.DataFrame) -> pd.DataFrame:
+    """SO' TAXA (7.4), para a ressalva do operador sobre o ATR da ultima
+    barra: quantos pregoes cada piso deixaria passar. Escolher entre eles
+    so' antes de congelar e por horizonte -- nunca depois de um p1."""
+    linhas = []
+    for ref, col_atr in (("ATR14 da ultima barra (declarado)", "atr_ref_pts"),
+                         ("ATR14 das 16:30 (info)", "atr_1630_pts")):
+        if col_atr not in o:
+            continue
+        atr = o[col_atr]
+        for k in (0.25, 0.5, 1.0):
+            m = (atr > 0) & (o["gap_abs"] >= k * atr)
+            linhas.append({"referencia": ref, "k": k, "pregoes": int(m.sum()),
+                           "por_pregao": round(int(m.sum()) / max(len(o), 1), 3)})
+    return pd.DataFrame(linhas)
+
+
+def em_pontos_gap(o: pd.DataFrame) -> dict[str, Any]:
+    def q(s: pd.Series) -> dict[str, float]:
+        s = s.dropna()
+        return ({"p10": round(float(s.quantile(0.1)), 1), "p50": round(float(s.median()), 1),
+                 "p90": round(float(s.quantile(0.9)), 1)} if not s.empty else {})
+    sin = o[o.get("sinal", pd.Series(False, index=o.index)).fillna(False).astype(bool)]
+    dq = q(sin["D_pts"]) if len(sin) else {}
+    d50 = float(sin["D_pts"].median()) if len(sin) else float("nan")
+    cls = sin["classe"].value_counts().to_dict() if "classe" in sin and len(sin) else {}
+    n = len(sin)
+    return {"atr_ref_pts": q(o["atr_ref_pts"]) if "atr_ref_pts" in o else {},
+            "atr_1630_pts": q(o["atr_1630_pts"]) if "atr_1630_pts" in o else {},
+            "gap_abs_pts_todos": q(o["gap_abs"]) if "gap_abs" in o else {},
+            "gap_em_atr_nos_sinais": q(sin["gap_em_atr"]) if n else {},
+            "D_pts_nos_sinais": dq,
+            "capital_recomendado_por_contrato_reais": (
+                {"em_D_p50": capital_recomendado(dq["p50"]),
+                 "em_D_p90": capital_recomendado(dq["p90"])} if dq else {}),
+            "p1_que_empata_custo_com_D_mediano": (round(0.5 + CUSTO_PONTOS / (2 * d50), 3)
+                                                  if n and d50 else None),
+            "classes": cls,
+            "fracao_ambigua": (round(cls.get("ambigua", 0) / n, 3) if n else None),
+            "fracao_por_tempo": (round(cls.get("por_tempo", 0) / n, 3) if n else None),
+            "barras_ate_resolver": q(sin["barras_ate_resolver"]) if n else {}}
+
+
+def rodar_gap(log_path: Path, saida: Path) -> dict[str, Any]:
+    df, meta = carregar_log(log_path)
+    d = indicadores(df)
+    eq = equivalencia(d)
+    o = marcar_gap(d)
+    funil = contar_clausulas_gap(o)
+    pontos = em_pontos_gap(o)
+    alts = alternativas_de_piso(o)
+    saida.mkdir(parents=True, exist_ok=True)
+    o.to_parquet(saida / "pregoes_gap.parquet", index=False)
+    (saida / "resumo_gap.json").write_text(
+        json.dumps({"dump": meta, "equivalencia": eq, "pontos": pontos,
+                    "funil_gap": funil.to_dict(orient="records"),
+                    "alternativas_de_piso": alts.to_dict(orient="records")},
+                   indent=2, default=str), encoding="utf-8")
+    n_sin = int(o["sinal"].sum()) if "sinal" in o else 0
+    log.info("eas_preco.rodada_gap", **meta, sinais=n_sin, saida=str(saida))
+    return {"meta": meta, "equivalencia": eq, "funil": funil, "pontos": pontos,
+            "alternativas": alts, "pregoes": o, "n_sinais": n_sin}
