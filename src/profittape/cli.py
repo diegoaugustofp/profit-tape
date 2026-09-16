@@ -1741,6 +1741,53 @@ def triagem_absorcao_cmd(
     typer.echo(f"\n  Saida: {saida}/triagem_absorcao.json")
 
 
+@app.command(name="rolagem")
+def rolagem_cmd(
+    dump: Path = typer.Argument(..., help="Dump PRCBARRA| do grafico M15"),
+    saida: Path = typer.Option(Path("data/research/rolagem"), "--saida"),
+    log_level: str = typer.Option("INFO", "--log-level"),
+) -> None:
+    """
+    DESCRICAO da rolagem (passo 1 de "anomalia medida"): a contraparte
+    OBRIGADA (quem precisa rolar ou fechar no vencimento) deixa marca?
+
+    Mede MAGNITUDE e ESTRUTURA -- volume, amplitude, |retorno| e o perfil
+    por horario, nos pregoes perto do vencimento contra os normais.
+    **Nao mede direcao**: retorno com sinal so' em ficha, com CONTRAPARTE
+    escrita. Categoria `features`, zero trial.
+    """
+    configurar(log_level)
+    from .research.rolagem import descrever
+
+    r = descrever(dump, saida)
+    typer.echo("=" * 72)
+    typer.echo(f"ROLAGEM — {r['dump']['pregoes']} pregoes, {len(r['vencimentos'])} vencimentos "
+               f"({r['dump']['inicio']} a {r['dump']['fim']})")
+    typer.echo("=" * 72)
+    typer.echo(f"  normais: {r['normais']}")
+    typer.echo(f"  perto do vencimento (d de -5 a 0): {r['perto_do_vencimento']}")
+    typer.echo("\n--- POR DISTANCIA EM PREGOES (d=0 e' o vencimento) ---")
+    typer.echo(f"  {'d':>3}  {'n':>4}  {'vol_p50':>12}  {'x normal':>8}  {'ampl_p50':>9}  "
+               f"{'x normal':>8}  {'|ret| x normal':>14}")
+    for k, e in r["por_d"].items():
+        if not e:
+            continue
+        def _n(x: float | None) -> str:
+            return f"{x:.3f}" if x is not None else "   -  "
+        typer.echo(f"  {k:>3}  {e['pregoes']:>4}  {e['vol_p50']:>12.0f}  "
+                   f"{_n(e.get('vol_vs_normal')):>8}  {e['amplitude_p50_pts']:>9.1f}  "
+                   f"{_n(e.get('amplitude_vs_normal')):>8}  "
+                   f"{_n(e.get('retorno_abs_vs_normal')):>14}")
+    ph = r["perfil_horario_fracao_do_volume"]
+    typer.echo("\n--- ESTRUTURA: fracao do volume do dia por faixa de horario ---")
+    typer.echo(f"  perto:   {ph['perto']}")
+    typer.echo(f"  normais: {ph['normais']}")
+    typer.echo("\n  LEITURA: se volume, amplitude e perfil dos dias perto do vencimento forem "
+               "iguais aos normais, a contraparte obrigada NAO deixa marca e nao ha' ficha a "
+               "escrever. Marca clara -> passo 2 (ficha, com contraparte e direcao declaradas).")
+    typer.echo(f"\n  Saida: {saida}/rolagem.json")
+
+
 @app.command(name="eas-preco-teste")
 def eas_preco_teste(
     log: Path = typer.Argument(..., help="Dump PRCBARRA| contendo SO' os dias da amostra pedida"),

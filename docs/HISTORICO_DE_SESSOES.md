@@ -2435,3 +2435,19 @@ com fluxo sintetico onde a resposta e' conhecida por construcao.
   anomalia MEDIDA, com candidatos baratos (rolagem, vencimento de
   opcao: fluxo obrigatorio = contraparte).
 - `ESTADO_E_CAMINHOS.md` reescrito para 16/09.
+
+### 2026-09-16 — primeira aplicacao do metodo novo: ROLAGEM, passo 1 (v3.00)
+
+Comecando pela CONTRAPARTE: quem e' OBRIGADO a negociar no WIN. Candidatos
+enumerados (rolagem, vencimento de opcao, ajuste/fechamento, margem);
+rolagem primeiro, porque as datas sao mecanicas e a serie continua
+AJUSTADA esconde o evento de quem so' olha o grafico.
+
+- `research/rolagem.py` + `profit-tape rolagem`: calendario (quarta mais
+  proxima do 15 dos meses pares; feriado usa o proximo pregao),
+  distancia em PREGOES, e a descricao -- volume, amplitude, |retorno| e
+  perfil por faixa de horario, perto do vencimento x normais.
+- **Mede magnitude e estrutura; NAO mede direcao** (retorno com sinal so'
+  no passo 2, dentro de ficha). Categoria features, zero trial.
+- 4 testes (calendario conferido a mao em tres datas, feriado no
+  vencimento, deteccao de volume 3x). 907 no total.

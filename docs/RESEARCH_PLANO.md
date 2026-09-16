@@ -5986,3 +5986,40 @@ sobre a anomalia -- ja' com mecanismo e contraparte. Candidatos baratos,
 sem gastar pregao: retorno condicionado a horario, a dia do mes, a
 ROLAGEM de contrato, a vencimento de opcao (dias com fluxo OBRIGATORIO
 -- que e' contraparte no sentido do item 1).
+
+
+## PRIMEIRA APLICACAO DO METODO NOVO: a ROLAGEM (2026-09-16)
+
+Comecamos pela CONTRAPARTE, nao pelo padrao. A pergunta: *quem no WIN e'
+OBRIGADO a negociar, quando, e contra quem?* Fluxo obrigatorio e' a
+contraparte que nao escolhe preco -- a fonte de borda mais defensavel.
+
+**Candidatos a contraparte no WIN**, enumerados antes de qualquer teste:
+rolagem de contrato (quem esta' posicionado precisa rolar ou fechar);
+vencimento de opcao sobre Ibovespa (hedge forcado perto do strike);
+ajuste diario e fechamento (consequencia de margem imediata); chamada de
+margem e stop institucional (nao observavel direto, mas com assinatura).
+
+**Ordem: rolagem primeiro.** Datas mecanicas e conhecidas; fluxo grande e
+documentado; e -- o que mais convence -- a serie continua AJUSTADA do
+Profit ESCONDE a rolagem, entao qualquer efeito ali e' invisivel para
+quem so' olha o grafico continuo, que e' a maioria. E' "dado raro" pelo
+item 3 da lista.
+
+### Passo 1 (entregue): a contraparte deixa MARCA?
+
+`profit-tape rolagem <dump>` descreve, nos dumps de dez anos que ja'
+existem: volume do dia, amplitude, |retorno| e o perfil de volume por
+faixa de horario, nos pregoes perto do vencimento (d de -5 a 0, em
+PREGOES) contra os normais. Calendario declarado: quarta-feira mais
+proxima do dia 15 dos meses PARES; feriado no vencimento usa o proximo
+pregao.
+
+**Mede MAGNITUDE e ESTRUTURA. NAO mede direcao.** Retorno com SINAL
+ficaria a um passo de virar p1 pela porta dos fundos; direcao so' no
+passo 2, dentro de ficha, com CONTRAPARTE escrita e criterio declarado.
+Categoria `features`, zero trial.
+
+**Leitura:** perfil e magnitude iguais aos dos dias normais = a
+contraparte obrigada nao deixa marca, e nao ha' ficha a escrever (e
+isso custa um comando). Marca clara -> passo 2.
