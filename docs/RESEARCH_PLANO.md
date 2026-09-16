@@ -5767,3 +5767,39 @@ modo forward.
 - [x] Sei o que reinicia a contagem: retreinar, mudar p*, k, h,
       features, split. Nao reinicia: bug que desvia da ficha.
 - [x] Variante e' config + artefato congelado, nao codigo novo por dia.
+
+
+## O grafico substitui o tape? (exploracao declarada, 2026-09-16)
+
+**Por que existe.** A decisao de dezembro tem duas perguntas: (1) ha' EA
+que opere com retorno? (2) a estrutura (ProfitDLL, cara) e' a certa, ou
+NTSL no Profit faria o mesmo? A (2) depende de UMA coisa: se a
+informacao que so' o tape tem e' realmente insubstituivel. Isto mede.
+
+**A pergunta, em duas metades:**
+
+- **NAO-DIRECIONAL.** `absorcao = vol_agr / range_ticks` usa o volume
+  AGREDIDO; o grafico da' `vol_total`. Se a razao `vol_agr/vol_total`
+  for estavel, `vol_total/range` proxia a absorcao — e ela passa a
+  existir em DEZ ANOS de grafico, nao em dois meses de tape. Isso
+  mudaria o que da' para testar hoje.
+- **DIRECIONAL.** `imbalance = (compra - venda)/vol_agr` nao esta' no
+  grafico por construcao; o unico proxy e' a geometria da barra
+  (`desloc_norm`). Se a geometria explicar, o tape e' dispensavel; se
+  nao explicar, fica PROVADO que o tape e' insubstituivel — e essa
+  prova e' insumo direto da decisao sobre estrutura.
+
+**O que decide: concordancia no DECIL, nao correlacao.** Feature vira
+limiar (gate), nao regressao: o que importa e' se o proxy escolhe as
+MESMAS barras no extremo. Acaso = 10%. Spearman e R2 entram como apoio.
+
+**Categoria `features`:** relacao entre variaveis, nenhum retorno
+olhado, nenhum trial consumido. Barras M15, so' as `volume_confiavel`
+(barra com buraco de feed subconta volume e contaminaria a razao).
+
+`profit-tape fluxo-vs-grafico --de 2026-07-24 --ate <hoje>`.
+
+**Como ler:** CV da razao baixo e concordancia alta na parte (a) =
+absorcao disponivel em dez anos. R2 baixo e concordancia perto de 0,1 na
+parte (b) = o direcional exige tape. Os dois resultados sao uteis; o
+segundo e' o que justifica (ou nao) a DLL.

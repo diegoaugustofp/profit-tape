@@ -1645,6 +1645,58 @@ def diario_cmd(
         typer.echo(f"\n--- INFRA ---\n  {r['infra']}")
 
 
+@app.command(name="fluxo-vs-grafico")
+def fluxo_vs_grafico(
+    de: str = typer.Option(..., "--de", help="YYYY-MM-DD (primeiro dia com tape)"),
+    ate: str = typer.Option(..., "--ate", help="YYYY-MM-DD"),
+    curated: Path = typer.Option(Path("data/curated"), "--curated"),
+    symbol: str = typer.Option("WINFUT", "--symbol"),
+    saida: Path = typer.Option(Path("data/research/fluxo_vs_grafico"), "--saida"),
+    log_level: str = typer.Option("INFO", "--log-level"),
+) -> None:
+    """
+    O GRAFICO SUBSTITUI O TAPE? Mede, nos dias de tape, se `vol_total`
+    (que existe em 10 anos de grafico) proxia a ABSORCAO (nao-direcional)
+    e se a geometria da barra proxia o IMBALANCE (direcional).
+
+    Categoria `features`: nenhum retorno olhado, nenhum trial. Decide o
+    que e' testavel em 10 anos e o que exige tape -- insumo da decisao
+    sobre estrutura (DLL x NTSL).
+    """
+    import datetime as dt
+
+    configurar(log_level)
+    from .research.fluxo_vs_grafico import rodar
+
+    d0, d1 = dt.date.fromisoformat(de), dt.date.fromisoformat(ate)
+    dias = [d0 + dt.timedelta(days=k) for k in range((d1 - d0).days + 1)
+            if (d0 + dt.timedelta(days=k)).weekday() < 5]
+    r = rodar(curated, symbol, dias, saida)
+    typer.echo("=" * 72)
+    typer.echo(f"O GRAFICO SUBSTITUI O TAPE? — {symbol}, {de} a {ate}")
+    typer.echo("=" * 72)
+    typer.echo(f"  barras construidas={r['barras']}  usadas (confiaveis)={r['barras_usadas']}")
+    rz = r["razao_vol_agr_sobre_vol_total"]
+    typer.echo("\n--- vol_agr / vol_total (o que o grafico NAO separa) ---")
+    typer.echo(f"  p10/p50/p90={rz['p10']}/{rz['p50']}/{rz['p90']}  media={rz['media']}  "
+               f"desvio={rz['desvio']}  CV={rz['cv']}")
+    nd = r["nao_direcional_absorcao"]
+    typer.echo("\n--- (a) ABSORCAO (nao-direcional): vol_total/range proxia vol_agr/range? ---")
+    typer.echo(f"  spearman={nd['spearman_proxy_x_tape']}")
+    typer.echo(f"  concordancia no decil: {nd['concordancia_decil']}")
+    di = r["direcional_imbalance"]
+    typer.echo("\n--- (b) IMBALANCE (direcional): a geometria da barra explica? ---")
+    typer.echo(f"  spearman(desloc_norm, imbalance)={di['spearman_desloc_x_imbalance']}  "
+               f"mesmo sinal={di['fracao_mesmo_sinal']}")
+    typer.echo(f"  R2 da geometria={di['r2_da_geometria']}  residuo_desvio={di['residuo_desvio']} "
+               f"(imbalance_desvio={di['imbalance_desvio']})")
+    typer.echo(f"  concordancia no decil (|imbalance|): {di['concordancia_decil_em_modulo']}")
+    typer.echo("\n  LEITURA: (a) CV baixo e concordancia alta = absorcao existe em 10 anos de "
+               "grafico. (b) R2 baixo e concordancia perto do acaso (0,1) = o tape e' "
+               "insubstituivel para o direcional -- e isso decide DLL x NTSL.")
+    typer.echo(f"\n  Saida: {saida}/fluxo_vs_grafico.json")
+
+
 @app.command(name="eas-preco-teste")
 def eas_preco_teste(
     log: Path = typer.Argument(..., help="Dump PRCBARRA| contendo SO' os dias da amostra pedida"),

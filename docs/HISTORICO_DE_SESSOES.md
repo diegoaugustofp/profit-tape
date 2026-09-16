@@ -2380,3 +2380,14 @@ registra o que EXECUTOU; o diario registra o que foi DECIDIDO.
   execucao, NUNCA escolher regra (isso e' ficha, antes). Sem Sharpe nem
   anualizacao com n de forward.
 - `EA_ARQUITETURA.md` secao 6. 6 testes novos; 894 no total.
+
+### 2026-09-16 — "o grafico substitui o tape?" (v2.96)
+
+Exploracao declarada (categoria features, zero trial), motivada pela
+segunda pergunta de dezembro (DLL x NTSL): medir, nos dias de tape, se
+`vol_total` (10 anos de grafico) proxia a ABSORCAO (nao-direcional) e se
+a geometria da barra proxia o IMBALANCE (direcional). Medida principal:
+concordancia no DECIL (feature vira limiar, nao regressao; acaso 10%).
+`research/fluxo_vs_grafico.py` + `profit-tape fluxo-vs-grafico`; 5 testes
+com fluxo sintetico onde a resposta e' conhecida por construcao.
+`RESEARCH_PLANO.md` com a pergunta e como ler. 899 no total.
