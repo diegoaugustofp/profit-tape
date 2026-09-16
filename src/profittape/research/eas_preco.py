@@ -1094,3 +1094,178 @@ def rodar_123_gate(log_path: Path, saida: Path) -> dict[str, Any]:
     log.info("eas_preco.rodada_123gate", **meta, sinais=amb["n_sinais"], saida=str(saida))
     return {"meta": meta, "equivalencia": eq, "funil": funil, "pontos": pontos,
             "ambiguidade": amb, "barras": x}
+
+
+# ---------------------------------------------------------------------
+# 11. Ficha "rompimento da maxima/minima da VESPERA" v0 (docs 11)
+# ---------------------------------------------------------------------
+# Informacao que nenhuma das outras usa: a estrutura do DIA ANTERIOR
+# inteiro (o ORB usa os primeiros 30 min; o 123, tres barras; o IFR2,
+# duas). Niveis conhecidos ANTES da abertura.
+VESP_PRIMEIRA_ENTRADA = 900          # armado desde a abertura
+VESP_ULTIMA_ENTRADA = 1630
+VESP_AMPLITUDE_MINIMA_TICKS = 4
+
+
+def marcar_vespera(d: pd.DataFrame, col_mme80: str = "mme80_ntsl") -> pd.DataFrame:
+    """
+    Uma linha por PREGAO. Clausulas, na ordem do funil:
+        vespera     o dia anterior existe no dump (bloco contiguo) e tem
+                    amplitude A_v = high_v - low_v >= 4 ticks
+        nao_ja_fora a ABERTURA do dia nao pode estar alem do nivel: se
+                    open(09:00) >= R_high_v + tick, o rompimento aconteceu
+                    no leilao/overnight e NAO e' o evento desta ficha --
+                    aquele lado sai (contado). Espelho na venda.
+        gatilho     primeira barra 09:00..16:30 com high >= R_high_v +
+                    tick (compra) ou low <= R_low_v - tick (venda), no
+                    lado armado. Os dois lados OCO: o primeiro rompe e'
+                    o SINAL; os dois na MESMA barra = gatilho ambiguo,
+                    fora. UMA operacao por pregao.
+    Entrada = nivel rompido. D = A_v (amplitude da vespera) ao tick --
+    mesma logica do ORB (D = o range que define o nivel). Alvo = entrada
+    + D, stop = entrada - D (espelho). Regime (close da vespera vs MME80)
+    e' ESTRATO reportado, nunca clausula (licao do ORB, 7.4).
+
+    Ambiguidade: como no ORB -- a barra de resolucao contem os dois, OU a
+    barra do gatilho toca o stop (que fica DENTRO do range da vespera).
+
+    RISCO DECLARADO: D = amplitude de um dia inteiro e' grande; o dia
+    pode nao andar isso depois de romper. A fracao "por tempo" e' medida
+    no funil; se for absurda (> 40%), a ficha volta ao desenho ANTES de
+    congelar -- decisao pre-congelamento, nao calibracao.
+    """
+    linhas: list[dict[str, Any]] = []
+    dias = list(d.groupby("dia", sort=True))
+    for k in range(1, len(dias)):
+        dia, g = dias[k]
+        _, v = dias[k - 1]
+        g = g.sort_values("current_bar")
+        if int(g.iloc[0]["bloco"]) != int(v.iloc[-1]["bloco"]):
+            continue                      # salto de bloco: vespera nao e' contigua
+        r_high, r_low = float(v["high"].max()), float(v["low"].min())
+        a_v = r_high - r_low
+        abertura = float(g.iloc[0]["open"])
+        linha: dict[str, Any] = {
+            "dia": dia, "R_high_v": r_high, "R_low_v": r_low, "A_v_pts": a_v,
+            "amplitude_ok": a_v >= VESP_AMPLITUDE_MINIMA_TICKS * TICK_WIN,
+            "abertura": abertura,
+            "ja_fora_compra": abertura >= r_high + TICK_WIN,
+            "ja_fora_venda": abertura <= r_low - TICK_WIN,
+            "a_favor_mme80": bool(float(v.iloc[-1]["close"]) > float(v.iloc[-1][col_mme80])),
+        }
+        janela = g[(g["hhmm"] >= VESP_PRIMEIRA_ENTRADA) & (g["hhmm"] <= VESP_ULTIMA_ENTRADA)]
+        vazio = janela.iloc[0:0]
+        gat_c = vazio if linha["ja_fora_compra"] else janela[janela["high"] >= r_high + TICK_WIN]
+        gat_v = vazio if linha["ja_fora_venda"] else janela[janela["low"] <= r_low - TICK_WIN]
+        hh_c = int(gat_c.iloc[0]["hhmm"]) if len(gat_c) else None
+        hh_v = int(gat_v.iloc[0]["hhmm"]) if len(gat_v) else None
+        linha.update({"rompeu_compra_hhmm": hh_c, "rompeu_venda_hhmm": hh_v,
+                      "rompeu_algum": (hh_c is not None) or (hh_v is not None)})
+        lado: str | None
+        if hh_c is None and hh_v is None:
+            lado = None
+        elif hh_v is None or (hh_c is not None and hh_c < hh_v):
+            lado = "compra"
+        elif hh_c is None or hh_v < hh_c:
+            lado = "venda"
+        else:
+            lado = "gatilho_ambiguo"
+        linha["sinal"] = bool(lado in ("compra", "venda") and linha["amplitude_ok"])
+        linha["lado"] = lado if linha["sinal"] else None
+        if not linha["sinal"]:
+            linhas.append(linha)
+            continue
+        d_pts = arredondar_ao_tick(a_v)
+        if lado == "compra":
+            entrada = r_high + TICK_WIN
+            alvo, stop, hh_gat = entrada + d_pts, entrada - d_pts, int(hh_c or 0)
+        else:
+            entrada = r_low - TICK_WIN
+            alvo, stop, hh_gat = entrada - d_pts, entrada + d_pts, int(hh_v or 0)
+        linha.update({"gatilho_hhmm": hh_gat, "entrada": entrada, "D_pts": d_pts,
+                      "alvo": alvo, "stop": stop})
+        resto = g[g["hhmm"] >= hh_gat]
+        classe, barras = "por_tempo", len(resto)
+        for i, (_, b) in enumerate(resto.iterrows()):
+            hi, lo = float(b["high"]), float(b["low"])
+            t_alvo = (hi >= alvo) if lado == "compra" else (lo <= alvo)
+            t_stop = (lo <= stop) if lado == "compra" else (hi >= stop)
+            if i == 0 and t_stop:
+                classe, barras = "ambigua", 1
+                break
+            if t_alvo or t_stop:
+                classe, barras = ("ambigua" if (t_alvo and t_stop) else "resolvida"), i + 1
+                break
+        linha.update({"classe": classe, "barras_ate_resolver": barras,
+                      "close_final": float(g.iloc[-1]["close"])})
+        linhas.append(linha)
+    return pd.DataFrame(linhas)
+
+
+def contar_clausulas_vespera(o: pd.DataFrame) -> pd.DataFrame:
+    n = max(len(o), 1)
+
+    def col(c: str) -> pd.Series:
+        return o[c].fillna(False).astype(bool) if c in o else pd.Series(False, index=o.index)
+
+    lado = o["lado"] if "lado" in o else pd.Series(None, index=o.index, dtype=object)
+    base = col("amplitude_ok")
+    etapas = [
+        ("pregoes com vespera contigua", pd.Series(True, index=o.index)),
+        (f"+A_v >= {VESP_AMPLITUDE_MINIMA_TICKS * TICK_WIN:g} pts", base),
+        ("+abertura NAO ja' fora (os dois lados)",
+         base & ~col("ja_fora_compra") & ~col("ja_fora_venda")),
+        ("(info) abertura ja' fora de um lado", col("ja_fora_compra") | col("ja_fora_venda")),
+        ("+rompeu algum lado armado ate' 16:30", base & col("rompeu_algum")),
+        ("+primeiro rompimento (um lado so') = SINAL", col("sinal")),
+        ("(info) os dois na MESMA barra: gatilho ambiguo, fora",
+         base & col("rompeu_algum") & ~col("sinal")),
+        ("(estrato) sinal de compra", col("sinal") & (lado == "compra")),
+        ("(estrato) sinal de venda", col("sinal") & (lado == "venda")),
+        ("(estrato) vespera fechou acima da MME80", col("sinal") & col("a_favor_mme80")),
+    ]
+    return pd.DataFrame([{"clausula": nome, "n": int(m.sum()),
+                          "por_pregao": round(int(m.sum()) / n, 3)} for nome, m in etapas])
+
+
+def em_pontos_vespera(o: pd.DataFrame) -> dict[str, Any]:
+    def q(s: pd.Series) -> dict[str, float]:
+        s = s.dropna()
+        return ({"p10": round(float(s.quantile(0.1)), 1), "p50": round(float(s.median()), 1),
+                 "p90": round(float(s.quantile(0.9)), 1)} if not s.empty else {})
+    sin = o[o.get("sinal", pd.Series(False, index=o.index)).fillna(False).astype(bool)]
+    dq = q(sin["D_pts"]) if len(sin) else {}
+    d50 = float(sin["D_pts"].median()) if len(sin) else float("nan")
+    cls = sin["classe"].value_counts().to_dict() if "classe" in sin else {}
+    n = len(sin)
+    return {"A_v_pts_todos_os_pregoes": q(o["A_v_pts"]) if "A_v_pts" in o else {},
+            "D_pts_nos_sinais": dq,
+            "capital_recomendado_por_contrato_reais": (
+                {"em_D_p50": capital_recomendado(dq["p50"]),
+                 "em_D_p90": capital_recomendado(dq["p90"])} if dq else {}),
+            "p1_que_empata_custo_com_D_mediano": (round(0.5 + CUSTO_PONTOS / (2 * d50), 3)
+                                                  if n and d50 else None),
+            "gatilho_hhmm": q(sin["gatilho_hhmm"]) if n else {},
+            "classes": cls,
+            "fracao_ambigua": (round(cls.get("ambigua", 0) / n, 3) if n else None),
+            "fracao_por_tempo": (round(cls.get("por_tempo", 0) / n, 3) if n else None),
+            "barras_ate_resolver": q(sin["barras_ate_resolver"]) if n else {}}
+
+
+def rodar_vespera(log_path: Path, saida: Path) -> dict[str, Any]:
+    df, meta = carregar_log(log_path)
+    d = indicadores(df)
+    eq = equivalencia(d)
+    o = marcar_vespera(d)
+    funil = contar_clausulas_vespera(o)
+    pontos = em_pontos_vespera(o)
+    saida.mkdir(parents=True, exist_ok=True)
+    o.to_parquet(saida / "pregoes_vespera.parquet", index=False)
+    (saida / "resumo_vespera.json").write_text(
+        json.dumps({"dump": meta, "equivalencia": eq, "pontos": pontos,
+                    "funil_vespera": funil.to_dict(orient="records")}, indent=2, default=str),
+        encoding="utf-8")
+    n_sin = int(o["sinal"].sum()) if "sinal" in o else 0
+    log.info("eas_preco.rodada_vespera", **meta, sinais=n_sin, saida=str(saida))
+    return {"meta": meta, "equivalencia": eq, "funil": funil, "pontos": pontos,
+            "pregoes": o, "n_sinais": n_sin}

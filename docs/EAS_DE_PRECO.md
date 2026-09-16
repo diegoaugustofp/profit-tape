@@ -1296,14 +1296,50 @@ simetrico. Literatura em indice futuro existe; no WIN, a medir.
 Perfil, estimador, amostras e ordem: os mesmos. Escrever a ficha
 completa quando o gate estiver fechado.
 
-## 11. Ficha "rompimento da maxima/minima da vespera" — DECLARADA, rascunho
+## 11. Ficha "rompimento da maxima/minima da VESPERA" v0 (2026-09-16, `entregue-v2.91`)
 
-Estrutura DIARIA, nao a dos primeiros 30 minutos: nivel = high/low do
-dia anterior (da serie continua); ordem STOP no rompimento, valida o
-dia inteiro (ou ate' 16:30), D = amplitude do dia anterior (ou uma
-fracao declarada). E' o ORB com outro range — a mesma familia de
-execucao (E2b), outra informacao. Escrever a ficha completa depois do
-gap.
+Informacao que nenhuma outra usa: a estrutura do DIA ANTERIOR inteiro
+(o ORB usa 30 min; o 123, tres barras; o IFR2, duas). Niveis conhecidos
+ANTES da abertura. Familia nova ("vespera"), trial 1.
+
+    HIPOTESE   O rompimento da maxima (ou minima) do dia anterior, quando
+               nao aconteceu ja' na abertura, continua por mais uma
+               amplitude da vespera antes de voltar uma amplitude contra:
+               p1 >= 0,56.
+
+    EVENTO     Vespera contigua no dump; A_v = high_v - low_v >= 4 ticks.
+               Ordens STOP nos dois lados, OCO: compra em R_high_v +
+               tick, venda em R_low_v - tick, validas de 09:00 a 16:30.
+               D = A_v ao tick; alvo = entrada + D, stop = entrada - D
+               (espelho). UMA operacao por pregao; primeiro rompimento
+               vence; os dois na mesma barra = gatilho ambiguo, fora.
+
+    TRES DECISOES, tomadas ANTES de medir (sem elas a ficha seria
+    ambigua depois):
+      1. **Abertura ja' fora desarma o lado.** Se open(09:00) >=
+         R_high_v + tick, o rompimento aconteceu no leilao/overnight —
+         nao e' o evento desta ficha. Aquele lado sai; o outro fica
+         armado. (Sem esta clausula a ficha viraria "gap de abertura"
+         disfarcado, e o gap e' a ficha 10, hipotese diferente.)
+      2. **D = A_v, a amplitude inteira da vespera** — a mesma logica do
+         ORB (D = o range que define o nivel), nao uma fracao escolhida.
+      3. **Regime (vespera vs MME80) e' ESTRATO**, nunca clausula — a
+         licao do ORB (7.4).
+
+    RISCO DECLARADO   D de um dia inteiro e' grande; o dia pode nao andar
+               isso depois de romper. A fracao "por tempo" e' MEDIDA no
+               funil; **se passar de 40%, a ficha volta ao desenho ANTES
+               de congelar** — decisao pre-congelamento, nao calibracao.
+               O `eas-preco --ficha vespera` avisa.
+
+    TAXA / EFEITO / AMBIGUIDADE: a medir. Estimador binario e ambiguidade
+    como no ORB (stop tocado na barra do gatilho = ambigua).
+    AMOSTRAS / ORDEM / CRITERIO / PARADA: os de sempre.
+
+    EXPECTATIVA, dita antes: e' a ficha com mais chance entre as
+    declaradas — o nivel e' publico e observado por todo mundo, o que
+    corta dos dois lados — mas depois de seis fichas de preco, prior
+    baixo. O que decide e' por-ano, como sempre.
 
 **Multiplicidade da linha, atualizada:** 7 familias no WIN quando estas
 tres rodarem (IFR2 x2, ORB, 123, 123gate, gap, vespera). Um unico

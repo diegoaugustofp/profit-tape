@@ -97,6 +97,12 @@ class EA123Service:
                 curated if curated is not None else Path(config.curated),
                 symbol=config.symbol, periodo_s=config.periodo_barra_s,
                 janela_pregoes=int(config.filtro_fluxo.get("janela_pregoes", 20)))
+        if perfil is not None and perfil.resumo()["horarios_com_perfil"] == 0:
+            raise SystemExit(
+                f"{self.nome}: `filtro_fluxo` pede o gate de volume, mas o perfil esta' VAZIO "
+                f"(parquet={config.semente_parquet}, curated={config.curated}). Sem perfil o "
+                "gate reprova TUDO e o EA sobe inerte -- confira os caminhos do yaml (relativos "
+                "sao resolvidos pela pasta do proprio yaml).")
         self.perfil = perfil
         self.ciclo = CicloDeOrdens123(
             self.sinal, executor=None if config.dry_run else executor,

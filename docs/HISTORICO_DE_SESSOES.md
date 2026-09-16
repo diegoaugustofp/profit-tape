@@ -2310,3 +2310,18 @@ pregoes). Declaradas sem data: gap de abertura, max/min da vespera,
 acoes. Rotina nova: backfill + cura do dia anterior toda manha.
 
 `docs/ESTADO_E_CAMINHOS.md` reescrito para esta data.
+
+### 2026-09-16 — ficha 11 (vespera): funil entregue; correcao de caminho no yaml (v2.91)
+
+- Ficha 11 escrita por completo ANTES do funil (docs 11), com as tres
+  decisoes pre-medicao (abertura ja' fora desarma o lado; D = A_v;
+  regime = estrato) e o risco declarado (por tempo > 40% = volta ao
+  desenho antes de congelar).
+- `marcar_vespera` / `contar_clausulas_vespera` / `em_pontos_vespera` /
+  `rodar_vespera`; `--ficha vespera` no funil; `resolver_vespera` e
+  familia "vespera" (trial 1) no modulo de teste.
+- Bug do pregao de hoje: caminho RELATIVO no yaml do EA era resolvido
+  pelo diretorio de onde o record foi chamado -> semente e perfil vazios,
+  EA subiu inerte. Agora relativo resolve pela pasta do YAML, e o
+  servico RECUSA subir com `filtro_fluxo` pedido e perfil vazio.
+- 7 testes novos; 882 no total.

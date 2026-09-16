@@ -45,7 +45,21 @@ class EA123Config(BaseModel):
     @classmethod
     def from_yaml(cls, caminho: Path) -> EA123Config:
         import yaml
-        return cls(**yaml.safe_load(caminho.read_text(encoding="utf-8")))
+        return cls.de_dados(yaml.safe_load(caminho.read_text(encoding="utf-8")), caminho)
+
+    @classmethod
+    def de_dados(cls, dados: dict[str, Any], origem: Path | None = None) -> EA123Config:
+        """Caminho RELATIVO no yaml e' resolvido pela pasta do YAML, nao pelo
+        diretorio de onde o record foi chamado. Bug real (2026-09-16): record
+        rodado de outra pasta -> `parquet nao existe` -> EA subiu inerte."""
+        cfg = cls(**dados)
+        if origem is not None:
+            raiz = origem.resolve().parent
+            for campo in ("semente_parquet", "curated", "registro_dir"):
+                val = getattr(cfg, campo, None)
+                if val and not Path(val).is_absolute():
+                    object.__setattr__(cfg, campo, str((raiz / val).resolve()))
+        return cfg
 
     def sha256(self) -> str:
         return hashlib.sha256(json.dumps(self.model_dump(), sort_keys=True, default=str)
@@ -65,5 +79,5 @@ def carregar_config_ea(caminho: Path) -> Any:
     from .config import EAConfig
     dados = yaml.safe_load(caminho.read_text(encoding="utf-8"))
     if isinstance(dados, dict) and dados.get("tipo") == "123":
-        return EA123Config(**dados)
+        return EA123Config.de_dados(dados, caminho)
     return EAConfig(**dados)

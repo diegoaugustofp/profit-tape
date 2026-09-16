@@ -570,3 +570,78 @@ def test_rodar_123_gate_escreve_saida(tmp_path: Path) -> None:
     r = ep.rodar_123_gate(_dump(tmp_path, d), tmp_path / "s")
     assert (tmp_path / "s" / "resumo_123gate.json").exists()
     assert r["pontos"]["fracao_dos_sinais_123_que_passam"] == 0.0
+
+
+# ---------------------------------------------------------------------
+# Ficha 11: rompimento da maxima/minima da VESPERA
+# ---------------------------------------------------------------------
+def _dia_v(data: int, cb0: int, base: float, mme80: float = 139000.0,
+           **mod: dict) -> list[dict]:
+    d = _dia(data, cb0, base=base)
+    for b in d:
+        b["high"], b["low"], b["mme80_ntsl"] = base + 10.0, base - 10.0, mme80
+        b["open"] = b["close"] = base
+    for i, v in mod.items():
+        d[int(i)].update(v)
+    return d
+
+
+def test_vespera_compra_niveis_e_resolucao(tmp_path: Path) -> None:
+    # vespera: high 140200, low 139800 -> A_v = 400; entrada 140205, D 400
+    v = _dia_v(1250901, 1, 140000.0, **{"5": {"high": 140200.0}, "9": {"low": 139800.0}})
+    # hoje abre 140000 (dentro), rompe 140205 as 10:00 (idx 4), alvo 140605 as 11:00 (idx 8)
+    h = _dia_v(1250902, 38, 140000.0, **{"4": {"high": 140210.0}, "8": {"high": 140610.0}})
+    df, _ = ep.carregar_log(_dump(tmp_path, v + h))
+    o = ep.marcar_vespera(ep.indicadores(df))
+    assert len(o) == 1
+    ln = o.iloc[0]
+    assert ln["R_high_v"] == 140200.0 and ln["R_low_v"] == 139800.0 and ln["A_v_pts"] == 400.0
+    assert bool(ln["sinal"]) and ln["lado"] == "compra" and ln["gatilho_hhmm"] == 1000
+    assert ln["entrada"] == 140205.0 and ln["D_pts"] == 400.0
+    assert ln["alvo"] == 140605.0 and ln["stop"] == 139805.0
+    assert ln["classe"] == "resolvida"
+    from profittape.research import eas_preco_teste as et
+    r = et.resolver_vespera(ep.indicadores(df))
+    assert len(r) == 1 and r["resultado"].iloc[0] == 1.0 and r["pnl_bruto_pts"].iloc[0] == 400.0
+
+
+def test_vespera_abertura_ja_fora_desarma_o_lado(tmp_path: Path) -> None:
+    v = _dia_v(1250901, 1, 140000.0, **{"5": {"high": 140200.0}, "9": {"low": 139800.0}})
+    # abre em 140300: ja' acima de 140205 -> compra desarmada; rompe a venda as 11:00
+    h = _dia_v(1250902, 38, 140300.0, **{"8": {"low": 139790.0}})
+    df, _ = ep.carregar_log(_dump(tmp_path, v + h))
+    o = ep.marcar_vespera(ep.indicadores(df))
+    ln = o.iloc[0]
+    assert bool(ln["ja_fora_compra"]) and not bool(ln["ja_fora_venda"])
+    assert ln["rompeu_compra_hhmm"] is None and ln["lado"] == "venda"
+    assert ln["entrada"] == 139795.0
+    f = ep.contar_clausulas_vespera(o).set_index("clausula")["n"]
+    assert f["(info) abertura ja' fora de um lado"] == 1
+
+
+def test_vespera_por_tempo_e_pontos(tmp_path: Path) -> None:
+    v = _dia_v(1250901, 1, 140000.0, **{"5": {"high": 140200.0}, "9": {"low": 139800.0}})
+    h = _dia_v(1250902, 38, 140000.0, **{"4": {"high": 140210.0}})   # rompe e nao anda mais
+    df, _ = ep.carregar_log(_dump(tmp_path, v + h))
+    o = ep.marcar_vespera(ep.indicadores(df))
+    assert o.iloc[0]["classe"] == "por_tempo"
+    pt = ep.em_pontos_vespera(o)
+    assert pt["fracao_por_tempo"] == 1.0 and pt["D_pts_nos_sinais"]["p50"] == 400.0
+    assert pt["p1_que_empata_custo_com_D_mediano"] == pytest.approx(0.514, abs=1e-3)
+    from profittape.research import eas_preco_teste as et
+    r = et.resolver_vespera(ep.indicadores(df))
+    assert r["classe"].iloc[0] == "por_tempo"
+    assert r["pnl_zeragem_pts"].iloc[0] == pytest.approx(140000.0 - 140205.0)
+
+
+def test_vespera_sem_vespera_contigua_nao_entra(tmp_path: Path) -> None:
+    h = _dia_v(1250902, 38, 140000.0, **{"4": {"high": 141000.0}})
+    df, _ = ep.carregar_log(_dump(tmp_path, h))
+    assert ep.marcar_vespera(ep.indicadores(df)).empty
+
+
+def test_rodar_vespera_escreve_saida(tmp_path: Path) -> None:
+    v = _dia_v(1250901, 1, 140000.0, **{"5": {"high": 140200.0}, "9": {"low": 139800.0}})
+    h = _dia_v(1250902, 38, 140000.0, **{"4": {"high": 140210.0}})
+    r = ep.rodar_vespera(_dump(tmp_path, v + h), tmp_path / "s")
+    assert (tmp_path / "s" / "resumo_vespera.json").exists() and r["n_sinais"] == 1

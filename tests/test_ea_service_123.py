@@ -100,3 +100,36 @@ def test_registro_de_eas_monta_o_123_pelo_yaml(tmp_path: Path) -> None:
     assert r.nome == "ea_123" and r.symbol == "WINFUT"
     assert type(r.bridge.ea_service).__name__ == "EA123Service"
     assert reg.remover("ea_123")
+
+
+def test_caminho_relativo_resolve_pela_pasta_do_yaml(tmp_path: Path) -> None:
+    """Bug real (2026-09-16): record rodado de outra pasta -> semente e perfil
+    vazios, EA sobe inerte. Relativo passa a ser resolvido pelo yaml."""
+    import os
+
+    import yaml
+    (tmp_path / "data").mkdir()
+    (tmp_path / "data" / "x.parquet").write_text("", encoding="utf-8")
+    p = tmp_path / "ea.yaml"
+    p.write_text(yaml.safe_dump({"tipo": "123", "semente_parquet": "data/x.parquet",
+                                 "curated": "data", "registro_dir": "fw"}), encoding="utf-8")
+    cwd = os.getcwd()
+    try:
+        os.chdir("/")                       # de qualquer lugar
+        cfg = carregar_config_ea(p)
+    finally:
+        os.chdir(cwd)
+    assert cfg.semente_parquet == str((tmp_path / "data" / "x.parquet").resolve())
+    assert cfg.registro_dir == str((tmp_path / "fw").resolve())
+
+
+def test_servico_recusa_gate_com_perfil_vazio(tmp_path: Path) -> None:
+    import yaml
+    p = tmp_path / "ea.yaml"
+    p.write_text(yaml.safe_dump({
+        "tipo": "123", "nome": "vb", "semente_parquet": str(tmp_path / "nao.parquet"),
+        "curated": str(tmp_path / "nao"), "registro_dir": str(tmp_path / "fw"),
+        "filtro_fluxo": {"tipo": "volume_baixo"}}), encoding="utf-8")
+    cfg = EA123Config.from_yaml(p)
+    with pytest.raises(SystemExit, match="perfil esta' VAZIO"):
+        EA123Service(cfg, dia=dt.date(2026, 9, 16))

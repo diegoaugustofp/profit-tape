@@ -104,6 +104,12 @@ FICHAS: dict[str, dict[str, Any]] = {
     # ficha 12 (docs): hipotese GERADA no WIN pelo complemento da ficha 9;
     # so' pode ser testada onde nenhum teste de volume tocou (WDO) e no
     # forward. Primario = volume ABAIXO da mediana; contraste = acima.
+    # ficha 11 (docs): rompimento da maxima/minima da VESPERA. Trial 1.
+    "vespera": {**_COMUM, "TRIAL": 1,
+                "VESP_PRIMEIRA_ENTRADA": ep.VESP_PRIMEIRA_ENTRADA,
+                "VESP_ULTIMA_ENTRADA": ep.VESP_ULTIMA_ENTRADA,
+                "VESP_AMPLITUDE_MINIMA_TICKS": ep.VESP_AMPLITUDE_MINIMA_TICKS,
+                "D": "amplitude da vespera (A_v)"},
     "123gate_baixo": {**_COMUM, "TRIAL": 1,
                       "P123_REGIME_NA_CLAUSULA": ep.P123_REGIME_NA_CLAUSULA,
                       "P123_PRIMEIRO_FECHAMENTO": ep.P123_PRIMEIRO_FECHAMENTO,
@@ -229,6 +235,51 @@ def resolver_sinais(x: pd.DataFrame, max_barras: int = 400) -> pd.DataFrame:
             "pnl_bruto_pts": (res * d_pts) if classe == "resolvida" else float("nan"),
             "barra_resolucao_hhmm": (int(hhmm[j]) if j < len(x) and classe != "por_tempo"
                                      else None),
+        })
+    return pd.DataFrame(linhas)
+
+
+def resolver_vespera(d: pd.DataFrame) -> pd.DataFrame:
+    """Resultado por PREGAO da ficha 11 (`marcar_vespera` classifica; o
+    RESULTADO sai aqui, fora do funil, como no ORB). Por tempo: P&L na
+    zeragem 17:30 reportado."""
+    o = ep.marcar_vespera(d)
+    if o.empty or "sinal" not in o:
+        return pd.DataFrame(columns=[*_COLUNAS, "pnl_zeragem_pts"])
+    o = o[o["sinal"].fillna(False).astype(bool)].copy()
+    linhas = []
+    for _, ln in o.iterrows():
+        lado = str(ln["lado"])
+        sinal_lado = 1.0 if lado == "compra" else -1.0
+        entrada, d_pts = float(ln["entrada"]), float(ln["D_pts"])
+        classe = str(ln["classe"])
+        res = {"resolvida": None, "ambigua": 0.0, "por_tempo": float("nan")}[classe]
+        if res is None:                       # resolvida: qual barreira? recalcula pelo dia
+            g = d[d["dia"] == ln["dia"]].sort_values("current_bar")
+            resto = g[g["hhmm"] >= int(ln["gatilho_hhmm"])]
+            alvo, stop = float(ln["alvo"]), float(ln["stop"])
+            res = float("nan")
+            for i, (_, b) in enumerate(resto.iterrows()):
+                hi, lo = float(b["high"]), float(b["low"])
+                t_alvo = (hi >= alvo) if lado == "compra" else (lo <= alvo)
+                t_stop = (lo <= stop) if lado == "compra" else (hi >= stop)
+                if i == 0 and t_stop:
+                    break
+                if t_alvo:
+                    res = 1.0
+                    break
+                if t_stop:
+                    res = -1.0
+                    break
+        pnl_z = ((float(ln["close_final"]) - entrada) * sinal_lado
+                 if classe == "por_tempo" else float("nan"))
+        linhas.append({
+            "dia": ln["dia"], "hhmm": int(ln["gatilho_hhmm"]), "current_bar": 0, "lado": lado,
+            "a_favor_mme80": bool(ln["a_favor_mme80"]), "entrada": entrada,
+            "alvo": float(ln["alvo"]), "stop": float(ln["stop"]), "D_pts": d_pts,
+            "classe": classe, "resultado": res, "barras": int(ln["barras_ate_resolver"]),
+            "pnl_bruto_pts": (res * d_pts) if classe == "resolvida" else float("nan"),
+            "pnl_zeragem_pts": pnl_z, "barra_resolucao_hhmm": None,
         })
     return pd.DataFrame(linhas)
 
@@ -552,7 +603,8 @@ def rodar(dump: Path, saida: Path, amostra: str,
          "orb": lambda: resolver_orb(d),
          "123": lambda: resolver_123(d),
          "123gate": lambda: resolver_123(d, gate=True),
-         "123gate_baixo": lambda: resolver_123(d, gate=False)}[ficha]()
+         "123gate_baixo": lambda: resolver_123(d, gate=False),
+         "vespera": lambda: resolver_vespera(d)}[ficha]()
     pl = placar(r, ficha)
     saida.mkdir(parents=True, exist_ok=True)
     if ficha in ("123gate", "123gate_baixo"):
