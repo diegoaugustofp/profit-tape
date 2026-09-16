@@ -2416,3 +2416,22 @@ com fluxo sintetico onde a resposta e' conhecida por construcao.
 - `por_regime` (quebra em 2020) no modulo de teste e no `combinar`,
   com a releitura do 123 volume-baixo DECLARADA antes (criterio de
   leitura escrito). 903 testes.
+
+### 2026-09-16 (noite) — releitura por regime; cinco pontos de hipotese; status (v2.99)
+
+- **123 em volume baixo atravessa a quebra de 2020**, nos dois
+  instrumentos: WIN 0,563 -> 0,546; WDO 0,552 -> 0,526; contraste abaixo
+  em todas as quatro celulas. Pelo criterio declarado antes, a hipotese
+  fica MAIS FORTE; o veredito (inconclusivo pelo 0,56) nao muda.
+  Registrado em `EAS_DE_PRECO.md` 12.3, com duas observacoes sem acao:
+  queda de ~2 pp do regime antigo para o novo nos dois (consistente com
+  arbitragem lenta) e a inversao de 2026 no WIN (n=104).
+- **Cinco pontos sobre geracao de hipotese** no `RESEARCH_PLANO.md`:
+  (1) CONTRAPARTE obrigatoria antes de HIPOTESE -- teria matado IFR2,
+  ORB, vespera e gap antes de custar trabalho; (2) triagem de feature
+  obrigatoria, e por REGIME quando for razao; (3) procurar onde o dado
+  e' raro (agentes, book, extremo direcional); (4) catalogo de hipoteses
+  mortas com o aprendizado da CATEGORIA; (5) hipotese a partir de
+  anomalia MEDIDA, com candidatos baratos (rolagem, vencimento de
+  opcao: fluxo obrigatorio = contraparte).
+- `ESTADO_E_CAMINHOS.md` reescrito para 16/09.

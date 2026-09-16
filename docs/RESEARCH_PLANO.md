@@ -5915,3 +5915,74 @@ apostando num mercado que nao existe mais.
 
 `eas-preco-combinar` passa a imprimir `POR REGIME` (primario e
 complemento) junto com o por-ano.
+
+
+## COMO GERAR E REFINAR HIPOTESE (2026-09-16, decisao do operador)
+
+Diagnostico do operador, aceito: o que esta' mais fragil no projeto sao
+as HIPOTESES. O gargalo nunca foi qualidade de codigo nem disciplina --
+foi que quase todas as hipoteses vinham da mesma fonte pobre ("setup
+publico conhecido"), que e' a categoria com menor probabilidade a priori
+que existe: se funcionasse, ja' estaria arbitrado. Cinco mudancas, todas
+adotadas.
+
+### 1. CONTRAPARTE e' campo OBRIGATORIO, antes de HIPOTESE
+
+Hoje a ficha comeca em "quando acontece X, entre". A pergunta que vem
+ANTES: **quem esta' do outro lado e por que perde?** Toda borda real tem
+contraparte que paga -- alguem obrigado (rolagem, hedge, chamada de
+margem, fechamento de caixa, vencimento), alguem desinformado, alguem
+lento. Ficha sem resposta plausivel nesse campo NAO se escreve.
+
+Teste retroativo: IFR2, ORB, vespera e gap nao tinham resposta -- e as
+quatro morreram. O 123 em volume baixo tem uma esbocada ("recuo sem
+conviccao nao atrai contraparte; quem estava no comando continua") -- e
+e' a unica que replicou em dois instrumentos e atravessou a quebra de
+2020. Isso teria poupado a maior parte do trabalho que nao rendeu.
+
+### 2. TRIAGEM DE FEATURE (7.2) e' obrigatoria, nao excecao
+
+Toda feature nova passa por "ela e' o que eu penso ou e' outra coisa
+disfarcada?". Tres de tres vezes que olhamos, achamos degeneracao:
+`absorcao_dir` era `desloc_norm` (31/08); a absorcao crua e' volume ou
+range conforme o regime (16/09); o gate de volume ALTO selecionava
+padroes MAIORES (funil da ficha 9). E, pelo achado de 16/09: **feature
+que e' RAZAO exige triagem em CADA REGIME**, porque a identidade de um
+quociente e' de quem varia mais.
+
+### 3. Procurar onde o dado e' RARO, nao onde e' abundante
+
+Preco em M15 e' o dado mais visto do mundo; qualquer borda ali tem
+milhares de olhos. O que este projeto tem e quase ninguem tem: tape com
+AGENTES identificados, book, e -- medido em 16/09 -- o EXTREMO do
+direcional (concordancia no decil de 0,43 contra 0,90 do nao-direcional).
+A pergunta mais valiosa provavelmente nao e' sobre padrao de preco; e'
+sobre COMPORTAMENTO DE AGENTE: quem aparece antes de que'. Exige tape,
+que e' escasso -- e e' exatamente por isso que vale.
+
+### 4. Catalogo de hipoteses MORTAS, com o aprendizado da CATEGORIA
+
+Os fechamentos estao no documento, mas dispersos; o prior da proxima
+ficha fica intuitivo em vez de explicito. Lista curta, mantida aqui:
+
+| hipotese | morreu por | aprendizado sobre a CATEGORIA |
+|---|---|---|
+| IFR2 (2 trials, WIN+WDO) | nulo | reversao a` media publica em M15 esta' arbitrada |
+| ORB (WIN+WDO) | nulo | idem para rompimento de abertura |
+| 123 puro | pequeno no WIN, nao replica no WDO | padrao de continuacao tem borda marginal |
+| 123 + volume ALTO | nulo, e selecionava padroes maiores | volume alto ~ padrao grande: confundidor |
+| vespera (v0 e v1) | estimador nao serve (78% por tempo; depois 68% ambigua) | **entrada por ROMPIMENTO exige D maior que a barra do gatilho**, ou o OHLC nao ordena |
+| gap de abertura | inconclusivo, por-ano sem padrao | informacao da noite tambem ja' esta' no preco |
+| absorcao_dir (fluxo) | era `desloc_norm` disfarcado | feature com subtracao de escalas desiguais degenera |
+| absorcao crua (grafico) | vira volume ou range conforme o regime | **razao muda de identidade com o regime** |
+
+### 5. Gerar a hipotese a partir de ANOMALIA MEDIDA, nao de leitura
+
+O unico achado real da linha de preco nao veio de escolher um setup:
+veio do COMPLEMENTO aparecer no contraste de uma ficha. Isso sugere um
+modo de trabalho: rodar DESCRICOES (categoria `features`, zero trial)
+procurando onde o mercado e' estranho, e so' entao escrever a ficha
+sobre a anomalia -- ja' com mecanismo e contraparte. Candidatos baratos,
+sem gastar pregao: retorno condicionado a horario, a dia do mes, a
+ROLAGEM de contrato, a vencimento de opcao (dias com fluxo OBRIGATORIO
+-- que e' contraparte no sentido do item 1).

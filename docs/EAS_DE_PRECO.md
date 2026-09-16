@@ -1284,6 +1284,40 @@ do parquet + ponte pelo tape, como a semente) e `filtro_fluxo:
   execucao nao. Cabo + nobreak antes do E4 real; VPS so' com dinheiro
   real.
 
+### 12.3 RELEITURA POR REGIME — o efeito atravessa a quebra de 2020 (2026-09-16)
+
+Releitura de estrato ja' reportado (zero trial), com o criterio escrito
+ANTES (RESEARCH_PLANO):
+
+| | ate 2019 | de 2020 |
+|---|---|---|
+| **WIN, volume BAIXO** (complemento da ficha 9) | **0,563** [0,535; 0,590] n=1.269 | **0,546** [0,524; 0,567] n=2.097 |
+| WIN, volume alto (o gate da ficha 9) | 0,507 [0,477; 0,537] n=1.058 | 0,506 [0,481; 0,531] n=1.523 |
+| **WDO, volume BAIXO** (ficha 12, primario) | **0,552** [0,520; 0,584] n=913 | **0,526** [0,503; 0,548] n=1.950 |
+| WDO, volume alto (contraste) | 0,528 [0,490; 0,566] n=661 | 0,486 [0,459; 0,514] n=1.289 |
+
+**Pelo criterio declarado: efeito parecido nos dois regimes -> a hipotese
+fica MAIS FORTE.** Quatro medicoes independentes (dois instrumentos x
+dois regimes), todas entre 0,526 e 0,563, todas com o contraste abaixo.
+Um efeito que atravessa uma mudanca ESTRUTURAL de microestrutura (o
+volume do WIN se homogeneizou em 2020 e a borda continuou la') e'
+qualitativamente diferente de um efeito que existe num periodo so'.
+
+**O veredito NAO muda:** continua INCONCLUSIVO pelo criterio de 0,56, que
+tambem nao se mexe. O que muda e' a confianca de que ha' mecanismo por
+tras, e nao sorte.
+
+**Duas observacoes, sem acao:**
+1. Ha' queda consistente de ~2 pp do regime antigo para o novo nos DOIS
+   instrumentos (0,563 -> 0,546 e 0,552 -> 0,526). Pequena demais para
+   afirmar (ICs sobrepostos), mas e' a direcao que se esperaria se a
+   borda estivesse sendo lentamente arbitrada. O forward mede no regime
+   atual e informa isso de graca.
+2. No WIN, **2026 aparece invertido**: gate (volume alto) 0,615 com
+   n=104 e complemento 0,533. E' um ano com n pequeno contra onze anos
+   no outro sentido. Registrado para ninguem estranhar se o forward de
+   2026 vier morno -- e para ninguem agir sobre isso.
+
 ## 10. Ficha "GAP de abertura" v0 (2026-09-16, `entregue-v2.93`)
 
 Informacao que nenhuma outra usa: a NOITE. Entrada a MERCADO — e' o que
