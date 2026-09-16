@@ -5850,3 +5850,68 @@ e a ficha faz sentido; ai' ela se escreve, com o `z_desloc_norm` como
 controle obrigatorio (exigencia que ficou do diagnostico de 31/08).
 
 Categoria `features`: zero trial, nenhum retorno olhado.
+
+
+## RESULTADO DA TRIAGEM: a absorcao MUDA DE IDENTIDADE, e o WIN quebrou em 2020 (2026-09-16)
+
+| periodo | barras | var(log vol) | corr z(absorcao) x z(-range) | decil: barra estreita / volume alto |
+|---|---|---|---|---|
+| 2015-19 | 37.583 | **1,24** | +0,03 | 0,148 / **0,424** |
+| 2020 | 9.024 | 0,30 | **+0,73** | **0,364** / 0,151 |
+| 2021-22 | 18.200 | 0,27 | **+0,72** | **0,426** / 0,086 |
+| 2023-25 | 28.083 | 0,40 | +0,64 | 0,356 / 0,117 |
+| 2026 | 6.580 | 0,49 | **+0,75** | **0,459** / 0,062 |
+
+**A ficha NAO se escreve**, pelo criterio declarado antes — e por motivos
+OPOSTOS nos dois regimes: ate' 2019 a absorcao e' VOLUME disfarcado
+(corr 0,89 com log-volume, concordancia com barra estreita abaixo do
+acaso); de 2020 em diante e' RANGE disfarcado. Dividir por range nao
+acrescenta informacao em regime nenhum: troca uma variavel por outra.
+Volume normalizado por horario (o gate do 123) ja' e' a forma util.
+
+**A quebra e' de 2020 e e' PERMANENTE.** A hipotese do operador (a
+pandemia contaminando 2015-22) foi testada e REJEITADA: se fosse
+contaminacao, 2021-22 voltaria a parecer 2015-19 — e 2021-22 e' MAIS
+extremo que 2020. Se fosse tendencia de nivel, a variancia voltaria a
+subir — ficou em 0,27-0,49. O que aconteceu foi homogeneizacao do
+volume (provavelmente a entrada massiva de PF e robos em 2020): antes
+havia barras quase secas e barras enormes, e era essa dispersao que
+sustentava a variancia. Com o numerador achatado, `volume/range` vira
+mecanicamente uma medida de range.
+
+**Isso explica retroativamente a morte da linha de fluxo em agosto:** ela
+testou absorcao em 2026, o regime em que a feature E' range disfarcado.
+O diagnostico de 31/08 (`absorcao_dir` = `desloc_norm`) e este sao o
+mesmo fenomeno visto de dois angulos.
+
+### Dois aprendizados permanentes
+
+1. **Toda feature que e' RAZAO precisa de triagem em CADA REGIME, nao
+   uma vez.** A identidade de um quociente e' de quem varia mais, e isso
+   muda com o mercado. Se tivessemos rodado isto em agosto, a linha de
+   fluxo teria economizado semanas.
+2. **2015-2019 e' outro mercado. Historico longo da' n, nao da'
+   homogeneidade.** Toda ficha testada em "dez anos" mistura duas
+   microestruturas. O por-ano sempre foi reportado; a partir de agora o
+   `por_regime` (quebra em 2020) tambem e', e a pergunta "o efeito existe
+   nos DOIS lados?" passa a fazer parte da leitura.
+
+## RELEITURA POR REGIME do 123 em volume baixo (declarada ANTES, 2026-09-16)
+
+Nao e' teste novo e nao gasta trial: e' releitura de um estrato que ja'
+foi reportado (`por_ano`), agrupado pela quebra de 2020. **Por que ela
+nao e' opcional aqui:** o gate da ficha 12 e' "volume ABAIXO da mediana
+do horario" — e a dispersao do volume foi exatamente o que mudou em
+2020. Se o efeito vier concentrado no regime antigo, o forward esta'
+apostando num mercado que nao existe mais.
+
+**Criterio de leitura, declarado antes de olhar:**
+- efeito parecido nos dois regimes -> a hipotese fica MAIS forte do que
+  estava (sobrevive a uma quebra de microestrutura);
+- efeito concentrado em 2015-19 -> vai para a ficha 12 como ressalva
+  grave, e o forward passa a ser a unica evidencia valida;
+- efeito concentrado de 2020 em diante -> e' o regime atual; a ficha
+  ganha, mas o n cai pela metade e a meia-largura dobra.
+
+`eas-preco-combinar` passa a imprimir `POR REGIME` (primario e
+complemento) junto com o por-ano.

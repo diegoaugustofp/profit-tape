@@ -1862,6 +1862,16 @@ def eas_preco_combinar(
                    f"pnl_bruto={cp['pnl_bruto_pts_medio']}")
         for ano, e in pl["complemento_por_ano"].items():
             typer.echo(f"  {ano}  n={e['n_resolvidas']:4d}  p1={e['p1']}")
+    if pl.get("por_regime_reportado"):
+        pr_ = pl["por_regime_reportado"]
+        typer.echo("\n--- POR REGIME (releitura; a microestrutura do WIN quebrou em 2020) ---")
+        for nome, e in pr_.items():
+            typer.echo(f"  {nome:10} n={e['n_resolvidas']:5d}  p1={e['p1']}  IC={e['ic95']}  "
+                       f"pnl_bruto={e['pnl_bruto_pts_medio']}")
+        if pl.get("complemento_por_regime"):
+            typer.echo("  complemento:")
+            for nome, e in pl["complemento_por_regime"].items():
+                typer.echo(f"  {nome:10} n={e['n_resolvidas']:5d}  p1={e['p1']}  IC={e['ic95']}")
     if pl.get("por_quartil_de_D_reportado"):
         pq = pl["por_quartil_de_D_reportado"]
         typer.echo(f"\n--- POR QUARTIL DE D (reportado; volume ou tamanho?) "

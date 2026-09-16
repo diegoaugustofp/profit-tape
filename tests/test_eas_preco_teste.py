@@ -284,3 +284,22 @@ def test_ficha_123gate_baixo_recusa_win_e_roda_no_wdo(tmp_path: Path) -> None:
     finally:
         ep.usar_instrumento("win")
         importlib.reload(ep)
+
+
+def test_por_regime_separa_antes_e_depois_de_2020() -> None:
+    import numpy as np
+    rng = np.random.default_rng(4)
+
+    def _r(anos: list[int], p1: float, n: int) -> pd.DataFrame:
+        dias = [f"{rng.choice(anos)}-06-{rng.integers(1, 28):02d}" for _ in range(n)]
+        res = np.where(rng.random(n) < p1, 1.0, -1.0)
+        return pd.DataFrame({"dia": dias, "classe": "resolvida", "resultado": res,
+                             "D_pts": 100.0, "pnl_bruto_pts": res * 100.0,
+                             "lado": "compra", "a_favor_mme80": True})
+
+    r = pd.concat([_r([2016, 2017, 2018], 0.62, 400), _r([2021, 2023, 2025], 0.50, 400)],
+                  ignore_index=True)
+    pr = et.por_regime(r, et.Z95)
+    assert set(pr) == {"ate_2019", "de_2020"}
+    assert pr["ate_2019"]["p1"] > 0.57 and abs(pr["de_2020"]["p1"] - 0.50) < 0.06
+    assert pr["ate_2019"]["n_resolvidas"] + pr["de_2020"]["n_resolvidas"] == 800

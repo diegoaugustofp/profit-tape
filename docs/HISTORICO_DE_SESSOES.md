@@ -2398,3 +2398,21 @@ com fluxo sintetico onde a resposta e' conhecida por construcao.
   desloc_norm disfarcado e a crua tem o risco irmao (range no
   denominador = "barra estreita"). Criterio de leitura declarado antes.
   3 testes com variancia controlada; 902 no total.
+
+### 2026-09-16 — a absorcao muda de identidade; o WIN quebrou em 2020 (v2.98)
+
+- Triagem em cinco blocos: ate' 2019 a absorcao e' VOLUME disfarcado
+  (var log-vol 1,24; decil volume 0,42); de 2020 em diante e' RANGE
+  disfarcado (var log-vol ~0,3; decil barra estreita 0,36-0,46). A ficha
+  NAO se escreve, por motivos opostos nos dois regimes.
+- A hipotese do operador (pandemia contaminando 2015-22) foi TESTADA e
+  rejeitada: 2021-22 e' mais extremo que 2020 e a variancia nao volta.
+  A quebra e' permanente -- homogeneizacao do volume em 2020.
+- Explica retroativamente a morte da absorcao_dir em 31/08 (testada em
+  2026, o regime em que a feature e' range disfarcado).
+- Dois aprendizados permanentes no RESEARCH_PLANO: feature que e' razao
+  precisa de triagem por REGIME; 2015-19 e' outro mercado (historico
+  longo da' n, nao homogeneidade).
+- `por_regime` (quebra em 2020) no modulo de teste e no `combinar`,
+  com a releitura do 123 volume-baixo DECLARADA antes (criterio de
+  leitura escrito). 903 testes.

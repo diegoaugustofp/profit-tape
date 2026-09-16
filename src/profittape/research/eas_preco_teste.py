@@ -556,6 +556,28 @@ def por_ano(r: pd.DataFrame, z: float) -> dict[str, Any]:
     return {str(a): _placar(r[anos == a], z) for a in sorted(anos.unique())}
 
 
+# QUEBRA DE REGIME (medida 2026-09-16 pela triagem da absorcao): a
+# variancia de log(volume) do WIN despenca de 1,24 (2015-19) para ~0,3 em
+# 2020 e NAO volta. Antes e depois sao microestruturas diferentes. Toda
+# leitura por regime usa esta data, declarada aqui.
+REGIME_QUEBRA_ANO = 2020
+
+
+def por_regime(r: pd.DataFrame, z: float) -> dict[str, Any]:
+    """
+    RELEITURA de estrato ja' reportado (nao e' teste novo, nao gasta
+    trial): o efeito e' o mesmo ANTES e DEPOIS da quebra de 2020? Para
+    uma ficha cujo gate depende de DISPERSAO de volume, a pergunta nao e'
+    opcional -- se o efeito so' existe no regime antigo, o forward esta'
+    apostando num mercado que nao existe mais.
+    """
+    if r.empty:
+        return {}
+    anos = pd.to_datetime(r["dia"].astype(str)).dt.year
+    return {f"ate_{REGIME_QUEBRA_ANO - 1}": _placar(r[anos < REGIME_QUEBRA_ANO], z),
+            f"de_{REGIME_QUEBRA_ANO}": _placar(r[anos >= REGIME_QUEBRA_ANO], z)}
+
+
 def por_quartil_de_d(r_gate: pd.DataFrame, r_comp: pd.DataFrame, z: float) -> dict[str, Any]:
     """
     Estrato DECLARADO antes do teste (ficha 9, 2026-09-15): o gate de volume
@@ -611,12 +633,14 @@ def combinar(saida: Path, ficha: str) -> dict[str, Any]:
     r = pd.concat(partes, ignore_index=True)
     pl = placar(r, ficha)
     pl["por_ano_reportado"] = por_ano(r, z_ic(trial_de(ficha)))
+    pl["por_regime_reportado"] = por_regime(r, z_ic(trial_de(ficha)))
     comps = [saida / f"sinais_{ficha}_{a}_complemento.csv" for a in presentes]
     if ficha in ("123gate", "123gate_baixo") and all(c.exists() for c in comps):
         rc = pd.concat([pd.read_csv(c) for c in comps], ignore_index=True)
         pl["complemento_reportado"] = _placar(rc, z_ic(trial_de(ficha)))
         pl["complemento_por_ano"] = por_ano(rc, z_ic(trial_de(ficha)))
         pl["por_quartil_de_D_reportado"] = por_quartil_de_d(r, rc, z_ic(trial_de(ficha)))
+        pl["complemento_por_regime"] = por_regime(rc, z_ic(trial_de(ficha)))
     pl["amostras"] = presentes
     pl["hash_ficha"] = next(iter(hashes)) if hashes else None
     (saida / f"resultado_{ficha}_COMBINADO.json").write_text(
