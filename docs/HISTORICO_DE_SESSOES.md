@@ -2391,3 +2391,10 @@ concordancia no DECIL (feature vira limiar, nao regressao; acaso 10%).
 `research/fluxo_vs_grafico.py` + `profit-tape fluxo-vs-grafico`; 5 testes
 com fluxo sintetico onde a resposta e' conhecida por construcao.
 `RESEARCH_PLANO.md` com a pergunta e como ler. 899 no total.
+- v2.97: resultado do "grafico x tape" registrado (absorcao: decil 0,90 —
+  existe em 10 anos; imbalance: R2 0,77 mas decil 0,43 — o extremo exige
+  tape) e TRIAGEM da absorcao de grafico ANTES da ficha
+  (`triagem-absorcao`), porque a absorcao_dir morreu em 31/08 por ser
+  desloc_norm disfarcado e a crua tem o risco irmao (range no
+  denominador = "barra estreita"). Criterio de leitura declarado antes.
+  3 testes com variancia controlada; 902 no total.

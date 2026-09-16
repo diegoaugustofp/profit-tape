@@ -5803,3 +5803,50 @@ olhado, nenhum trial consumido. Barras M15, so' as `volume_confiavel`
 absorcao disponivel em dez anos. R2 baixo e concordancia perto de 0,1 na
 parte (b) = o direcional exige tape. Os dois resultados sao uteis; o
 segundo e' o que justifica (ou nao) a DLL.
+
+
+## RESULTADO: o grafico substitui o tape? (2026-09-16, WINFUT, 1.327 barras M15 de 24/07 a 15/09)
+
+| | medida | leitura |
+|---|---|---|
+| razao `vol_agr/vol_total` | media 0,740, p10-p90 0,70-0,77, **CV 6,3%** | o grafico nao separa agressao, mas a fracao e' quase constante |
+| **(a) absorcao** (nao-direcional) | spearman 0,990; **decil 0,902** (120 de 133) | `vol_total/range` proxia `vol_agr/range`: para uso como GATE e' o MESMO conjunto de barras |
+| **(b) imbalance** (direcional) | spearman 0,901; mesmo sinal 87%; **R2 0,772**; residuo 0,034 contra desvio 0,070; **decil 0,429** | a geometria explica 3/4 do imbalance MEDIO, mas erra o EXTREMO em ~6 de 10 |
+
+**O que isto decide:**
+
+1. **A absorcao passa a ser testavel em DEZ ANOS de grafico**, nao em
+   dois meses de tape. Muda o que da' para fazer antes de dezembro.
+2. **O argumento tecnico para a DLL enfraqueceu.** Para o
+   nao-direcional e para o grosso do direcional, o grafico basta. Sobram
+   com exclusividade: o EXTREMO do direcional (decil 0,43), os agentes
+   (`agf`), o book, e a execucao automatica.
+3. Proxy funcionar NAO e' hipotese funcionar: continua valendo funil,
+   ficha e sequencia -- so' que com amostra de dez anos.
+
+## TRIAGEM (7.2) ANTES da ficha de absorcao de grafico (2026-09-16)
+
+**Por que nao escrevi a ficha direto.** Em 31/08 a linha de fluxo matou
+a `absorcao_dir` com um diagnostico: ela correlacionava **0,988 com
+`-desloc_norm`** — era deslocamento disfarcado. A absorcao CRUA tem um
+risco irmao: `absorcao = volume / range` tem o range no DENOMINADOR, e
+range varia mais que volume. Se a variancia de log(absorcao) vier quase
+toda de log(range), "absorcao alta" e' **"barra estreita"**, e qualquer
+sinal em cima disso e' sinal de barra estreita.
+
+`profit-tape triagem-absorcao <dump>` mede, nos dumps de dez anos que
+ja' existem (nao precisa de tape): decomposicao da variancia em log,
+concordancia no DECIL com "barra estreita" e com "volume alto", e o
+mesmo depois de tirar o padrao intradiario (z por horario, porque volume
+e range tem padrao forte por hora).
+
+**Criterio, declarado antes:** se a concordancia no decil com BARRA
+ESTREITA for muito maior que com VOLUME ALTO (e a variancia vier do
+range), a ficha NAO se escreve nessa forma -- a feature seria range
+disfarcado, e o caminho seria normalizar o volume por horario (como o
+gate do 123 ja' faz) em vez de dividir por range. Se as duas
+concordancias forem comparaveis, a absorcao carrega informacao de volume
+e a ficha faz sentido; ai' ela se escreve, com o `z_desloc_norm` como
+controle obrigatorio (exigencia que ficou do diagnostico de 31/08).
+
+Categoria `features`: zero trial, nenhum retorno olhado.

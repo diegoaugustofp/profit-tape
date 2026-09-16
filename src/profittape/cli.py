@@ -1697,6 +1697,50 @@ def fluxo_vs_grafico(
     typer.echo(f"\n  Saida: {saida}/fluxo_vs_grafico.json")
 
 
+@app.command(name="triagem-absorcao")
+def triagem_absorcao_cmd(
+    dump: Path = typer.Argument(..., help="Dump PRCBARRA| do grafico M15"),
+    saida: Path = typer.Option(Path("data/research/triagem_absorcao"), "--saida"),
+    log_level: str = typer.Option("INFO", "--log-level"),
+) -> None:
+    """
+    TRIAGEM (7.2) da absorcao de grafico, ANTES de qualquer ficha:
+    `absorcao = volume / range` tem o range no denominador. Se a variancia
+    vier quase toda do range, "absorcao alta" e' "BARRA ESTREITA" -- e a
+    ficha nao se escreve nessa forma (foi assim que a `absorcao_dir`
+    morreu em 31/08: era desloc_norm disfarcado).
+
+    Categoria `features`: zero trial, nenhum retorno olhado.
+    """
+    configurar(log_level)
+    from .research.triagem_absorcao import triar
+
+    r = triar(dump, saida)
+    b, h = r["bruto"], r["normalizado_por_horario"]
+    typer.echo("=" * 72)
+    typer.echo(f"TRIAGEM DA ABSORCAO DE GRAFICO — {r['barras']} barras "
+               f"({r['dump']['inicio']} a {r['dump']['fim']})")
+    typer.echo("=" * 72)
+    typer.echo("\n--- DECOMPOSICAO (em log; a absorcao e' um quociente) ---")
+    typer.echo(f"  var(log absorcao)={b['var_log_absorcao']}  var(log volume)={b['var_log_volume']}"
+               f"  var(log range)={b['var_log_range']}  cov={b['cov_log_v_log_r']}")
+    typer.echo(f"  fracao da variancia vinda do RANGE: {b['fracao_da_var_vinda_do_range']}")
+    typer.echo(f"  corr(log absorcao, log volume)={b['corr_log_absorcao_com_log_volume']}   "
+               f"corr(log absorcao, -log range)={b['corr_log_absorcao_com_menos_log_range']}")
+    typer.echo("\n--- CONCORDANCIA NO DECIL (acaso = 0,1) ---")
+    typer.echo(f"  absorcao alta tambem e' BARRA ESTREITA: {b['decil_tambem_em_barra_estreita']}")
+    typer.echo(f"  absorcao alta tambem e' VOLUME ALTO:    {b['decil_tambem_em_volume_alto']}")
+    typer.echo("\n--- DEPOIS DE TIRAR O PADRAO INTRADIARIO (z por horario) ---")
+    typer.echo(f"  n={h['n']}  corr com z(volume)={h['corr_z_absorcao_com_z_volume']}  "
+               f"corr com z(-range)={h['corr_z_absorcao_com_z_menos_range']}")
+    typer.echo(f"  decil tambem barra estreita: {h['decil_tambem_em_barra_estreita']}")
+    typer.echo(f"  decil tambem volume alto:    {h['decil_tambem_em_volume_alto']}")
+    typer.echo("\n  LEITURA: se a concordancia com BARRA ESTREITA for muito maior que com "
+               "VOLUME ALTO (e a variancia vier do range), absorcao e' range disfarcado e a "
+               "ficha NAO se escreve nessa forma.")
+    typer.echo(f"\n  Saida: {saida}/triagem_absorcao.json")
+
+
 @app.command(name="eas-preco-teste")
 def eas_preco_teste(
     log: Path = typer.Argument(..., help="Dump PRCBARRA| contendo SO' os dias da amostra pedida"),
