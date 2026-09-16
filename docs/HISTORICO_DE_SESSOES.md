@@ -2356,3 +2356,10 @@ acoes. Rotina nova: backfill + cura do dia anterior toda manha.
   barra de gatilho = estimador limpo), D = |entrada - close_v|, piso
   |gap| >= 0,5 x ATR14 com a RESSALVA do operador registrada e
   `alternativas_de_piso` (so' taxa) no funil. 5 testes; 888 no total.
+- v2.94: ficha 10 (GAP) CONGELADA. Funil: 0,53-0,71 sinais/pregao,
+  ambiguidade 0-2% (entrada a mercado resolveu o que matou a ficha 11),
+  por tempo 11-17%, D p50 655-1.328 pts, +-2,5 pp no combinado. Ressalva
+  do piso MEDIDA: ATR das 16:30 e' 5-9% maior e a clausula quase nao
+  muda (84% vs 81%) -- piso mantido em 0,5. Registrado: a clausula que
+  mais corta e' "a barra 09:00 fechou o gap" (14% -> 29-34%: o gap fecha
+  na primeira barra com frequencia crescente).

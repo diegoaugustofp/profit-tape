@@ -1331,6 +1331,48 @@ ordenar dentro dela). Familia nova ("gap"), trial 1.
     O que muda aqui e' a fonte de informacao (a noite) e o fato de a
     entrada ser a mercado, o que deixa o estimador limpo.
 
+### 10.1 Funil e CONGELAMENTO (2026-09-16, `entregue-v2.94`)
+
+| | 2015-22 | 2023-25 | 2026 |
+|---|---|---|---|
+| \|gap\| >= 0,5 x ATR14 | 85,2% | 83,8% | 87,3% |
+| **barra 09:00 fechou o gap (corta)** | 14,2% | **28,6%** | **34,1%** |
+| SINAL por pregao | 0,71 | 0,55 | 0,53 |
+| gap em ATR nos sinais (p50) | 2,0 | 2,1 | 2,4 |
+| D p50 (pts) | 960 | 655 | 1.328 |
+| **ambigua** | 1,1% | 2,2% | 0% |
+| **por tempo** | 14,5% | 11,4% | 17,4% |
+| capital p50 (R$/contrato, informativo) | 9.600 | 6.550 | 13.275 |
+| p1 de empate | 0,506 | 0,508 | 0,504 |
+
+Combinado: ~1.760 sinais, ~1.490 resolvidas, **+-2,5 pp**. O estimador
+ficou LIMPO (ambiguidade 0-2%), que era o que a entrada a mercado tinha
+que resolver -- e o contraste com a ficha 11 (54-74% ambigua por entrar
+em rompimento) fecha o aprendizado de metodo.
+
+**A ressalva do operador, MEDIDA:** o ATR14 das 16:30 e' 5-9% maior que
+o da ultima barra (p50 241 vs 262 em 2023-25); o piso de 0,5 deixa
+passar 84% dos pregoes com um e 81% com o outro. O encolhimento do fim
+do pregao existe e NAO move a clausula -- ela corta pouco de qualquer
+forma, porque o gap mediano ja' e' 2 ATR. Sem razao de horizonte para
+trocar; trocar sem razao seria escolha vazia. **Piso MANTIDO em 0,5 x
+ATR14 da ultima barra.**
+
+**Duas medicoes registradas, sem mudar clausula:**
+1. A clausula que mais corta nao e' o piso: e' "a barra 09:00 nao fechou
+   o gap" -- 14% em 2015-22, **29-34%** em 2023-25 e 2026. O gap fecha na
+   primeira barra com frequencia CRESCENTE (mercado mais rapido).
+   Informacao sobre o evento, nao defeito.
+2. D e' grande (655-1.328 pts) porque e' a distancia ate' o fechamento da
+   vespera e o gap mediano e' 2 ATR; por tempo de 11-17% e' consequencia
+   disso, aceitavel (o estimador continua binario e limpo).
+
+**CONGELADA (2026-09-16, confirmada pelo operador)** como esta': piso,
+clausulas, lado pelo sinal do gap, entrada a mercado em 09:15, D da
+entrada. Trial 1 da familia "gap". Sequencia: depuracao -> teste ->
+replicacao -> historico -> combinado; veredito no combinado; por-ano
+reportado; inconclusivo = fecha.
+
 ## 11. Ficha "rompimento da maxima/minima da VESPERA" v1 (2026-09-16, `entregue-v2.92`)
 
 Informacao que nenhuma outra usa: a estrutura do DIA ANTERIOR inteiro
