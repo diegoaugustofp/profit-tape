@@ -40,6 +40,7 @@ from ..research.fase2 import _carimbo
 from .barra_tempo import ConstrutorDeBarraDeTempo
 from .ciclo_123 import CicloDeOrdens123
 from .config_123 import EA123Config
+from .diario import DiarioDeSinais
 from .gate_fluxo import construir_gate
 from .perfil_volume import construir_perfil
 from .registro_123 import RegistroDeSinais123
@@ -95,8 +96,10 @@ class EA123Service:
                       nota="EA sobe SEM armar sinal; a MME so' e' atualizada")
             self.sinal.dia_completo = False
         registro = None
+        self.diario: DiarioDeSinais | None = None
         if config.registro_dir:
             registro = RegistroDeSinais123(Path(config.registro_dir), self.carimbo)
+            self.diario = DiarioDeSinais(Path(config.registro_dir), self.nome, self.carimbo)
         perfil = None
         if config.filtro_fluxo and config.filtro_fluxo.get("tipo") == "volume_baixo":
             perfil = construir_perfil(
@@ -117,7 +120,7 @@ class EA123Service:
             slack_limite_pts=config.slack_limite_pts,
             gate=construir_gate(config.filtro_fluxo, perfil, lambda: self.dia),
             vagas=vagas, symbol=config.symbol, nome=self.nome, registro=registro,
-            infra_extra=self._infra)
+            infra_extra=self._infra, diario=self.diario)
         self._corretora_pronta_antes: bool | None = None
         self._ultimo_tick = 0.0
         self.trades = 0

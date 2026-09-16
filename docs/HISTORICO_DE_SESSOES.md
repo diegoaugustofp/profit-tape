@@ -2363,3 +2363,20 @@ acoes. Rotina nova: backfill + cura do dia anterior toda manha.
   muda (84% vs 81%) -- piso mantido em 0,5. Registrado: a clausula que
   mais corta e' "a barra 09:00 fechou o gap" (14% -> 29-34%: o gap fecha
   na primeira barra com frequencia crescente).
+
+### 2026-09-16 — diario de sinais e relatorio (v2.95)
+
+Decisao do operador: nao depender do Profit para o diario. O Profit
+registra o que EXECUTOU; o diario registra o que foi DECIDIDO.
+
+- `ea/diario.py`: `DiarioDeSinais` -- uma linha JSONL por SINAL, com
+  `desfecho` separando executou / nao_executou / rejeitado_gate /
+  gate_indefinido / sem_vaga / posicao_aberta / pendente. O ciclo passou
+  a registrar os descartes com o motivo (mediana e volume do gate, dono
+  da vaga, estado) e a infra do momento. Arquivo pelo dia do SINAL.
+- `research/diario_relatorio.py` + `profit-tape diario`: desfechos,
+  custo das regras, curva e drawdown em pontos, slippage/latencia por
+  perna, avisos, infra. CONTRATO no topo: dimensionar e diagnosticar
+  execucao, NUNCA escolher regra (isso e' ficha, antes). Sem Sharpe nem
+  anualizacao com n de forward.
+- `EA_ARQUITETURA.md` secao 6. 6 testes novos; 894 no total.

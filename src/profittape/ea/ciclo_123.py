@@ -136,12 +136,14 @@ class CicloDeOrdens123:
                  slack_limite_pts: float = 50.0, timeout_s: float = 10.0,
                  gate: GateDeFluxo | None = None,
                  vagas: Any | None = None, symbol: str = "", nome: str = "",
-                 registro: Any | None = None, infra_extra: Any | None = None) -> None:
+                 registro: Any | None = None, infra_extra: Any | None = None,
+                 diario: Any | None = None) -> None:
         self.sinal = sinal
         self.executor = executor
         self.gate: GateDeFluxo = gate or SemFiltro()
         self.vagas, self.symbol, self.nome = vagas, symbol, nome
         self.registro = registro                 # passo 6: grava cada operacao
+        self.diario = diario                     # uma linha por SINAL (16/09)
         self.infra_extra = infra_extra           # callable -> dict do estado da infra
         self.rejeitados_gate = 0
         self.sinais_sem_vaga = 0
@@ -241,23 +243,44 @@ class CicloDeOrdens123:
             return
         if self.estado == "livre":
             passou = self.gate.permite(c, b)
+            visto = dict(getattr(self.gate, "ultimo", {}) or {})
             if registrar is not None:
                 registrar(b)
             if not passou:
                 self.rejeitados_gate += 1
-                log.info("ea.123.rejeitado_gate", gate=type(self.gate).__name__, **c.resumo())
+                # gate INDEFINIDO (barra nao confiavel ou sem perfil) e' um
+                # desfecho diferente de "reprovou pelo volume" -- o diario
+                # separa, porque um e' mercado e o outro e' feed.
+                indefinido = (not visto.get("confiavel", True)) or visto.get("mediana") is None
+                desfecho = "gate_indefinido" if indefinido else "rejeitado_gate"
+                log.info(f"ea.123.{desfecho}", gate=type(self.gate).__name__, **c.resumo())
+                self._diario_descarte(c, desfecho, visto)
                 return
             if self.vagas is not None and not self.vagas.tentar_ocupar(self.symbol, self.nome):
                 self.sinais_sem_vaga += 1
                 log.info("ea.123.sinal_sem_vaga", **c.resumo())
+                self._diario_descarte(c, "sem_vaga",
+                                      {"dono_da_vaga": self.vagas.dono(self.symbol)})
                 return
             self._armar(c)
         elif self.estado == "posicionado" or self.estado == "saindo":
             self.ignorados_posicao += 1
             log.info("ea.123.ignorado_posicao", **c.resumo())
+            self._diario_descarte(c, "posicao_aberta", {"estado": self.estado})
         else:
             self.ignorados_pendente += 1
             log.info("ea.123.ignorado_pendente", **c.resumo())
+            self._diario_descarte(c, "pendente", {"estado": self.estado})
+
+    def _diario_descarte(self, c: Candidato123, desfecho: str,
+                         motivo: dict[str, Any]) -> None:
+        if self.diario is None:
+            return
+        try:
+            self.diario.descartado(c, desfecho, motivo,
+                                   self.infra_extra() if self.infra_extra else {})
+        except Exception:
+            log.exception("ea.123.diario_falhou", desfecho=desfecho)
 
     def _armar(self, c: Candidato123) -> None:
         o = OrdemViva("entrada", c.lado, c.entrada)
@@ -438,6 +461,11 @@ class CicloDeOrdens123:
                 self.registro.gravar(op)
             except Exception:
                 log.exception("ea.123.registro_falhou")
+        if self.diario is not None:
+            try:
+                self.diario.operacao(op)
+            except Exception:
+                log.exception("ea.123.diario_falhou", desfecho=desfecho)
         self.op = None
         self.estado = "livre"
 
@@ -513,4 +541,5 @@ class CicloDeOrdens123:
                 "sinais_sem_vaga": self.sinais_sem_vaga,
                 "reconciliacoes": self.reconciliacoes,
                 "candidatos": self.sinal.candidatos_armados,
+                "diario": (self.diario.resumo() if self.diario is not None else None),
                 "dry_run": self.dry_run}

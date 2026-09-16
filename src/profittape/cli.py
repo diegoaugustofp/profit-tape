@@ -1599,6 +1599,52 @@ def _eas_preco_gap(log: Path, saida: Path, rodar: Any) -> None:
     typer.echo(f"\n  Saida: {saida}/resumo_gap.json e pregoes_gap.parquet")
 
 
+@app.command(name="diario")
+def diario_cmd(
+    diretorio: Path = typer.Argument(..., help="Pasta do registro (ex.: data/forward/ea_123_vb)"),
+    ea: str | None = typer.Option(None, "--ea", help="Nome do EA (default: todos na pasta)"),
+    curva: bool = typer.Option(False, "--curva", help="Imprime a curva acumulada em pontos"),
+    log_level: str = typer.Option("INFO", "--log-level"),
+) -> None:
+    """
+    Relatorio do DIARIO de sinais: uma linha por sinal, inclusive os que
+    NAO viraram ordem. Responde o que o Profit nao sabe -- quanto as
+    regras (vaga, gate, posicao aberta) custaram -- e mede execucao
+    (slippage, latencias, avisos).
+
+    CONTRATO: e' para DIMENSIONAR (capital, tamanho) e DIAGNOSTICAR
+    EXECUCAO. NAO e' para escolher regra: clausula nasce em ficha, antes.
+    """
+    configurar(log_level)
+    from .research.diario_relatorio import relatorio
+
+    r = relatorio(diretorio, ea)
+    typer.echo("=" * 72)
+    typer.echo(f"DIARIO DE SINAIS — {ea or 'todos'} ({r['arquivos']} arquivo(s), "
+               f"{r['sinais']} sinais)")
+    typer.echo("=" * 72)
+    typer.echo("  NAO use isto para escolher regra -- so' para dimensionar e diagnosticar.")
+    typer.echo(f"\n--- DESFECHOS ---\n  {r['por_desfecho']}")
+    cr = r["custo_das_regras"]
+    typer.echo("\n--- CUSTO DAS REGRAS ---")
+    typer.echo(f"  descartados={cr['descartados']} ({cr['fracao_dos_sinais']} dos sinais)")
+    typer.echo(f"  por regra: {cr['por_regra']}")
+    cv = r["curva_e_drawdown_pts"]
+    if cv:
+        typer.echo("\n--- EXECUTADAS (pontos) ---")
+        typer.echo(f"  operacoes={cv['operacoes']}  total={cv['pnl_total_pts']}  "
+                   f"medio={cv['pnl_medio_pts']}  V/P={cv['vencedoras']}/{cv['perdedoras']}")
+        typer.echo(f"  maior ganho={cv['maior_ganho']}  maior perda={cv['maior_perda']}")
+        typer.echo(f"  drawdown max={cv['drawdown_max_pts']} pts "
+                   f"(na operacao {cv['drawdown_max_em_operacao']})")
+        if curva:
+            typer.echo(f"  curva: {cv['curva_pts']}")
+    if r["execucao"]:
+        typer.echo(f"\n--- EXECUCAO ---\n  {r['execucao']}")
+    if r["infra"]:
+        typer.echo(f"\n--- INFRA ---\n  {r['infra']}")
+
+
 @app.command(name="eas-preco-teste")
 def eas_preco_teste(
     log: Path = typer.Argument(..., help="Dump PRCBARRA| contendo SO' os dias da amostra pedida"),

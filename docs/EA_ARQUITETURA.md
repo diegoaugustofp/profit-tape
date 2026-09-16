@@ -523,6 +523,45 @@ Categoria `features`: nao olha retorno, nao consome trial.
 
 ---
 
+## 6. Diario de sinais e relatorio (2026-09-16)
+
+**Por que existe** (decisao do operador): o Profit registra o que
+EXECUTOU; o diario registra o que foi DECIDIDO, inclusive o que nao
+virou ordem. Essa metade nao existe em lugar nenhum fora do EA, e e' ela
+que mede o custo das regras. Nao depender do Profit tambem evita
+exportacao manual, formato de terceiro e perda de historico numa troca
+de corretora.
+
+**Formato:** `<registro_dir>/diario_<ea>_<AAAA-MM-DD>.jsonl`, uma linha
+por SINAL, com carimbo (tag + sha256 do yaml), candidato, motivo,
+infra, e -- quando executou -- as ordens e o P&L. `desfecho` e' o campo
+que separa tudo:
+
+    executou / nao_executou / erro / zeragem / reconciliado   (virou ordem)
+    rejeitado_gate      o gate reprovou pelo volume
+    gate_indefinido     barra nao confiavel ou sem 20 pregoes de perfil
+    sem_vaga            modo exclusivo: outro EA posicionado
+    posicao_aberta      este EA ja' estava posicionado
+    pendente            este EA ja' tinha ordem de entrada viva
+
+O arquivo de OPERACOES (`sinais_<ficha>_*.jsonl`) continua e e' um
+subconjunto. O dia do arquivo vem do ts do SINAL, nao do relogio.
+
+**Relatorio:** `profit-tape diario <dir> [--ea nome] [--curva]` —
+desfechos, custo das regras (quantos sinais cada uma descartou), curva e
+drawdown em PONTOS das executadas, slippage e latencia por perna,
+avisos CONFIRA, e o estado de infra dos sinais.
+
+**CONTRATO, escrito no comando e no modulo:** o relatorio e' para
+DIMENSIONAR (capital, tamanho) e DIAGNOSTICAR EXECUCAO. **Nao e' para
+escolher regra.** Um relatorio de backtest e' uma maquina de decisoes
+pos-hoc ("perde as sextas", "o drawdown vem de 2020") e cada filtro
+desses e' um trial nao declarado. Clausula nasce em ficha, antes. Por
+isso nao ha' Sharpe nem anualizacao: com n de forward pequeno, dariam
+uma precisao que o dado nao tem.
+
+---
+
 ## Indice por assunto
 
 (2026-08-28, adicionado -- o arquivo cresceu demais para navegar so' por

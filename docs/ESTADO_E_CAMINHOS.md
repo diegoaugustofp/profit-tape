@@ -50,7 +50,7 @@ Código completo. Dois EAs prontos, o operador escolhe:
 
 | # | falta | quem |
 |---|---|---|
-| 7a | **um pregão em dry_run**: ligar antes das 09:00, conferir 2–3 candidatos no gráfico, `perfil_volume` no arranque, JSONL no fim | operador |
+| 7a | **um pregão em dry_run**: ligar antes das 09:00, conferir 2–3 candidatos no gráfico, `perfil_volume` no arranque, e no fim `profit-tape diario data/forward/ea_123_vb --ea ea_123_vb` | operador |
 | — | conferir `SendCancelOrders` ao vivo (usada na reconciliação; declarada, não testada) | operador |
 | 7b | **E4**: `dry_run: false` + `--login-completo --ea-ticker-ordem`; E5.6 fecha junto | operador |
 | — | o forward em si: slippage ≤ 6 pts, n = 100, ~50 pregões | calendário |
