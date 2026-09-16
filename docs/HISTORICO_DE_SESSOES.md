@@ -2325,3 +2325,13 @@ acoes. Rotina nova: backfill + cura do dia anterior toda manha.
   EA subiu inerte. Agora relativo resolve pela pasta do YAML, e o
   servico RECUSA subir com `filtro_fluxo` pedido e perfil vazio.
 - 7 testes novos; 882 no total.
+- v2.92: funil da vespera v0 -> **volta ao desenho** (por tempo 74-79%,
+  A_v mediano 2.850 pts contra ATR14 465). v1: **D = ATR14 da ultima
+  barra fechada antes do gatilho** (nivel da vespera, escala do dia;
+  decisao do operador). Nenhum p1 calculado. Se a v1 tambem passar de
+  40% por tempo, a ficha fecha sem p1.
+- Bug do pregao (16/09): a barra 09:00 saiu `parcial` (1o trade > 60 s
+  depois, leilao) e o dia inteiro ficou sem sinal com o EA de pe' desde
+  08:18. Criterio corrigido: parcial = o CONSTRUTOR comecou depois do
+  inicio da barra (`inicio_ns`); no servico, so' quando o dia operado e'
+  hoje (replay cai no criterio antigo, que conferiu 69/69). 883 testes.

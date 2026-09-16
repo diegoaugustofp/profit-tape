@@ -1296,7 +1296,7 @@ simetrico. Literatura em indice futuro existe; no WIN, a medir.
 Perfil, estimador, amostras e ordem: os mesmos. Escrever a ficha
 completa quando o gate estiver fechado.
 
-## 11. Ficha "rompimento da maxima/minima da VESPERA" v0 (2026-09-16, `entregue-v2.91`)
+## 11. Ficha "rompimento da maxima/minima da VESPERA" v1 (2026-09-16, `entregue-v2.92`)
 
 Informacao que nenhuma outra usa: a estrutura do DIA ANTERIOR inteiro
 (o ORB usa 30 min; o 123, tres barras; o IFR2, duas). Niveis conhecidos
@@ -1335,6 +1335,36 @@ ANTES da abertura. Familia nova ("vespera"), trial 1.
     TAXA / EFEITO / AMBIGUIDADE: a medir. Estimador binario e ambiguidade
     como no ORB (stop tocado na barra do gatilho = ambigua).
     AMOSTRAS / ORDEM / CRITERIO / PARADA: os de sempre.
+
+### 11.1 Funil da v0 e a volta ao desenho -> v1 (2026-09-16, `entregue-v2.92`)
+
+Funil da v0 (D = A_v) nos tres dumps do WIN:
+
+| | 2015-22 | 2023-25 | 2026 |
+|---|---|---|---|
+| abertura ja' fora de um lado | 26,8% | 17,2% | 20,8% |
+| SINAL (primeiro rompimento) por pregao | 0,63 | 0,70 | 0,68 |
+| A_v p50 (pts) | 2.931 | 2.148 | 3.085 |
+| ambigua | 0% | 0% | 0% |
+| **por tempo** | **78,6%** | **73,7%** | **76,9%** |
+| barras ate' resolver p50 | 28 | 30 | 30 |
+
+**A ficha voltou ao desenho, como estava escrito.** Com D = A_v so'
+21-26% das operacoes resolvem; excluir 78% nao e' excluir ruido, e'
+escolher subamostra. A causa esta' nos pontos: A_v mediano 2.850 pts
+contra ATR14 de M15 de 465 — o alvo fica a uma amplitude diaria inteira
+do rompimento e o dia nao anda isso. O resto funcionou: a clausula da
+abertura tira 17-27% (o gap, que pertence a` ficha 10), ambiguidade
+ZERO, horizonte fecharia (+-2,9 pp no historico).
+
+**v1 (decisao do operador, 16/09): D = ATR14 da ultima barra FECHADA
+antes do gatilho.** O nivel vem da vespera; a ESCALA vem do dia — a
+mesma do IFR2 (K = 1 x ATR14) no mesmo instrumento, e uma quantidade
+MEDIDA, nao uma fracao escolhida. A hipotese passa a ser: *o rompimento
+do nivel da vespera continua por uma volatilidade diaria tipica antes de
+retroceder o mesmo tanto.* Uma mudanca, declarada, sem nenhum p1
+calculado. Se o por-tempo continuar acima de 40% na v1, a ficha FECHA
+sem nunca ter tido p1.
 
     EXPECTATIVA, dita antes: e' a ficha com mais chance entre as
     declaradas — o nivel e' publico e observado por todo mundo, o que

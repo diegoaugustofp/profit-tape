@@ -1525,8 +1525,8 @@ def _eas_preco_vespera(log: Path, saida: Path, rodar: Any) -> None:
     r = rodar(log, saida)
     m, pt = r["meta"], r["pontos"]
     typer.echo("=" * 72)
-    typer.echo("EAs DE PRECO — dump M15 (ficha VESPERA v0: rompimento da maxima/minima do dia "
-               "anterior, D = amplitude da vespera)")
+    typer.echo("EAs DE PRECO — dump M15 (ficha VESPERA v1: rompimento da maxima/minima do dia "
+               "anterior, D = ATR14 da ultima barra fechada)")
     typer.echo("=" * 72)
     typer.echo(f"  {m['barras']} barras | {m['pregoes']} pregoes | {m['inicio']} a {m['fim']}")
     falhas = [k for k, x in r["equivalencia"].items() if not x["bate"]]
@@ -1536,7 +1536,8 @@ def _eas_preco_vespera(log: Path, saida: Path, rodar: Any) -> None:
     typer.echo(r["funil"].to_string(index=False))
     typer.echo("\n--- EM PONTOS (7.5) ---")
     typer.echo(f"  A_v (amplitude da vespera) p10/p50/p90: {pt['A_v_pts_todos_os_pregoes']}")
-    typer.echo(f"  D = A_v ao tick, nos sinais: {pt['D_pts_nos_sinais']}")
+    typer.echo(f"  ATR14 de referencia nos sinais: {pt['atr_ref_pts_nos_sinais']}")
+    typer.echo(f"  D = 1,0 x ATR14 ao tick, nos sinais: {pt['D_pts_nos_sinais']}")
     typer.echo(f"  capital RECOMENDADO por contrato (R${ep.VALOR_PONTO_REAIS}/pt; informativo): "
                f"{pt['capital_recomendado_por_contrato_reais']}")
     typer.echo(f"  p1 que empata {ep.CUSTO_PONTOS:g} pts com D mediano: "
@@ -1551,8 +1552,8 @@ def _eas_preco_vespera(log: Path, saida: Path, rodar: Any) -> None:
         typer.echo(f"\n  HORIZONTE: {r['n_sinais'] / preg:.2f} sinais/pregao; com "
                    f"{r['n_sinais']} sinais a meia-largura e' +-{meia:.1f} pp.")
         if (pt["fracao_por_tempo"] or 0) > 0.40:
-            typer.echo("  AVISO: por tempo > 40% -- D = amplitude da vespera e' grande demais "
-                       "para o dia; a ficha volta ao desenho ANTES de congelar (docs 11).")
+            typer.echo("  AVISO: por tempo > 40% -- D grande demais para o dia; a ficha volta "
+                       "ao desenho ANTES de congelar (docs 11).")
     typer.echo(f"\n  Saida: {saida}/resumo_vespera.json e pregoes_vespera.parquet")
 
 

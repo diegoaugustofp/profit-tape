@@ -47,16 +47,21 @@ cuja barra comecaria a partir dai' entra na barra em formacao do mesmo
 dia. Para o 123 isso nao muda sinal (ultima entrada 16:30) -- muda a
 continuidade dos indicadores, que e' o que a ficha exige igual ao grafico.
 
-PRIMEIRA BARRA (medido em 11/09/2026: record ligado as ~09:50)
-------------------------------------------------------------
-A primeira barra que o construtor fecha depois de instanciado pode
-estar PARCIAL: o processo pode ter subido no meio dela. Criterio: e' a
-primeira barra E o primeiro trade dela chegou mais de
-`tolerancia_parcial_s` (60 s) depois do inicio da barra -- no WIN ha'
-negocio a cada segundo na abertura, entao 09:00 com o 1o trade em
-09:00:07 e' completa, e 09:45 com o 1o trade em 09:50 nao e'. A parcial
-nao serve para GEOMETRIA (open/high/low; 75 e 155 pts fora no caso
-medido); o close dela esta' certo e alimenta a MME normalmente.
+PRIMEIRA BARRA (medido 11/09; criterio CORRIGIDO em 16/09)
+---------------------------------------------------------
+A primeira barra que o construtor fecha pode estar PARCIAL: o processo
+pode ter subido no meio dela. O criterio certo e' o INICIO DO
+CONSTRUTOR, nao a chegada do primeiro negocio: se `inicio_ns` <=
+ts_open da barra, nada foi perdido e a barra e' COMPLETA, ainda que o
+primeiro print tenha vindo 90 s depois (leilao de abertura, assinatura
+demorando). Bug real de 16/09: EA de pe' desde 08:18, a barra 09:00
+saiu `parcial` porque o 1o trade veio > 60 s depois -> `dia_incompleto`
+-> nenhum sinal no dia inteiro, sem motivo.
+Sem `inicio_ns` (replay, pesquisa) cai no criterio antigo: primeiro
+trade mais de `tolerancia_parcial_s` depois do inicio da barra -- e' o
+que conferiu 69/69 contra o grafico e continua valendo ali.
+A parcial nao serve para GEOMETRIA (open/high/low); o close dela esta'
+certo e alimenta a MME normalmente.
 
 ORDEM DOS TRADES
 ----------------
@@ -129,7 +134,8 @@ class ConstrutorDeBarraDeTempo:
     no tick. Os dois devolvem BarraFechada ou None."""
 
     def __init__(self, periodo_s: int = 900, fim_sessao_hhmm: int | None = 1830,
-                 tolerancia_parcial_s: int = 60, lacuna_maxima_s: int = 5) -> None:
+                 tolerancia_parcial_s: int = 60, lacuna_maxima_s: int = 5,
+                 inicio_ns: int | None = None) -> None:
         if periodo_s <= 0 or 3600 % periodo_s != 0:
             raise ValueError(
                 f"periodo_s={periodo_s}: precisa dividir uma hora (5, 15, 30, 60 min), "
@@ -143,6 +149,7 @@ class ConstrutorDeBarraDeTempo:
         # dentro da barra marca volume_confiavel=False (o gate trata como
         # indefinido). Parcial tambem e' nao confiavel (faltou o comeco).
         self.lacuna_maxima_ns = lacuna_maxima_s * _NS_POR_S
+        self.inicio_ns = inicio_ns          # ao vivo: quando o construtor subiu
         self._acc: _AcumuladorTempo | None = None
         self.barras_fechadas = 0
 
@@ -177,8 +184,9 @@ class ConstrutorDeBarraDeTempo:
             vol_agr_compra=acc.vol_agr_compra, vol_agr_venda=acc.vol_agr_venda,
             n_trades=acc.n_trades, vol_total=acc.vol_total,
             ts_primeiro_ns=acc.ts_primeiro_ns,
-            parcial=(self.barras_fechadas == 1
-                     and acc.ts_primeiro_ns - acc.ts_open_ns > self.tolerancia_parcial_ns),
+            parcial=(self.barras_fechadas == 1 and (
+                acc.ts_open_ns < self.inicio_ns if self.inicio_ns is not None
+                else acc.ts_primeiro_ns - acc.ts_open_ns > self.tolerancia_parcial_ns)),
             maior_lacuna_s=round(acc.maior_lacuna_ns / _NS_POR_S, 3),
         )
         barra.volume_confiavel = (not barra.parcial

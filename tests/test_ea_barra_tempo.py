@@ -222,3 +222,23 @@ def test_volume_confiavel_cai_com_lacuna_ou_parcial() -> None:
     c3.processar_trade(_t(600), 140000.0, 1, 2)          # primeira barra, 1o trade tarde
     b3 = c3.avancar_relogio(_t(900))
     assert b3 is not None and b3.parcial and not b3.volume_confiavel
+
+
+def test_parcial_pelo_inicio_do_construtor_nao_pelo_1o_trade() -> None:
+    """Bug real (16/09): EA de pe' desde 08:18, a barra 09:00 saiu `parcial`
+    porque o 1o trade veio 90 s depois (leilao) -> dia inteiro sem sinal.
+    Com `inicio_ns` antes do inicio da barra, a barra e' COMPLETA."""
+    c = ConstrutorDeBarraDeTempo(900, inicio_ns=T0900 - 3600 * NS)   # subiu 1 h antes
+    c.processar_trade(_t(95), 140000.0, 1, 2)                        # 1o trade 95 s depois
+    b = c.processar_trade(_t(900), 140010.0, 1, 2)
+    assert b is not None and not b.parcial
+    # construtor que subiu NO MEIO da barra: parcial
+    c2 = ConstrutorDeBarraDeTempo(900, inicio_ns=T0900 + 300 * NS)
+    c2.processar_trade(_t(310), 140000.0, 1, 2)
+    b2 = c2.processar_trade(_t(900), 140010.0, 1, 2)
+    assert b2 is not None and b2.parcial
+    # sem inicio_ns (pesquisa/replay): criterio antigo, que conferiu 69/69
+    c3 = ConstrutorDeBarraDeTempo(900)
+    c3.processar_trade(_t(95), 140000.0, 1, 2)
+    b3 = c3.processar_trade(_t(900), 140010.0, 1, 2)
+    assert b3 is not None and b3.parcial

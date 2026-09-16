@@ -1121,10 +1121,15 @@ def marcar_vespera(d: pd.DataFrame, col_mme80: str = "mme80_ntsl") -> pd.DataFra
                     lado armado. Os dois lados OCO: o primeiro rompe e'
                     o SINAL; os dois na MESMA barra = gatilho ambiguo,
                     fora. UMA operacao por pregao.
-    Entrada = nivel rompido. D = A_v (amplitude da vespera) ao tick --
-    mesma logica do ORB (D = o range que define o nivel). Alvo = entrada
-    + D, stop = entrada - D (espelho). Regime (close da vespera vs MME80)
-    e' ESTRATO reportado, nunca clausula (licao do ORB, 7.4).
+    Entrada = nivel rompido. **D = ATR14 da ultima barra FECHADA antes do
+    gatilho** (v1, 2026-09-16): o nivel vem da vespera, a ESCALA vem do
+    dia -- a mesma do IFR2 (K = 1 x ATR14) no mesmo instrumento. A v0
+    usava D = A_v (amplitude da vespera) e morreu no funil: 74-79% das
+    operacoes nao resolviam (A_v mediano 2.850 pts contra ATR14 de 465),
+    e excluir 78% seria escolher subamostra. Mudanca PRE-congelamento,
+    declarada, sem nenhum p1 calculado. Alvo = entrada + D, stop =
+    entrada - D (espelho). Regime (close da vespera vs MME80) e' ESTRATO
+    reportado, nunca clausula (licao do ORB, 7.4).
 
     Ambiguidade: como no ORB -- a barra de resolucao contem os dois, OU a
     barra do gatilho toca o stop (que fica DENTRO do range da vespera).
@@ -1175,13 +1180,25 @@ def marcar_vespera(d: pd.DataFrame, col_mme80: str = "mme80_ntsl") -> pd.DataFra
         if not linha["sinal"]:
             linhas.append(linha)
             continue
-        d_pts = arredondar_ao_tick(a_v)
+        hh_gat = int(hh_c or 0) if lado == "compra" else int(hh_v or 0)
+        # ATR14 da ultima barra FECHADA antes do gatilho: dentro do dia, a
+        # barra anterior; se o gatilho e' a primeira barra (09:00), a ultima
+        # da vespera. Informacao disponivel no instante da ordem.
+        antes = g[g["hhmm"] < hh_gat]
+        atr_ref = float(antes.iloc[-1]["atr_ntsl"]) if len(antes) else float(v.iloc[-1]["atr_ntsl"])
+        linha["atr_ref_pts"] = atr_ref
+        if not (atr_ref > 0):
+            linha["sinal"] = False
+            linha["lado"] = None
+            linhas.append(linha)
+            continue
+        d_pts = arredondar_ao_tick(K_ATR * atr_ref)
         if lado == "compra":
             entrada = r_high + TICK_WIN
-            alvo, stop, hh_gat = entrada + d_pts, entrada - d_pts, int(hh_c or 0)
+            alvo, stop = entrada + d_pts, entrada - d_pts
         else:
             entrada = r_low - TICK_WIN
-            alvo, stop, hh_gat = entrada - d_pts, entrada + d_pts, int(hh_v or 0)
+            alvo, stop = entrada - d_pts, entrada + d_pts
         linha.update({"gatilho_hhmm": hh_gat, "entrada": entrada, "D_pts": d_pts,
                       "alvo": alvo, "stop": stop})
         resto = g[g["hhmm"] >= hh_gat]
@@ -1239,6 +1256,7 @@ def em_pontos_vespera(o: pd.DataFrame) -> dict[str, Any]:
     cls = sin["classe"].value_counts().to_dict() if "classe" in sin else {}
     n = len(sin)
     return {"A_v_pts_todos_os_pregoes": q(o["A_v_pts"]) if "A_v_pts" in o else {},
+            "atr_ref_pts_nos_sinais": q(sin["atr_ref_pts"]) if n and "atr_ref_pts" in sin else {},
             "D_pts_nos_sinais": dq,
             "capital_recomendado_por_contrato_reais": (
                 {"em_D_p50": capital_recomendado(dq["p50"]),

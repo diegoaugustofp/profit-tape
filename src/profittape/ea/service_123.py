@@ -72,8 +72,15 @@ class EA123Service:
         self.nome = nome or config.nome or "ea_123"
         self.client = client
         self.dia = dia or dt.datetime.now(_TZ).date()
+        # inicio_ns: o que decide se a primeira barra e' parcial (16/09). So'
+        # vale quando o dia operado e' HOJE -- reproduzir um dia passado pelo
+        # servico e' replay, e ai' o relogio de parede nao diz nada (cai no
+        # criterio do primeiro trade).
+        hoje = dt.datetime.now(_TZ).date()
+        inicio_ns = int(time.time() * _NS) if self.dia == hoje else None
         self.construtor = ConstrutorDeBarraDeTempo(config.periodo_barra_s,
-                                                    fim_sessao_hhmm=config.fim_sessao_hhmm)
+                                                    fim_sessao_hhmm=config.fim_sessao_hhmm,
+                                                    inicio_ns=inicio_ns)
         self.carimbo = {"codigo": _carimbo(), "yaml_sha256": config.sha256(),
                         "nome": self.nome, "dry_run": config.dry_run}
         self.semente: Semente = construir_semente(
