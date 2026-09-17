@@ -1933,6 +1933,60 @@ def ea_123_replay(
     typer.echo(f"\n  Agora: profit-tape diario {cfg.registro_dir} --ea {s.nome}")
 
 
+@app.command(name="iceberg")
+def iceberg_cmd(
+    de: str = typer.Option(..., "--de", help="YYYY-MM-DD"),
+    ate: str = typer.Option(..., "--ate", help="YYYY-MM-DD"),
+    curated: Path = typer.Option(Path("data/curated"), "--curated"),
+    symbol: str = typer.Option("WINFUT", "--symbol"),
+    janela_s: float = typer.Option(30.0, "--janela-s", help="intervalo maximo dentro da corrida"),
+    n_minimo: int = typer.Option(
+        10, "--n-minimo", help="tamanho de corrida 'relevante' (volume e recomposicao)"),
+    tick: float = typer.Option(5.0, "--tick"),
+    saida: Path = typer.Option(Path("data/research/iceberg"), "--saida"),
+    log_level: str = typer.Option("INFO", "--log-level"),
+) -> None:
+    """
+    ICEBERG / LOTE REPETIDO, passo 1: negocios de MESMA quantidade no MESMO
+    preco em sequencia existem ALEM do acaso? A medida que decide e' a
+    razao contra o BASELINE EMBARALHADO (mesmas quantidades permutadas).
+    Tudo em dobro: com e sem RLP. Sem direcao, zero trial.
+    """
+    import datetime as dt
+
+    configurar(log_level)
+    from .research.iceberg import descrever
+
+    d0, d1 = dt.date.fromisoformat(de), dt.date.fromisoformat(ate)
+    dias = [d0 + dt.timedelta(days=k) for k in range((d1 - d0).days + 1)
+            if (d0 + dt.timedelta(days=k)).weekday() < 5]
+    r = descrever(curated, symbol, dias, janela_s, n_minimo, tick, saida)
+    typer.echo("=" * 72)
+    typer.echo(f"ICEBERG / LOTE REPETIDO — {symbol}, {de} a {ate} "
+               f"(corrida: >= {n_minimo} negocios iguais, ate' {janela_s:g}s entre eles)")
+    typer.echo("=" * 72)
+    for nome, a in r["agregado"].items():
+        typer.echo(f"\n--- {nome.upper().replace('_', ' ')} ({a['dias']} dias) ---")
+        typer.echo(f"  corridas relevantes (p50/dia): {a['corridas_relevantes_p50']:.0f}")
+        typer.echo(f"  BASELINE embaralhado (p50):    {a['baseline_p50']:.0f}")
+        typer.echo(f"  RAZAO observado/baseline:      {a['razao_vs_baseline_p50']:.2f}  "
+                   f"(dias acima do baseline: {a['dias_acima_do_baseline']}/{a['dias']})")
+        typer.echo("  curva por limiar (corrida >= N; reportada SEMPRE, nao se escolhe depois):")
+        typer.echo(f"    {'N':>4}  {'observado':>10}  {'baseline':>10}  {'razao':>7}")
+        for n, e in a["por_limiar"].items():
+            razao = f"{e['razao_p50']:.2f}" if e["razao_p50"] is not None else "   -"
+            typer.echo(f"    {n:>4}  {e['observado_p50']:>10.0f}  {e['baseline_p50']:>10.0f}  "
+                       f"{razao:>7}")
+        typer.echo(f"  fracao do volume nessas corridas: {100 * a['fracao_do_volume_p50']:.2f}%")
+        typer.echo(f"  com RECOMPOSICAO (preco saiu do nivel e voltou): "
+                   f"{100 * a['fracao_com_recomposicao_p50']:.1f}%")
+    typer.echo("\n  LEITURA: razao perto de 1 = e' ACASO, e a linha morre aqui. Razao bem acima "
+               "de 1 COM fracao de volume relevante e recomposicao alta = ha' ordem escondida, "
+               "e o passo 2 escreve a ficha (com a direcao declarada antes: 'o nivel segura' e "
+               "'o nivel rompe' sao hipoteses OPOSTAS).")
+    typer.echo(f"\n  Saida: {saida}/iceberg.json")
+
+
 @app.command(name="eas-preco-teste")
 def eas_preco_teste(
     log: Path = typer.Argument(..., help="Dump PRCBARRA| contendo SO' os dias da amostra pedida"),

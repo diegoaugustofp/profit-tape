@@ -6403,3 +6403,42 @@ contraste DENTRO da propria serie. Calls `PETRJ*`, puts `PETRV*`.
 
 **Rotina MENSAL, nao config fixa:** as series mudam a cada vencimento;
 a lista de tickers precisa ser trocada no dia da virada.
+
+
+### Iceberg, passo 1 ENTREGUE (2026-09-17) -- e a licao da METRICA
+
+`profit-tape iceberg --de ... --ate ...`. Corrida = negocios de MESMA
+quantidade no MESMO preco, cada um a no maximo 30 s do anterior
+(negocios de outros precos no meio NAO interrompem -- e' assim que um
+iceberg se recompoe).
+
+**O teste reprovou a primeira metrica, e isso foi o mais util da
+entrega.** Contar corridas de >= 5 nao separa NADA: com lotes pequenos em
+poucos niveis, o acaso produz milhares delas. Num fluxo sintetico com SEIS
+icebergs plantados (30 recargas cada), a razao contra o embaralhado deu
+**0,999** -- o sinal sumia no ruido.
+
+A correcao nao foi baixar a barra: foi reportar a **CURVA POR LIMIAR**
+(5, 10, 20, 30, 50), sempre inteira, sem escolher o limiar depois. No
+mesmo fluxo:
+
+| corrida >= N | observado | baseline | razao |
+|---|---|---|---|
+| 5 | 2.688 | 2.692 | **0,999** |
+| 10 | 626 | 610 | 1,03 |
+| 20 | 46 | 44 | 1,05 |
+| **30** | **11** | **4** | **2,75** |
+
+O sinal vive na CAUDA. Corrida aleatoria de 30 iguais no mesmo preco e'
+rara; iceberg de 30 recargas nao e'. Um limiar unico teria escondido isso
+-- e teria escondido tambem um resultado NULO, se o caso fosse esse.
+
+**Reportado sempre, em dobro (com e sem RLP):** curva por limiar,
+observado x baseline embaralhado, fracao do volume nas corridas
+relevantes (>= 10) e fracao COM RECOMPOSICAO (o preco saiu do nivel e
+voltou -- o que separa iceberg de negocio picado seguido).
+
+**Leitura:** curva toda perto de 1 = acaso, e a linha morre. Cauda bem
+acima de 1 COM fracao de volume relevante e recomposicao alta = ha' ordem
+escondida, e o passo 2 escreve a ficha -- com a direcao declarada antes
+("o nivel SEGURA" e "o nivel ROMPE" sao hipoteses OPOSTAS, uma por vez).

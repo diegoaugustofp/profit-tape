@@ -2643,3 +2643,18 @@ fechava a barra a cada tick.
   `--dia`, conferir residuo no raw, manter backup) e a pergunta em
   aberto: por que o record gravou um evento do dia anterior ao subir.
 - 4 testes; 928 no total.
+
+### 2026-09-17 (noite) — replay de hoje limpo; iceberg passo 1 (v3.15)
+
+- **Replay de 17/09 com as barras certas:** 37 barras, dia completo, 4
+  candidatos (dentro da taxa da ficha), 3 executados, 1 rejeitado pelo
+  gate. Os dois sinais falsos do ao vivo SUMIRAM -- a correcao da
+  fragmentacao esta' confirmada no dado real. P&L de um dia nao mede nada.
+- **Iceberg passo 1** (`profit-tape iceberg`): corridas de mesma
+  quantidade no mesmo preco, baseline EMBARALHADO, fracao do volume,
+  recomposicao, tudo com e sem RLP.
+- **A licao veio do teste:** contar corridas de >= 5 nao separa nada (com
+  seis icebergs plantados a razao deu 0,999). A metrica virou a CURVA POR
+  LIMIAR (5/10/20/30/50), reportada inteira: no mesmo fluxo, razao 0,999
+  / 1,03 / 1,05 / **2,75**. O sinal vive na cauda.
+- 6 testes; 934 no total.
