@@ -2628,3 +2628,18 @@ fechava a barra a cada tick.
   muda ONDE a barra fecha -- e o `z_agf_win` roda hoje com isso sem
   medicao. `EA_ARQUITETURA.md` secao 8 com a ordem (medir -> achar o
   gargalo -> decidir). 924 testes.
+
+### 2026-09-17 (noite) — a cura destruiu o pregao de 16/09; protecao (v3.14)
+
+- **Incidente:** residuo de 1 linha no raw (criado ao subir o record) foi
+  processado por uma cura sem `--dia` e SOBRESCREVEU a particao de 16/09:
+  5.971.245 linhas viraram 1, em nove simbolos. Recuperado do backup do
+  raw; o replay reproduziu o resultado anterior, confirmando integridade.
+- **Protecao:** `_pode_sobrescrever` -- se a particao existe e o novo tem
+  menos da METADE das linhas, RECUSA (`curate.sobrescrita_RECUSADA` +
+  bloco no relatorio); `--forcar "motivo"` libera. Recura normal
+  continua passando (a cura e' idempotente por desenho).
+- `OPERACAO.md` com o incidente, a recuperacao, a rotina (curar com
+  `--dia`, conferir residuo no raw, manter backup) e a pergunta em
+  aberto: por que o record gravou um evento do dia anterior ao subir.
+- 4 testes; 928 no total.

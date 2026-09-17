@@ -1,3 +1,47 @@
+## INCIDENTE 2026-09-17: a cura destruiu um pregao inteiro (e a protecao)
+
+**O que aconteceu.** Ao subir o record na manha de 17/09, um evento com
+data de 16/09 foi gravado no raw -- criando `data/raw/trade/dt=2026-09-16`
+com UMA linha. A cura rodou SEM `--dia`, varreu o raw inteiro, processou
+esse residuo e SOBRESCREVEU a particao de 16/09 no curated: **5.971.245
+linhas viraram 1**, em NOVE simbolos (WINFUT, WDOFUT, PETR4, VALE3,
+ITUB4, BBAS3, BOVA11, MGLU3, WEGE3).
+
+**Como foi recuperado.** O raw de 16/09 existia no disco de BACKUP. Foi
+restaurado (depois de apagar o residuo) e recurado: 59,4 MB e 5.971.245
+linhas de volta, zero duplicatas, e o replay do EA reproduziu o mesmo
+resultado de antes -- dado restaurado identico ao original.
+
+**Sem o backup, o dia estaria perdido** (o backfill cobre 30 dias, entao
+neste caso haveria segunda chance -- mas nao haveria para um dia antigo).
+
+### A protecao (v3.14)
+
+A cura agora COMPARA antes de escrever: se a particao ja' existe e o novo
+tem **menos da METADE** das linhas, RECUSA e conta
+(`curate.sobrescrita_RECUSADA`, e um bloco no relatorio final).
+`--forcar "motivo"` libera, no mesmo padrao do `eas-preco-teste`.
+
+Recurar o mesmo dia continua funcionando -- a cura E' idempotente por
+desenho, e a regra so' pega queda drastica.
+
+### Rotina que passa a valer
+
+1. **Curar sempre com `--dia`**, nao varrer o raw inteiro. Reduz a
+   superficie; nao substitui a protecao (rotina se esquece, codigo nao).
+2. **Conferir o raw depois de subir o record**: se aparecer uma pasta
+   `dt=` do dia ANTERIOR, e' residuo -- apague antes de curar.
+3. **Backup do raw** e' o que salvou este incidente. Mantenha.
+
+### Pergunta em aberto
+
+Por que o record gravou um evento de 16/09 as 08:24 de 17/09? Pode ser
+evento atrasado da DLL no arranque, ou trade do after entregue na
+conexao. Se for recorrente, TODA manha nasce um residuo do dia anterior
+no raw -- e a protecao passa a ser essencial, nao opcional.
+
+---
+
 # Operacao
 
 ## Antes do primeiro pregao

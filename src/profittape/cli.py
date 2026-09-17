@@ -551,11 +551,20 @@ def curate(
         "Util pra isolar um simbolo suspeito de lentidao sem esperar "
         "o dia inteiro chegar nele.",
     ),
+    forcar: str | None = typer.Option(
+        None, "--forcar",
+        help="MOTIVO para sobrescrever uma particao do curated com MENOS da "
+             "metade das linhas que ja' estao la'. Sem isto a gravacao e' "
+             "RECUSADA -- protecao criada depois do incidente de 17/09, em que "
+             "um residuo de 1 linha no raw substituiu 5,97 milhoes.",
+    ),
 ) -> None:
     """
     Deduplica e ordena raw -> curated. Rode SEMPRE antes de calcular features.
 
-    Idempotente: reprocessar sobrescreve a mesma saida. Loga progresso por
+    Idempotente: reprocessar sobrescreve a mesma saida -- MAS nunca com
+    menos da metade das linhas que ja' existem na particao (use --forcar
+    com motivo se for mesmo o caso). Loga progresso por
     (dia, simbolo) -- curate.processando / curate.particao_ok -- e por ETAPA
     dentro de cada particao (curate.leitura_ok / conversao_pandas_ok /
     dedup_ok, mais curate.leitura_progresso com --diagnostico) — o log so'
@@ -575,6 +584,7 @@ def curate(
             diagnostico=diagnostico,
             dia_filtro=dia,
             simbolo_filtro=simbolo,
+            forcar=forcar,
         )
     )
 

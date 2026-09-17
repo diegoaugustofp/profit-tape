@@ -38,11 +38,60 @@ from ..storage.validacao import relatorio
 log = structlog.get_logger(__name__)
 
 
+# Proporcao minima do que ja' existe no curated para a gravacao passar sem
+# `--forcar`. Escolhido em 0,5 (metade) porque um dia recapturado ou
+# recurado varia pouco -- o que aconteceu em 17/09 foi 1 linha substituindo
+# 5.971.245.
+FRACAO_MINIMA_PARA_SOBRESCREVER = 0.5
+
+
+def _linhas_no_curated(destino: Path) -> int:
+    arquivos = list(destino.glob("*.parquet"))
+    if not arquivos:
+        return 0
+    try:
+        return sum(pq.ParquetFile(a).metadata.num_rows for a in arquivos)
+    except Exception:          # arquivo corrompido: trata como vazio
+        log.warning("curate.curated_ilegivel", destino=str(destino))
+        return 0
+
+
+def _pode_sobrescrever(destino: Path, linhas_novas: int, forcar: str | None,
+                       dia: str, sym: str, totais: dict[str, int | float]) -> bool:
+    """
+    PROTECAO (2026-09-17, incidente real): o record gravou no raw um
+    RESIDUO de 1 linha do dia anterior ao subir; a cura rodou sem `--dia`,
+    processou esse residuo e SOBRESCREVEU a particao de 16/09 -- 5.971.245
+    linhas viraram 1, em NOVE simbolos. So' foi recuperado porque havia
+    backup do raw.
+
+    Regra: se a particao ja' existe e o novo tem menos da METADE das linhas,
+    RECUSA e conta. `--forcar "motivo"` libera (mesmo padrao do
+    eas-preco-teste). Recurar um dia com menos dado do que ja' esta' la' e'
+    quase sempre erro -- e quando nao e', o motivo fica escrito.
+    """
+    existentes = _linhas_no_curated(destino)
+    if existentes == 0 or linhas_novas >= existentes * FRACAO_MINIMA_PARA_SOBRESCREVER:
+        return True
+    if forcar:
+        log.warning("curate.sobrescrita_forcada", dia=dia, symbol=sym,
+                    linhas_novas=linhas_novas, linhas_existentes=existentes, motivo=forcar)
+        return True
+    log.error("curate.sobrescrita_RECUSADA", dia=dia, symbol=sym,
+              linhas_novas=linhas_novas, linhas_existentes=existentes,
+              nota=("o novo tem menos da metade do que ja' esta' no curated. Provavel residuo "
+                    "no raw (o record grava um evento do dia anterior ao subir). Confira o raw "
+                    "desse dia; se a substituicao for mesmo desejada, use --forcar \"motivo\""))
+    totais["particoes_recusadas"] = int(totais.get("particoes_recusadas", 0)) + 1
+    return False
+
+
 def curar_trades(raiz_raw: Path, raiz_curated: Path,
                  modo_leitura: str = "lote",
                  diagnostico: bool = False,
                  dia_filtro: str | None = None,
-                 simbolo_filtro: str | None = None) -> dict[str, int | float]:
+                 simbolo_filtro: str | None = None,
+                 forcar: str | None = None) -> dict[str, int | float]:
     """
     Processa particao por particao de (dia, simbolo) — nunca o dataset
     inteiro em memoria, nem o dia inteiro com todos os simbolos misturados.
@@ -152,8 +201,10 @@ def curar_trades(raiz_raw: Path, raiz_curated: Path,
              raiz_curated=str(raiz_curated.resolve()), dias_encontrados=len(dias_totais),
              particoes_encontradas=len(trabalho))
 
-    totais = {"lidas": 0, "duplicatas": 0, "ts_invalido": 0, "gravadas": 0,
-              "particoes": 0, "segundos_leitura": 0.0, "segundos_total": 0.0}
+    totais: dict[str, int | float] = {
+        "lidas": 0, "duplicatas": 0, "ts_invalido": 0, "gravadas": 0,
+        "particoes": 0, "particoes_recusadas": 0,
+        "segundos_leitura": 0.0, "segundos_total": 0.0}
 
     for idx, (dia, pasta_dia, symbol) in enumerate(trabalho, 1):
         t0 = time.monotonic()
@@ -294,6 +345,8 @@ def curar_trades(raiz_raw: Path, raiz_curated: Path,
         # vez de silenciosamente misturar simbolos.
         for sym, grupo in df.groupby("symbol", observed=True):
             destino = raiz_curated / "trade" / f"dt={dia}" / f"sym={sym}"
+            if not _pode_sobrescrever(destino, len(grupo), forcar, dia, str(sym), totais):
+                continue
             destino.mkdir(parents=True, exist_ok=True)
             # dt e sym vivem no CAMINHO (hive). Duplica-los dentro do arquivo
             # cria conflito de merge na leitura do dataset quando o tipo da
@@ -338,6 +391,12 @@ def imprimir_relatorio(t: dict[str, int | float]) -> None:
     print(f"  duplicatas removidas: {t['duplicatas']:,}")
     print(f"  ts invalido excluido: {t['ts_invalido']:,}")
     print(f"  linhas gravadas     : {t['gravadas']:,}")
+    recusadas = int(t.get("particoes_recusadas", 0))
+    if recusadas:
+        print(f"  particoes RECUSADAS : {recusadas}  <-- o novo tinha menos da METADE")
+        print("     do que ja' esta' no curated. Provavel RESIDUO no raw (o record")
+        print("     grava um evento do dia anterior ao subir). Confira o raw desse")
+        print("     dia; se a substituicao for mesmo desejada: --forcar \"motivo\".")
     if t.get("segundos_total", 0) > 0:
         pct_leitura = 100 * t["segundos_leitura"] / t["segundos_total"]
         print(f"  tempo total         : {t['segundos_total']:.1f}s "
