@@ -274,3 +274,48 @@ def test_replay_do_proprio_dia_nao_e_tratado_como_ao_vivo(
     assert s.ao_vivo is False
     assert s.barras == 23, f"esperava 23 barras, veio {s.barras}"
     assert s.sinal.dia_completo is True
+
+
+def test_ao_vivo_com_ea_atrasado_nao_fragmenta_a_barra(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """REPRODUZ o defeito de producao (17/09): AO VIVO, com o EA atras da
+    fila, o relogio de parede esta' minutos a` frente da barra em formacao
+    e `avancar_relogio` fechava a barra a cada tick -- `vol_total_t=329`
+    numa barra M15 que teve 670.878 contratos. Aqui: 6 h de trades com
+    timestamp 30 MIN atras do relogio, tick a cada trade, ao_vivo=True.
+    Tem que fechar 23 barras (a ultima fica em formacao), nao milhares."""
+    import numpy as np
+
+    from profittape.ea import service_123 as sv
+    from profittape.ea.config_123 import EA123Config
+    from tests.test_ea_perfil_volume import _parquet_vol
+
+    p, df = _parquet_vol(tmp_path, 25)
+    df["mme80_ntsl"] = 139000.0
+    df.to_parquet(p, index=False)
+    alvo = sorted(df["dia"].unique())[-1]
+    import yaml
+    cfg_path = tmp_path / "ea.yaml"
+    cfg_path.write_text(yaml.safe_dump({
+        "tipo": "123", "nome": "ea_vivo", "dry_run": True,
+        "semente_parquet": str(p), "curated": str(tmp_path / "curated"),
+        "registro_dir": str(tmp_path / "fw")}), encoding="utf-8")
+    (tmp_path / "curated").mkdir(exist_ok=True)
+
+    # relogio de parede 30 min A FRENTE do ultimo trade (o EA atrasado)
+    t0 = int(pd.Timestamp(f"{alvo} 12:00:00", tz="UTC").value)
+    agora = [t0 / NS + 1800.0]
+    monkeypatch.setattr(sv.time, "time", lambda: agora[0])
+    s = sv.EA123Service(EA123Config.from_yaml(cfg_path), dia=alvo, ao_vivo=True)
+    assert s.ao_vivo is True
+
+    rng = np.random.default_rng(17)
+    n = 6 * 3600 // 2
+    precos = 140000.0 + np.cumsum(rng.choice([-5.0, 0.0, 5.0], n))
+    for i in range(n):
+        ts = t0 + i * 2 * NS
+        agora[0] = ts / NS + 1800.0          # o relogio segue 30 min a frente
+        s.processar_trade_bruto(sv._TradeBruto(ts, float(precos[i]), 1, 2))
+        s._ultimo_tick = 0.0                 # forca o tick a cada trade
+        s.tick()
+    assert s.barras == 23, f"esperava 23 barras, veio {s.barras}"

@@ -136,6 +136,8 @@ class EA123Service:
             infra_extra=self._infra, diario=self.diario)
         self._corretora_pronta_antes: bool | None = None
         self._ultimo_tick = 0.0
+        self._ultimo_alerta = 0.0
+        self.atraso_alerta_s = 5.0
         self.trades = 0
         self.barras = 0
         self._ultimo_ts_ns = 0
@@ -176,10 +178,28 @@ class EA123Service:
         # em 3.022 fragmentos, marcava a 1a barra parcial e o dia inteiro
         # ficava sem sinal. A ultima barra do replay fica em formacao, como
         # deve ser -- `encerrar_dia` cuida da posicao.
-        if self.ao_vivo:
-            b = self.construtor.avancar_relogio(int(agora * _NS))
-            if b is not None:
-                self._barra(b)
+        # QUEM FECHA BARRA E' O TRADE -- tambem AO VIVO (17/09, causa final
+        # da fragmentacao). O relogio de PAREDE parece o certo ao vivo, mas
+        # o EA processa a FILA: com 6 M de trades/dia ele fica minutos para
+        # tras (fila_pico 7.999 no heartbeat). A barra em formacao e' de
+        # 09:30 enquanto o relogio ja' marca 09:50 -> `avancar_relogio`
+        # fechava na hora, o proximo trade abria um fragmento, o tick
+        # seguinte fechava de novo. Resultado medido em producao:
+        # `vol_total_t=329` numa barra M15 que teve 670.878 contratos, e
+        # sinais formados sobre fragmentos -- "sinal onde nao tem".
+        # A ultima barra do dia fica em formacao e `encerrar_dia` cuida da
+        # posicao; barra sem NENHUM trade nao existe no WIN em pregao.
+        #
+        # O ATRASO passa a ser VISIVEL: ele nao quebra mais a barra, mas
+        # atrasa o SINAL (o EA arma quando processa o trade que cruza a
+        # fronteira, nao quando ela passa). Sem log, isso ficaria invisivel.
+        if self.ao_vivo and self._ultimo_ts_ns:
+            atraso_s = time.time() - self._ultimo_ts_ns / _NS
+            if atraso_s > self.atraso_alerta_s and agora - self._ultimo_alerta > 30:
+                self._ultimo_alerta = agora
+                log.warning("ea.123.atrasado", atraso_s=round(atraso_s, 1),
+                            trades=self.trades, barras=self.barras,
+                            nota="o EA esta' atras da fila: o sinal sai atrasado o mesmo tanto")
         if self.client is not None and not self.config.dry_run:
             pronta = bool(getattr(self.client, "corretora_pronta", True))
             if self._corretora_pronta_antes is False and pronta:

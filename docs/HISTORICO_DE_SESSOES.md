@@ -2598,3 +2598,22 @@ Fabricacao. Daqui em diante: anexo vazio -> digo que nao vi e paro.
   desprezivel; vigiar `fila` e `descartados` no primeiro dia. OUTUBRO:
   capturar o MES INTEIRO (baseline dentro da mesma serie), calls PETRJ*,
   puts PETRV*, trocando na virada de 21/09. Rotina mensal.
+
+### 2026-09-17 (noite) — a CAUSA da fragmentacao: o EA atras da fila (v3.12)
+
+Quarta e ultima correcao do mesmo sintoma -- a primeira feita depois de
+REPRODUZIR. Os timestamps estavam certos (bar_id x 900 = 09:30 BRT); o
+problema era o EA processar a FILA com minutos de atraso, deixando o
+relogio de parede a` frente da barra em formacao. `avancar_relogio`
+fechava a barra a cada tick.
+
+- Correcao: quem fecha barra e' o TRADE, tambem ao vivo. `encerrar_dia`
+  cuida da ultima.
+- Teste que PROVA: 6 h de trades 30 min atras do relogio, tick a cada
+  trade -- sem a correcao 10.800 barras, com ela 23.
+- O atraso virou VISIVEL (`ea.123.atrasado`, > 5 s, no maximo a cada
+  30 s). Ele nao quebra mais a barra, mas ATRASA O SINAL -- e isso e'
+  problema de desempenho a resolver ANTES do E4, senao o forward mede
+  slippage misturado com atraso de processamento.
+- `EA_ARQUITETURA.md` secao 7 com a regra unica e o historico dos tres
+  defeitos anteriores. 919 testes.

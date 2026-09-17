@@ -562,6 +562,41 @@ uma precisao que o dado nao tem.
 
 ---
 
+## 7. Quem fecha a barra de tempo (2026-09-17, tres defeitos e a causa final)
+
+**Regra, agora unica: quem fecha barra e' o TRADE.** Nem no replay nem ao
+vivo o relogio de parede fecha barra. A ultima barra do dia fica em
+formacao e `encerrar_dia` cuida da posicao; barra sem NENHUM trade nao
+existe no WIN durante o pregao.
+
+**Por que o relogio de parede parecia certo ao vivo e nao e':** o EA
+processa uma FILA. Com 6 milhoes de trades/dia ele fica MINUTOS atras
+(`fila_pico=7.999` no heartbeat de 17/09). A barra em formacao e' de
+09:30 enquanto o relogio ja' marca 09:50 -> `avancar_relogio(agora)`
+fechava a barra na hora, o trade seguinte abria um fragmento, o tick
+seguinte fechava de novo.
+
+**Medido em producao (17/09):** sinal armado com `vol_total_t=329` numa
+barra M15 que teve **670.878** contratos; niveis batendo com o fragmento
+(entrada 188.325, stop 188.965) e nao com a barra real (188.230 e
+189.090). O operador viu no grafico antes de qualquer diagnostico:
+"ele esta' vendo sinal onde nao tem".
+
+**Teste que prova (e que faltou nas tres tentativas anteriores):**
+`test_ao_vivo_com_ea_atrasado_nao_fragmenta_a_barra` -- 6 h de trades com
+timestamp 30 min atras do relogio, `ao_vivo=True`, tick a cada trade.
+Sem a correcao: **10.800 barras**. Com ela: **23**.
+
+**O ATRASO nao sumiu -- ficou VISIVEL.** Ele nao quebra mais a barra, mas
+atrasa o SINAL: o EA arma quando processa o trade que cruza a fronteira,
+nao quando ela passa. `ea.123.atrasado` sai quando o atraso passa de 5 s
+(no maximo a cada 30 s), com o atraso, trades e barras. **Isso e' um
+problema de DESEMPENHO a resolver antes do E4**: um sinal que sai 2 min
+atrasado entra a um preco que ja' andou, e o forward mediria slippage de
+execucao misturado com atraso de processamento.
+
+---
+
 ## Indice por assunto
 
 (2026-08-28, adicionado -- o arquivo cresceu demais para navegar so' por
