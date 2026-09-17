@@ -162,14 +162,18 @@ class EA123Service:
         if agora - self._ultimo_tick < 0.4:
             return
         self._ultimo_tick = agora
-        # BUG REAL (17/09): em REPLAY o relogio de parede esta' no futuro e
-        # fechava a barra a cada tick -- 3.022 "barras" num pregao de 38, e
-        # o dia inteiro virava incompleto. Fora do ao vivo, o relogio e' o
-        # do ultimo TRADE.
-        relogio_ns = int(agora * _NS) if self.ao_vivo else self._ultimo_ts_ns
-        b = self.construtor.avancar_relogio(relogio_ns) if relogio_ns else None
-        if b is not None:
-            self._barra(b)
+        # BUG REAL (17/09), duas tentativas erradas antes desta: em REPLAY
+        # o `avancar_relogio` NAO deve ser chamado. Quem fecha barra ali e'
+        # o fluxo de TRADES (medido no dado real de 16/09: 37 barras, o
+        # numero certo); `avancar_relogio` existe para o AO VIVO, onde o
+        # tempo passa sem negocio. Chamando nos dois, o replay picava o dia
+        # em 3.022 fragmentos, marcava a 1a barra parcial e o dia inteiro
+        # ficava sem sinal. A ultima barra do replay fica em formacao, como
+        # deve ser -- `encerrar_dia` cuida da posicao.
+        if self.ao_vivo:
+            b = self.construtor.avancar_relogio(int(agora * _NS))
+            if b is not None:
+                self._barra(b)
         if self.client is not None and not self.config.dry_run:
             pronta = bool(getattr(self.client, "corretora_pronta", True))
             if self._corretora_pronta_antes is False and pronta:

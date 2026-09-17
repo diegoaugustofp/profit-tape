@@ -183,3 +183,48 @@ def test_replay_do_dia_roda_o_caminho_inteiro(
     hb = s._hb()
     assert hb["trades"] == n and hb["barras"] >= 9
     assert hb["candidatos"] >= 0 and s.ciclo.estado == "livre"     # encerrar_dia zerou
+
+
+def test_replay_fecha_exatamente_as_barras_do_dia(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """TESTE ESCRITO ANTES DA CORRECAO (17/09, segunda tentativa no mesmo
+    defeito): o replay de 16/09 fechou 3.022 barras num pregao de 38 porque
+    o `tick` chamava `avancar_relogio` com um relogio que ja' estava alem da
+    fronteira da barra em formacao. Em replay quem fecha barra e' o fluxo de
+    TRADES; `avancar_relogio` so' existe para o ao vivo, onde o tempo passa
+    sem negocio. Aqui: 6 h de trades a cada 2 s = 24 barras M15, e o teste
+    exige 24 -- com o tick sendo chamado o tempo todo."""
+    import numpy as np
+
+    from profittape.ea import service_123 as sv
+    from profittape.ea.config_123 import EA123Config
+    from tests.test_ea_perfil_volume import _parquet_vol
+
+    p, df = _parquet_vol(tmp_path, 25)
+    df["mme80_ntsl"] = 139000.0
+    df.to_parquet(p, index=False)
+    alvo = sorted(df["dia"].unique())[-1]
+
+    rng = np.random.default_rng(11)
+    t0 = int(pd.Timestamp(f"{alvo} 12:00:00", tz="UTC").value)      # 09:00 BRT
+    n = 6 * 3600 // 2                                               # 6 h, 1 trade a cada 2 s
+    precos = 140000.0 + np.cumsum(rng.choice([-5.0, 0.0, 5.0], n))
+    trades = pd.DataFrame({"ts_ns": [t0 + i * 2 * NS for i in range(n)], "price": precos,
+                           "quantidade": 1, "trade_type": 2,
+                           "agente_comprador": 0, "agente_vendedor": 0})
+    (tmp_path / "curated" / "trade" / f"dt={alvo.isoformat()}" / "sym=WINFUT").mkdir(parents=True)
+    import profittape.features.pipeline as pipe
+    monkeypatch.setattr(pipe, "_carregar_dia", lambda pasta, sym: trades)
+
+    import yaml
+    cfg_path = tmp_path / "ea.yaml"
+    cfg_path.write_text(yaml.safe_dump({
+        "tipo": "123", "nome": "ea_bar", "dry_run": True,
+        "semente_parquet": str(p), "curated": str(tmp_path / "curated"),
+        "registro_dir": str(tmp_path / "fw")}), encoding="utf-8")
+    # tick a CADA trade: o caso mais agressivo possivel
+    s = sv.replay_do_dia(EA123Config.from_yaml(cfg_path), alvo, tick_a_cada=1)
+    # 6 h = 24 barras; a ultima fica em formacao (o ultimo trade e' 2 s antes
+    # do fim), entao 23 fechadas -- e nao 10.800, que era o que o tick fazia.
+    assert s.barras == 23, f"esperava 23 barras fechadas em 6 h, veio {s.barras}"
+    assert s.sinal.dia_completo is True

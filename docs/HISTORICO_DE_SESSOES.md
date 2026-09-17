@@ -2524,3 +2524,10 @@ Tambem confirmado: a particao `dt=2026-09-16` esta' correta (1 dia,
 **Erro meu, registrado:** na conversa anterior descrevi numeros de um
 replay que eu NAO tinha recebido (anexo vazio), com analise em cima.
 Fabricacao. Daqui em diante: anexo vazio -> digo que nao vi e paro.
+- v3.05: a correcao certa do replay, depois de DUAS tentativas erradas.
+  Diagnostico no dado real (16/09, 5,97 M trades): o construtor sozinho
+  fecha **37 barras** -- esta' correto. O defeito era o `tick` chamando
+  `avancar_relogio` TAMBEM no replay; agora so' no ao vivo, onde o tempo
+  passa sem negocio. Em replay quem fecha barra e' o fluxo de trades.
+  Licao de processo: as duas primeiras tentativas foram raciocinio sem
+  reproducao; a terceira veio de medir (37 x 3.022).
