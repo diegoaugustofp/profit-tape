@@ -597,6 +597,53 @@ execucao misturado com atraso de processamento.
 
 ---
 
+## 8. ATRASO do EA em relacao ao mercado (instrumentado 2026-09-17)
+
+**A pergunta do operador, aceita:** gravar e decidir tem requisitos
+OPOSTOS. O record pode enfileirar -- o que importa e' nao perder, e
+latencia nao afeta o dado. A execucao precisa do AGORA. Hoje os dois
+consomem o mesmo caminho.
+
+**Onde a intuicao precisa de correcao:** separar as filas nao resolve
+sozinho. Se o EA consome mais devagar do que o mercado produz, a fila
+propria dele TAMBEM enche. O gargalo nao e' a fila, e' a TAXA DE CONSUMO
+-- 6 milhoes de trades/dia processados um a um em Python so' para
+descobrir em que barra de 15 min cada um cai.
+
+**Por que medir antes de desenhar:** nesta sessao eu errei QUATRO vezes
+propondo correcao sem reproduzir. Arquitetura de fila sem saber se o
+atraso e' 5 s ou 5 min seria o mesmo erro numa escala maior.
+
+**O que foi instrumentado** (`EABridge`, serve para os DOIS EAs, medido no
+ponto onde o trade SAI da fila):
+
+- `ea_bridge.atraso` -- linha PERIODICA a cada 5 min, sempre: atraso
+  medio, MAXIMO da janela, fila agora e pico. Sem o nivel normal medido
+  nao da' para saber se um pico de 5 s e' rotina ou excecao.
+- `ea_bridge.atrasado` -- WARNING quando o maximo passa de 5 s (no
+  maximo 1 por minuto).
+- `ea_bridge.finalizado` -- passou a WARNING e leva o atraso do dia.
+- `ea.123.atrasado` (v3.12) -- o mesmo pelo lado do EA de preco.
+
+**O efeito e' DIFERENTE nos dois EAs, e o segundo e' pior:**
+
+| | barra de TEMPO (123) | barra de VOLUME (z_agf) |
+|---|---|---|
+| o que o atraso faz | atrasa o SINAL: o EA arma quando processa o trade que cruza a fronteira | muda ONDE a barra fecha -- a barra fecha por CONTAGEM de contratos |
+| gravidade | preco pior, mensuravel | altera o proprio EVENTO |
+
+O `z_agf_win` roda em producao HOJE com esse atraso, e nunca foi medido.
+E' pergunta aberta sobre um EA que ja' esta' no ar.
+
+**Ordem declarada:** (1) medir -- feito; (2) descobrir para onde o tempo
+vai (EA? writer competindo por CPU? DLL entregando em lote?); (3) so'
+entao decidir entre fila propria, agregacao mais barata (o EA de preco
+precisa de OHLC e volume, nao de cada trade), descarte controlado (para
+OHLC, perder o MEIO nao muda nada -- so' extremo e fechamento importam)
+ou processo separado.
+
+---
+
 ## Indice por assunto
 
 (2026-08-28, adicionado -- o arquivo cresceu demais para navegar so' por

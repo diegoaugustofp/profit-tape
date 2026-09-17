@@ -2617,3 +2617,14 @@ fechava a barra a cada tick.
   slippage misturado com atraso de processamento.
 - `EA_ARQUITETURA.md` secao 7 com a regra unica e o historico dos tres
   defeitos anteriores. 919 testes.
+- v3.13: ATRASO instrumentado nos dois EAs (`EABridge`, na saida da fila):
+  linha periodica a cada 5 min com medio/maximo/fila, warning acima de
+  5 s, e o atraso do dia no `finalizado`. Motivo: a pergunta do operador
+  sobre separar a fila do record da fila de execucao esta' certa no
+  diagnostico, mas fila propria nao resolve se a TAXA DE CONSUMO for
+  menor que a do mercado -- e sem medir, arquitetura e' chute (quatro
+  erros por raciocinio nesta sessao). Registrado tambem que o efeito e'
+  PIOR no EA de fluxo: barra de VOLUME fecha por contagem, entao atraso
+  muda ONDE a barra fecha -- e o `z_agf_win` roda hoje com isso sem
+  medicao. `EA_ARQUITETURA.md` secao 8 com a ordem (medir -> achar o
+  gargalo -> decidir). 924 testes.

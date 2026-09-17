@@ -23,6 +23,8 @@ from __future__ import annotations
 
 import queue
 import threading
+import time
+from typing import Any
 
 import structlog
 
@@ -43,6 +45,18 @@ class EABridge:
         self._fila: queue.Queue[Trade] = queue.Queue(maxsize=maxsize)
         self._descartados = 0
         self._filtrados_outro_simbolo = 0
+        # ATRASO (17/09): medido no ponto onde o trade SAI da fila -- vale para
+        # os DOIS EAs. Foi atraso de processamento que fragmentou a barra do
+        # EA de preco; no EA de FLUXO o efeito e' pior e nao foi medido: a
+        # barra de VOLUME fecha por contagem de contratos, entao atraso/perda
+        # muda ONDE a barra fecha, ou seja o proprio evento.
+        self.atraso_alerta_s = 5.0
+        self._ultimo_alerta_atraso = 0.0
+        self._ultimo_periodico = time.time()
+        self._atraso_max_s = 0.0
+        self._atraso_soma = 0.0
+        self._atraso_n = 0
+        self._fila_pico = 0
         self._parar_evento = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -77,9 +91,51 @@ class EABridge:
             self.ea_service.encerrar_dia()
         except Exception:
             log.exception("ea_bridge.erro_ao_encerrar_dia")
-        log.info("ea_bridge.finalizado", descartados=self._descartados,
-                 filtrados_outro_simbolo=self._filtrados_outro_simbolo,
-                 **self.ea_service._hb())
+        log.warning("ea_bridge.finalizado", descartados=self._descartados,
+                    filtrados_outro_simbolo=self._filtrados_outro_simbolo,
+                    **self.atraso(), **self.ea_service._hb())
+
+    def _medir_atraso(self, trade: Trade) -> None:
+        ts = getattr(trade, "ts_ns", 0) or 0
+        if not ts:
+            return
+        atraso = time.time() - ts / 1e9
+        if atraso < 0:                      # relogio do feed a` frente: ignora
+            return
+        self._atraso_max_s = max(self._atraso_max_s, atraso)
+        self._atraso_soma += atraso
+        self._atraso_n += 1
+        self._fila_pico = max(self._fila_pico, self._fila.qsize())
+
+    def _alertar_atraso(self) -> None:
+        """O atraso precisa aparecer DURANTE o pregao. No maximo uma linha a
+        cada 60 s, so' quando passa do limite."""
+        agora = time.time()
+        # linha PERIODICA (5 min), sempre: sem o nivel normal medido, nao da'
+        # para saber se 5 s e' pico ou rotina.
+        if agora - self._ultimo_periodico > 300:
+            self._ultimo_periodico = agora
+            log.info("ea_bridge.atraso", symbol=self._simbolo, **self.atraso())
+            self._atraso_max_s = 0.0          # maximo por JANELA, nao do dia
+            self._atraso_soma = 0.0
+            self._atraso_n = 0
+        if self._atraso_max_s <= self.atraso_alerta_s:
+            return
+        if agora - self._ultimo_alerta_atraso < 60:
+            return
+        self._ultimo_alerta_atraso = agora
+        log.warning("ea_bridge.atrasado", symbol=self._simbolo, **self.atraso(),
+                    nota=("o EA processa a fila atras do mercado: em barra de TEMPO isso "
+                          "atrasa o sinal; em barra de VOLUME muda ONDE a barra fecha"))
+
+    def atraso(self) -> dict[str, Any]:
+        """Atraso entre o trade ACONTECER e o EA processa-lo. `p50` nao, porque
+        guardar a serie custaria memoria: media, MAXIMO e o pico da fila."""
+        n = self._atraso_n
+        return {"atraso_medio_s": (round(self._atraso_soma / n, 3) if n else None),
+                "atraso_max_s": round(self._atraso_max_s, 3),
+                "fila_agora": self._fila.qsize(), "fila_pico_ea": self._fila_pico,
+                "trades_medidos": n}
 
     def _tick(self) -> None:
         """EA com `tick()` (o 123: barra pelo relogio, callbacks de ordem,
@@ -100,6 +156,8 @@ class EABridge:
             except queue.Empty:
                 self._tick()
                 continue
+            self._medir_atraso(trade)
+            self._alertar_atraso()
             self._tick()
             try:
                 self.ea_service.processar_trade_bruto(_TradeBruto(
