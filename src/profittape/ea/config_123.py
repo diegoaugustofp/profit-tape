@@ -20,6 +20,15 @@ from pydantic import BaseModel, ConfigDict
 from .config import RiscoConfig
 
 
+def _raiz_do_projeto(inicio: Path) -> Path:
+    """Sobe ate' achar `pyproject.toml` (ou `.git`); sem achar, usa o
+    diretorio atual -- o comportamento antigo, para nao quebrar caso raro."""
+    for pasta in [inicio, *inicio.parents]:
+        if (pasta / "pyproject.toml").exists() or (pasta / ".git").exists():
+            return pasta
+    return Path.cwd()
+
+
 class EA123Config(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -49,12 +58,16 @@ class EA123Config(BaseModel):
 
     @classmethod
     def de_dados(cls, dados: dict[str, Any], origem: Path | None = None) -> EA123Config:
-        """Caminho RELATIVO no yaml e' resolvido pela pasta do YAML, nao pelo
-        diretorio de onde o record foi chamado. Bug real (2026-09-16): record
-        rodado de outra pasta -> `parquet nao existe` -> EA subiu inerte."""
+        """Caminho RELATIVO no yaml e' resolvido pela RAIZ DO PROJETO (a
+        pasta com `pyproject.toml`/`.git`), nao pelo diretorio de onde o
+        record foi chamado nem pela pasta do yaml. Dois bugs reais:
+        16/09, record de outra pasta -> parquet nao existe; 17/09, yaml em
+        `config/` -> `config/data/curated`. A raiz atende os dois, porque
+        `data/...` e' relativo ao PROJETO, e o yaml pode morar em
+        qualquer lugar (config/, data/eas_ativos/...)."""
         cfg = cls(**dados)
         if origem is not None:
-            raiz = origem.resolve().parent
+            raiz = _raiz_do_projeto(origem.resolve().parent)
             for campo in ("semente_parquet", "curated", "registro_dir"):
                 val = getattr(cfg, campo, None)
                 if val and not Path(val).is_absolute():

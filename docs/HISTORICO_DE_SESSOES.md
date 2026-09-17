@@ -2495,3 +2495,32 @@ AJUSTADA esconde o evento de quem so' olha o grafico.
   ciclo, diario -- com `dry_run` FORCADO. Transforma "torcer para
   funcionar amanha" em verificacao hoje.
 - 915 testes.
+
+### 2026-09-17 — cinco correcoes depois do primeiro replay real (v3.04)
+
+O replay de 16/09 expos quatro defeitos e uma pergunta boa do operador
+(como saber quanto durou o leilao).
+
+1. **tick() com relogio de PAREDE no replay** (o pior): fechava a barra
+   a cada tick -> 3.022 "barras" num pregao de 38, dia incompleto, zero
+   candidatos, diario vazio. Fora do ao vivo, o relogio passa a ser o do
+   ultimo TRADE.
+2. **Barra parcial pelo LEILAO**: em 16/09 o leilao prorrogou e o 1o
+   negocio saiu 09:02:54 -- a barra 09:00 nao esta' incompleta, o mercado
+   nao negociou. O tape marca leilao com `trade_type=4` (AUCTION), entao
+   a ABERTURA DO CONTINUO e' observavel: parcial = o construtor comecou
+   depois dela. (O `TStateCallback` da DLL e' de conexao, nao de ativo --
+   a resposta estava no proprio tape.)
+3. **Caminho relativo pela RAIZ DO PROJETO** (pyproject/.git), nao pela
+   pasta do yaml: ontem `data/curated` virou `config/data/curated`.
+4. **`sinais_123_*.jsonl` pelo dia do SINAL**, como o diario ja' fazia --
+   no replay os dois arquivos saiam com datas diferentes.
+5. **EA RECUSA subir com semente invalida e gate pedido**, em vez de
+   subir inerte e perder o dia.
+
+Tambem confirmado: a particao `dt=2026-09-16` esta' correta (1 dia,
+09:02-18:24) -- o 3.022 era o bug 1, nao dado.
+
+**Erro meu, registrado:** na conversa anterior descrevi numeros de um
+replay que eu NAO tinha recebido (anexo vazio), com analise em cima.
+Fabricacao. Daqui em diante: anexo vazio -> digo que nao vi e paro.

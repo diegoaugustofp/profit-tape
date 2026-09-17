@@ -78,7 +78,8 @@ class EA123Service:
         # servico e' replay, e ai' o relogio de parede nao diz nada (cai no
         # criterio do primeiro trade).
         hoje = dt.datetime.now(_TZ).date()
-        inicio_ns = int(time.time() * _NS) if self.dia == hoje else None
+        self.ao_vivo = self.dia == hoje
+        inicio_ns = int(time.time() * _NS) if self.ao_vivo else None
         self.construtor = ConstrutorDeBarraDeTempo(config.periodo_barra_s,
                                                     fim_sessao_hhmm=config.fim_sessao_hhmm,
                                                     inicio_ns=inicio_ns)
@@ -107,6 +108,12 @@ class EA123Service:
                 curated if curated is not None else Path(config.curated),
                 symbol=config.symbol, periodo_s=config.periodo_barra_s,
                 janela_pregoes=int(config.filtro_fluxo.get("janela_pregoes", 20)))
+        if not self.semente.valida and config.filtro_fluxo is not None:
+            raise SystemExit(
+                f"{self.nome}: semente da MME80 INVALIDA ({self.semente.motivo}) e o yaml pede "
+                "`filtro_fluxo`. Sem semente o EA sobe inerte (nao arma nenhum sinal) e o dia "
+                "se perde -- melhor nao subir. Corrija a semente (backfill + cura do dia que "
+                "falta, ou dump novo do grafico) e suba de novo.")
         if perfil is not None and perfil.resumo()["horarios_com_perfil"] == 0:
             raise SystemExit(
                 f"{self.nome}: `filtro_fluxo` pede o gate de volume, mas o perfil esta' VAZIO "
@@ -125,6 +132,7 @@ class EA123Service:
         self._ultimo_tick = 0.0
         self.trades = 0
         self.barras = 0
+        self._ultimo_ts_ns = 0
         log.warning("ea.123.iniciado", **self.carimbo, semente=self.semente.resumo(),
                     filtro_fluxo=config.filtro_fluxo,
                     perfil_volume=(perfil.resumo() if perfil is not None else None),
@@ -134,6 +142,7 @@ class EA123Service:
     # ------------------------------------------------------------------
     def processar_trade_bruto(self, t: _TradeBruto) -> None:
         self.trades += 1
+        self._ultimo_ts_ns = t.ts_ns
         b = self.construtor.processar_trade(t.ts_ns, t.price, t.quantidade, t.trade_type)
         if b is not None:
             self._barra(b)
@@ -153,7 +162,12 @@ class EA123Service:
         if agora - self._ultimo_tick < 0.4:
             return
         self._ultimo_tick = agora
-        b = self.construtor.avancar_relogio(int(agora * _NS))
+        # BUG REAL (17/09): em REPLAY o relogio de parede esta' no futuro e
+        # fechava a barra a cada tick -- 3.022 "barras" num pregao de 38, e
+        # o dia inteiro virava incompleto. Fora do ao vivo, o relogio e' o
+        # do ultimo TRADE.
+        relogio_ns = int(agora * _NS) if self.ao_vivo else self._ultimo_ts_ns
+        b = self.construtor.avancar_relogio(relogio_ns) if relogio_ns else None
         if b is not None:
             self._barra(b)
         if self.client is not None and not self.config.dry_run:

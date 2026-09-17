@@ -102,28 +102,35 @@ def test_registro_de_eas_monta_o_123_pelo_yaml(tmp_path: Path) -> None:
     assert reg.remover("ea_123")
 
 
-def test_caminho_relativo_resolve_pela_pasta_do_yaml(tmp_path: Path) -> None:
-    """Bug real (2026-09-16): record rodado de outra pasta -> semente e perfil
-    vazios, EA sobe inerte. Relativo passa a ser resolvido pelo yaml."""
+def test_caminho_relativo_resolve_pela_raiz_do_projeto(tmp_path: Path) -> None:
+    """Dois bugs reais: 16/09 record de outra pasta; 17/09 yaml em config/ ->
+    `config/data/curated`. Relativo passa a ser resolvido pela RAIZ (a pasta
+    com pyproject.toml), com o yaml podendo morar em qualquer subpasta."""
     import os
 
     import yaml
+    (tmp_path / "pyproject.toml").write_text("", encoding="utf-8")
     (tmp_path / "data").mkdir()
     (tmp_path / "data" / "x.parquet").write_text("", encoding="utf-8")
-    p = tmp_path / "ea.yaml"
+    (tmp_path / "config").mkdir()
+    p = tmp_path / "config" / "ea.yaml"                  # yaml NAO esta' na raiz
     p.write_text(yaml.safe_dump({"tipo": "123", "semente_parquet": "data/x.parquet",
-                                 "curated": "data", "registro_dir": "fw"}), encoding="utf-8")
+                                 "curated": "data", "registro_dir": "data/fw"}),
+                 encoding="utf-8")
     cwd = os.getcwd()
     try:
-        os.chdir("/")                       # de qualquer lugar
+        os.chdir("/")
         cfg = carregar_config_ea(p)
     finally:
         os.chdir(cwd)
     assert cfg.semente_parquet == str((tmp_path / "data" / "x.parquet").resolve())
-    assert cfg.registro_dir == str((tmp_path / "fw").resolve())
+    assert cfg.curated == str((tmp_path / "data").resolve())
+    assert cfg.registro_dir == str((tmp_path / "data" / "fw").resolve())
 
 
-def test_servico_recusa_gate_com_perfil_vazio(tmp_path: Path) -> None:
+def test_servico_recusa_subir_com_semente_invalida_e_gate_pedido(tmp_path: Path) -> None:
+    """17/09: com semente invalida o EA subia INERTE e o dia se perdia. Se o
+    yaml pede o gate, agora recusa."""
     import yaml
     p = tmp_path / "ea.yaml"
     p.write_text(yaml.safe_dump({
@@ -131,7 +138,7 @@ def test_servico_recusa_gate_com_perfil_vazio(tmp_path: Path) -> None:
         "curated": str(tmp_path / "nao"), "registro_dir": str(tmp_path / "fw"),
         "filtro_fluxo": {"tipo": "volume_baixo"}}), encoding="utf-8")
     cfg = EA123Config.from_yaml(p)
-    with pytest.raises(SystemExit, match="perfil esta' VAZIO"):
+    with pytest.raises(SystemExit, match="semente da MME80 INVALIDA"):
         EA123Service(cfg, dia=dt.date(2026, 9, 16))
 
 

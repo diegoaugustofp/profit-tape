@@ -29,13 +29,25 @@ class RegistroDeSinais123:
         self.gravados = 0
         self.dir.mkdir(parents=True, exist_ok=True)
 
-    def _arquivo(self) -> Path:
-        return self.dir / f"sinais_123_{dt.date.today().isoformat()}.jsonl"
+    def _arquivo(self, dia: dt.date | None = None) -> Path:
+        # dia do SINAL, nao `today()` -- no replay e' o dia replicado, e um
+        # processo que atravessa a meia-noite nao espalha o dia em dois.
+        return self.dir / f"sinais_123_{(dia or dt.date.today()).isoformat()}.jsonl"
+
+    @staticmethod
+    def _dia_do_sinal(op: Any) -> dt.date | None:
+        ts = getattr(op.candidato, "valido_ate_ns", 0) or 0
+        if not ts:
+            return None
+        import datetime as _dt
+        from zoneinfo import ZoneInfo
+        return _dt.datetime.fromtimestamp(ts / 1e9, tz=ZoneInfo("America/Sao_Paulo")).date()
 
     def gravar(self, op: Any) -> None:
         linha = {"gravado_em": dt.datetime.now().isoformat(timespec="seconds"),
                  "carimbo": self.carimbo, **op.resumo()}
-        with self._arquivo().open("a", encoding="utf-8") as f:
+        arq = self._arquivo(self._dia_do_sinal(op))
+        with arq.open("a", encoding="utf-8") as f:
             f.write(json.dumps(linha, default=str, ensure_ascii=False) + "\n")
         self.gravados += 1
-        log.info("ea.123.sinal_gravado", arquivo=str(self._arquivo()), total=self.gravados)
+        log.info("ea.123.sinal_gravado", arquivo=str(arq), total=self.gravados)

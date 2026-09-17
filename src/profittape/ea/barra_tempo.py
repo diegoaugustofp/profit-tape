@@ -47,8 +47,23 @@ cuja barra comecaria a partir dai' entra na barra em formacao do mesmo
 dia. Para o 123 isso nao muda sinal (ultima entrada 16:30) -- muda a
 continuidade dos indicadores, que e' o que a ficha exige igual ao grafico.
 
-PRIMEIRA BARRA (medido 11/09; criterio CORRIGIDO em 16/09)
----------------------------------------------------------
+PRIMEIRA BARRA (criterio final, 17/09: a ABERTURA DO CONTINUO)
+--------------------------------------------------------------
+O leilao de abertura pode prorrogar -- em 16/09 o primeiro negocio saiu
+09:02:54. A barra 09:00 nao esta' incompleta por isso: o mercado nao
+negociou, nao houve nada a perder. O tape marca leilao com
+`trade_type=4` (AUCTION, enum confirmado contra o profitTypes oficial),
+entao a ABERTURA DO CONTINUO e' observavel no proprio dado: o primeiro
+trade que nao e' leilao. Criterio: a primeira barra e' PARCIAL se o
+construtor comecou DEPOIS da abertura do continuo. Sem `inicio_ns`
+(pesquisa/replay puro), cai no criterio antigo (primeiro trade > 60 s).
+
+Historico do criterio: primeiro foi "1o trade veio tarde" (marcava a
+09:00 de 16/09 como parcial e matava o dia); depois "construtor comecou
+depois do inicio da BARRA" (marcava parcial quando o leilao prorrogava).
+
+PRIMEIRA BARRA (versao anterior, mantida para replay sem inicio_ns)
+-------------------------------------------------------------------
 A primeira barra que o construtor fecha pode estar PARCIAL: o processo
 pode ter subido no meio dela. O criterio certo e' o INICIO DO
 CONSTRUTOR, nao a chegada do primeiro negocio: se `inicio_ns` <=
@@ -85,6 +100,7 @@ _TZ_BOLSA = ZoneInfo("America/Sao_Paulo")
 
 _BUY = int(TradeType.AGGRESSOR_BUYER)
 _SELL = int(TradeType.AGGRESSOR_SELLER)
+_LEILAO = int(TradeType.AUCTION)
 _NS_POR_S = 1_000_000_000
 
 
@@ -108,8 +124,11 @@ class _AcumuladorTempo:
     ts_ultimo_ns: int = field(default=0)
     ts_primeiro_ns: int = field(default=0)
     maior_lacuna_ns: int = 0        # maior intervalo sem negocio dentro da barra
+    ts_continuo_ns: int = 0         # 1o trade que NAO e' leilao (abertura do continuo)
 
     def registrar(self, ts_ns: int, price: float, quantidade: int, trade_type: int) -> None:
+        if trade_type != _LEILAO and self.ts_continuo_ns == 0:
+            self.ts_continuo_ns = ts_ns
         if self.open is None:
             self.open = price
             self.ts_primeiro_ns = ts_ns
@@ -157,6 +176,15 @@ class ConstrutorDeBarraDeTempo:
     def _local(ts_ns: int) -> datetime:
         return datetime.fromtimestamp(ts_ns / _NS_POR_S, tz=_TZ_BOLSA)
 
+    def _e_parcial(self, acc: _AcumuladorTempo) -> bool:
+        """Parcial = o construtor comecou DEPOIS da abertura do continuo
+        (ou, sem `inicio_ns`, o 1o trade veio muito depois do inicio da
+        barra). Leilao prorrogado NAO torna a barra parcial."""
+        if self.inicio_ns is None:
+            return acc.ts_primeiro_ns - acc.ts_open_ns > self.tolerancia_parcial_ns
+        referencia = acc.ts_continuo_ns or acc.ts_primeiro_ns or acc.ts_open_ns
+        return self.inicio_ns > max(referencia, acc.ts_open_ns)
+
     def _dobra_no_fim_de_sessao(self, ts_ns: int) -> bool:
         """True se um trade em ts_ns pertence a` barra em formacao por
         convencao de fim de sessao (mesmo dia local, hora >= fim)."""
@@ -184,9 +212,7 @@ class ConstrutorDeBarraDeTempo:
             vol_agr_compra=acc.vol_agr_compra, vol_agr_venda=acc.vol_agr_venda,
             n_trades=acc.n_trades, vol_total=acc.vol_total,
             ts_primeiro_ns=acc.ts_primeiro_ns,
-            parcial=(self.barras_fechadas == 1 and (
-                acc.ts_open_ns < self.inicio_ns if self.inicio_ns is not None
-                else acc.ts_primeiro_ns - acc.ts_open_ns > self.tolerancia_parcial_ns)),
+            parcial=(self.barras_fechadas == 1 and self._e_parcial(acc)),
             maior_lacuna_s=round(acc.maior_lacuna_ns / _NS_POR_S, 3),
         )
         barra.volume_confiavel = (not barra.parcial

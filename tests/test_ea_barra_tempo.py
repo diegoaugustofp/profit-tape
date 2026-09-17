@@ -224,19 +224,27 @@ def test_volume_confiavel_cai_com_lacuna_ou_parcial() -> None:
     assert b3 is not None and b3.parcial and not b3.volume_confiavel
 
 
-def test_parcial_pelo_inicio_do_construtor_nao_pelo_1o_trade() -> None:
-    """Bug real (16/09): EA de pe' desde 08:18, a barra 09:00 saiu `parcial`
-    porque o 1o trade veio 90 s depois (leilao) -> dia inteiro sem sinal.
-    Com `inicio_ns` antes do inicio da barra, a barra e' COMPLETA."""
+def test_parcial_pela_abertura_do_continuo_nao_pelo_leilao() -> None:
+    """16/09: leilao prorrogou e o 1o negocio saiu 09:02:54. A barra 09:00
+    NAO esta' incompleta -- o mercado nao negociou. O criterio e' a
+    abertura do CONTINUO (1o trade com trade_type != 4)."""
     c = ConstrutorDeBarraDeTempo(900, inicio_ns=T0900 - 3600 * NS)   # subiu 1 h antes
-    c.processar_trade(_t(95), 140000.0, 1, 2)                        # 1o trade 95 s depois
+    c.processar_trade(_t(174), 140000.0, 1, 4)                       # leilao 09:02:54
+    c.processar_trade(_t(175), 140000.0, 1, 2)                       # continuo abre
     b = c.processar_trade(_t(900), 140010.0, 1, 2)
     assert b is not None and not b.parcial
-    # construtor que subiu NO MEIO da barra: parcial
+    # construtor que subiu DEPOIS da abertura do continuo: parcial (perdeu
+    # negocios). Leilao 09:01:40, continuo 09:02:30, construtor 09:05.
     c2 = ConstrutorDeBarraDeTempo(900, inicio_ns=T0900 + 300 * NS)
-    c2.processar_trade(_t(310), 140000.0, 1, 2)
+    c2.processar_trade(_t(100), 140000.0, 1, 4)
+    c2.processar_trade(_t(150), 140000.0, 1, 2)
     b2 = c2.processar_trade(_t(900), 140010.0, 1, 2)
     assert b2 is not None and b2.parcial
+    # construtor que subiu ANTES do continuo abrir (leilao longo): completa
+    c3 = ConstrutorDeBarraDeTempo(900, inicio_ns=T0900 + 300 * NS)
+    c3.processar_trade(_t(310), 140000.0, 1, 2)
+    b3 = c3.processar_trade(_t(900), 140010.0, 1, 2)
+    assert b3 is not None and not b3.parcial
     # sem inicio_ns (pesquisa/replay): criterio antigo, que conferiu 69/69
     c3 = ConstrutorDeBarraDeTempo(900)
     c3.processar_trade(_t(95), 140000.0, 1, 2)
