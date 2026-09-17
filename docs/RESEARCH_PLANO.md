@@ -6192,6 +6192,58 @@ mostra. A DLL provou serventia aqui, ainda que o resultado seja negativo:
 e' informacao sobre o mercado, nao hipotese.
 
 
+## CANDIDATO ANTES DO AGENTE: ICEBERG / LOTE REPETIDO (desenho, 2026-09-17)
+
+Pergunta do operador: da' para medir ordem iceberg, ou robo comprando a
+mesma quantidade num preco? Da', e **nao precisa de agente** -- a
+assinatura esta' em `price`, `quantidade` e `ts_ns`, que existem desde
+sempre. Por isso esta ficha vem ANTES da de agente: contraparte mais
+nitida, nao depende de identificar corretora (o risco que pode matar a
+linha de agente inteira), e a amostra ja' basta.
+
+**CONTRAPARTE (antes da hipotese).** Iceberg e', por definicao, alguem
+que QUER ESCONDER TAMANHO -- logo tem tamanho para esconder e uma razao
+para nao mostrar. Se o preco volta ao nivel e a ordem se recompoe, ha'
+alguem defendendo aquele nivel com capital. Quem negocia contra isso
+enfrenta profundidade que NAO VE: e' a contraparte, e ela perde por
+falta de informacao sobre o livro real, nao por pressa nem por lentidao.
+
+**Por que o mecanismo e' mais defensavel que o de agente:** e' LOCAL e
+verificavel -- o nivel defendido segura ou nao segura, e isso se mede
+diretamente. Nao depende de atribuir intencao a uma corretora.
+
+**O QUE O PASSO 1 MEDE (features, zero trial, SEM DIRECAO):**
+
+1. **Frequencia.** Sequencias de N negocios com a MESMA quantidade no
+   MESMO preco, dentro de uma janela curta (segundos). Distribuicao de N.
+2. **Contra o acaso.** Com milhoes de negocios, lote igual coincide
+   MUITO. A medida so' vale contra um baseline: a mesma contagem com as
+   quantidades EMBARALHADAS (mantendo a distribuicao de tamanhos e os
+   precos). Se o observado nao superar o embaralhado, o "iceberg" e'
+   coincidencia -- e a linha morre aqui, barato.
+3. **Volume envolvido.** Que fracao do volume do dia passa por esses
+   eventos. Se for irrisoria, nao ha' o que explorar mesmo existindo.
+4. **Recomposicao.** Depois de o preco se afastar do nivel e VOLTAR, os
+   negocios de mesma quantidade continuam? E' o que separa iceberg
+   (recompoe) de robo de lote fixo (nao necessariamente) e de
+   coincidencia (nao volta).
+
+**O que NAO se mede no passo 1:** se o nivel segura, e o retorno depois
+do evento. Isso e' a ficha (passo 2), e so' se escreve se 2 e 4
+passarem -- com a direcao declarada antes ("nivel com iceberg segura" ou
+"nivel com iceberg rompe e acelera": sao hipoteses OPOSTAS e so' uma
+pode ser testada por vez).
+
+**Amostra:** alguns pregoes bastam para 1-4 (a medida e' por nivel e por
+instante, nao por dia). Diferente de tudo que veio antes, esta NAO
+precisa esperar tape acumular.
+
+**Riscos declarados:** (a) a B3 tem RLP (`trade_type=13`, ~25% do WIN),
+que gera repeticao por construcao e precisa ser tratado a parte -- ou
+excluido, ou medido separado, decidido ANTES de olhar resultado; (b) o
+tape traz o NEGOCIO, nao a oferta: iceberg no livro que nunca executa e'
+invisivel aqui (o book teria, e e' o terceiro item de "dado raro").
+
 ## PROXIMO CANDIDATO: COMPORTAMENTO DE AGENTE (desenho, 2026-09-17)
 
 Escrito ANTES de qualquer medicao, para revisao. Nada rodou.

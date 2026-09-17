@@ -2570,3 +2570,10 @@ Fabricacao. Daqui em diante: anexo vazio -> digo que nao vi e paro.
   preenchida antes da hipotese, os quatro itens do passo 1 e o risco
   declarado (agente da B3 e' corretora, nao cliente final).
 - 918 testes.
+- v3.09 (docs): ICEBERG / LOTE REPETIDO desenhado e colocado ANTES da
+  ficha de agente (pergunta do operador). Nao precisa de agente -- a
+  assinatura esta' em price/quantidade/ts. Contraparte: quem negocia
+  contra profundidade que nao ve. Passo 1: frequencia, baseline com
+  quantidades EMBARALHADAS (com milhoes de negocios, lote igual coincide
+  muito), fracao do volume e recomposicao do nivel. Riscos declarados:
+  RLP gera repeticao por construcao; o tape traz negocio, nao oferta.
