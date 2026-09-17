@@ -1884,6 +1884,45 @@ def defasagem_cmd(
     typer.echo(f"\n  Saida: {saida}/defasagem.json e defasagem_por_dia.csv")
 
 
+@app.command(name="ea-123-replay")
+def ea_123_replay(
+    yaml_path: Path = typer.Argument(..., help="config/ea_123_volume_baixo.yaml"),
+    dia: str = typer.Option(..., "--dia", help="YYYY-MM-DD (dia ja' curado)"),
+    curated: Path | None = typer.Option(None, "--curated", help="default: o do yaml"),
+    log_level: str = typer.Option("INFO", "--log-level"),
+) -> None:
+    """
+    REPLAY do EA 123 sobre um dia curado: semente, perfil de volume, gate,
+    sinal, ciclo em dry_run e DIARIO, com barras reais e sem esperar
+    pregao. `dry_run` e' forcado -- nenhuma ordem sai.
+    """
+    import datetime as dt
+
+    configurar(log_level)
+    from .ea.config_123 import carregar_config_ea
+    from .ea.service_123 import replay_do_dia
+
+    cfg = carregar_config_ea(yaml_path)
+    s = replay_do_dia(cfg, dt.date.fromisoformat(dia), curated)
+    hb = s._hb()
+    typer.echo("=" * 72)
+    typer.echo(f"REPLAY DO EA 123 — {dia} ({s.nome})")
+    typer.echo("=" * 72)
+    typer.echo(f"  semente: {s.semente.resumo()}")
+    if s.perfil is not None:
+        typer.echo(f"  perfil de volume: {s.perfil.resumo()}")
+    typer.echo(f"\n  trades={hb['trades']}  barras={hb['barras']}  "
+               f"dia_completo={hb['dia_completo']}  mme80={hb['mme80']}")
+    typer.echo(f"  candidatos={hb['candidatos']}  operacoes={hb['operacoes']}  "
+               f"rejeitados_gate={hb['rejeitados_gate']}  "
+               f"gate_indefinidos={hb['gate_indefinidos']}")
+    typer.echo(f"  ignorados: posicao={hb['ignorados_posicao']} pendente={hb['ignorados_pendente']}"
+               f"  sem_vaga={hb['sinais_sem_vaga']}")
+    if hb.get("diario"):
+        typer.echo(f"\n  diario: {hb['diario']}")
+    typer.echo(f"\n  Agora: profit-tape diario {cfg.registro_dir} --ea {s.nome}")
+
+
 @app.command(name="eas-preco-teste")
 def eas_preco_teste(
     log: Path = typer.Argument(..., help="Dump PRCBARRA| contendo SO' os dias da amostra pedida"),

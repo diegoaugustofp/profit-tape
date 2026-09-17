@@ -181,3 +181,53 @@ class EA123Service:
         return {"trades": self.trades, "barras": self.barras, "semente_valida": self.semente.valida,
                 "mme80": round(self.sinal.mme.valor, 1), "dia_completo": self.sinal.dia_completo,
                 **self.ciclo.hb()}
+
+
+def replay_do_dia(config: EA123Config, dia: dt.date, curated: Path | None = None,
+                  tick_a_cada: int = 2000) -> EA123Service:
+    """
+    REPLAY do EA de preco sobre um dia ja' CURADO (2026-09-17).
+
+    Exercita o caminho inteiro -- semente, perfil de volume, gate, sinal,
+    ciclo em dry_run, diario -- com barras REAIS, sem esperar pregao. E' o
+    que transforma "torcer para funcionar amanha" em verificacao hoje.
+
+    Duas coisas de proposito:
+      - `dry_run` e' FORCADO: replay nunca manda ordem, mesmo se o yaml
+        disser o contrario.
+      - o construtor cai no criterio ANTIGO de barra parcial (o servico
+        so' usa o relogio quando o dia operado e' hoje), que e' o que
+        conferiu 69/69 contra o grafico.
+
+    `tick_a_cada`: o `tick()` fecha barra pelo relogio e le callbacks; no
+    replay nao ha' callback, mas chamar de vez em quando exercita o mesmo
+    caminho do ao vivo.
+    """
+    from ..features.pipeline import _carregar_dia
+
+    cfg = config.model_copy(update={"dry_run": True})
+    raiz = curated if curated is not None else Path(cfg.curated)
+    pasta = raiz / "trade" / f"dt={dia.isoformat()}"
+    if not (pasta / f"sym={cfg.symbol}").exists():
+        raise SystemExit(f"sem tape curado para {cfg.symbol} em {dia}: {pasta}")
+    t = _carregar_dia(pasta, cfg.symbol)
+    if t.empty:
+        raise SystemExit(f"tape vazio em {pasta}")
+    s = EA123Service(cfg, dia=dia, curated=raiz)
+    cols = ["ts_ns", "price", "quantidade", "trade_type", "agente_comprador", "agente_vendedor"]
+    faltando = [c for c in cols if c not in t.columns]
+    if faltando:
+        cols = [c for c in cols if c not in faltando]
+    dados = t[cols].to_dict("records")
+    for i, linha in enumerate(dados, start=1):
+        s.processar_trade_bruto(_TradeBruto(
+            ts_ns=int(linha["ts_ns"]), price=float(linha["price"]),
+            quantidade=int(linha["quantidade"]), trade_type=int(linha["trade_type"]),
+            agente_comprador=int(linha.get("agente_comprador") or 0),
+            agente_vendedor=int(linha.get("agente_vendedor") or 0)))
+        if i % tick_a_cada == 0:
+            s._ultimo_tick = 0.0      # o tick tem cadencia de 0,4 s no ao vivo
+            s.tick()
+    s.encerrar_dia()
+    log.warning("ea.123.replay_concluido", dia=dia.isoformat(), **s._hb())
+    return s

@@ -5977,6 +5977,7 @@ ficha fica intuitivo em vez de explicito. Lista curta, mantida aqui:
 | absorcao crua (grafico) | vira volume ou range conforme o regime | **razao muda de identidade com o regime** |
 | rolagem de contrato (passo 1) | contraparte obrigada nao deixa marca | fluxo obrigatorio ESPALHADO nao move estatistica em ativo muito liquido |
 | ajuste/fechamento (passo 1) | sem marca, e INVERTIDO: o fim do pregao e' o momento mais magro | no WIN o fluxo obrigatorio de HORARIO tambem nao deixa marca; quem concentra e' a abertura -- que ja' esta' queimada em preco |
+| defasagem WIN x cesta (passo 1) | sem ordem de chegada em 60 s; em 15 s quem lidera e' o WIN (5 de 5 dias) | no par futuro/cesta quem lidera e' o FUTURO; explorar exigiria operar acao, e 0,09 de correlacao em 15 s nao paga um tick |
 
 ### 5. Gerar a hipotese a partir de ANOMALIA MEDIDA, nao de leitura
 
@@ -6163,3 +6164,29 @@ pagar isso.
 diante), entao a amostra e' pequena e o resultado e' indicativo. Se
 houver assimetria, ela sera' confirmada com o tape que continuar
 acumulando -- e' a primeira linha em que ESPERAR pregao tem retorno.
+
+
+### Passo 1 da DEFASAGEM: RESULTADO — nao ha' o que explorar, e o achado e' INVERTIDO (2026-09-17)
+
+Barras de 60 s, 26 pregoes (01/08 a 15/09): todas as defasadas entre
+-0,05 e +0,05, fracao de dias 38-50%. **Sem ordem de chegada.** A
+contemporanea confirma que a medicao esta' certa (BOVA11 0,89-0,93,
+como se espera de um ETF do proprio indice).
+
+Em 15 s aparece assimetria CONSISTENTE, e no sentido CONTRARIO ao que eu
+hipotetizei: `WIN->papel` positivo (+0,03 a +0,09) e `papel->WIN`
+negativo nos cinco papeis, com a fracao de dias em **0%** -- ou seja, em
+TODOS os dias quem chegou na frente foi o WIN. BOVA11 e' o mais claro
+(+0,090 x -0,034). Coerente com o que se sabe: o futuro e' mais liquido
+e mais barato de negociar que a cesta, entao ele lidera.
+
+**A linha fecha mesmo assim, por dois motivos independentes:**
+1. **A defasagem esta' do lado errado para nos.** Explorar "o WIN
+   antecipa PETR4" e' operar ACAO -- bolsa B, lote 100, E2 a refazer.
+2. **Nao paga o custo, por construcao.** Correlacao defasada de 0,09 em
+   15 s significa recuperar uma fracao pequena de um movimento de 15 s;
+   no WIN isso e' da ordem de UM tick (5 pts) contra custo de 11 pts.
+
+**Achado real, sem valor operacional** -- e so' o tape sincronizado
+mostra. A DLL provou serventia aqui, ainda que o resultado seja negativo:
+e' informacao sobre o mercado, nao hipotese.

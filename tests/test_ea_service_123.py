@@ -133,3 +133,46 @@ def test_servico_recusa_gate_com_perfil_vazio(tmp_path: Path) -> None:
     cfg = EA123Config.from_yaml(p)
     with pytest.raises(SystemExit, match="perfil esta' VAZIO"):
         EA123Service(cfg, dia=dt.date(2026, 9, 16))
+
+
+def test_replay_do_dia_roda_o_caminho_inteiro(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Replay sobre um dia curado: semente, perfil, gate, sinal, ciclo e
+    diario, com dry_run FORCADO."""
+    import numpy as np
+
+    from profittape.ea import service_123 as sv
+    from profittape.ea.config_123 import EA123Config
+    from tests.test_ea_perfil_volume import _parquet_vol
+
+    p, df = _parquet_vol(tmp_path, 25)
+    df["mme80_ntsl"] = 139000.0
+    df.to_parquet(p, index=False)
+    alvo = sorted(df["dia"].unique())[-1]
+
+    # tape do dia: um trade a cada 2 s, preco em passeio com passos de 5 pts
+    rng = np.random.default_rng(7)
+    t0 = int(pd.Timestamp(f"{alvo} 12:00:00", tz="UTC").value)
+    n = 9000
+    precos = 140000.0 + np.cumsum(rng.choice([-5.0, 0.0, 5.0], n))
+    trades = pd.DataFrame({"ts_ns": [t0 + i * 2 * NS for i in range(n)], "price": precos,
+                           "quantidade": 1, "trade_type": 2,
+                           "agente_comprador": 0, "agente_vendedor": 0})
+    (tmp_path / "curated" / "trade" / f"dt={alvo.isoformat()}" / "sym=WINFUT").mkdir(parents=True)
+    monkeypatch.setattr(sv, "_carregar_dia", lambda pasta, sym: trades, raising=False)
+    import profittape.features.pipeline as pipe
+    monkeypatch.setattr(pipe, "_carregar_dia", lambda pasta, sym: trades)
+
+    import yaml
+    cfg_path = tmp_path / "ea.yaml"
+    cfg_path.write_text(yaml.safe_dump({
+        "tipo": "123", "nome": "ea_rep", "dry_run": False,        # sera' FORCADO para True
+        "semente_parquet": str(p), "curated": str(tmp_path / "curated"),
+        "registro_dir": str(tmp_path / "fw"),
+        "filtro_fluxo": {"tipo": "volume_baixo"}}), encoding="utf-8")
+    s = sv.replay_do_dia(EA123Config.from_yaml(cfg_path), alvo)
+    assert s.ciclo.dry_run is True                                # forcado
+    assert s.semente.valida and s.perfil is not None
+    hb = s._hb()
+    assert hb["trades"] == n and hb["barras"] >= 9
+    assert hb["candidatos"] >= 0 and s.ciclo.estado == "livre"     # encerrar_dia zerou

@@ -2481,3 +2481,17 @@ AJUSTADA esconde o evento de quem so' olha o grafico.
   60 s, correlacao contemporanea e as duas defasadas, assimetria e
   fracao de DIAS com cada lado na frente. 4 testes com series de ordem
   conhecida. 914 no total.
+
+### 2026-09-17 — defasagem fechada (achado invertido); replay do EA 123 (v3.03)
+
+- DEFASAGEM: em 60 s nao ha' ordem de chegada (defasadas entre -0,05 e
+  +0,05, fracao de dias 38-50%). Em 15 s ha' assimetria consistente no
+  sentido CONTRARIO ao hipotetizado: o WIN lidera a cesta em 5 de 5
+  dias (BOVA11 +0,090 x -0,034). Fecha mesmo assim: explorar seria
+  operar ACAO e 0,09 em 15 s nao paga um tick. Achado real, sem valor
+  operacional -- e so' o tape sincronizado mostra.
+- `EA123Service.replay_do_dia` + `profit-tape ea-123-replay`: roda o EA
+  de preco sobre um dia ja' curado -- semente, perfil, gate, sinal,
+  ciclo, diario -- com `dry_run` FORCADO. Transforma "torcer para
+  funcionar amanha" em verificacao hoje.
+- 915 testes.
