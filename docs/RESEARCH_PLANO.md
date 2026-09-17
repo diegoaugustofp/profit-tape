@@ -6361,3 +6361,45 @@ concentracao de negocio perto dos strikes com OI relevante -- que e' o
 que separa "semana de vencimento e' agitada" de "o preco e' atraido
 pelos strikes"? A segunda pergunta e' a que tem mecanismo; a primeira,
 sozinha, e' so' sazonalidade.
+
+
+### Opcao sobre acao: as series, o custo e o calendario (2026-09-17)
+
+**Dados conferidos no Trade Hunter** (`derivatives-options-walls` e
+`derivatives-positions`, fechamento de 16/09, PETR4 spot 48,65):
+
+- O ticker NAO e' o strike: `PETRI447` tem strike AJUSTADO **42,42** (447
+  e' o original, antes dos proventos). O mapeamento se faz casando o OI
+  de cada serie com o perfil de strikes -- conferido, bate exato.
+- **O OI esta' concentrado LONGE do spot**: 25 M em 36-44 (call fundo
+  ITM, put fundo OTM, posicao velha e sem sensibilidade) contra 7,0 M em
+  48,67 e 7,6 M em 49,92, que sao os strikes perto do dinheiro.
+
+**Consequencia, dita ANTES de medir:** como o hedge forcado vem do OI
+PERTO DO DINHEIRO, a expectativa de pinning NESTE vencimento e' BAIXA.
+Se nao aparecer nada em 18/09, e' o esperado -- nao e' resultado contra a
+hipotese. O teste com poder e' outubro.
+
+**Series de setembro incluidas no record** (12 tickers, trades sem book):
+perto do dinheiro `PETRI19`, `PETRI522`, `PETRI527`, `PETRI542`; de
+contraste (maior OI, longe) `PETRI447`/`PETRU447` (max pain),
+`PETRI457`/`PETRU457`, `PETRI442`/`PETRU442`, `PETRI452`/`PETRU452`. O
+contraste responde a pergunta que separa hedge de sazonalidade: se o
+fluxo aparecer TAMBEM nos strikes fundos, nao e' hedge, e' so' vencimento.
+
+**Custo:** trades apenas, SEM `offer_book` -- book e' o que pesa (10 a
+100x mais evento que trades). Uma serie liquida faz alguns milhares de
+negocios/dia contra 6 MILHOES do WIN. Vigiar no primeiro dia: `fila` tem
+que voltar a zero e `descartados` continuar 0; se a fila subir e ficar,
+tirar as series (o WIN e' o dado que nao pode faltar).
+
+**OUTUBRO: capturar o MES INTEIRO, nao so' a ultima semana.** A hipotese
+e' que o hedge APERTA perto do vencimento -- isso exige comparar a semana
+do vencimento com as semanas normais DA MESMA SERIE (mesmos strikes,
+mesmo OI). Capturando so' a ultima semana nao ha' baseline, e a
+comparacao vira "outubro contra setembro", que mistura serie, strike e
+regime. Comecar na virada (segunda, 21/09) da' quatro semanas com o
+contraste DENTRO da propria serie. Calls `PETRJ*`, puts `PETRV*`.
+
+**Rotina MENSAL, nao config fixa:** as series mudam a cada vencimento;
+a lista de tickers precisa ser trocada no dia da virada.

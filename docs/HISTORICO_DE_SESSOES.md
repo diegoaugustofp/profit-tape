@@ -2588,3 +2588,13 @@ Fabricacao. Daqui em diante: anexo vazio -> digo que nao vi e paro.
   (OI por strike, max pain, walls) vem do Trade Hunter, conferido com
   PETR4; limitacoes declaradas (EOD, posicao e nao fluxo). **O proximo
   vencimento e' 18/09 -- esta sexta** e a semana esta' sendo capturada.
+- v3.11 (docs): series de opcao mapeadas no Trade Hunter e o bloco de
+  tickers entregue. Descobertas que entram na ficha ANTES de medir: o
+  ticker nao e' o strike (PETRI447 = 42,42 ajustado; mapeamento por OI,
+  conferido); e o OI de PETR4 esta' concentrado LONGE do spot (25 M em
+  36-44 contra 7 M perto do dinheiro), entao a expectativa de pinning
+  NESTE vencimento e' baixa -- dito antes, para um resultado nulo em
+  18/09 nao ser lido como evidencia contra. Custo: trades sem book,
+  desprezivel; vigiar `fila` e `descartados` no primeiro dia. OUTUBRO:
+  capturar o MES INTEIRO (baseline dentro da mesma serie), calls PETRJ*,
+  puts PETRV*, trocando na virada de 21/09. Rotina mensal.
