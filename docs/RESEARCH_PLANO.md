@@ -5978,6 +5978,7 @@ ficha fica intuitivo em vez de explicito. Lista curta, mantida aqui:
 | rolagem de contrato (passo 1) | **RECLASSIFICADA em 17/09**: o teste foi fraco (serie continua APAGA a rolagem; a assinatura e' o par casado entre contratos) | procurar efeito no agregado quando a assinatura e' um PAR entre instrumentos e' o teste errado |
 | ajuste/fechamento (passo 1) | sem marca, e INVERTIDO: o fim do pregao e' o momento mais magro | no WIN o fluxo obrigatorio de HORARIO tambem nao deixa marca; quem concentra e' a abertura -- que ja' esta' queimada em preco |
 | defasagem WIN x cesta (passo 1) | sem ordem de chegada em 60 s; em 15 s quem lidera e' o WIN (5 de 5 dias) | no par futuro/cesta quem lidera e' o FUTURO; explorar exigiria operar acao, e 0,09 de correlacao em 15 s nao paga um tick |
+| iceberg / lote repetido (passo 1, v1 e v2) | curva plana contra o baseline nas duas versoes; as maiores corridas sao lote 1 de uma corretora grande | **agente na B3 e' CORRETORA, nao cliente**; e o tape so' mostra o que EXECUTOU -- ordem escondida que nao executa exige BOOK |
 
 ### 5. Gerar a hipotese a partir de ANOMALIA MEDIDA, nao de leitura
 
@@ -6493,3 +6494,55 @@ contratos por registro nosso contra 12,3 por linha do Profit. **O nosso
 feed registra cada CASAMENTO; o Profit agrega os casamentos de uma mesma
 ordem agressora.** Preco e volume nao mudam; `n_trades` conta coisas
 diferentes -- e e' insumo de feature (esta' no `BarraFechada`).
+
+
+### ICEBERG: LINHA FECHADA no passo 1 (2026-09-17, v2 validada em dado REAL)
+
+O operador exportou as DUAS abas do Times & Trades, e isso resolveu duas
+coisas de uma vez.
+
+**Qual aba corresponde ao nosso tape:** a de NEGOCIOS -- 3,24 contratos
+por linha (o nosso tem 3,1), as duas corretoras nomeadas, RLP separado. A
+de ORDEM ORIGINAL agrega por ordem agressora (12,3 contratos por linha,
+lado passivo como "-"). Confirma o fator de ~4x entre as duas contagens.
+
+**A v2 em dado real (17/09, 17:00-18:31, 200 k negocios -- a exportacao
+limita):**
+
+| corrida >= N | observado | baseline | razao |
+|---|---|---|---|
+| 5 | 5.975 | 5.634 | 1,06 |
+| 10 | 2.967 | 2.946 | 1,01 |
+| 20 | 1.548 | 1.640 | 0,94 |
+| 30 | 1.011 | 1.061 | 0,95 |
+| 50 | 539 | 517 | 1,04 |
+
+Plana. E as SEIS maiores corridas explicam o porque: todas de **1
+contrato com o Santander no passivo**, 277 a 376 negocios, em niveis de
+preco sucessivos.
+
+**Por que a linha fecha (dois limites ESTRUTURAIS, nao de calibragem):**
+
+1. **Agente na B3 e' CORRETORA, nao cliente final.** Uma ordem iceberg
+   individual fica diluida no fluxo inteiro da corretora -- e' o risco
+   que a ficha de agente ja' declarava, agora CONFIRMADO em dado real.
+2. **O tape mostra o que EXECUTOU.** Iceberg vive no LIVRO: recarrega sem
+   ser consumido. Ordem escondida que segura o preco sem executar e'
+   invisivel aqui, por construcao.
+
+Estava declarado antes de rodar: se a v2 desse acaso, a linha fecha sem
+v3. Fecha.
+
+**Limite da amostra, declarado:** a exportacao do T&T corta em 200 k
+linhas (1h30 do dia). A conclusao nao se apoia so' nisso -- se apoia na
+curva plana MAIS os dois limites estruturais acima, que nao mudam com
+mais amostra.
+
+**Observacao registrada, sem acao:** o Santander aparece como passivo
+dominante em lote 1 nos niveis sucessivos. Pode ser formador de mercado
+ou so' a corretora com mais clientes de varejo. Nao e' a nossa hipotese;
+fica anotado.
+
+**Para onde isso aponta:** o BOOK. E' o terceiro item de "dado raro", o
+record ja' captura `offer_book` do WINFUT, e e' o unico lugar onde o
+ANTES do movimento esta' registrado -- inclusive ordem que nao executa.

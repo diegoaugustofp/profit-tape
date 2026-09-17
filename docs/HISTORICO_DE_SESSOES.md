@@ -2671,3 +2671,12 @@ fechava a barra a cada tick.
   Colateral: nosso tape conta CASAMENTOS, o Profit agrega por ordem
   agressora (4x mais registros, mesmo volume) -- `n_trades` e' insumo de
   feature e conta coisa diferente. 936 testes.
+- v3.17: ICEBERG FECHADO no passo 1. As duas abas do T&T resolveram qual
+  corresponde ao nosso tape (NEGOCIOS: 3,24 contratos/linha contra 3,1
+  nossos; ORDEM ORIGINAL agrega por ordem, 12,3). A v2 (com agente
+  passivo) em dado real deu curva PLANA (1,06/1,01/0,94/0,95/1,04) e as
+  seis maiores corridas sao lote 1 com o Santander no passivo. Dois
+  limites ESTRUTURAIS fecham a linha: agente na B3 e' CORRETORA e nao
+  cliente (risco declarado, agora confirmado), e o tape so' mostra o que
+  EXECUTOU (iceberg vive no LIVRO). Sem v3, como estava declarado.
+  Aponta para o BOOK -- o unico dado em que o ANTES do movimento existe.
