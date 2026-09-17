@@ -2577,3 +2577,14 @@ Fabricacao. Daqui em diante: anexo vazio -> digo que nao vi e paro.
   quantidades EMBARALHADAS (com milhoes de negocios, lote igual coincide
   muito), fracao do volume e recomposicao do nivel. Riscos declarados:
   RLP gera repeticao por construcao; o tape traz negocio, nao oferta.
+- v3.10 (docs): RECLASSIFICACAO pedida pela critica do operador.
+  (1) ROLAGEM sai do catalogo de mortas -- o teste foi fraco: a serie
+  continua APAGA a rolagem, e a assinatura e' o PAR CASADO entre os dois
+  contratos, do mesmo agente. Exige assinar WINV26/WINZ26 antes da virada
+  (outubro no WIN; mensal no WDO). (2) OPCAO separada: sobre INDICE
+  descartada com razao medida (o hedge e' na acao, e quem lidera o par e'
+  o WIN); sobre ACAO NAO TESTADA e VIAVEL -- o hedge acontece no papel e o
+  tape de PETR4/VALE3/ITUB4/BBAS3 existe desde 24/07. Dados de opcao
+  (OI por strike, max pain, walls) vem do Trade Hunter, conferido com
+  PETR4; limitacoes declaradas (EOD, posicao e nao fluxo). **O proximo
+  vencimento e' 18/09 -- esta sexta** e a semana esta' sendo capturada.

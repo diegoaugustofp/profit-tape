@@ -5975,7 +5975,7 @@ ficha fica intuitivo em vez de explicito. Lista curta, mantida aqui:
 | gap de abertura | inconclusivo, por-ano sem padrao | informacao da noite tambem ja' esta' no preco |
 | absorcao_dir (fluxo) | era `desloc_norm` disfarcado | feature com subtracao de escalas desiguais degenera |
 | absorcao crua (grafico) | vira volume ou range conforme o regime | **razao muda de identidade com o regime** |
-| rolagem de contrato (passo 1) | contraparte obrigada nao deixa marca | fluxo obrigatorio ESPALHADO nao move estatistica em ativo muito liquido |
+| rolagem de contrato (passo 1) | **RECLASSIFICADA em 17/09**: o teste foi fraco (serie continua APAGA a rolagem; a assinatura e' o par casado entre contratos) | procurar efeito no agregado quando a assinatura e' um PAR entre instrumentos e' o teste errado |
 | ajuste/fechamento (passo 1) | sem marca, e INVERTIDO: o fim do pregao e' o momento mais magro | no WIN o fluxo obrigatorio de HORARIO tambem nao deixa marca; quem concentra e' a abertura -- que ja' esta' queimada em preco |
 | defasagem WIN x cesta (passo 1) | sem ordem de chegada em 60 s; em 15 s quem lidera e' o WIN (5 de 5 dias) | no par futuro/cesta quem lidera e' o FUTURO; explorar exigiria operar acao, e 0,09 de correlacao em 15 s nao paga um tick |
 
@@ -6299,3 +6299,65 @@ DLL, porque nada disso existe no grafico.
 por CORRETORA, nao por cliente final. Um agente grande e' uma corretora
 com milhares de clientes, e a agregacao pode diluir qualquer sinal. Se a
 concentracao (item 1) vier baixa, esse risco ja' responde a linha inteira.
+
+
+## RECLASSIFICACAO: rolagem e vencimento de opcao (2026-09-17, critica do operador)
+
+O operador levantou dois pontos que corrigem o que eu fiz ontem.
+
+### 1. ROLAGEM: o teste foi FRACO, nao a hipotese
+
+**A critica:** a assinatura da rolagem e' o PAR CASADO -- venda no
+contrato que vence e compra no seguinte, do mesmo agente, perto no
+tempo. No agregado isso vira "volume maior", que e' onde o efeito e'
+mais diluido. E ha' um problema anterior: o dump do grafico e o `WINFUT`
+do tape sao a SERIE CONTINUA -- o Profit substitui o contrato por baixo,
+ou seja, o dado com que medi APAGA a rolagem por construcao.
+
+**Reclassificacao:** o que morreu foi "a rolagem deixa marca no volume,
+amplitude e perfil horario da serie continua" -- afirmacao muito mais
+estreita que "a rolagem nao deixa marca". Sai do catalogo de mortas e
+entra como NAO TESTADA CORRETAMENTE.
+
+**O que o teste certo exige:** assinar os DOIS contratos (ex.: WINV26 e
+WINZ26) nas semanas de virada e procurar o par casado -- mesmo agente,
+venda num e compra no outro, em segundos, quantidades parecidas. Isso e'
+captura NOVA: precisa estar ligado ANTES da rolagem. Proxima do WIN:
+outubro (quarta mais proxima do dia 15). No WDO vence todo mes, entao o
+dado chega mais rapido.
+
+### 2. OPCAO: separar INDICE de ACAO
+
+- **Opcao sobre INDICE, como evento do WIN: descartada, agora com razao
+  MEDIDA.** O hedge de opcao de PETR4 e' feito em PETR4; chegar ao WIN
+  exigiria arbitragem de cesta, e a medicao de 16/09 mostrou que nesse
+  par quem lidera e' o WIN (nao a acao). Somado a "fluxo obrigatorio
+  espalhado nao move estatistica em ativo liquido", fica descartado.
+- **Opcao sobre ACAO: NAO TESTADA, e viavel com o que ja' temos.** Eu
+  tinha adiado por "falta de infraestrutura"; estava errado quanto a`
+  descricao inicial. O hedge acontece NO PAPEL, e o tape de PETR4,
+  VALE3, ITUB4 e BBAS3 existe desde 24/07.
+
+**CONTRAPARTE (preenchida):** quem vendeu opcao e esta' com delta e'
+OBRIGADO a hedgear, e o hedge fica mais violento quanto mais perto do
+strike no vencimento -- compra quando o papel sobe, vende quando cai.
+Fluxo que nao escolhe preco, concentrado em DATA e em NIVEL DE PRECO.
+
+**Os dados de opcao vem do Trade Hunter** (conectado): OI por strike,
+MAX PAIN, call/put wall e a data de vencimento -- conferido em 17/09 com
+PETR4 (218 series, OI call 268 M, put 268 M, max pain 42,42 com spot
+48,65). Limitacoes que a propria ferramenta declara e que entram na
+ficha: o OI e' **EOD, nao intradiario**, e e' POSICAO EM ABERTO, nao
+fluxo.
+
+**Calendario:** o vencimento das opcoes de acao na B3 e' na terceira
+sexta-feira. O proximo e' **18/09/2026 -- esta sexta**, e a semana esta'
+sendo capturada agora. Nao precisa esperar outubro.
+
+**PASSO 1 (a escrever com cuidado antes de medir), sem direcao:** o
+comportamento do papel na semana do vencimento difere do usual em
+MAGNITUDE e ESTRUTURA (volume, amplitude, perfil horario)? E ha'
+concentracao de negocio perto dos strikes com OI relevante -- que e' o
+que separa "semana de vencimento e' agitada" de "o preco e' atraido
+pelos strikes"? A segunda pergunta e' a que tem mecanismo; a primeira,
+sozinha, e' so' sazonalidade.
