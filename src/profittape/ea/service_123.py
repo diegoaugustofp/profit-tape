@@ -66,7 +66,7 @@ class EA123Service:
     def __init__(self, config: EA123Config, executor: Any | None = None,
                  vagas: Any | None = None, nome: str | None = None,
                  client: Any | None = None, dia: dt.date | None = None,
-                 curated: Path | None = None) -> None:
+                 curated: Path | None = None, ao_vivo: bool | None = None) -> None:
         if not config.dry_run and executor is None:
             raise SystemExit("dry_run=False exige um ExecutorDeOrdens construido")
         self.config = config
@@ -77,8 +77,14 @@ class EA123Service:
         # vale quando o dia operado e' HOJE -- reproduzir um dia passado pelo
         # servico e' replay, e ai' o relogio de parede nao diz nada (cai no
         # criterio do primeiro trade).
+        # `ao_vivo` decide duas coisas: se o `tick` avanca o relogio de
+        # parede e se a 1a barra e' julgada pelo `inicio_ns`. Detectar por
+        # DATA e' fragil -- replay do PROPRIO dia (rodado a noite) era lido
+        # como ao vivo, e o relogio de parede picava o dia em milhares de
+        # barras (bug de 17/09, terceira aparicao do mesmo defeito). Quem
+        # faz replay FORCA `ao_vivo=False`, como ja' forca `dry_run`.
         hoje = dt.datetime.now(_TZ).date()
-        self.ao_vivo = self.dia == hoje
+        self.ao_vivo = (self.dia == hoje) if ao_vivo is None else ao_vivo
         inicio_ns = int(time.time() * _NS) if self.ao_vivo else None
         self.construtor = ConstrutorDeBarraDeTempo(config.periodo_barra_s,
                                                     fim_sessao_hhmm=config.fim_sessao_hhmm,
@@ -231,7 +237,7 @@ def replay_do_dia(config: EA123Config, dia: dt.date, curated: Path | None = None
     t = _carregar_dia(pasta, cfg.symbol)
     if t.empty:
         raise SystemExit(f"tape vazio em {pasta}")
-    s = EA123Service(cfg, dia=dia, curated=raiz)
+    s = EA123Service(cfg, dia=dia, curated=raiz, ao_vivo=False)
     cols = ["ts_ns", "price", "quantidade", "trade_type", "agente_comprador", "agente_vendedor"]
     faltando = [c for c in cols if c not in t.columns]
     if faltando:

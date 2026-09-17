@@ -228,3 +228,49 @@ def test_replay_fecha_exatamente_as_barras_do_dia(
     # do fim), entao 23 fechadas -- e nao 10.800, que era o que o tick fazia.
     assert s.barras == 23, f"esperava 23 barras fechadas em 6 h, veio {s.barras}"
     assert s.sinal.dia_completo is True
+
+
+def test_replay_do_proprio_dia_nao_e_tratado_como_ao_vivo(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Bug de 17/09 (terceira aparicao): o replay rodado a noite, sobre o
+    pregao do MESMO dia, era lido como ao vivo -- o relogio de parede
+    fechava uma barra por tick (3.022 num pregao de 37) e marcava a 1a
+    barra parcial. `replay_do_dia` FORCA ao_vivo=False."""
+    import numpy as np
+
+    from profittape.ea import service_123 as sv
+    from profittape.ea.config_123 import EA123Config
+    from tests.test_ea_perfil_volume import _parquet_vol
+
+    p, df = _parquet_vol(tmp_path, 25)
+    df["mme80_ntsl"] = 139000.0
+    df.to_parquet(p, index=False)
+    alvo = sorted(df["dia"].unique())[-1]
+    rng = np.random.default_rng(13)
+    t0 = int(pd.Timestamp(f"{alvo} 12:00:00", tz="UTC").value)
+    n = 6 * 3600 // 2
+    precos = 140000.0 + np.cumsum(rng.choice([-5.0, 0.0, 5.0], n))
+    trades = pd.DataFrame({"ts_ns": [t0 + i * 2 * NS for i in range(n)], "price": precos,
+                           "quantidade": 1, "trade_type": 2,
+                           "agente_comprador": 0, "agente_vendedor": 0})
+    (tmp_path / "curated" / "trade" / f"dt={alvo.isoformat()}" / "sym=WINFUT").mkdir(parents=True)
+    import profittape.features.pipeline as pipe
+    monkeypatch.setattr(pipe, "_carregar_dia", lambda pasta, sym: trades)
+
+    # o relogio do sistema diz que HOJE e' o dia do replay (o caso que quebrou)
+    class _FakeDT(dt.datetime):
+        @classmethod
+        def now(cls, tz=None):  # type: ignore[no-untyped-def]
+            return dt.datetime.combine(alvo, dt.time(23, 33), tzinfo=tz)
+
+    monkeypatch.setattr(sv.dt, "datetime", _FakeDT)
+    import yaml
+    cfg_path = tmp_path / "ea.yaml"
+    cfg_path.write_text(yaml.safe_dump({
+        "tipo": "123", "nome": "ea_noite", "dry_run": True,
+        "semente_parquet": str(p), "curated": str(tmp_path / "curated"),
+        "registro_dir": str(tmp_path / "fw")}), encoding="utf-8")
+    s = sv.replay_do_dia(EA123Config.from_yaml(cfg_path), alvo, tick_a_cada=1)
+    assert s.ao_vivo is False
+    assert s.barras == 23, f"esperava 23 barras, veio {s.barras}"
+    assert s.sinal.dia_completo is True

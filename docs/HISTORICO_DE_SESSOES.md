@@ -2531,3 +2531,10 @@ Fabricacao. Daqui em diante: anexo vazio -> digo que nao vi e paro.
   passa sem negocio. Em replay quem fecha barra e' o fluxo de trades.
   Licao de processo: as duas primeiras tentativas foram raciocinio sem
   reproducao; a terceira veio de medir (37 x 3.022).
+- v3.06: a CAUSA dos 3.022 -- o log e' UTC; o replay rodou 02:33 UTC =
+  23:33 BRT do MESMO dia, entao `ao_vivo` (detectado por DATA) deu True:
+  relogio de parede fechando uma barra por tick e a 1a barra marcada
+  parcial. `replay_do_dia` passa a FORCAR `ao_vivo=False`, como ja'
+  forcava `dry_run`. Detectar modo por data e' fragil e esta' escrito no
+  codigo. Terceira e ultima aparicao do mesmo defeito; o teste novo
+  reproduz o caso (relogio do sistema no dia do replay, 23:33).
