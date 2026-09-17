@@ -2460,3 +2460,24 @@ AJUSTADA esconde o evento de quem so' olha o grafico.
   janela estreita; mede concentracao, amplitude e |retorno| por barra
   final contra a primeira hora e o uniforme, com estabilidade por ano —
   e sem direcao. 3 testes; 910 no total.
+
+### 2026-09-17 — fechamento sem marca; opcoes adiada; defasagem WIN x cesta (v3.02)
+
+- AJUSTE/FECHAMENTO, passo 1: **sem marca e INVERTIDO** -- as 2 ultimas
+  barras tem 1,65%/1,33%/0,94% do volume contra 5,3-5,6% do uniforme, com
+  amplitude 0,5-0,8 da barra mediana, e a concentracao CAI ano a ano.
+  Quem concentra e' a ABERTURA (09:00 com 5,25% do volume, amplitude
+  3,16x e |ret| 3,50x em 2026) -- mas o preco na abertura ja' esta'
+  queimado (ORB, gap, janela do 123) e anomalia sem contraparte nomeada
+  nao vira ficha. Catalogo atualizado com o aprendizado da categoria.
+- OPCOES: registrada como LINHA ADIADA (nao recusada), com a contraparte
+  ja' nomeada (vendedor com delta obrigado a hedgear perto do strike).
+  Motivo do adiamento: exige dados que o projeto nao captura (series por
+  strike, open interest, superficie de vol) -- e' linha com
+  infraestrutura propria, nao ficha. Entra na fila depois de dezembro.
+- DEFASAGEM WIN x CESTA: `research/defasagem.py` + `profit-tape
+  defasagem`. Contraparte LENTA (arbitragem com latencia); primeira linha
+  em que a DLL e' indispensavel (timestamp comum entre ativos). Barras de
+  60 s, correlacao contemporanea e as duas defasadas, assimetria e
+  fracao de DIAS com cada lado na frente. 4 testes com series de ordem
+  conhecida. 914 no total.

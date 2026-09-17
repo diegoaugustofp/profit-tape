@@ -5976,6 +5976,7 @@ ficha fica intuitivo em vez de explicito. Lista curta, mantida aqui:
 | absorcao_dir (fluxo) | era `desloc_norm` disfarcado | feature com subtracao de escalas desiguais degenera |
 | absorcao crua (grafico) | vira volume ou range conforme o regime | **razao muda de identidade com o regime** |
 | rolagem de contrato (passo 1) | contraparte obrigada nao deixa marca | fluxo obrigatorio ESPALHADO nao move estatistica em ativo muito liquido |
+| ajuste/fechamento (passo 1) | sem marca, e INVERTIDO: o fim do pregao e' o momento mais magro | no WIN o fluxo obrigatorio de HORARIO tambem nao deixa marca; quem concentra e' a abertura -- que ja' esta' queimada em preco |
 
 ### 5. Gerar a hipotese a partir de ANOMALIA MEDIDA, nao de leitura
 
@@ -6070,3 +6071,95 @@ no passo 2, em ficha.
 **Leitura:** concentracao perto do uniforme e |ret| relativo perto de 1 =
 sem marca, e a hipotese morre aqui. Concentracao alta COM amplitude ou
 |retorno| elevados = ha' distorcao, e o passo 2 escreve a ficha.
+
+
+### Passo 1 do AJUSTE/FECHAMENTO: RESULTADO — sem marca, e INVERTIDO (2026-09-17)
+
+| | 2015-22 | 2023-25 | 2026 |
+|---|---|---|---|
+| **2 ultimas barras, % do volume** | **1,65%** | **1,33%** | **0,94%** |
+| (uniforme seria) | 5,56% | 5,26% | 5,26% |
+| 4 ultimas barras | 4,66% (unif. 11,1%) | 3,62% (10,5%) | 2,27% (10,5%) |
+| amplitude relativa da ultima barra | 0,76 | 0,73 | 0,60 |
+| **barra 09:00: % do volume** | 2,57% | 4,11% | **5,25%** |
+| **barra 09:00: amplitude rel.** | 1,60 | 2,21 | **3,16** |
+| **barra 09:00: \|retorno\| rel.** | 1,72 | 2,11 | **3,50** |
+
+**Nao ha' ficha a escrever, e pelo motivo OPOSTO ao esperado.** O fim do
+pregao e' o momento mais MAGRO e mais PARADO do dia: as duas ultimas
+barras tem 1/4 a 1/6 do volume uniforme, com amplitude 0,5-0,8 da barra
+mediana. E a concentracao CAI ano a ano (2,38% em 2015 -> 0,94% em
+2026) -- provavelmente after-market tirando a obrigacao de estar na
+ultima barra, e robos zerando bem antes.
+
+**Quem concentra e' a ABERTURA**, e crescendo: a barra 09:00 tem 5,25%
+do volume, amplitude 3,16x e |retorno| 3,50x a mediana em 2026 (era
+1,60x/1,72x em 2015-22). Anomalia estrutural forte e estavel.
+
+**Mas isso NAO e' hipotese nova.** O preco na abertura ja' foi testado
+tres vezes (ORB, gap, e a janela do 123) e esta' queimado. A anomalia de
+VOLUME e VOLATILIDADE na abertura, sem contraparte nomeada, e' apenas o
+fato conhecido de que a abertura concentra a informacao da noite. Sem
+"quem e' obrigado e por que perde", nao vira ficha.
+
+**Aprendizado de CATEGORIA (catalogo):** no WIN, fluxo obrigatorio de
+calendario (rolagem) e de horario (ajuste/fechamento) NAO deixa marca.
+Os dois candidatos de "contraparte obrigada" mais obvios morreram no
+passo 1, por dois comandos. O que resta de contraparte obrigada com
+potencial exige outro tipo de dado -- e' o que motiva as duas linhas
+abaixo.
+
+## LINHA ADIADA (nao recusada): OPCOES (2026-09-17)
+
+**Nao e' falta de promessa -- e' falta de infraestrutura.** O operador
+tem razao em dois pontos: no Brasil o volume de opcoes esta' nas ACOES
+(PETR4, VALE3), nao no indice; e poucos sabem explorar. A contraparte
+ja' esta' nomeada e e' das melhores que existem: **o vendedor de opcao
+com delta e' OBRIGADO a hedgear, e o hedge fica mais violento quanto
+mais perto do strike no vencimento** -- fluxo que nao escolhe preco,
+concentrado em data E em nivel de preco.
+
+**Por que nao e' para agora:** exige dados que o projeto nao captura --
+series de opcao por strike e vencimento, open interest, superficie de
+volatilidade. Nao e' uma ficha; e' uma LINHA nova com infraestrutura
+propria (assinatura de series, armazenamento, features). Entra na fila
+depois que o forward do 123 responder as perguntas de dezembro.
+
+**Consequencia para o WIN, registrada:** como o hedge da opcao de PETR4
+e' feito em PETR4, chegar ao WIN exigiria arbitragem de cesta -- fluxo
+de segunda ordem e diluido. Somado ao aprendizado de que fluxo
+obrigatorio espalhado nao move estatistica em ativo liquido, o
+vencimento de opcao como evento DO WIN tem prior baixo e nao sera
+testado isoladamente.
+
+
+## DEFASAGEM WIN x CESTA — passo 1 entregue (2026-09-17)
+
+**Contraparte (nomeada antes):** o Ibovespa E' uma cesta; o WIN tem que
+refletir os papeis de maior peso. Quem garante isso sao ARBITRADORES, e
+arbitragem tem LATENCIA e custo. Se um papel de peso se move primeiro,
+alguem no WIN esta' negociando preco velho -- e' ele quem paga. **Nao e'
+contraparte OBRIGADA (as duas dessas morreram no passo 1); e' contraparte
+LENTA**, a outra forma de perder por construcao.
+
+**Por que esta linha exige a DLL** -- e e' a unica ate' agora: o record
+captura WIN, PETR4, VALE3, ITUB4, BBAS3, BOVA11 e outros no MESMO tape,
+com timestamp comum. Medir ordem de chegada entre ativos com precisao de
+milissegundo e' impossivel com grafico. "Dado raro" pelo item 3.
+
+`profit-tape defasagem --de ... --ate ...`: barras curtas (60 s; M15 e'
+grosso demais para latencia), correlacao contemporanea e as DUAS
+defasadas (papel->WIN e WIN->papel), a assimetria, e -- o que mais
+importa -- a FRACAO DE DIAS em que cada lado chega na frente. Media de
+correlacao esconde; a fracao de dias nao.
+
+**Leitura:** as duas defasadas proximas de zero e iguais = so' movimento
+comum, sem ordem de chegada, e a linha morre aqui. Assimetria consistente
+(fracao de dias >> 50%) = ha' quem chegue primeiro -> passo 2, ficha com
+o custo na mesa: 1 tick do WIN e' 5 pts, e defasagem de 60 s tem que
+pagar isso.
+
+**Limite conhecido, declarado:** o tape so' tem dois meses (24/07 em
+diante), entao a amostra e' pequena e o resultado e' indicativo. Se
+houver assimetria, ela sera' confirmada com o tape que continuar
+acumulando -- e' a primeira linha em que ESPERAR pregao tem retorno.

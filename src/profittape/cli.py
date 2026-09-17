@@ -1838,6 +1838,52 @@ def fechamento_cmd(
     typer.echo(f"\n  Saida: {saida}/fechamento.json")
 
 
+@app.command(name="defasagem")
+def defasagem_cmd(
+    de: str = typer.Option(..., "--de", help="YYYY-MM-DD"),
+    ate: str = typer.Option(..., "--ate", help="YYYY-MM-DD"),
+    curated: Path = typer.Option(Path("data/curated"), "--curated"),
+    periodo_s: int = typer.Option(60, "--periodo-s", help="tamanho da barra (60 s default)"),
+    papeis: str = typer.Option("PETR4,VALE3,ITUB4,BBAS3,BOVA11", "--papeis"),
+    saida: Path = typer.Option(Path("data/research/defasagem"), "--saida"),
+    log_level: str = typer.Option("INFO", "--log-level"),
+) -> None:
+    """
+    DESCRICAO da defasagem WIN x CESTA (passo 1): quem chega primeiro?
+    Correlacao contemporanea e DEFASADA (papel->WIN e WIN->papel) em
+    barras curtas do MESMO tape. A contraparte aqui e' LENTA (arbitragem
+    tem latencia), nao obrigada. E' a unica linha em que a DLL e'
+    indispensavel: timestamp comum entre ativos.
+
+    Nao calcula p1, nao simula entrada. Categoria `features`, zero trial.
+    """
+    import datetime as dt
+
+    configurar(log_level)
+    from .research.defasagem import descrever
+
+    d0, d1 = dt.date.fromisoformat(de), dt.date.fromisoformat(ate)
+    dias = [d0 + dt.timedelta(days=k) for k in range((d1 - d0).days + 1)
+            if (d0 + dt.timedelta(days=k)).weekday() < 5]
+    r = descrever(curated, dias, tuple(p.strip() for p in papeis.split(",")),
+                  periodo_s=periodo_s, saida=saida)
+    typer.echo("=" * 72)
+    typer.echo(f"DEFASAGEM WIN x CESTA — barras de {r['periodo_s']}s, {de} a {ate}")
+    typer.echo("=" * 72)
+    typer.echo(f"  {'papel':>7}  {'dias':>4}  {'barras':>6}  {'contemp':>8}  "
+               f"{'papel->WIN':>10}  {'WIN->papel':>10}  {'assim':>7}  {'% dias':>7}")
+    for papel, e in r["por_papel"].items():
+        typer.echo(f"  {papel:>7}  {e['dias']:>4}  {e['barras_p50']:>6}  "
+                   f"{e['contemporanea_p50']:>8.4f}  {e['papel_antecipa_p50']:>10.4f}  "
+                   f"{e['win_antecipa_p50']:>10.4f}  {e['assimetria_p50']:>7.4f}  "
+                   f"{100 * e['fracao_dias_papel_na_frente']:>6.1f}%")
+    typer.echo("\n  LEITURA: as duas defasadas proximas de zero e iguais entre si = nao ha' "
+               "ordem de chegada, so' movimento comum. Assimetria consistente (e a fracao de "
+               "DIAS acima de ~60%) = alguem chega primeiro -> passo 2, ficha com o custo na "
+               "mesa (1 tick do WIN = 5 pts).")
+    typer.echo(f"\n  Saida: {saida}/defasagem.json e defasagem_por_dia.csv")
+
+
 @app.command(name="eas-preco-teste")
 def eas_preco_teste(
     log: Path = typer.Argument(..., help="Dump PRCBARRA| contendo SO' os dias da amostra pedida"),
