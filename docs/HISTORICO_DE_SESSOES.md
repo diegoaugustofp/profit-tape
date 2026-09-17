@@ -2658,3 +2658,16 @@ fechava a barra a cada tick.
   LIMIAR (5/10/20/30/50), reportada inteira: no mesmo fluxo, razao 0,999
   / 1,03 / 1,05 / **2,75**. O sinal vive na cauda.
 - 6 testes; 934 no total.
+- v3.16: iceberg v1 REPROVADO na validacao contra o Times & Trades (as 8
+  maiores corridas de 17/09 eram lote 1, 280-409 negocios, dois lados,
+  dezenas de corretoras -- pregao normal, cobrindo 68% do volume). A
+  pergunta do operador ("nao saber identificar e' diferente de nao
+  existir") estava certa: eu so' tinha validado contra dado que eu mesmo
+  plantei. v2 poe o AGENTE PASSIVO na definicao (o tape tem os dois
+  agentes em 100% dos registros, melhor que o T&T, onde o passivo vem
+  como "-"): no sintetico o baseline cai a ZERO e sobram exatamente os 6
+  icebergs plantados. Razao passou a ser suavizada. UMA mudanca,
+  justificada por validez; se der acaso, a linha fecha sem v3.
+  Colateral: nosso tape conta CASAMENTOS, o Profit agrega por ordem
+  agressora (4x mais registros, mesmo volume) -- `n_trades` e' insumo de
+  feature e conta coisa diferente. 936 testes.

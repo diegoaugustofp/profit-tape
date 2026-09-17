@@ -1947,9 +1947,12 @@ def iceberg_cmd(
     log_level: str = typer.Option("INFO", "--log-level"),
 ) -> None:
     """
-    ICEBERG / LOTE REPETIDO, passo 1: negocios de MESMA quantidade no MESMO
-    preco em sequencia existem ALEM do acaso? A medida que decide e' a
-    razao contra o BASELINE EMBARALHADO (mesmas quantidades permutadas).
+    ICEBERG / LOTE REPETIDO, passo 1 (v2): negocios de mesma quantidade, no
+    mesmo preco, COM O MESMO AGENTE PASSIVO, em sequencia -- existem alem do
+    acaso? A v1 (sem agente) foi reprovada contra o Times & Trades: as
+    maiores "corridas" eram lote 1 com dezenas de corretoras, ou seja o
+    pregao normal. A medida que decide e' a razao contra o BASELINE, que
+    permuta o par (quantidade, agente) preservando as marginais.
     Tudo em dobro: com e sem RLP. Sem direcao, zero trial.
     """
     import datetime as dt
@@ -1974,9 +1977,8 @@ def iceberg_cmd(
         typer.echo("  curva por limiar (corrida >= N; reportada SEMPRE, nao se escolhe depois):")
         typer.echo(f"    {'N':>4}  {'observado':>10}  {'baseline':>10}  {'razao':>7}")
         for n, e in a["por_limiar"].items():
-            razao = f"{e['razao_p50']:.2f}" if e["razao_p50"] is not None else "   -"
             typer.echo(f"    {n:>4}  {e['observado_p50']:>10.0f}  {e['baseline_p50']:>10.0f}  "
-                       f"{razao:>7}")
+                       f"{e['razao_p50']:>7.2f}")
         typer.echo(f"  fracao do volume nessas corridas: {100 * a['fracao_do_volume_p50']:.2f}%")
         typer.echo(f"  com RECOMPOSICAO (preco saiu do nivel e voltou): "
                    f"{100 * a['fracao_com_recomposicao_p50']:.1f}%")

@@ -6442,3 +6442,54 @@ voltou -- o que separa iceberg de negocio picado seguido).
 acima de 1 COM fracao de volume relevante e recomposicao alta = ha' ordem
 escondida, e o passo 2 escreve a ficha -- com a direcao declarada antes
 ("o nivel SEGURA" e "o nivel ROMPE" sao hipoteses OPOSTAS, uma por vez).
+
+
+### Iceberg v1 REPROVADO na VALIDACAO (nao pelo resultado) -> v2 com AGENTE (2026-09-17)
+
+**O operador perguntou o que faltava perguntar:** "nao sabermos
+identificar e' uma coisa, nao ter nenhum no mercado e' diferente". Estava
+certo -- eu tinha validado o detector so' contra dado sintetico que eu
+mesmo plantei.
+
+**A validacao veio do Times & Trades do Profit** (17/09 completo,
+1.083.514 linhas, com NOME de corretora). As oito maiores "corridas" do
+dia pela definicao v1:
+
+| preco | qtd | negocios | duracao | agressao | corretoras |
+|---|---|---|---|---|---|
+| 188.670 | **1** | 409 | 268 s | 222 vend / 187 comp | XP 116, Ideal 62, Genial 57 |
+| 188.665 | **1** | 353 | 267 s | 192 comp / 161 vend | XP 84, BTG 60, Ideal 60 |
+| ... (as oito iguais: lote 1, dois lados, dezenas de corretoras) |
+
+Isso e' o pregao normal no preco mais negociado -- e cobria **68% do
+volume**. A v1 nao media iceberg: media fluxo de varejo em lote 1. O
+resultado "razao ~1,00, e' acaso" era uma conclusao sobre a MINHA
+DEFINICAO, nao sobre o mercado.
+
+**v2: o AGENTE PASSIVO entra na definicao.** Iceberg e' a mesma corretora
+recarregando no lado passivo -- que e' o contrario do agressor
+(`trade_type=2` => passivo e' o vendedor; `=3` => o comprador). O nosso
+tape traz os DOIS agentes em 100% dos registros (conferido em 17/09) --
+melhor que a exportacao do Profit, onde o passivo vem como "-".
+
+**Efeito medido no fluxo sintetico:** com o agente na definicao, o
+baseline embaralhado cai a ZERO corridas e sobram exatamente os 6
+icebergs plantados (obs {5:9, 10:6, 20:6, 30:6} contra baseline
+{0,0,0,0}). O ruido que afogava o sinal era, todo ele, corridas de
+agentes DIFERENTES. A razao passou a ser suavizada (+1 nos dois lados),
+senao o caso mais forte -- observado contra nada -- viraria indefinido.
+
+**A v2 e' UMA mudanca, justificada por VALIDEZ e nao por resultado** (o
+argumento do "68% do volume" existe sem olhar nenhum p1). Se a v2 tambem
+der acaso, a linha fecha -- e nao havera' v3.
+
+### Achado colateral: o nosso tape conta NEGOCIOS diferente do Profit
+
+17/09: T&T 1.083.514 linhas / 13.288.327 contratos; nosso tape 5.670.638
+registros / 18.040.877 contratos. A diferenca de VOLUME (4,75 M) e' o RLP,
+que o T&T nao mostra -- conferido, o volume BATE. Mas a contagem nao:
+4,27 M registros (ex-RLP) contra 1,08 M linhas, ~4x; media de 3,1
+contratos por registro nosso contra 12,3 por linha do Profit. **O nosso
+feed registra cada CASAMENTO; o Profit agrega os casamentos de uma mesma
+ordem agressora.** Preco e volume nao mudam; `n_trades` conta coisas
+diferentes -- e e' insumo de feature (esta' no `BarraFechada`).

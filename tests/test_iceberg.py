@@ -39,15 +39,23 @@ def _fluxo(n: int, seed: int, com_iceberg: bool, dia: dt.date) -> pd.DataFrame:
     qtd = rng.choice([1, 2, 3, 5, 10], n, p=[0.45, 0.25, 0.15, 0.1, 0.05]).astype(float)
     tipo = np.full(n, 2)
     tipo[rng.random(n) < 0.25] = 13                      # RLP, como no WIN
-    df = pd.DataFrame({"ts_ns": ts, "price": price, "quantidade": qtd, "trade_type": tipo})
+    # agentes: muitos, como no mercado real (dezenas de corretoras)
+    ag_c = rng.integers(1, 40, n)
+    ag_v = rng.integers(1, 40, n)
+    df = pd.DataFrame({"ts_ns": ts, "price": price, "quantidade": qtd, "trade_type": tipo,
+                       "agente_comprador": ag_c, "agente_vendedor": ag_v})
     if com_iceberg:
         extras = []
         for k in range(6):                               # 6 niveis defendidos
             nivel = float(price[n // 8 * (k + 1)])
             base = int(ts[n // 8 * (k + 1)])
             for j in range(30):                          # 30 recargas de 37 contratos
+                # SEMPRE o mesmo agente PASSIVO (99): e' a assinatura de iceberg.
+                # Agressor comprador (2) -> passivo e' o vendedor.
                 extras.append({"ts_ns": base + j * 20 * NS, "price": nivel,
-                               "quantidade": 37.0, "trade_type": 2})
+                               "quantidade": 37.0, "trade_type": 2,
+                               "agente_comprador": int(rng.integers(1, 40)),
+                               "agente_vendedor": 99})
         df = pd.concat([df, pd.DataFrame(extras)], ignore_index=True)
     return df.sort_values("ts_ns").reset_index(drop=True)
 
@@ -57,10 +65,10 @@ def test_sem_iceberg_a_razao_fica_perto_de_um(
     dia = dt.date(2026, 8, 3)
     c = _curated(monkeypatch, tmp_path, _fluxo(60_000, 1, False, dia), dia)
     r = ib.medir_dia(c, "WINFUT", dia)["sem_rlp"]
-    # sem iceberg, a curva inteira tem que ficar perto do acaso
+    # sem iceberg plantado, com o agente na definicao, quase nao ha' corrida
+    # -- nem no observado nem no baseline. A razao suavizada fica perto de 1.
     for n, razao in r["razao_por_limiar"].items():
-        if razao is not None:
-            assert 0.5 < razao < 2.0, (n, razao)
+        assert 0.3 < razao < 3.0, (n, razao)
 
 
 def test_iceberg_plantado_aparece_contra_o_baseline(
@@ -68,12 +76,12 @@ def test_iceberg_plantado_aparece_contra_o_baseline(
     dia = dt.date(2026, 8, 4)
     c = _curated(monkeypatch, tmp_path, _fluxo(60_000, 2, True, dia), dia)
     r = ib.medir_dia(c, "WINFUT", dia)["sem_rlp"]
-    # o que SEPARA nao e' a contagem de corridas de 5 (o acaso produz
-    # milhares, e a razao la' fica em 1,00): e' a CAUDA. Medido neste
-    # fluxo: razao 0,999 / 1,03 / 1,05 / 2,75 para N = 5 / 10 / 20 / 30.
-    assert r["razao_por_limiar"]["5"] < 1.2
-    assert r["razao_por_limiar"]["30"] > 2.0, r["razao_por_limiar"]
-    assert r["por_limiar"]["30"] > r["baseline_embaralhado"]["por_limiar"]["30"]
+    # com o AGENTE PASSIVO na definicao (v2) o ruido some: o baseline vai a
+    # ZERO e sobram exatamente os 6 icebergs plantados. Medido: obs
+    # {5:9, 10:6, 20:6, 30:6}, baseline {0,0,0,0}.
+    assert r["por_limiar"]["30"] >= 6
+    assert r["baseline_embaralhado"]["por_limiar"]["30"] == 0
+    assert r["razao_por_limiar"]["30"] > 3.0, r["razao_por_limiar"]
     assert r["recomposicao"]["avaliadas"] >= 6
 
 
@@ -94,8 +102,29 @@ def test_corridas_respeitam_a_janela() -> None:
     ts = np.array([0, 10 * NS, 300 * NS], dtype=np.int64)
     price = np.array([100.0, 100.0, 100.0])
     qtd = np.array([7.0, 7.0, 7.0])
-    r = ib._resumo_corridas(ts, price, qtd, janela_s=30.0, n_minimo=2)
+    passivo = np.array([9, 9, 9], dtype=np.int64)
+    r = ib._resumo_corridas(ts, price, qtd, passivo, janela_s=30.0, n_minimo=2)
     assert r["corridas"] == 2 and r["tamanho_max"] == 2
+
+
+def test_agente_passivo_e_o_contrario_do_agressor() -> None:
+    comprador = np.array([10, 20, 30], dtype=np.int64)
+    vendedor = np.array([11, 21, 31], dtype=np.int64)
+    tipo = np.array([2, 3, 13], dtype=np.int64)          # agride comprador / vendedor / RLP
+    p = ib.agente_passivo(comprador, vendedor, tipo)
+    assert p.tolist() == [11, 20, 0]
+
+
+def test_agente_diferente_quebra_a_corrida() -> None:
+    """Mesma quantidade e mesmo preco, mas cada negocio com um passivo
+    diferente: NAO e' iceberg -- e' o pregao normal (foi o que o Times &
+    Trades mostrou nas 8 maiores corridas de 17/09)."""
+    ts = (np.arange(20) * NS).astype(np.int64)
+    price = np.full(20, 100.0)
+    qtd = np.full(20, 1.0)
+    passivo = np.arange(1, 21, dtype=np.int64)
+    r = ib._resumo_corridas(ts, price, qtd, passivo, janela_s=30.0, n_minimo=5)
+    assert r["corridas"] == 20 and r["tamanho_max"] == 1 and r["corridas_relevantes"] == 0
 
 
 def test_agregado_e_saida(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -108,8 +137,7 @@ def test_agregado_e_saida(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
     # com 20 k trades o baseline pode nao ter nenhuma corrida de 30 (razao
     # indefinida): o que importa e' o observado estar la'.
     assert a["por_limiar"]["30"]["observado_p50"] >= 6
-    razao30 = a["por_limiar"]["30"]["razao_p50"]
-    assert razao30 is None or razao30 > 1.0
+    assert a["por_limiar"]["30"]["razao_p50"] > 1.0
 
 
 def test_sem_dado_recusa(tmp_path: Path) -> None:
