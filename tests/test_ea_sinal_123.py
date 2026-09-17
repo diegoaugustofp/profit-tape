@@ -131,3 +131,8 @@ def test_candidato_tem_niveis_validade_e_fluxo() -> None:
     assert c.valido_ate_ns == t0 + 4 * P15          # fim da barra 09:45 (t+1)
     assert (c.vol_agr_compra_t, c.vol_agr_venda_t, c.n_trades_t) == (30, 10, 40)
     assert ea.candidatos_armados == 1
+    # a JANELA das tres barras vai no candidato (17/09): conferir no grafico
+    # sem adivinhar qual e' a barra do meio
+    assert [b["hhmm"] for b in c.janela] == [900, 915, 930]
+    assert [b["low"] for b in c.janela] == [139900.0, 139800.0, 139900.0]
+    assert c.resumo()["janela"][1]["high"] == 140080.0

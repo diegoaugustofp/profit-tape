@@ -6190,3 +6190,60 @@ e mais barato de negociar que a cesta, entao ele lidera.
 **Achado real, sem valor operacional** -- e so' o tape sincronizado
 mostra. A DLL provou serventia aqui, ainda que o resultado seja negativo:
 e' informacao sobre o mercado, nao hipotese.
+
+
+## PROXIMO CANDIDATO: COMPORTAMENTO DE AGENTE (desenho, 2026-09-17)
+
+Escrito ANTES de qualquer medicao, para revisao. Nada rodou.
+
+**Por que este e' o melhor candidato que sobrou.** Os tres de contraparte
+OBRIGADA morreram no passo 1 (rolagem, ajuste/fechamento) ou sem valor
+operacional (defasagem). A lista de "onde o dado e' raro" (item 3) tem
+tres entradas: agentes, book e o EXTREMO do direcional. Agente e' a
+unica ainda intocada, e e' a que mais separa este projeto de quem so'
+tem grafico: o tape traz `agente_comprador` e `agente_vendedor` de CADA
+negocio, com timestamp comum -- informacao que nao existe em lugar
+nenhum fora da DLL.
+
+**CONTRAPARTE (o campo obrigatorio, preenchido antes da hipotese).** Nao
+e' obrigada nem lenta: e' **desinformada**. Se existe agente cuja
+presenca antecede movimento -- porque executa ordem de cliente grande,
+porque roda estrategia com sinal proprio, porque tem fluxo que o resto
+nao ve -- entao quem esta' do outro lado dele esta' negociando contra
+informacao que nao tem. Essa e' a terceira forma classica de perder por
+construcao, e a unica que ainda nao testamos.
+
+**O QUE O PASSO 1 MEDE (features, zero trial, sem direcao):**
+
+1. **Concentracao.** Quantos agentes respondem por 50% e por 80% do
+   volume agredido do WIN? Se o mercado for pulverizado, nao ha' "agente"
+   a seguir e a linha morre aqui.
+2. **Persistencia.** O ranking de agentes por volume e' estavel entre
+   pregoes? Um agente que aparece num dia e some no outro nao e' sinal,
+   e' ruido -- e sem persistencia nao ha' o que aprender.
+3. **Assimetria de presenca.** Para os N agentes mais ativos: a fracao do
+   volume dele que e' AGRESSAO COMPRADORA varia por agente e e' estavel?
+   Um agente sistematicamente comprador e' diferente de um que so'
+   intermedia.
+4. **Antecipacao (a pergunta que importa), SEM DIRECAO nesta etapa:**
+   nos minutos que antecedem os maiores deslocamentos do dia (|retorno|
+   no decil superior), a composicao de agentes e' diferente da usual?
+   Medida: divergencia entre a distribuicao de volume por agente nos 2
+   minutos ANTES do deslocamento e a distribuicao do dia. Se for igual a`
+   usual, ninguem antecede; se for diferente, ha' quem chegue antes.
+
+**O que NAO se mede no passo 1:** retorno com sinal condicionado a
+agente. Isso e' a ficha (passo 2), e so' se escreve se a antecipacao
+existir -- com o agente identificado ANTES, nunca escolhido depois de
+ver quem deu lucro (que seria escolher o vencedor entre centenas de
+candidatos, o erro classico desta categoria).
+
+**Amostra:** o tape desde 24/07 (dois meses). Suficiente para descrever
+concentracao e persistencia; curto para antecipacao. E' a segunda linha
+em que ESPERAR pregao tem retorno -- e a que mais justifica o custo da
+DLL, porque nada disso existe no grafico.
+
+**Risco conhecido, declarado:** identificacao de agente no tape da B3 e'
+por CORRETORA, nao por cliente final. Um agente grande e' uma corretora
+com milhares de clientes, e a agregacao pode diluir qualquer sinal. Se a
+concentracao (item 1) vier baixa, esse risco ja' responde a linha inteira.

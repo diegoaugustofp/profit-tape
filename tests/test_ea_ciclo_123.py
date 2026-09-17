@@ -256,10 +256,15 @@ def test_reconciliacao_posicionado_e_posicao_igual_rearma_saida() -> None:
     ex.preencher(101, 140060.0)
     c.tick()
     assert c.estado == "posicionado"
+    c.tick()                     # absorve os callbacks de stop e alvo (ClOrdID)
     rel = c.reconciliar_apos_reconexao()
     assert rel["acao"] == "rearmou_saida" and c.estado == "posicionado"
+    # cancelamento ORDEM A ORDEM (funcao singular, provada no E2b) -- a
+    # plural nao foi testada ao vivo e ficou de fora (decisao de 17/09)
+    assert "cancelar_todas" not in [n for n, _ in ex.chamadas]
+    assert set(rel["canceladas"]) == {"stop", "alvo"}
     nomes = [n for n, _ in ex.chamadas]
-    assert nomes[-3:] == ["cancelar_todas", "enviar_stop", "enviar_limitada"]
+    assert nomes[-2:] == ["enviar_stop", "enviar_limitada"]
 
 
 def test_reconciliacao_posicionado_mas_zero_fecha_reconciliado() -> None:

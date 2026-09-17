@@ -2543,3 +2543,30 @@ Fabricacao. Daqui em diante: anexo vazio -> digo que nao vi e paro.
   parcial: o construtor viu a abertura inteira (16/09: continuo so' as
   09:02:54, barra 09:00 completa). Sem leilao na barra, vale o criterio
   antigo. Com isso o replay de 16/09 arma.
+
+### 2026-09-17 — dry_run ao vivo ACHOU UM DEFEITO; itens 1-3 entregues (v3.08)
+
+- **O dry_run de hoje encontrou o que o replay nao pegou:** ao vivo o EA
+  arma sobre FRAGMENTOS de barra. Prova: sinal das 09:30 com
+  `vol_total_t=329` quando a barra M15 real teve 670.878 contratos; os
+  niveis batiam com o fragmento (entrada 188.325, stop 188.965) e nao com
+  a barra (entrada 188.230, stop 189.090 pela maxima de 09:15). O
+  operador conferiu no grafico e viu primeiro: "ele esta' vendo sinal
+  onde nao tem". EA retirado da pasta a quente; record seguiu capturando.
+  **Nao corrigido ainda, de proposito**: ja' errei tres vezes consertando
+  esse sintoma por raciocinio -- a proxima correcao so' vem depois de
+  REPRODUZIR a fragmentacao ao vivo no sandbox (servico com ao_vivo=True
+  e relogio simulado), com teste exigindo o numero exato de barras.
+- **Item 1** (decisao do operador): reconciliacao cancela ORDEM A ORDEM
+  com a funcao SINGULAR, provada no E2b. A plural (`SendCancelOrders`),
+  nunca testada ao vivo, fica de fora. LIMITACAO DECLARADA na docstring:
+  ordem orfa de processo morto nao e' cancelada (aviso + limpeza manual);
+  com stop e alvo reais a posicao segue protegida.
+- **Item 2**: o candidato passa a carregar a JANELA das tres barras
+  (hhmm, OHLC, volume) -- conferir no grafico sem adivinhar qual e' a do
+  meio. Foi essa ambiguidade que quase mascarou o defeito de hoje.
+- **Item 3**: desenho do proximo candidato -- COMPORTAMENTO DE AGENTE --
+  escrito no RESEARCH_PLANO para revisao, com a contraparte (DESINFORMADA)
+  preenchida antes da hipotese, os quatro itens do passo 1 e o risco
+  declarado (agente da B3 e' corretora, nao cliente final).
+- 918 testes.

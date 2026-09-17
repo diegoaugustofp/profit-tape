@@ -475,8 +475,16 @@ class CicloDeOrdens123:
         Chamado quando a corretora volta a ficar pronta (ou no arranque com
         posicao desconhecida). Politica, decidida em 2026-09-14 (5.4):
 
-          1. cancela TODAS as ordens vivas do ticker (as que sobreviveram
-             a` queda: entrada fora de t+1, par orfao);
+          1. cancela ORDEM A ORDEM as que este ciclo conhece (entrada,
+             stop, alvo), com `SendCancelOrder` -- a funcao SINGULAR,
+             provada no E2b. **Decisao do operador (17/09): seguir sem a
+             plural (`SendCancelOrders`), que nunca foi testada ao vivo.**
+             LIMITACAO DECLARADA: ordem ORFA de processo morto (queda de
+             energia com ordem viva) nao tem ClOrdID na memoria do EA
+             novo e NAO e' cancelada -- fica o aviso CONFIRA AS ORDENS NO
+             PROFIT e a limpeza e' manual. Com stop e alvo REAIS na
+             corretora a posicao segue protegida; o risco residual e' um
+             par orfao executar depois;
           2. consulta a POSICAO real;
           3. compara com o que o ciclo acha que tem:
              - ciclo posicionado e posicao real igual  -> re-arma stop + alvo;
@@ -494,7 +502,14 @@ class CicloDeOrdens123:
             rel["estado_depois"] = self.estado
             return rel
         assert self.executor is not None
-        rel["cancel_todas"] = self.executor.cancelar_todas()
+        # ordem a ordem, com a funcao singular (ver docstring)
+        canceladas = []
+        if self.op is not None:
+            for o in (self.op.entrada, self.op.stop, self.op.alvo):
+                if o is not None and o.viva and o.cl_ord_id:
+                    self._cancelar(o)
+                    canceladas.append(o.papel)
+        rel["canceladas"] = canceladas
         pos = self.executor.consultar_posicao()
         real = int(pos.quantidade_liquida) if pos.plausivel else None
         rel["posicao_real"] = real

@@ -63,13 +63,18 @@ class Candidato123:
     vol_total_t: int = 0
     volume_confiavel_t: bool = True
     maior_lacuna_t_s: float = 0.0
+    # As TRES barras do padrao (t-2, t-1, t), cada uma com hhmm e OHLC.
+    # Sem isto, conferir um sinal no grafico exige adivinhar a janela --
+    # em 17/09 a ambiguidade do `hhmm` (que e' a barra t, a ULTIMA) custou
+    # meia hora de conferencia e quase mascarou um defeito real.
+    janela: tuple[dict[str, Any], ...] = ()
 
     def resumo(self) -> dict[str, Any]:
         return {"lado": self.lado, "entrada": self.entrada, "stop": self.stop,
                 "alvo": self.alvo, "D_pts": self.D_pts, "hhmm": self.hhmm_sinal,
                 "bar_id": self.barra_sinal_id, "mme80": round(self.mme80, 2),
                 "vol_total_t": self.vol_total_t, "volume_confiavel_t": self.volume_confiavel_t,
-                "maior_lacuna_t_s": self.maior_lacuna_t_s}
+                "maior_lacuna_t_s": self.maior_lacuna_t_s, "janela": list(self.janela)}
 
 
 class SinalPreco123:
@@ -107,6 +112,10 @@ class SinalPreco123:
         if not self.dia_completo or len(self._janela) < 3:
             return None
         b2, b1, b0 = self._janela
+        janela = tuple({"hhmm": (lambda t: t.hour * 100 + t.minute)(self._local(b.ts_open_ns)),
+                        "open": b.open, "high": b.high, "low": b.low, "close": b.close,
+                        "vol_total": b.vol_total, "n_trades": b.n_trades}
+                       for b in (b2, b1, b0))
         r = avaliar_123(b2.high, b2.low, b1.high, b1.low, b0.high, b0.low, b0.close, mme, hhmm)
         if r is None:
             return None
@@ -119,6 +128,7 @@ class SinalPreco123:
             vol_agr_compra_t=b0.vol_agr_compra, vol_agr_venda_t=b0.vol_agr_venda,
             n_trades_t=b0.n_trades, vol_total_t=b0.vol_total,
             volume_confiavel_t=b0.volume_confiavel, maior_lacuna_t_s=b0.maior_lacuna_s,
+            janela=janela,
         )
         log.info("ea.sinal_123.armado", **c.resumo())
         return c
