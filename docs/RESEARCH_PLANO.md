@@ -5975,6 +5975,7 @@ ficha fica intuitivo em vez de explicito. Lista curta, mantida aqui:
 | gap de abertura | inconclusivo, por-ano sem padrao | informacao da noite tambem ja' esta' no preco |
 | absorcao_dir (fluxo) | era `desloc_norm` disfarcado | feature com subtracao de escalas desiguais degenera |
 | absorcao crua (grafico) | vira volume ou range conforme o regime | **razao muda de identidade com o regime** |
+| rolagem de contrato (passo 1) | contraparte obrigada nao deixa marca | fluxo obrigatorio ESPALHADO nao move estatistica em ativo muito liquido |
 
 ### 5. Gerar a hipotese a partir de ANOMALIA MEDIDA, nao de leitura
 
@@ -6023,3 +6024,49 @@ Categoria `features`, zero trial.
 **Leitura:** perfil e magnitude iguais aos dos dias normais = a
 contraparte obrigada nao deixa marca, e nao ha' ficha a escrever (e
 isso custa um comando). Marca clara -> passo 2.
+
+
+### Passo 1 da ROLAGEM: RESULTADO — a contraparte NAO deixa marca (2026-09-16)
+
+| | 2015-22 (44 venc.) | 2023-25 (18) | 2026 (4) |
+|---|---|---|---|
+| volume x normal, d de -5 a 0 | 0,999 a 1,192 | 1,014 a 1,083 | 0,851 a 1,065 |
+| amplitude x normal | 0,968 a 1,112 | 0,969 a 1,134 | 0,887 a 1,237 |
+| \|retorno\| x normal | 0,859 a 1,140 | 1,102 a 1,328 | 0,825 a 2,191 (n=4) |
+| perfil por horario (ate 10h) | 0,1393 x 0,1388 | 0,1887 x 0,1897 | 0,2062 x 0,2204 |
+
+**Nao ha' ficha a escrever.** O volume nao tem pico consistente (o maior
+de 2015-22 esta' em d-3, o de 2023-25 em d-5/d-1, e em 2026 os dias de
+rolagem tem volume MENOR). O perfil por horario e' praticamente
+identico — se a rolagem criasse fluxo forcado num momento do dia, a
+distribuicao se deslocaria; nao desloca. O |retorno| so' sobe em
+2023-25, sem consistencia entre regimes.
+
+**Explicacao:** o WIN gira 15-17 milhoes de contratos/dia. O fluxo de
+rolagem, por maior que seja em absoluto, e' pequeno contra esse giro E
+espalhado por varios dias e horarios. A contraparte obrigada existe; nao
+e' grande o suficiente para deixar rastro num ativo tao liquido.
+
+**O metodo funcionou:** um comando, tres minutos, e uma hipotese que
+teria custado uma noite de ficha (funil, congelamento, depuracao, teste,
+replicacao — o caminho do IFR2) morreu antes de nascer.
+
+### Proximo candidato: AJUSTE E FECHAMENTO (passo 1 entregue)
+
+Por que este e' diferente da rolagem: o fluxo obrigatorio se concentra
+numa JANELA ESTREITA, nao se espalha por dias. **Contraparte:** o preco
+de AJUSTE sai da media dos negocios do fim do pregao e tem consequencia
+de margem imediata; e quem opera day trade e' obrigado a zerar antes do
+fim, queira ou nao o preco.
+
+`profit-tape fechamento <dump>`: por barra do fim (0 = ultima), a fracao
+do volume do dia, a amplitude e o |retorno| relativos a` barra mediana
+daquele dia; contraste com a primeira hora; concentracao nas 2 e 4
+ultimas barras contra o que seria UNIFORME; estabilidade por ano.
+**Nao mede direcao** — a hipotese obvia ("distorcao no fechamento
+reverte na abertura seguinte") exige retorno com SINAL e so' se escreve
+no passo 2, em ficha.
+
+**Leitura:** concentracao perto do uniforme e |ret| relativo perto de 1 =
+sem marca, e a hipotese morre aqui. Concentracao alta COM amplitude ou
+|retorno| elevados = ha' distorcao, e o passo 2 escreve a ficha.

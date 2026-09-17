@@ -1788,6 +1788,56 @@ def rolagem_cmd(
     typer.echo(f"\n  Saida: {saida}/rolagem.json")
 
 
+@app.command(name="fechamento")
+def fechamento_cmd(
+    dump: Path = typer.Argument(..., help="Dump PRCBARRA| do grafico M15"),
+    saida: Path = typer.Option(Path("data/research/fechamento"), "--saida"),
+    log_level: str = typer.Option("INFO", "--log-level"),
+) -> None:
+    """
+    DESCRICAO do AJUSTE/FECHAMENTO (passo 1): o fluxo obrigatorio do fim
+    do pregao (ajuste = margem; zeragem de day trade) deixa marca numa
+    janela estreita? Mede fracao do volume, amplitude e |retorno| por
+    barra final, contra a primeira hora, e a estabilidade por ano.
+    **Nao mede direcao** -- isso e' passo 2, em ficha.
+    """
+    configurar(log_level)
+    from .research.fechamento import descrever
+
+    r = descrever(dump, saida)
+    typer.echo("=" * 72)
+    typer.echo(f"AJUSTE E FECHAMENTO — {r['dump']['pregoes']} pregoes "
+               f"({r['dump']['inicio']} a {r['dump']['fim']}), "
+               f"{r['barras_por_dia_p50']} barras/dia")
+    typer.echo("=" * 72)
+    typer.echo("\n--- BARRAS DO FIM (0 = ultima do dia) ---")
+    typer.echo(f"  {'k':>2}  {'hhmm':>5}  {'n':>5}  {'% do vol':>9}  {'ampl rel':>8}  "
+               f"{'|ret| rel':>9}")
+    for k, e in r["perfil_do_fim"].items():
+        typer.echo(f"  {k:>2}  {e['hhmm_p50']:>5}  {e['n']:>5}  "
+                   f"{100 * e['frac_vol_p50']:>8.2f}%  {e['ampl_rel_p50']:>8.3f}  "
+                   f"{e['ret_rel_p50']:>9.3f}")
+    typer.echo("\n--- BARRAS DO INICIO (0 = primeira), para contraste ---")
+    for k, e in r["perfil_do_inicio"].items():
+        typer.echo(f"  {k:>2}  {e['hhmm_p50']:>5}  {e['n']:>5}  "
+                   f"{100 * e['frac_vol_p50']:>8.2f}%  {e['ampl_rel_p50']:>8.3f}  "
+                   f"{e['ret_rel_p50']:>9.3f}")
+    c_ = r["concentracao"]
+    typer.echo("\n--- CONCENTRACAO (mediana da fracao do volume do dia) ---")
+    typer.echo(f"  2 ultimas barras: {100 * c_['ultimas_2_barras']:.2f}%  "
+               f"(uniforme seria {100 * c_['ultimas_2_barras_uniforme']:.2f}%)")
+    typer.echo(f"  4 ultimas barras: {100 * c_['ultimas_4_barras']:.2f}%  "
+               f"(uniforme seria {100 * c_['ultimas_4_barras_uniforme']:.2f}%)")
+    typer.echo("\n--- ESTABILIDADE POR ANO (2 ultimas barras) ---")
+    for ano, e in r["por_ano_2_ultimas"].items():
+        typer.echo(f"  {ano}  n={e['pregoes']:>4}  {100 * e['frac_vol_2_ultimas_p50']:.2f}%")
+    typer.echo("\n  LEITURA: concentracao perto do uniforme e |ret| rel perto de 1 = o fluxo "
+               "obrigatorio do fechamento nao deixa marca. Concentracao alta COM amplitude ou "
+               "|ret| elevados = ha' distorcao, e o passo 2 escreve a ficha (com direcao "
+               "declarada: a hipotese obvia e' reversao na abertura seguinte).")
+    typer.echo(f"\n  Saida: {saida}/fechamento.json")
+
+
 @app.command(name="eas-preco-teste")
 def eas_preco_teste(
     log: Path = typer.Argument(..., help="Dump PRCBARRA| contendo SO' os dias da amostra pedida"),

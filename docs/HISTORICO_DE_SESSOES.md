@@ -2451,3 +2451,12 @@ AJUSTADA esconde o evento de quem so' olha o grafico.
   no passo 2, dentro de ficha). Categoria features, zero trial.
 - 4 testes (calendario conferido a mao em tres datas, feriado no
   vencimento, deteccao de volume 3x). 907 no total.
+- v3.01: ROLAGEM, passo 1 — **sem marca** (volume 0,85-1,19 sem pico
+  consistente; perfil por horario identico; |retorno| so' em 2023-25).
+  Explicacao: giro de 15-17 M contratos/dia dilui fluxo obrigatorio
+  espalhado. Entrou no catalogo de mortas com o aprendizado da
+  categoria. Proximo candidato entregue: AJUSTE E FECHAMENTO
+  (`profit-tape fechamento`), que difere por concentrar o fluxo numa
+  janela estreita; mede concentracao, amplitude e |retorno| por barra
+  final contra a primeira hora e o uniforme, com estabilidade por ano —
+  e sem direcao. 3 testes; 910 no total.
