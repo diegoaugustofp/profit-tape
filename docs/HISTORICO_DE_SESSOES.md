@@ -2538,3 +2538,8 @@ Fabricacao. Daqui em diante: anexo vazio -> digo que nao vi e paro.
   forcava `dry_run`. Detectar modo por data e' fragil e esta' escrito no
   codigo. Terceira e ultima aparicao do mesmo defeito; o teste novo
   reproduz o caso (relogio do sistema no dia do replay, 23:33).
+- v3.07: ultimo pedaco do replay -- no modo replay (sem `inicio_ns`), a
+  barra que TEM prints de leilao antes do primeiro continuo NAO e'
+  parcial: o construtor viu a abertura inteira (16/09: continuo so' as
+  09:02:54, barra 09:00 completa). Sem leilao na barra, vale o criterio
+  antigo. Com isso o replay de 16/09 arma.

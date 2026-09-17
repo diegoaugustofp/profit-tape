@@ -250,3 +250,20 @@ def test_parcial_pela_abertura_do_continuo_nao_pelo_leilao() -> None:
     c3.processar_trade(_t(95), 140000.0, 1, 2)
     b3 = c3.processar_trade(_t(900), 140010.0, 1, 2)
     assert b3 is not None and b3.parcial
+
+
+def test_replay_barra_com_leilao_nao_e_parcial() -> None:
+    """16/09 em REPLAY (sem inicio_ns): o leilao prorrogou e o continuo so'
+    abriu 09:02:54. A barra 09:00 TEM os prints de leilao -> o construtor
+    viu a abertura inteira -> NAO e' parcial. Sem leilao na barra, o
+    criterio antigo continua valendo."""
+    c = ConstrutorDeBarraDeTempo(900)                    # replay: sem inicio_ns
+    c.processar_trade(_t(174), 140000.0, 1, 4)           # leilao 09:02:54
+    c.processar_trade(_t(175), 140000.0, 1, 2)           # continuo abre
+    b = c.processar_trade(_t(900), 140010.0, 1, 2)
+    assert b is not None and not b.parcial
+    # sem leilao e 1o trade tarde: parcial (o record entrou no meio)
+    c2 = ConstrutorDeBarraDeTempo(900)
+    c2.processar_trade(_t(600), 140000.0, 1, 2)
+    b2 = c2.processar_trade(_t(900), 140010.0, 1, 2)
+    assert b2 is not None and b2.parcial

@@ -177,10 +177,22 @@ class ConstrutorDeBarraDeTempo:
         return datetime.fromtimestamp(ts_ns / _NS_POR_S, tz=_TZ_BOLSA)
 
     def _e_parcial(self, acc: _AcumuladorTempo) -> bool:
-        """Parcial = o construtor comecou DEPOIS da abertura do continuo
-        (ou, sem `inicio_ns`, o 1o trade veio muito depois do inicio da
-        barra). Leilao prorrogado NAO torna a barra parcial."""
+        """
+        Parcial = faltou o COMECO da barra. Duas situacoes, uma regra:
+
+        - com `inicio_ns` (ao vivo): parcial se o construtor comecou depois
+          da abertura do continuo.
+        - sem `inicio_ns` (replay/pesquisa): se a barra TEM trade de leilao
+          (`trade_type=4`) antes do primeiro contínuo, o construtor viu a
+          abertura inteira -- NAO e' parcial, por mais que o leilao tenha
+          prorrogado (16/09: contínuo so' as 09:02:54, e a barra 09:00 esta'
+          completa). Sem leilao na barra, vale o criterio antigo: o 1o
+          trade veio mais de `tolerancia_parcial_s` depois do inicio.
+        """
+        viu_leilao = acc.ts_continuo_ns > acc.ts_primeiro_ns > 0
         if self.inicio_ns is None:
+            if viu_leilao:
+                return False
             return acc.ts_primeiro_ns - acc.ts_open_ns > self.tolerancia_parcial_ns
         referencia = acc.ts_continuo_ns or acc.ts_primeiro_ns or acc.ts_open_ns
         return self.inicio_ns > max(referencia, acc.ts_open_ns)
