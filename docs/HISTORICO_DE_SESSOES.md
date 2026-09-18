@@ -2680,3 +2680,13 @@ fechava a barra a cada tick.
   cliente (risco declarado, agora confirmado), e o tape so' mostra o que
   EXECUTOU (iceberg vive no LIVRO). Sem v3, como estava declarado.
   Aponta para o BOOK -- o unico dado em que o ANTES do movimento existe.
+- v3.18: CORRECAO DE REGISTRO pedida pelo operador. Eu havia escrito "a
+  linha do iceberg fecha", misturando tres coisas: (a) erro MEU (a v1
+  sem agente era definicao ruim), (b) limite do DADO (tape so' tem
+  execucao; agente e' corretora), (c) a HIPOTESE, que continua viva e
+  nao testada. O correto: iceberg NAO E' TESTAVEL NO TAPE DE NEGOCIOS e
+  vai para a fila esperando BOOK -- nao para o catalogo de mortas.
+  Criada a regra "COMO CLASSIFICAR UM FECHAMENTO": hipotese REFUTADA x
+  teste SEM PODER x DADO INSUFICIENTE, com exemplos ja' existentes de
+  cada um. Classificar (3) como (1) enterra hipotese viva; o inverso
+  mantem viva hipotese refutada e vira busca.

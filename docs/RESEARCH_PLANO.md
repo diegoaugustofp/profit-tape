@@ -5978,7 +5978,7 @@ ficha fica intuitivo em vez de explicito. Lista curta, mantida aqui:
 | rolagem de contrato (passo 1) | **RECLASSIFICADA em 17/09**: o teste foi fraco (serie continua APAGA a rolagem; a assinatura e' o par casado entre contratos) | procurar efeito no agregado quando a assinatura e' um PAR entre instrumentos e' o teste errado |
 | ajuste/fechamento (passo 1) | sem marca, e INVERTIDO: o fim do pregao e' o momento mais magro | no WIN o fluxo obrigatorio de HORARIO tambem nao deixa marca; quem concentra e' a abertura -- que ja' esta' queimada em preco |
 | defasagem WIN x cesta (passo 1) | sem ordem de chegada em 60 s; em 15 s quem lidera e' o WIN (5 de 5 dias) | no par futuro/cesta quem lidera e' o FUTURO; explorar exigiria operar acao, e 0,09 de correlacao em 15 s nao paga um tick |
-| iceberg / lote repetido (passo 1, v1 e v2) | curva plana contra o baseline nas duas versoes; as maiores corridas sao lote 1 de uma corretora grande | **agente na B3 e' CORRETORA, nao cliente**; e o tape so' mostra o que EXECUTOU -- ordem escondida que nao executa exige BOOK |
+| iceberg / lote repetido (v1: DEFINICAO RUIM, minha) | capturava 68% do volume; corrigida na v2 | definicao que pega dois tercos do volume nao e' evento -- da' para ver ANTES de qualquer resultado |
 
 ### 5. Gerar a hipotese a partir de ANOMALIA MEDIDA, nao de leitura
 
@@ -6111,7 +6111,28 @@ passo 1, por dois comandos. O que resta de contraparte obrigada com
 potencial exige outro tipo de dado -- e' o que motiva as duas linhas
 abaixo.
 
-## LINHA ADIADA (nao recusada): OPCOES (2026-09-17)
+## COMO CLASSIFICAR UM FECHAMENTO (2026-09-17, depois de eu errar isto)
+
+Escrevi "a linha fecha" para o iceberg misturando tres situacoes que tem
+consequencias OPOSTAS para o futuro. A partir daqui, todo fechamento
+declara qual dos tres e':
+
+1. **HIPOTESE REFUTADA** -- testada com poder, na fonte certa, e nao
+   sobreviveu. Nao volta sem informacao nova. Ex.: IFR2 (nulo em dois
+   instrumentos, dez anos); ORB.
+2. **TESTE SEM PODER** -- o desenho nao conseguia responder, com ou sem
+   efeito. Volta se houver desenho melhor. Ex.: vespera (o estimador
+   binario nao serve para entrada por rompimento com D pequeno);
+   rolagem v1 (a serie continua APAGA o evento).
+3. **DADO INSUFICIENTE** -- a hipotese e' boa e a fonte nao a carrega.
+   Volta quando o dado existir, sem reabrir discussao. Ex.: iceberg
+   (exige BOOK); opcoes (exige series por strike); fluxo com n serio
+   (exige mais tape).
+
+O erro de classificar (3) como (1) e' caro: enterra hipotese viva. O erro
+inverso e' pior: mantem viva hipotese ja' refutada, e vira busca.
+
+## LINHA NA FILA POR DADO (nao recusada): OPCOES (2026-09-17)
 
 **Nao e' falta de promessa -- e' falta de infraestrutura.** O operador
 tem razao em dois pontos: no Brasil o volume de opcoes esta' nas ACOES
@@ -6496,7 +6517,7 @@ ordem agressora.** Preco e volume nao mudam; `n_trades` conta coisas
 diferentes -- e e' insumo de feature (esta' no `BarraFechada`).
 
 
-### ICEBERG: LINHA FECHADA no passo 1 (2026-09-17, v2 validada em dado REAL)
+### ICEBERG: NAO TESTAVEL NO TAPE DE NEGOCIOS -- requer BOOK (2026-09-17)
 
 O operador exportou as DUAS abas do Times & Trades, e isso resolveu duas
 coisas de uma vez.
@@ -6521,7 +6542,19 @@ Plana. E as SEIS maiores corridas explicam o porque: todas de **1
 contrato com o Santander no passivo**, 277 a 376 negocios, em niveis de
 preco sucessivos.
 
-**Por que a linha fecha (dois limites ESTRUTURAIS, nao de calibragem):**
+**O que este resultado E' e o que NAO E'** (correcao do proprio registro,
+pedida pelo operador em 17/09 -- eu havia escrito "a linha fecha", o que
+mistura tres coisas diferentes):
+
+- **Erro MEU, corrigido:** a v1 sem agente era definicao ruim (capturava
+  68% do volume). Isso nao e' conclusao sobre nada; e' codigo errado.
+- **Limite do DADO, nao do codigo:** os dois pontos abaixo. Nenhuma
+  versao minha acharia iceberg no tape de negocios.
+- **A HIPOTESE continua VIVA e NAO TESTADA:** "existe ordem escondida
+  defendendo niveis, e quem negocia contra ela perde". O que esta'
+  estabelecido e' que ela nao e' testavel NESTA FONTE.
+
+**Os dois limites ESTRUTURAIS (do dado, nao de calibragem):**
 
 1. **Agente na B3 e' CORRETORA, nao cliente final.** Uma ordem iceberg
    individual fica diluida no fluxo inteiro da corretora -- e' o risco
@@ -6530,8 +6563,9 @@ preco sucessivos.
    ser consumido. Ordem escondida que segura o preco sem executar e'
    invisivel aqui, por construcao.
 
-Estava declarado antes de rodar: se a v2 desse acaso, a linha fecha sem
-v3. Fecha.
+Estava declarado antes de rodar: se a v2 desse acaso, nao haveria v3 no
+tape. Nao ha' -- e nao havera', porque mais engenharia sobre execucao nao
+cria informacao que a execucao nao carrega.
 
 **Limite da amostra, declarado:** a exportacao do T&T corta em 200 k
 linhas (1h30 do dia). A conclusao nao se apoia so' nisso -- se apoia na
@@ -6543,6 +6577,8 @@ dominante em lote 1 nos niveis sucessivos. Pode ser formador de mercado
 ou so' a corretora com mais clientes de varejo. Nao e' a nossa hipotese;
 fica anotado.
 
-**Para onde isso aponta:** o BOOK. E' o terceiro item de "dado raro", o
-record ja' captura `offer_book` do WINFUT, e e' o unico lugar onde o
-ANTES do movimento esta' registrado -- inclusive ordem que nao executa.
+**Para onde a hipotese vai:** o BOOK. E' o terceiro item de "dado raro",
+o record ja' captura `offer_book` do WINFUT, e e' o unico lugar onde o
+ANTES do movimento esta' registrado -- inclusive ordem que NAO executa,
+que e' exatamente o caso que interessa. A hipotese fica na fila
+esperando DADO, como a de opcoes -- nao no catalogo de mortas.
