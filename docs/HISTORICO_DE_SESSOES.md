@@ -2690,3 +2690,19 @@ fechava a barra a cada tick.
   teste SEM PODER x DADO INSUFICIENTE, com exemplos ja' existentes de
   cada um. Classificar (3) como (1) enterra hipotese viva; o inverso
   mantem viva hipotese refutada e vira busca.
+
+### 2026-09-17 (madrugada) — recomposicao no LIVRO, passo 1 (v3.19)
+
+A hipotese do iceberg na fonte certa. `research/book_recomposicao.py` +
+`profit-tape book-recomposicao`: recargas por (preco, lado, quantidade)
+em ate' 5 s, curva por limiar contra baseline embaralhado, niveis
+defendidos, custo reportado JUNTO (uma linha por dia no log).
+
+Observacao do operador, aceita: eu estava propondo um "levantamento de
+custo" previo que nenhum outro levantamento exigiu -- tempo de execucao
+nunca foi restricao aqui. Excesso de cautela nao e' disciplina.
+
+Limite declarado: a maioria dos deltas nao tem data propria; o relogio e'
+`ts_recv_ns` (recepcao). Serve para INTERVALO entre eventos proximos, nao
+para datar contra o trade -- e isso ja' limita o desenho do passo 2.
+5 testes; 941 no total.

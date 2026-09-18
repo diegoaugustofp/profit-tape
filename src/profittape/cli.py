@@ -1989,6 +1989,54 @@ def iceberg_cmd(
     typer.echo(f"\n  Saida: {saida}/iceberg.json")
 
 
+@app.command(name="book-recomposicao")
+def book_recomposicao_cmd(
+    de: str = typer.Option(..., "--de", help="YYYY-MM-DD"),
+    ate: str = typer.Option(..., "--ate", help="YYYY-MM-DD"),
+    curated: Path = typer.Option(Path("data/curated"), "--curated"),
+    symbol: str = typer.Option("WINFUT", "--symbol"),
+    janela_s: float = typer.Option(5.0, "--janela-s"),
+    n_minimo: int = typer.Option(3, "--n-minimo"),
+    saida: Path = typer.Option(Path("data/research/book_recomposicao"), "--saida"),
+    log_level: str = typer.Option("INFO", "--log-level"),
+) -> None:
+    """
+    RECOMPOSICAO NO LIVRO, passo 1: oferta consumida que REAPARECE no mesmo
+    preco e tamanho em segundos. E' a hipotese do iceberg na fonte certa --
+    no tape de negocios ela nao era testavel (so' ha' o que executou).
+
+    Loga uma linha POR DIA (o book e' pesado; da' para ver andando).
+    Sem direcao, zero trial.
+    """
+    import datetime as dt
+
+    configurar(log_level)
+    from .research.book_recomposicao import descrever
+
+    d0, d1 = dt.date.fromisoformat(de), dt.date.fromisoformat(ate)
+    dias = [d0 + dt.timedelta(days=k) for k in range((d1 - d0).days + 1)
+            if (d0 + dt.timedelta(days=k)).weekday() < 5]
+    r = descrever(curated, symbol, dias, janela_s, n_minimo, saida)
+    a = r["agregado"]
+    typer.echo("=" * 72)
+    typer.echo(f"RECOMPOSICAO NO LIVRO — {symbol}, {de} a {ate} "
+               f"(recarga: mesma qtd e preco em ate' {janela_s:g}s)")
+    typer.echo("=" * 72)
+    typer.echo(f"  dias={a['dias']}  deltas/dia (p50)={a['deltas_p50']:,.0f}  "
+               f"segundos/dia (p50)={a['segundos_por_dia_p50']:.0f}")
+    typer.echo(f"  niveis defendidos (>= {n_minimo} recargas), p50/dia: "
+               f"{a['niveis_defendidos_p50']:,.0f}")
+    typer.echo("\n  curva por limiar (recargas >= N; reportada SEMPRE):")
+    typer.echo(f"    {'N':>4}  {'observado':>12}  {'baseline':>12}  {'razao':>7}")
+    for n, e in a["por_limiar"].items():
+        typer.echo(f"    {n:>4}  {e['observado_p50']:>12,.0f}  {e['baseline_p50']:>12,.0f}  "
+                   f"{e['razao_p50']:>7.2f}")
+    typer.echo("\n  LEITURA: curva perto de 1 = a recomposicao e' rotina de reposicao (o "
+               "formador repondo), nao nivel defendido. Cauda acima de 1 = ha' quem defenda "
+               "nivel com capital -> passo 2 escreve a ficha, com a direcao declarada antes.")
+    typer.echo(f"\n  Saida: {saida}/book_recomposicao.json")
+
+
 @app.command(name="eas-preco-teste")
 def eas_preco_teste(
     log: Path = typer.Argument(..., help="Dump PRCBARRA| contendo SO' os dias da amostra pedida"),

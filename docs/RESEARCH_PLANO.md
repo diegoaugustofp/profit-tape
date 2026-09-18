@@ -6582,3 +6582,41 @@ o record ja' captura `offer_book` do WINFUT, e e' o unico lugar onde o
 ANTES do movimento esta' registrado -- inclusive ordem que NAO executa,
 que e' exatamente o caso que interessa. A hipotese fica na fila
 esperando DADO, como a de opcoes -- nao no catalogo de mortas.
+
+
+## RECOMPOSICAO NO LIVRO — passo 1 entregue (2026-09-17)
+
+A hipotese do iceberg na FONTE CERTA. No tape de negocios ela era DADO
+INSUFICIENTE (so' ha' o que executou); o `offer_book` do WINFUT e'
+ORDER-BY-ORDER e traz `offer_id`, `agente`, preco, quantidade, lado,
+posicao na fila e a ACAO -- a materia-prima exata.
+
+**CONTRAPARTE:** quem negocia contra profundidade que nao ve. Oferta
+consumida que REAPARECE no mesmo preco e tamanho, em segundos, e' alguem
+defendendo o nivel com capital.
+
+`profit-tape book-recomposicao --de ... --ate ...`. Loga uma linha POR
+DIA (da' para ver andando); o custo (deltas, segundos) sai JUNTO com o
+resultado, nao como etapa previa -- tempo de execucao nunca foi
+restricao neste projeto.
+
+**O que mede, sem direcao:** recargas por (preco, lado, quantidade) em
+ate' 5 s; curva por limiar (3/5/10/20/50) contra o BASELINE com as
+quantidades permutadas; niveis "defendidos" (>= 3 recargas); distribuicao
+de tamanho.
+
+**Por que o baseline importa aqui mais que nunca:** formador de mercado
+repondo oferta gera recarga por ROTINA. O embaralhado e' o que separa
+"reposicao automatica" de "nivel defendido".
+
+**LIMITE declarado:** a maioria dos deltas nao carrega data propria
+(`has_date=False`, `ts_ns=0`); o relogio disponivel e' `ts_recv_ns`, o
+instante em que NOS recebemos. Para medir INTERVALO entre eventos
+proximos serve; para datar em relacao ao trade, nao -- e isso limita o
+passo 2, que precisara' do TinyBook ou do trade como ancora.
+
+**Leitura:** curva perto de 1 = rotina de reposicao, e a linha fecha
+(desta vez como HIPOTESE REFUTADA, porque a fonte e' a certa). Cauda
+acima de 1 = ha' nivel defendido, e o passo 2 escreve a ficha -- com a
+direcao declarada antes ("o nivel defendido SEGURA" e "o nivel defendido
+ROMPE e acelera" sao hipoteses opostas).
