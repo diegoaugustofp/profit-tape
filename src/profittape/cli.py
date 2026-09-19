@@ -1993,7 +1993,9 @@ def iceberg_cmd(
 def book_recomposicao_cmd(
     de: str = typer.Option(..., "--de", help="YYYY-MM-DD"),
     ate: str = typer.Option(..., "--ate", help="YYYY-MM-DD"),
-    curated: Path = typer.Option(Path("data/curated"), "--curated"),
+    raiz: Path = typer.Option(
+        Path("data/raw"), "--raiz",
+        help="raiz do RAW (o book nao passa pela cura, que so' trata `trade`)"),
     symbol: str = typer.Option("WINFUT", "--symbol"),
     janela_s: float = typer.Option(5.0, "--janela-s"),
     n_minimo: int = typer.Option(3, "--n-minimo"),
@@ -2001,9 +2003,12 @@ def book_recomposicao_cmd(
     log_level: str = typer.Option("INFO", "--log-level"),
 ) -> None:
     """
-    RECOMPOSICAO NO LIVRO, passo 1: oferta consumida que REAPARECE no mesmo
-    preco e tamanho em segundos. E' a hipotese do iceberg na fonte certa --
-    no tape de negocios ela nao era testavel (so' ha' o que executou).
+    RECOMPOSICAO NO LIVRO, passo 1 (v2): oferta que SAI do livro e cujo
+    lugar e' reposto pelo MESMO agente, no mesmo preco e tamanho, em
+    segundos. Estado por `offer_id` -- preco so' e' confiavel em `atAdd`
+    (manual da DLL), entao a saida resolve o nivel pelo id, nao pelos
+    campos do proprio evento. Deduplica na leitura (o raw nao passa por
+    cura).
 
     Loga uma linha POR DIA (o book e' pesado; da' para ver andando).
     Sem direcao, zero trial.
@@ -2016,16 +2021,18 @@ def book_recomposicao_cmd(
     d0, d1 = dt.date.fromisoformat(de), dt.date.fromisoformat(ate)
     dias = [d0 + dt.timedelta(days=k) for k in range((d1 - d0).days + 1)
             if (d0 + dt.timedelta(days=k)).weekday() < 5]
-    r = descrever(curated, symbol, dias, janela_s, n_minimo, saida)
+    r = descrever(raiz, symbol, dias, janela_s, n_minimo, saida)
     a = r["agregado"]
     typer.echo("=" * 72)
     typer.echo(f"RECOMPOSICAO NO LIVRO — {symbol}, {de} a {ate} "
                f"(recarga: mesma qtd e preco em ate' {janela_s:g}s)")
     typer.echo("=" * 72)
     typer.echo(f"  dias={a['dias']}  deltas/dia (p50)={a['deltas_p50']:,.0f}  "
+               f"duplicatas/dia (p50)={a['duplicatas_p50']:,.0f}  "
                f"segundos/dia (p50)={a['segundos_por_dia_p50']:.0f}")
-    typer.echo(f"  niveis defendidos (>= {n_minimo} recargas), p50/dia: "
-               f"{a['niveis_defendidos_p50']:,.0f}")
+    typer.echo(f"  recargas/dia (p50): {a['recargas_p50']:,.0f}   "
+               f"niveis defendidos (>= {n_minimo}), p50/dia: "
+               f"{a['niveis_defendidos_p50']:,.0f}   cadeia max: {a['cadeia_max']:,}")
     typer.echo("\n  curva por limiar (recargas >= N; reportada SEMPRE):")
     typer.echo(f"    {'N':>4}  {'observado':>12}  {'baseline':>12}  {'razao':>7}")
     for n, e in a["por_limiar"].items():

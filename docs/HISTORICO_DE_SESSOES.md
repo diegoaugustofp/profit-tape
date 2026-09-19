@@ -2706,3 +2706,21 @@ Limite declarado: a maioria dos deltas nao tem data propria; o relogio e'
 `ts_recv_ns` (recepcao). Serve para INTERVALO entre eventos proximos, nao
 para datar contra o trade -- e isso ja' limita o desenho do passo 2.
 5 testes; 941 no total.
+
+### 2026-09-19 — book v2: estado por offer_id (v3.20)
+
+- A v1 rodou e deu curva com a forma "certa" (0,78/0,92/1,24/1,37/1,35) e
+  NAO foi interpretada: tres defeitos de validez -- preco usado fora de
+  `atAdd` (o manual nao garante), sem exigir mesma ordem nem mesmo agente
+  (cadeia_max 63.508 com quantidade mediana 1; um milhao de "niveis
+  defendidos" por dia) e raw sem dedup.
+- v2: `ADD` alimenta o estado `offer_id -> (preco, qtd, agente, lado)`;
+  a saida resolve o nivel PELO ID. Recarga exige mesmo agente, preco,
+  lado e tamanho dentro de 5 s; cadeia = recargas seguidas no mesmo
+  nivel. Dedup na leitura, reportado. `--curated` virou `--raiz` (o book
+  nao passa pela cura).
+- Nota de infra registrada: os dias lentos (5 h e 9 h) sao anteriores a`
+  correcao do writer (row groups de 15 linhas, v2.23) -- `compact`
+  resolve. Nao era disco.
+- 8 testes (inclusive DELETE com preco ZERADO, que quebra se o detector
+  usar os campos do evento em vez do estado). 944 no total.

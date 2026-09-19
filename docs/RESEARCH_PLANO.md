@@ -6620,3 +6620,41 @@ passo 2, que precisara' do TinyBook ou do trade como ancora.
 acima de 1 = ha' nivel defendido, e o passo 2 escreve a ficha -- com a
 direcao declarada antes ("o nivel defendido SEGURA" e "o nivel defendido
 ROMPE e acelera" sao hipoteses opostas).
+
+
+### Book, v1 REFEITA sem nunca ter sido interpretada (2026-09-19)
+
+A v1 rodou (68 M de deltas/dia, 8 dias) e deu curva 0,78 / 0,92 / 1,24 /
+1,37 / 1,35 -- forma que parecia a da hipotese. **Nao foi interpretada**,
+porque tinha tres defeitos de VALIDEZ:
+
+1. **O manual da DLL diz que fora de `atAdd` os campos escalares --
+   inclusive `dPrice` -- nao sao garantidos** (mesmo motivo do descarte
+   de `atFullBook` na origem). A v1 usava `action in (ADD, EDIT)` como se
+   EDIT trouxesse preco valido.
+2. **Nao exigia a mesma ordem nem o mesmo agente.** `cadeia_max` de
+   **63.508** num unico (preco, lado, quantidade), com quantidade mediana
+   **1** -- isso e' o preco mais negociado acumulando lote 1, exatamente
+   o que o Times & Trades ja' tinha exposto no iceberg do tape. E um
+   milhao de "niveis defendidos" por dia: evento que acontece um milhao
+   de vezes nao e' evento.
+3. **Lia o RAW sem deduplicar** -- e duplicata e' literalmente "a oferta
+   apareceu duas vezes", que infla recarga por construcao e infla mais o
+   observado que o embaralhado.
+
+**v2: ESTADO POR `offer_id`.** `ADD` registra (id -> preco, qtd, agente,
+lado); `DELETE`/`DELETE_FROM` resolvem o nivel PELO ID, nao pelos campos
+do proprio evento. RECARGA = saida seguida, em ate' 5 s, de entrada com
+mesmo preco, lado, quantidade e AGENTE. Cadeia = recargas seguidas no
+mesmo nivel. Dedup na leitura, com o numero reportado.
+
+Limites declarados: `offer_id` pode ser reaproveitado no dia (o estado
+guarda o ultimo ADD); `agente` e' CORRETORA e nao cliente (reduz o
+poder, nao invalida -- exigir o mesmo agente ja' e' muito mais apertado
+que nao exigir nada); o relogio e' o de RECEPCAO.
+
+**Nota de infra:** os dois primeiros dias levaram 5 h e 9 h de leitura
+contra 3 min dos demais. Nao e' disco -- sao particoes anteriores a`
+correcao do writer (row groups de 15 linhas, v2.23). `profit-tape
+compact --dia ...` resolve, e e' o que explica tambem por que o
+`fluxo-vs-grafico` pareceu lento.
