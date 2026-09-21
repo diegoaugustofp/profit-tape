@@ -163,17 +163,18 @@ def reconstruir(df: pd.DataFrame, log_a_cada: int = 5_000_000) -> tuple[pd.DataF
     (em listas com inicio em 0, size - nPosition - 1)".
 
     Consequencia: o FIM da lista e' o TOPO do livro (posicao 0 = melhor
-    oferta). A primeira versao indexava a partir do INICIO -- cada
-    `DELETE_FROM` apagava o topo e o dia terminava com 3,7 BILHOES de
-    "removidas" contra 20 M de insercoes. Contando do fim, o livro parcial
-    fica alinhado pelo topo; o que falta (o livro inicial, descartado na
-    origem) fica no FUNDO, onde quase nada acontece.
+    oferta). ATENCAO -- correcao de registro: indexar do inicio ou do fim
+    e' ESPELHO (as contagens saem identicas, conferido); a v3.24 so' mudou a
+    orientacao da checagem de ordem. O que produzia 3,7 BILHOES de
+    "removidas" era ler o `DELETE_FROM` como corte do FUNDO -- ele corta o
+    TOPO (ver o corpo).
 
       ADD p        -> insere no indice size - p (a nova oferta fica na posicao p)
       DELETE p     -> remove o indice size - p - 1
       EDIT p       -> troca a quantidade no indice size - p - 1
-      DELETE_FROM p-> remove as posicoes >= p (o FUNDO: indices 0..size-p-1);
-                      reset, nao consumo -- NAO conta como saida
+      DELETE_FROM p-> remove as p+1 MELHORES (o TOPO: indice size-p-1 ate' o
+                      fim). E' VARREDURA por agressao -- CONSUMO -- e as
+                      ofertas removidas contam como SAIDAS (ver o corpo).
 
     AUTOVERIFICACAO: cada ADD e' conferido contra os vizinhos conhecidos. O
     lado de compra tem que crescer em preco rumo ao fim (melhor compra =
@@ -191,6 +192,7 @@ def reconstruir(df: pd.DataFrame, log_a_cada: int = 5_000_000) -> tuple[pd.DataF
     k = 0
     desconhecidas = edit_desconhecido = truncadas = 0
     adds_conferidos = fora_de_ordem = 0
+    por_varredura = 0
     cols = [df[c].tolist() for c in ("ts_recv_ns", "action", "side", "position",
                                      "price", "quantidade", "agente")]
     for i, (ts, acao, lado, pos, preco, qtd, ag) in enumerate(zip(*cols, strict=True)):
@@ -233,9 +235,27 @@ def reconstruir(df: pd.DataFrame, log_a_cada: int = 5_000_000) -> tuple[pd.DataF
             else:
                 edit_desconhecido += 1
         elif acao == _DELETE_FROM:
-            if pos < tam:
-                truncadas += tam - pos
-                del lista[:tam - pos]
+            # REMOVE AS p+1 MELHORES OFERTAS (o TOPO): do indice size-p-1 ATE' O
+            # FIM da lista. Leitura corrigida em 21/09: a 1a versao removia o
+            # FUNDO (posicoes >= p). No dado real (17/09, 920.904 eventos) NAO
+            # existe nenhum DELETE_FROM com p = 0 -- remover so' a melhor e' um
+            # DELETE 0 -- e a distribuicao decai a partir de 1 (270 k, 163 k,
+            # 106 k...): assinatura de VARREDURA do topo por ordem agressora.
+            # Logo e' CONSUMO, e as ofertas removidas SAO saidas.
+            corte = tam - pos - 1
+            if corte < 0:                        # topo p+1 maior que o conhecido
+                desconhecidas += -corte
+                corte = 0
+            removidas = lista[corte:]
+            del lista[corte:]
+            truncadas += len(removidas)
+            for saiu in removidas:
+                if saiu is None:
+                    desconhecidas += 1
+                else:
+                    s_ts[k], s_pr[k], s_sd[k], s_q[k], s_ag[k] = ts, saiu[0], lado, saiu[1], saiu[2]
+                    k += 1
+                    por_varredura += 1
         if log_a_cada and i and i % log_a_cada == 0:
             log.info("book_recomposicao.reconstruindo", eventos=i, de=n, saidas=k,
                      desconhecidas=desconhecidas, fora_de_ordem=fora_de_ordem)
@@ -254,6 +274,7 @@ def reconstruir(df: pd.DataFrame, log_a_cada: int = 5_000_000) -> tuple[pd.DataF
                                             if total_saidas else None),
             "edit_desconhecido": edit_desconhecido,
             "removidas_por_delete_from": truncadas,
+            "saidas_por_varredura": por_varredura,
             "insercoes_conferidas": adds_conferidos,
             "insercoes_fora_de_ordem": fora_de_ordem,
             "fracao_insercoes_fora_de_ordem": (round(fora_de_ordem / adds_conferidos, 4)

@@ -6755,3 +6755,44 @@ e reposta; formador e' oferta CANCELADA e reposta. O DELETE nao diz qual
 dos dois -- cruzar com o tape (negocio no mesmo preco, milissegundos antes
 do DELETE, pelo `ts_recv_ns`, que e' o relogio comum aos dois) diz. E'
 o proximo desenho, ANTES de qualquer leitura de curva.
+
+
+### CORRECAO DO REGISTRO ANTERIOR + a leitura do DELETE_FROM (2026-09-21)
+
+**O que escrevi na secao anterior estava ERRADO em dois pontos:**
+
+1. **Nao foi a indexacao.** Indexar do inicio ou do fim da lista e'
+   ESPELHO -- conferido no sandbox, as contagens saem identicas, e a
+   rodada da v3.24 reproduziu os numeros da v3 ate' a ultima casa. A
+   v3.24 so' mudou a orientacao da checagem de ordem de preco.
+2. **A "prova" de que os testes novos reprovavam na versao antiga era
+   falsa:** reprovavam porque a versao antiga nao devolvia o campo
+   `insercoes_fora_de_ordem` (erro de chave, nao de semantica). Nao
+   conferi o motivo da falha. A partir daqui, todo teste que distingue
+   versoes e' conferido pelo MOTIVO da reprovacao.
+
+**Uma hipotese intermediaria tambem foi REFUTADA antes de ser registrada:**
+eu supus que as saidas desconhecidas vinham de ~200 ressincronizacoes do
+livro por dia (`full_book_descartados=204` no resumo de 18/09). O
+diagnostico mostrou ZERO `DELETE_FROM` com posicao 0 -- nao sao limpezas
+do livro.
+
+**A leitura que o dado sustenta:** o `DELETE_FROM` remove as p+1
+MELHORES ofertas (o TOPO), e nao o fundo. Evidencia em 17/09 (920.904
+eventos): nenhum com p = 0 (remover so' a melhor ja' e' `DELETE 0`) e
+distribuicao decaindo a partir de 1 -- 270 k, 163 k, 106 k, 72 k --,
+assinatura de VARREDURA do topo por ordem agressora. E' a leitura natural
+da formula do manual como operacao de lista: do indice size-p-1 ATE' O
+FIM, que e' o topo.
+
+**Consequencia importante:** o `DELETE_FROM` e' CONSUMO. As ofertas
+removidas passam a ser saidas (`saidas_por_varredura`), e isso e'
+justamente o sinal de consumo que faltava para separar iceberg (oferta
+consumida e reposta) de formador (oferta cancelada e reposta).
+
+**Previsao declarada ANTES da proxima rodada -- se nao acontecer, a
+leitura esta' errada:**
+- `fracao_saidas_desconhecidas` cai muito e PARA de crescer ao longo do
+  dia (nas linhas `reconstruindo`);
+- `removidas_por_delete_from` perto da soma de (p+1): milhoes, nao bilhoes;
+- `fracao_insercoes_fora_de_ordem` abaixo dos 3,4-3,7% atuais.

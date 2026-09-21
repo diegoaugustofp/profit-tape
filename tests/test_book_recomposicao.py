@@ -67,11 +67,17 @@ def test_edit_troca_a_quantidade_na_posicao() -> None:
     assert ev[~ev["entrada"]].iloc[0]["quantidade"] == 4
 
 
-def test_delete_from_trunca_e_nao_vira_saida() -> None:
-    df = pd.DataFrame([_ev(1, ADD, 0, 0, 1.0, 1, 1, 1), _ev(2, ADD, 0, 1, 2.0, 1, 1, 2),
-                       _ev(3, ADD, 0, 2, 3.0, 1, 1, 3), _ev(4, DELETE_FROM, 0, 1)])
-    _, cont = br.reconstruir(df, log_a_cada=0)
-    assert cont["removidas_por_delete_from"] == 2 and cont["saidas_atribuidas"] == 0
+def test_delete_from_e_varredura_do_topo_e_conta_como_saida() -> None:
+    """DELETE_FROM p remove as p+1 MELHORES ofertas -- consumo por agressao.
+    No dado real nao existe p = 0 (seria um DELETE 0) e a distribuicao
+    decai a partir de 1."""
+    df = pd.DataFrame([_ev(1, ADD, 0, 0, 100.0, 1, 1), _ev(2, ADD, 0, 0, 101.0, 1, 2),
+                       _ev(3, ADD, 0, 0, 102.0, 1, 3),       # topo = 102
+                       _ev(4, DELETE_FROM, 0, 1)])           # varre as 2 melhores
+    ev, cont = br.reconstruir(df, log_a_cada=0)
+    saidas = sorted(ev[~ev["entrada"]]["agente"].tolist())
+    assert saidas == [2, 3]                                  # 101 e 102, nao 100
+    assert cont["removidas_por_delete_from"] == 2 and cont["saidas_por_varredura"] == 2
 
 
 def test_dia_dobrado_e_desfeito_e_dia_normal_nao_e_tocado() -> None:
@@ -185,11 +191,19 @@ def test_insercao_fora_de_ordem_e_detectada() -> None:
     assert cont["insercoes_fora_de_ordem"] == 1
 
 
-def test_delete_from_remove_o_FUNDO_e_preserva_o_topo() -> None:
+def test_depois_da_varredura_o_topo_e_a_oferta_que_sobrou() -> None:
+    """Este distingue as duas leituras do DELETE_FROM (fundo x topo): depois
+    de varrer o topo, o DELETE 0 tem que achar a oferta que SOBROU embaixo."""
     df = pd.DataFrame([_ev(1, ADD, 0, 0, 100.0, 1, 1), _ev(2, ADD, 0, 0, 101.0, 1, 2),
                        _ev(3, ADD, 0, 0, 102.0, 1, 3),
-                       _ev(4, DELETE_FROM, 0, 1),      # tira posicoes >= 1 (o fundo)
-                       _ev(5, DELETE, 0, 0)])          # o topo sobreviveu
-    ev, cont = br.reconstruir(df, log_a_cada=0)
-    assert cont["removidas_por_delete_from"] == 2
-    assert ev[~ev["entrada"]].iloc[0]["agente"] == 3
+                       _ev(4, DELETE_FROM, 0, 1),      # varre 102 e 101
+                       _ev(5, DELETE, 0, 0)])          # o novo topo e' 100
+    ev, _ = br.reconstruir(df, log_a_cada=0)
+    ultima = ev[~ev["entrada"]].sort_values("ts_recv_ns").iloc[-1]
+    assert ultima["agente"] == 1 and ultima["price"] == 100.0
+
+
+def test_varredura_maior_que_o_livro_conhecido_conta_desconhecidas() -> None:
+    df = pd.DataFrame([_ev(1, ADD, 0, 0, 100.0, 1, 1), _ev(2, DELETE_FROM, 0, 3)])
+    _, cont = br.reconstruir(df, log_a_cada=0)
+    assert cont["saidas_atribuidas"] == 1 and cont["saidas_desconhecidas"] == 3

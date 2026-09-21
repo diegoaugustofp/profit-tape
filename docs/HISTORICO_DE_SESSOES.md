@@ -2777,3 +2777,14 @@ Captura do mes inteiro para ter baseline dentro da mesma serie.
   dado real. Registrado o problema conceitual: o baseline nao separa
   formador recotando de nivel defendido -- a separacao exige cruzar o
   DELETE com o tape (consumo x cancelamento). 954 testes.
+- v3.25: CORRECAO DE REGISTRO. A v3.24 nao mudou nada nas contagens: as
+  duas indexacoes sao espelho (conferido; a rodada repetiu os numeros ate'
+  a ultima casa). E a "prova" de que os testes novos reprovavam na versao
+  antiga era falsa -- erro de chave, nao de semantica. A hipotese seguinte
+  (ressincronizacoes do livro) tambem foi refutada, ANTES de registrada:
+  zero DELETE_FROM com posicao 0. A leitura que o dado sustenta: DELETE_FROM
+  remove as p+1 MELHORES (varredura do topo por agressao, distribuicao
+  decaindo a partir de 1) -- e portanto e' CONSUMO. Previsao declarada
+  antes da rodada. Teste que distingue as leituras conferido pelo MOTIVO:
+  reprova na v3.24 por asercao (o topo varrido continuava no livro).
+  955 testes.
