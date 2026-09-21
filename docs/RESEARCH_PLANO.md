@@ -7,6 +7,28 @@ arquivo cresceu demais para navegar so' por titulo cronologico).
 
 ## Indice por assunto
 
+**Setembro/2026 -- regime, metodo de hipotese e contrapartes**
+- [RESULTADO DA TRIAGEM: a absorcao MUDA DE IDENTIDADE, e o WIN quebrou em 2020 (2026-09-16)](#resultado-da-triagem-a-absorcao-muda-de-identidade-e-o-win-quebrou-em-2020-2026-09-16)
+- [RELEITURA POR REGIME do 123 em volume baixo (declarada ANTES, 2026-09-16)](#releitura-por-regime-do-123-em-volume-baixo-declarada-antes-2026-09-16)
+- [COMO GERAR E REFINAR HIPOTESE (2026-09-16, decisao do operador)](#como-gerar-e-refinar-hipotese-2026-09-16-decisao-do-operador)
+- [PRIMEIRA APLICACAO DO METODO NOVO: a ROLAGEM (2026-09-16)](#primeira-aplicacao-do-metodo-novo-a-rolagem-2026-09-16)
+- [Passo 1 do AJUSTE/FECHAMENTO: RESULTADO — sem marca, e INVERTIDO (2026-09-17)](#passo-1-do-ajustefechamento-resultado--sem-marca-e-invertido-2026-09-17)
+- [Passo 1 da DEFASAGEM: RESULTADO — nao ha' o que explorar, e o achado e' INVERTIDO (2026-09-17)](#passo-1-da-defasagem-resultado--nao-ha-o-que-explorar-e-o-achado-e-invertido-2026-09-17)
+- [COMO CLASSIFICAR UM FECHAMENTO (2026-09-17, depois de eu errar isto)](#como-classificar-um-fechamento-2026-09-17-depois-de-eu-errar-isto)
+- [RECLASSIFICACAO: rolagem e vencimento de opcao (2026-09-17, critica do operador)](#reclassificacao-rolagem-e-vencimento-de-opcao-2026-09-17-critica-do-operador)
+- [Opcao sobre acao: series de OUTUBRO e a expectativa DECLARADA ANTES (2026-09-21)](#opcao-sobre-acao-series-de-outubro-e-a-expectativa-declarada-antes-2026-09-21)
+
+**Setembro/2026 -- iceberg e livro de ofertas (book)**
+- [CANDIDATO ANTES DO AGENTE: ICEBERG / LOTE REPETIDO (desenho, 2026-09-17)](#candidato-antes-do-agente-iceberg--lote-repetido-desenho-2026-09-17)
+- [ICEBERG: NAO TESTAVEL NO TAPE DE NEGOCIOS -- requer BOOK (2026-09-17)](#iceberg-nao-testavel-no-tape-de-negocios----requer-book-2026-09-17)
+- [Achado colateral: o nosso tape conta NEGOCIOS diferente do Profit](#achado-colateral-o-nosso-tape-conta-negocios-diferente-do-profit)
+- [RECOMPOSICAO NO LIVRO — passo 1 entregue (2026-09-17)](#recomposicao-no-livro--passo-1-entregue-2026-09-17)
+- [CORRECAO DO REGISTRO ANTERIOR + a leitura do DELETE_FROM (2026-09-21)](#correcao-do-registro-anterior--a-leitura-do-delete_from-2026-09-21)
+- [Book v3.25 rodado: a reconstrucao PASSOU nas previsoes declaradas (2026-09-21)](#book-v325-rodado-a-reconstrucao-passou-nas-previsoes-declaradas-2026-09-21)
+- [Book v3.26 rodado: TESTE SEM PODER -- linha ESTACIONADA (2026-09-21)](#book-v326-rodado-teste-sem-poder----linha-estacionada-2026-09-21)
+- [Nota: o "identificador de iceberg" em NTSL da Nelogica (2026-09-21)](#nota-o-identificador-de-iceberg-em-ntsl-da-nelogica-2026-09-21)
+- [PROXIMO CANDIDATO: COMPORTAMENTO DE AGENTE (desenho, 2026-09-17)](#proximo-candidato-comportamento-de-agente-desenho-2026-09-17)
+
 **DeepScalper / RL intradiario (caminho G) — curadoria fechada**
 - [PRE-REGISTRO: DeepScalper — Fase 0 (desenho) (2026-09-07)](#pre-registro-deepscalper--fase-0-desenho-2026-09-07)
   — curadoria em `docs/CURADORIA_DEEPSCALPER.md`. Portao decisivo e' a
@@ -6838,3 +6860,53 @@ SEGURANDO. Por isso a leitura e' na CAUDA da curva de consumo.
 avulso cruzando o DELETE na posicao 0 com o tape (negocio no mesmo preco
 logo antes = consumo de uma oferta; sem negocio = cancelamento), pelo
 `ts_recv_ns`, que e' o relogio comum aos dois streams.
+
+
+### Book v3.26 rodado: TESTE SEM PODER -- linha ESTACIONADA (2026-09-21)
+
+Seis dias (10 a 17/09). Reconstrucao validada em TODOS: entradas ~ saidas
+(ex.: 16/09 19.727.043 x 19.722.870), desconhecidas ~0 (0 em 16/09, 106 em
+17/09).
+
+| corrida >= N | consumo obs. | baseline | razao | avulsa obs. | baseline | razao |
+|---|---|---|---|---|---|---|
+| 3 | 121.530 | 81.496 | 1,45 | 577.634 | 350.427 | 1,63 |
+| 10 | 14.324 | 5.465 | 2,53 | 128.310 | 44.526 | 2,72 |
+| 20 | **1.582** | 257 | **5,85** | 41.364 | 8.252 | 4,46 |
+| 50 | 6 | 0 | 6,50 | **8.472** | 216 | **41,6** |
+
+**Pelo criterio escrito, a cauda de consumo passa em N = 20.** Mas o que eu
+declarei que SEPARAVA formador de nivel defendido -- o COMPRIMENTO da
+cadeia -- nao separa: as cadeias mais longas estao no grupo AVULSO, onde
+mora a recotacao. O comprimento, se aponta para algum lado, aponta para o
+formador. Formador executado no melhor preco e repondo o mesmo lote produz
+exatamente as cadeias de consumo observadas.
+
+**Classificacao: TESTE SEM PODER** (o controle nao separa as duas
+explicacoes). Nem refutada nem confirmada.
+
+**O que separaria: o LADO.** Formador cota os dois lados; quem defende um
+nivel fica de um so'. Com o livro reconstruido, para cada cadeia: o mesmo
+agente mantinha oferta do lado oposto no topo? Ressalva ja' conhecida:
+agente e' corretora e pode abrigar os dois.
+
+**Linha ESTACIONADA** ate' o E4 comecar (recomendacao aceita no fim da
+sessao: o book nao decide dezembro). O que ela ja' entregou: a
+reconstrucao do livro validada, o diagnostico da captura em dobro e a
+descricao do consumo (16% das saidas vem de varredura).
+
+**Itens abertos:** (1) insercoes fora de ordem variam 0-16% por dia,
+sempre no fim do pregao -- contar por HORA; (2) capturar o `atFullBook`.
+
+### Nota: o "identificador de iceberg" em NTSL da Nelogica (2026-09-21)
+
+Analisado a pedido do operador. NAO detecta iceberg: (1) LADOS TROCADOS --
+junta agressao compradora com o livro de COMPRA, que ela nem toca (iceberg
+de compra absorve VENDEDORES); (2) limiares que nao filtram no WIN (1.000
+contratos de agressao num candle de 5 min; >= 3 ofertas em 5 niveis);
+(3) compara totais de 5 niveis que mudam de preco quando o preco anda --
+iceberg e' UM preco segurando; (4) pelo proprio manual do NTSL o livro nao
+tem historico: marcacoes em candles passados sao artefato, e em tempo real
+o "anterior" e' da execucao anterior, nao do candle anterior. Mesmo
+corrigido, esbarraria no que medimos: absorcao nao separa formador de
+iceberg sem olhar o lado.

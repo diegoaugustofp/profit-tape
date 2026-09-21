@@ -1,3 +1,19 @@
+# Operacao
+
+## Setembro/2026: incidentes, achados e a rotina que eles criaram
+
+**Rotina (vale todo pregao):**
+1. No arranque: `energia.mantendo_acordado` no log (se vier
+   `energia.pedido_recusado`, a maquina pode dormir). Notebook na TOMADA,
+   tampa aberta.
+2. Depois de subir o record: se nasceu pasta `dt=` do DIA ANTERIOR em
+   `data/raw/trade/`, e' residuo -- apague antes de curar.
+3. Curar SEMPRE com `--dia`. A cura recusa sobrescrever com menos da
+   metade das linhas (`--forcar "motivo"` libera).
+4. No fim: `recorder.resumo` -> `offer_book_chamadas` (`v1_suprimidas`
+   ~ `v2` = o book esta' sendo gravado uma vez so').
+5. Opcoes: a lista de series muda a CADA vencimento (rotina mensal).
+
 ## ACHADO 2026-09-21: o offer book estava sendo GRAVADO EM DOBRO
 
 **O que se viu.** O diagnostico do book de 17/09 mostrou todo `ADD` em
@@ -121,8 +137,6 @@ no raw -- e a protecao passa a ser essencial, nao opcional.
 
 ---
 
-# Operacao
-
 ## Antes do primeiro pregao
 
 ```bash
@@ -230,6 +244,12 @@ de rede boa e horario comercial, ai sim procure o 46o codigo NL_ no manual.
   energia enquanto grava.
 
 ## Offer book: V1 x V2 (incidente 2026-08-21)
+
+> **ATUALIZACAO 2026-09-21:** a premissa desta secao ("o setter sobrepoe o
+> do init, nunca os dois ativos") deixou de valer numa versao posterior da
+> DLL: V1 e V2 passaram a disparar os dois e o book foi gravado em DOBRO.
+> Ver "ACHADO 2026-09-21" acima -- o V1 agora so' publica enquanto o V2
+> nao entregou nada.
 
 Os slots de callback do DLLInitializeMarketLogin sao os tipos V1 (nQtd em
 Integer 32 bits). Registrar callbacks V2 neles produziu dois sintomas

@@ -131,6 +131,19 @@ em dia sem pregao.
 
 ## 3. Pendencias REAIS (o que de fato falta)
 
+**ATUALIZACAO 2026-09-21 (vale sobre o texto abaixo):**
+
+| pendencia | estado |
+|---|---|
+| 7a -- dry_run ao vivo do 123 | replay 16 e 17/09 OK e conferido no grafico; ao vivo 17/09 achou a fragmentacao (corrigida, sec. 7); 18/09 limpo mas com 35 barras pelo Modern Standby. **Falta 1 pregao limpo com a v3.21+** |
+| SendCancelOrders (plural) | **descartada** por decisao do operador; reconciliacao ordem a ordem com a singular (E2b). Limitacao: ordem orfa de processo morto -> limpeza manual |
+| Atraso do EA | medido (sec. 8): 0,03-6 s media, 8 s max com fluxo -- nao bloqueia o E4 do 123 |
+| Maquina dormindo | corrigido: record chama SetThreadExecutionState (OPERACAO) |
+| Cabo + nobreak | pendente -- agora com motivo MEDIDO |
+| E4 | `dry_run: false` + `--ea-ticker-ordem`, ate' o fim de setembro |
+| Diario: gate nao avaliado com posicao aberta | pendente (pequeno): o custo do gate sai subestimado |
+
+
 Revisado linha a linha em 2026-09-11. As pendencias historicas listadas
 no corpo antigo deste arquivo estao TODAS resolvidas; o texto e' que
 nunca foi atualizado. Especificamente:

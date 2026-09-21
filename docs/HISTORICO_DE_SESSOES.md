@@ -2796,3 +2796,37 @@ Captura do mes inteiro para ter baseline dentro da mesma serie.
   saida que as precede: depois de CONSUMO (varredura) x depois de saida
   AVULSA. Ressalva registrada antes: formador tambem repoe apos execucao;
   o que distingue e' a cadeia LONGA de consumo. 957 testes.
+
+### RESUMO DA SESSAO 16-21/09 (v2.98 -> v3.27, 902 -> 957 testes)
+
+**Pesquisa.** A triagem mostrou que o WIN QUEBROU EM 2020 (permanente) e
+que a absorcao muda de identidade com o regime; o 123 em volume baixo
+ATRAVESSA a quebra nos dois instrumentos. Metodo novo de hipotese:
+CONTRAPARTE antes do padrao, triagem por regime, dado raro, catalogo de
+mortas, anomalia medida -- e a taxonomia de fechamento (refutada / sem
+poder / dado insuficiente), criada depois de eu errar a classificacao.
+Rolagem (depois reclassificada: a serie continua apaga o evento),
+fechamento e defasagem descritos; opcao sobre acao em captura (setembro e
+outubro, com a expectativa de outubro declarada antes). Iceberg no tape:
+v1 reprovada contra o Times & Trades do operador, v2 plana -> dado
+insuficiente. Book: reconstrucao por posicao validada depois de varias
+leituras erradas minhas; nivel defendido = teste sem poder; linha
+estacionada.
+
+**EA e infra.** Replay do EA 123 (e a saga do relogio: quatro tentativas,
+a ultima so' depois de reproduzir). Dry_run ao vivo achou a FRAGMENTACAO
+DE BARRA -- o operador viu no grafico antes do diagnostico. Atraso
+instrumentado e medido. Modern Standby, cura destrutiva e book em dobro:
+tres incidentes com causa achada e protecao no codigo.
+
+**Erros meus que ficam registrados para nao repetir:** descrever numeros
+de anexo que nao recebi; corrigir sem reproduzir (4x no relogio);
+"provar" com teste que falhava pelo motivo errado (erro de chave);
+afirmar causa antes de testar (indexacao "invertida", que era espelho;
+ressincronizacao do livro, refutada pelo operador); editar o fake errado;
+numero de testes errado no historico. O padrao que corrigiu todos: MEDIR,
+conferir o MOTIVO da falha, declarar a previsao ANTES de rodar.
+
+**Proxima sessao:** confirmar no pregao (energia, 38 barras,
+`offer_book_chamadas`), backfill do 18/09, cabo/nobreak e E4. Pesquisa
+estacionada ate' o E4 comecar; ver ESTADO_E_CAMINHOS secao 3.

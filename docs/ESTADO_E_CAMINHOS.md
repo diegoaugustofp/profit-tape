@@ -1,82 +1,102 @@
-# Onde estamos e para onde dá para ir — 2026-09-16 (noite)
+# Onde estamos e para onde dá para ir — 2026-09-21
 
-> Substitui a versão de 2026-09-15. Aquela fechava com a linha de preço
-> percorrida em dois instrumentos; esta fecha com a linha inteira
-> resolvida, um efeito replicado que atravessa uma quebra de regime, o
-> diário de sinais pronto, e o método de gerar hipótese revisto.
+> Substitui a versão de 2026-09-16. Sessão de 16 a 21/09: v2.98 → v3.27,
+> 902 → 957 testes. O EA 123 rodou ao vivo pela primeira vez, o dry_run
+> encontrou defeitos que o replay não pegava, e a pesquisa ganhou método
+> novo (contraparte antes do padrão) e uma linha inteira de book.
 
 ## 1. O que existe hoje, em uma tela
 
 | linha | estado |
 |---|---|
-| **Preço** (M15) | **percorrida e fechada.** 7 famílias × 2 futuros × 10 anos. Um efeito vivo: 123 em volume baixo |
-| **Fluxo** (tape) | absorção fechada em duas formas; tape acumulando desde 24/07 (2 meses). É a aposta original, ainda sem resposta |
-| **Execução** | E0–E3, E2b, E5.5 fechados. F5 do 123 com código completo (7 passos + gate + diário). Falta pregão |
+| **EA 123 + gate volume baixo** | código completo; replay e ao vivo validados contra o gráfico; **falta 1 pregão limpo** e a infra |
+| **Pesquisa de preço (M15)** | fechada; o único efeito vivo (123 volume baixo) atravessa a quebra de 2020 |
+| **Pesquisa por contraparte** | rolagem, fechamento e defasagem descritos; opção sobre ação em captura |
+| **Book (livro de ofertas)** | reconstrução validada; hipótese de nível defendido = **teste sem poder**; linha **estacionada** até o E4 |
+| **Captura** | 9 ativos + 14 séries de opção; book agora gravado **sem duplicata**; record mantém a máquina acordada |
 
-## 2. O que sabemos, e com que confiança
+## 2. O que a sessão estabeleceu
 
-**Nulo, em dez anos, nos dois futuros:** IFR2 (2 trials), ORB, gap de
-abertura (inconclusivo sem padrão). Véspera fechou sem p1 — o estimador
-binário não serve para entrada por rompimento com D pequeno.
+**Sobre o mercado**
+- **O WIN quebrou em 2020** e não voltou: a variância de log-volume caiu de
+  1,24 para ~0,3. Histórico longo dá n, não homogeneidade.
+- **O 123 em volume baixo sobrevive à quebra** nos dois instrumentos (WIN
+  0,563 → 0,546; WDO 0,552 → 0,526; contraste abaixo em todos). Hipótese
+  mais forte; veredito (inconclusivo pelo 0,56) inalterado.
+- **Fluxo obrigatório de calendário e de horário não deixa marca no WIN**
+  (rolagem na série contínua, ajuste/fechamento) — e o fim do pregão é o
+  momento mais magro do dia; quem concentra é a abertura.
+- **O WIN lidera a cesta** em 15 s (5 de 5 dias), sem valor operacional.
+- **Book:** 16% das saídas de oferta são varredura por agressão; existem
+  ~1,6 mil cadeias/dia de consumo seguido de reposição acima do embaralhado,
+  mas as cadeias mais longas são de recotação — o comprimento não separa
+  formador de nível defendido.
 
-**O efeito vivo — 123 em volume baixo.** Quatro medições independentes:
-
-| | até 2019 | de 2020 |
-|---|---|---|
-| WIN | 0,563 [0,535; 0,590] | 0,546 [0,524; 0,567] |
-| WDO | 0,552 [0,520; 0,584] | 0,526 [0,503; 0,548] |
-
-Contraste (volume alto) abaixo em todas. Atravessa a quebra de
-microestrutura de 2020. **Inconclusivo pelo critério de 0,56** — e o
-critério não muda —, mas é a única hipótese com mecanismo plausível,
-replicação em dois instrumentos e sobrevivência a uma mudança estrutural.
-
-**Dois achados de método, que valem mais que qualquer ficha:**
-1. **O WIN quebrou em 2020.** A variância de log‑volume caiu de 1,24
-   para ~0,3 e não voltou. Histórico longo dá n, não homogeneidade.
-2. **O gráfico proxia a absorção (decil 0,90) e o grosso do imbalance
-   (R² 0,77), mas erra o extremo direcional (decil 0,43).** O que
-   justifica a DLL é o extremo, os agentes, o book e a execução.
+**Sobre o próprio sistema (defeitos achados e corrigidos)**
+- EA armava sobre **fragmentos de barra** ao vivo (EA atrás da fila +
+  relógio de parede). Agora quem fecha barra é o trade. Teste: 10.800 → 23.
+- **Atraso real** do EA com fluxo: 0,03–6 s de média, 8 s de máximo — não
+  bloqueia o E4 do 123.
+- **Modern Standby** congelou o record 26 min em 18/09. O record agora pede
+  ao Windows para não dormir.
+- A **cura destruiu um pregão** (resíduo de 1 linha sobrescreveu 5,97 M).
+  Agora recusa sobrescrever com menos da metade.
+- O **offer book era gravado em dobro** (V1 e V2 disparando). Corrigido na
+  captura; o histórico é desfeito na leitura.
+- Nosso tape = aba **"negócios"** do Times & Trades (cada casamento); o
+  Profit em "ordem original" agrega ~4×. Volume bate (fora RLP).
 
 ## 3. O que falta — em ordem
 
-### A. Forward do 123 com gate (o que decide dezembro)
+### A. Caminho crítico (decide dezembro) — prazo: fim de setembro
 
 | # | falta | quem |
 |---|---|---|
-| 7a | **pregão em dry_run** com `ea_123_vb`, ligado antes das 09:00; no fim, `profit-tape diario data/forward/ea_123_vb --ea ea_123_vb` | operador |
-| — | `SendCancelOrders` ao vivo (única peça da reconciliação nunca testada) | operador |
-| — | cabo em vez de Wi‑Fi + nobreak (máquina e roteador) | operador |
-| 7b | **E4** (`dry_run: false`); E5.6 fecha junto | operador |
-| — | ~50 pregões: slippage ≤ 6 pts, n = 100 | calendário |
+| 1 | Aplicar até a v3.27 com o record parado | operador |
+| 2 | Próximo pregão: conferir `energia.mantendo_acordado` no arranque, ~38 barras sem `dia_incompleto`, e no `recorder.resumo` o `offer_book_chamadas` (`v1_suprimidas` ≈ `v2` prova a duplicata) | operador |
+| 3 | **Backfill do 18/09** (buraco 16:08–16:59) — janela de 30 dias fecha ~18/10 | operador |
+| 4 | Cabo + nobreak — agora com motivo medido (Wi-Fi em D3, espera) | operador |
+| 5 | **E4**: `dry_run: false` + `--ea-ticker-ordem`; E5.6 junto | operador |
+| 6 | ~50 pregões de forward; slippage ≤ 6 pts | calendário |
 
-**Prazo:** o E4 precisa começar até o fim de setembro, ou o forward não
-fecha dentro da janela de dezembro — e "não deu tempo" é pior desfecho
-que "não tem borda".
+### B. Pequenos, no código (não bloqueiam)
+- Diário: o gate não é avaliado quando há posição aberta → custo do gate
+  subestimado. Registrar o gate mesmo no sinal bloqueado.
+- Record: por que grava um evento do **dia anterior** ao subir (16/09 e
+  17/09)? A proteção da cura já impede estrago; falta a causa.
+- Book: horário das inserções fora de ordem (0–16% por dia, sempre no fim).
 
-### B. Enquanto o tape acumula (é de graça, não gasta pregão)
+### C. Pesquisa — estacionada até o E4 começar
+- **Opções de PETR4**: outubro capturado o mês inteiro (vence 16/10); OI
+  colado no spot → **um nulo em outubro pesa contra**. Falta escrever a
+  descrição do passo 1 (setembro já tem 18/09 capturado).
+- **Book, próximo teste — o LADO**: formador cota os dois lados; defensor,
+  um. Para cada cadeia de consumo, o mesmo agente tinha oferta do lado
+  oposto? Depois: capturar o `atFullBook` (engenharia na captura).
+- **Rolagem refeita** (par casado entre contratos): WIN vence 14/10 →
+  assinar `WINV26` e `WINZ26` antes de ~07/10. **WDO vence no 1º dia útil
+  do mês → a virada é nesta semana**; se quiser a amostra mais rápida,
+  assinar `WDOV26` e `WDOX26` já.
+- **Agente** (saldo acumulado e a sua virada) — depois do book.
 
-Os cinco pontos sobre geração de hipótese estão no `RESEARCH_PLANO.md` e
-valem a partir da próxima ficha — com destaque para o campo
-**CONTRAPARTE** obrigatório antes de HIPÓTESE, e para a triagem por
-regime. O caminho mais valioso: **comportamento de agente** (quem
-aparece antes de quê), que exige tape e é onde o dado é raro.
+## 4. Onde cada hipótese está (a taxonomia de fechamento)
 
-### C. Andando sozinho / backlog
+| hipótese | estado |
+|---|---|
+| IFR2, ORB | **refutada** |
+| véspera, rolagem v1 (série contínua) | **teste sem poder** |
+| iceberg no tape | **dado insuficiente** (tape só tem execução; agente = corretora) |
+| nível defendido no book | **teste sem poder** (controle não separa formador) |
+| opção sobre índice | descartada com razão medida |
+| opção sobre ação | **em captura** |
+| 123 volume baixo | **viva**, no forward |
 
-- Tape acumula; **rotina nova:** backfill + cura do dia anterior toda
-  manhã, no mesmo Agendador que sobe o record.
-- DeepScalper espera n = 50; Rota B espera o primeiro sinal real.
-- `RequestSerieHistory` de barras; `FEATURES.md` atrasado.
-- **Queimado:** WIN 2015–2026 para IFR2, ORB, 123, 123gate, vespera e
-  gap; WDO para IFR2, ORB, 123 e 123gate_baixo.
+## 5. As duas perguntas de dezembro
 
-## 4. As duas perguntas de dezembro
-
-1. **Existe EA que opere com retorno?** Hoje: um candidato com efeito
-   pequeno e real. O forward diz se a execução cabe dentro dele.
-2. **A estrutura (ProfitDLL) é a certa, ou NTSL faria o mesmo?** O
-   forward responde isto também, medindo o que a DLL custa em slippage
-   para fazer o que o NTSL faria barato. E a medição de 16/09 já disse o
-   que sobra de exclusivo para ela: extremo direcional, agentes, book,
-   execução automática.
+1. **Existe EA que opere com retorno?** Um candidato com efeito pequeno,
+   real e que atravessou uma mudança estrutural. O forward mede se a
+   execução cabe dentro dele.
+2. **A estrutura (ProfitDLL) é a certa?** Esta sessão respondeu parte: a
+   DLL deu o que o gráfico não dá (agente por negócio, ordem de chegada
+   entre ativos, livro reconstruível evento a evento) — e cobrou caro em
+   engenharia (book duplicado, standby, fila). O forward responde o resto.
