@@ -105,6 +105,14 @@ _EDIT = int(BookAction.EDIT)
 _DELETE = int(BookAction.DELETE)
 _DELETE_FROM = int(BookAction.DELETE_FROM)
 LIMIAR_DIA_DOBRADO = 0.9
+# TIPO DA SAIDA (2026-09-21). Varredura (DELETE_FROM) e' CONSUMO com
+# certeza: agressao levou as p+1 melhores. O DELETE avulso MISTURA
+# cancelamento com consumo de uma oferta so' -- separar os dois exige o
+# tape (proximo passo). Ja' assim, a pergunta fica certa: a reposicao vem
+# depois de CONSUMO (assinatura de nivel defendido) ou depois de saida
+# avulsa (onde mora a recotacao rotineira do formador)?
+SAIDA_DELETE = 0
+SAIDA_VARREDURA = 1
 
 
 def carregar_book(raiz: Path, symbol: str, dia: dt.date) -> tuple[pd.DataFrame, int]:
@@ -189,6 +197,7 @@ def reconstruir(df: pd.DataFrame, log_a_cada: int = 5_000_000) -> tuple[pd.DataF
     s_sd = np.empty(n, dtype=np.int64)
     s_q = np.empty(n, dtype=np.int64)
     s_ag = np.empty(n, dtype=np.int64)
+    s_tp = np.empty(n, dtype=np.int8)       # 1 = varredura (consumo), 0 = delete avulso
     k = 0
     desconhecidas = edit_desconhecido = truncadas = 0
     adds_conferidos = fora_de_ordem = 0
@@ -225,6 +234,7 @@ def reconstruir(df: pd.DataFrame, log_a_cada: int = 5_000_000) -> tuple[pd.DataF
                     desconhecidas += 1
                 else:
                     s_ts[k], s_pr[k], s_sd[k], s_q[k], s_ag[k] = ts, saiu[0], lado, saiu[1], saiu[2]
+                    s_tp[k] = SAIDA_DELETE
                     k += 1
             else:
                 desconhecidas += 1              # oferta mais funda que o conhecido
@@ -254,6 +264,7 @@ def reconstruir(df: pd.DataFrame, log_a_cada: int = 5_000_000) -> tuple[pd.DataF
                     desconhecidas += 1
                 else:
                     s_ts[k], s_pr[k], s_sd[k], s_q[k], s_ag[k] = ts, saiu[0], lado, saiu[1], saiu[2]
+                    s_tp[k] = SAIDA_VARREDURA
                     k += 1
                     por_varredura += 1
         if log_a_cada and i and i % log_a_cada == 0:
@@ -265,9 +276,10 @@ def reconstruir(df: pd.DataFrame, log_a_cada: int = 5_000_000) -> tuple[pd.DataF
                              "side": add["side"].to_numpy(dtype=np.int64),
                              "quantidade": add["quantidade"].to_numpy(dtype=np.int64),
                              "agente": add["agente"].to_numpy(dtype=np.int64),
-                             "entrada": True})
+                             "entrada": True, "tipo_saida": np.int8(-1)})
     saidas = pd.DataFrame({"ts_recv_ns": s_ts[:k], "price": s_pr[:k], "side": s_sd[:k],
-                           "quantidade": s_q[:k], "agente": s_ag[:k], "entrada": False})
+                           "quantidade": s_q[:k], "agente": s_ag[:k], "entrada": False,
+                           "tipo_saida": s_tp[:k]})
     total_saidas = k + desconhecidas
     cont = {"saidas_atribuidas": k, "saidas_desconhecidas": desconhecidas,
             "fracao_saidas_desconhecidas": (round(desconhecidas / total_saidas, 4)
@@ -288,18 +300,22 @@ def eventos_de_nivel(df: pd.DataFrame) -> pd.DataFrame:
     return ev
 
 
-def _cadeias(ev: pd.DataFrame, janela_ns: int) -> np.ndarray:
+def _cadeias(ev: pd.DataFrame, janela_ns: int, tipo: int | None = None) -> np.ndarray:
     """Tamanho de cada cadeia de RECARGAS: saida seguida de entrada no
-    mesmo (preco, lado, quantidade, agente) dentro da janela."""
+    mesmo (preco, lado, quantidade, agente) dentro da janela. Com `tipo`,
+    so' contam as recargas cuja saida precedente e' daquele tipo
+    (SAIDA_VARREDURA = consumo; SAIDA_DELETE = avulsa)."""
     if ev.empty:
         return np.array([], dtype=np.int64)
     chave = (ev["price"].to_numpy(dtype=np.float64), ev["side"].to_numpy(dtype=np.int64),
              ev["quantidade"].to_numpy(dtype=np.int64), ev["agente"].to_numpy(dtype=np.int64))
     ts = ev["ts_recv_ns"].to_numpy(dtype=np.int64)
     entrada = ev["entrada"].to_numpy(dtype=bool)
+    tp_col = (ev["tipo_saida"].to_numpy(dtype=np.int8) if "tipo_saida" in ev
+              else np.zeros(len(ev), dtype=np.int8))
     ordem = np.lexsort((ts, *chave[::-1]))
     p, s_, q, a = (c[ordem] for c in chave)
-    t, e = ts[ordem], entrada[ordem]
+    t, e, tp = ts[ordem], entrada[ordem], tp_col[ordem]
     mesma = np.empty(len(t), dtype=bool)
     mesma[0] = False
     mesma[1:] = ((p[1:] == p[:-1]) & (s_[1:] == s_[:-1]) & (q[1:] == q[:-1])
@@ -307,6 +323,8 @@ def _cadeias(ev: pd.DataFrame, janela_ns: int) -> np.ndarray:
     # recarga: entrada logo apos uma SAIDA da mesma chave, dentro da janela
     recarga = np.zeros(len(t), dtype=bool)
     recarga[1:] = mesma[1:] & e[1:] & (~e[:-1]) & ((t[1:] - t[:-1]) <= janela_ns)
+    if tipo is not None:
+        recarga[1:] &= tp[:-1] == tipo          # o tipo da SAIDA que precede
     if not recarga.any():
         return np.array([], dtype=np.int64)
     # CADEIA = recargas seguidas no MESMO nivel. Elas nao sao adjacentes no
@@ -350,6 +368,15 @@ def medir_dia(raiz: Path, symbol: str, dia: dt.date, janela_s: float = JANELA_S,
         return {str(n): int((v >= n).sum()) for n in (3, 5, 10, 20, 50)}
 
     obs, base = curva(tam), curva(tam_b)
+    por_tipo: dict[str, Any] = {}
+    for nome, tp in (("apos_consumo", SAIDA_VARREDURA), ("apos_saida_avulsa", SAIDA_DELETE)):
+        t_o = _cadeias(ev, janela_ns, tp)
+        t_b = _cadeias(ev_b, janela_ns, tp)
+        o, b = curva(t_o), curva(t_b)
+        por_tipo[nome] = {"recargas": int(t_o.sum()),
+                          "cadeia_max": int(t_o.max()) if len(t_o) else 0,
+                          "por_limiar": o, "baseline": b,
+                          "razao_por_limiar": {n: round((o[n] + 1) / (b[n] + 1), 3) for n in o}}
     r = {
         "dia": dia.isoformat(), "deltas": int(deltas_brutos),
         "duplicatas_removidas": int(desdob["linhas_removidas"]),
@@ -363,12 +390,15 @@ def medir_dia(raiz: Path, symbol: str, dia: dt.date, janela_s: float = JANELA_S,
         "cadeia_max": int(tam.max()) if len(tam) else 0,
         "por_limiar": obs, "baseline": base,
         "razao_por_limiar": {n: round((obs[n] + 1) / (base[n] + 1), 3) for n in obs},
+        "por_tipo_de_saida": por_tipo,
         "segundos_leitura": seg_leitura,
         "segundos_total": round(time.monotonic() - t0, 1),
     }
     log.info("book_recomposicao.dia", **{k: v for k, v in r.items()
                                          if k not in ("por_limiar", "baseline",
-                                                      "razao_por_limiar")})
+                                                      "razao_por_limiar", "por_tipo_de_saida")},
+             recargas_apos_consumo=por_tipo["apos_consumo"]["recargas"],
+             recargas_apos_saida_avulsa=por_tipo["apos_saida_avulsa"]["recargas"])
     return r
 
 
@@ -395,6 +425,20 @@ def descrever(raiz: Path, symbol: str, dias: list[dt.date], janela_s: float = JA
                 "razao_p50": float(np.median([x["razao_por_limiar"][n] for x in linhas]))}
             for n in linhas[0]["por_limiar"]},
         "segundos_por_dia_p50": float(np.median([x["segundos_total"] for x in linhas])),
+        "por_tipo_de_saida": {
+            nome: {
+                "recargas_p50": float(np.median(
+                    [x["por_tipo_de_saida"][nome]["recargas"] for x in linhas])),
+                "por_limiar": {
+                    n: {"observado_p50": float(np.median(
+                            [x["por_tipo_de_saida"][nome]["por_limiar"][n] for x in linhas])),
+                        "baseline_p50": float(np.median(
+                            [x["por_tipo_de_saida"][nome]["baseline"][n] for x in linhas])),
+                        "razao_p50": float(np.median(
+                            [x["por_tipo_de_saida"][nome]["razao_por_limiar"][n]
+                             for x in linhas]))}
+                    for n in linhas[0]["por_limiar"]}}
+            for nome in ("apos_consumo", "apos_saida_avulsa")},
     }
     r = {"symbol": symbol, "janela_s": janela_s, "n_minimo": n_minimo,
          "versao": "v3_posicional",

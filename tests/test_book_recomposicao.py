@@ -207,3 +207,50 @@ def test_varredura_maior_que_o_livro_conhecido_conta_desconhecidas() -> None:
     df = pd.DataFrame([_ev(1, ADD, 0, 0, 100.0, 1, 1), _ev(2, DELETE_FROM, 0, 3)])
     _, cont = br.reconstruir(df, log_a_cada=0)
     assert cont["saidas_atribuidas"] == 1 and cont["saidas_desconhecidas"] == 3
+
+
+def _nivel(ts: int, lado: int, preco: float, qtd: int, agente: int, ciclos: int,
+           por_varredura: bool) -> tuple[list[dict], int]:
+    """Um nivel sendo reposto `ciclos` vezes pelo mesmo agente. A saida e'
+    por VARREDURA (consumo: DELETE_FROM 1 leva as 2 melhores -- a nossa e'
+    uma delas) ou por DELETE avulso na posicao 0."""
+    linhas = []
+    for _ in range(ciclos):
+        if por_varredura:
+            linhas.append(_ev(ts, ADD, lado, 0, preco + (5.0 if lado else -5.0), 1, 99))
+            ts += 100_000
+        linhas.append(_ev(ts, ADD, lado, 0, preco, qtd, agente))
+        ts += NS
+        linhas.append(_ev(ts, DELETE_FROM, lado, 1) if por_varredura
+                      else _ev(ts, DELETE, lado, 0))
+        ts += NS
+    return linhas, ts
+
+
+def test_recarga_depois_de_consumo_e_separada_da_recarga_depois_de_cancelamento() -> None:
+    """A mesma cadeia de 30 reposicoes, uma vez depois de VARREDURA e outra
+    depois de DELETE avulso: cada uma so' aparece na curva do seu tipo."""
+    consumo, ts = _nivel(1, 0, 140000.0, 137, 7, 30, por_varredura=True)
+    avulsa, _ = _nivel(ts + 600 * NS, 0, 139000.0, 88, 8, 30, por_varredura=False)
+    ev, cont = br.reconstruir(pd.DataFrame(consumo + avulsa), log_a_cada=0)
+    assert cont["saidas_por_varredura"] >= 30
+    so_consumo = br._cadeias(ev, 5 * NS, br.SAIDA_VARREDURA)
+    so_avulsa = br._cadeias(ev, 5 * NS, br.SAIDA_DELETE)
+    assert so_consumo.max() >= 25 and so_avulsa.max() >= 25
+    # nenhuma cadeia de consumo longa com o agente do nivel avulso, e vice-versa
+    ev_c = ev[(ev["agente"] == 8)]
+    assert br._cadeias(ev_c, 5 * NS, br.SAIDA_VARREDURA).sum() == 0
+    ev_a = ev[(ev["agente"] == 7)]
+    assert br._cadeias(ev_a, 5 * NS, br.SAIDA_DELETE).sum() == 0
+
+
+def test_tipo_da_saida_chega_ao_relatorio(tmp_path: Path) -> None:
+    dia = dt.date(2026, 9, 15)
+    linhas, _ = _nivel(int(pd.Timestamp(f"{dia} 12:00", tz="UTC").value), 0, 140000.0,
+                       137, 7, 30, por_varredura=True)
+    _escrever(tmp_path, dia, pd.DataFrame(linhas))
+    r = br.medir_dia(tmp_path, "WINFUT", dia)
+    pt = r["por_tipo_de_saida"]
+    assert pt["apos_consumo"]["recargas"] >= 25
+    assert pt["apos_consumo"]["por_limiar"]["20"] >= 1
+    assert pt["apos_saida_avulsa"]["por_limiar"]["20"] == 0

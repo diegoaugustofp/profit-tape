@@ -2788,3 +2788,11 @@ Captura do mes inteiro para ter baseline dentro da mesma serie.
   antes da rodada. Teste que distingue as leituras conferido pelo MOTIVO:
   reprova na v3.24 por asercao (o topo varrido continuava no livro).
   955 testes.
+- v3.26: a v3.25 PASSOU nas tres previsoes declaradas antes (dia 10/09:
+  desconhecidas 62% -> 0,09% e paradas depois da abertura; DELETE_FROM
+  3,77 bilhoes -> 3,25 milhoes; fora de ordem 3,75% -> 1,69%) e numa
+  nao prevista (entrada 20,08 M ~ saida 20,08 M). Item aberto: fora de
+  ordem concentrado no fim do dia. Recargas agora separadas pelo tipo da
+  saida que as precede: depois de CONSUMO (varredura) x depois de saida
+  AVULSA. Ressalva registrada antes: formador tambem repoe apos execucao;
+  o que distingue e' a cadeia LONGA de consumo. 957 testes.

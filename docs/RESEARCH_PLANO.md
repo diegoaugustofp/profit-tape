@@ -6796,3 +6796,45 @@ leitura esta' errada:**
   dia (nas linhas `reconstruindo`);
 - `removidas_por_delete_from` perto da soma de (p+1): milhoes, nao bilhoes;
 - `fracao_insercoes_fora_de_ordem` abaixo dos 3,4-3,7% atuais.
+
+
+### Book v3.25 rodado: a reconstrucao PASSOU nas previsoes declaradas (2026-09-21)
+
+Dia 10/09, parcial (a rodada dos 6 dias continuava):
+
+| | v3.24 | v3.25 | previsao |
+|---|---|---|---|
+| saidas desconhecidas | 62,1% | **0,09%** | cair muito -- OK |
+| crescimento ao longo do dia | constante | **para depois da abertura** (16,5 mil -> 17,7 mil de 5 M a 35 M de eventos) | parar de crescer -- OK |
+| removidas por DELETE_FROM | 3,77 bilhoes | **3,25 milhoes** | milhoes -- OK |
+| insercoes fora de ordem | 3,75% | **1,69%** | abaixo de 3,4% -- OK |
+
+**Checagem nao prevista que confirma:** 20.083.770 ofertas entraram e
+20.079.438 sairam no dia -- entrada e saida empatam, com alguns milhares
+no livro no fim do pregao, como um livro real.
+
+**Item aberto (nao bloqueia):** as insercoes fora de ordem sao ZERO nos
+primeiros 25 M de eventos e aparecem so' no fim (59 mil aos 30 M, 310 mil
+aos 35 M). Palpite: leilao de fechamento / after, onde o livro pode ficar
+cruzado legitimamente. A conferir pelo horario.
+
+**A curva ainda nao respondia:** com as saidas certas, os "niveis
+defendidos" subiram para ~750 mil/dia -- a recotacao rotineira dominando.
+
+### v3.26: recarga separada pelo TIPO DA SAIDA que a precede
+
+Das 20 M de saidas de 10/09, 3,24 M vieram de VARREDURA -- consumo com
+certeza. As outras sao DELETE avulso: cancelamento OU consumo de uma
+oferta so' (mistura). As curvas agora saem em dois grupos, cada um contra
+o seu baseline: RECARGA DEPOIS DE CONSUMO e RECARGA DEPOIS DE SAIDA AVULSA.
+
+**Ressalva declarada ANTES de ler:** o formador tambem repoe depois de
+ser executado. Uma recarga depois de consumo, ISOLADA, nao distingue os
+dois. O que distingue e' a cadeia LONGA: o mesmo nivel absorvendo
+varredura atras de varredura e sendo reposto no mesmo preco -- o nivel
+SEGURANDO. Por isso a leitura e' na CAUDA da curva de consumo.
+
+**Proximo passo, se a cauda de consumo se destacar:** separar o balde
+avulso cruzando o DELETE na posicao 0 com o tape (negocio no mesmo preco
+logo antes = consumo de uma oferta; sem negocio = cancelamento), pelo
+`ts_recv_ns`, que e' o relogio comum aos dois streams.

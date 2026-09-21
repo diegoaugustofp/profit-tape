@@ -2038,9 +2038,21 @@ def book_recomposicao_cmd(
     for n, e in a["por_limiar"].items():
         typer.echo(f"    {n:>4}  {e['observado_p50']:>12,.0f}  {e['baseline_p50']:>12,.0f}  "
                    f"{e['razao_p50']:>7.2f}")
-    typer.echo("\n  LEITURA: curva perto de 1 = a recomposicao e' rotina de reposicao (o "
-               "formador repondo), nao nivel defendido. Cauda acima de 1 = ha' quem defenda "
-               "nivel com capital -> passo 2 escreve a ficha, com a direcao declarada antes.")
+    rotulos = {"apos_consumo": "RECARGA DEPOIS DE CONSUMO (varredura por agressao)",
+               "apos_saida_avulsa": "RECARGA DEPOIS DE SAIDA AVULSA (cancelamento OU consumo "
+                                    "de 1 oferta -- mistura)"}
+    for nome, rot in rotulos.items():
+        e_ = a["por_tipo_de_saida"][nome]
+        typer.echo(f"\n  {rot}   recargas/dia (p50): {e_['recargas_p50']:,.0f}")
+        typer.echo(f"    {'N':>4}  {'observado':>12}  {'baseline':>12}  {'razao':>7}")
+        for n, x in e_["por_limiar"].items():
+            typer.echo(f"    {n:>4}  {x['observado_p50']:>12,.0f}  {x['baseline_p50']:>12,.0f}  "
+                       f"{x['razao_p50']:>7.2f}")
+    typer.echo("\n  LEITURA: nivel DEFENDIDO aparece como cadeias LONGAS de recarga DEPOIS DE "
+               "CONSUMO -- o nivel absorve varreduras seguidas e e' reposto no mesmo preco. "
+               "Recarga depois de saida avulsa e' onde mora a recotacao do formador. RESSALVA: "
+               "formador tambem repoe depois de ser executado -- o que separa e' a cadeia "
+               "LONGA (o nivel segurando varredura atras de varredura), nao a recarga isolada.")
     typer.echo(f"\n  Saida: {saida}/book_recomposicao.json")
 
 
