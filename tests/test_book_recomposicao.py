@@ -254,3 +254,16 @@ def test_tipo_da_saida_chega_ao_relatorio(tmp_path: Path) -> None:
     assert pt["apos_consumo"]["recargas"] >= 25
     assert pt["apos_consumo"]["por_limiar"]["20"] >= 1
     assert pt["apos_saida_avulsa"]["por_limiar"]["20"] == 0
+
+
+def test_fora_de_ordem_e_contado_por_hora_local() -> None:
+    """As violacoes apareciam so' no fim do dia; o horario diz se e' leilao
+    de fechamento ou after. 12:00 UTC = 09:00 BRT; 21:10 UTC = 18:10 BRT."""
+    h09 = int(pd.Timestamp("2026-09-17 12:00", tz="UTC").value)
+    h18 = int(pd.Timestamp("2026-09-17 21:10", tz="UTC").value)
+    df = pd.DataFrame([_ev(h09, ADD, 0, 0, 100.0, 1, 1), _ev(h09 + 1, ADD, 0, 0, 101.0, 1, 2),
+                       _ev(h18, ADD, 0, 0, 90.0, 1, 3)])     # compra mais barata no topo: errado
+    _, cont = br.reconstruir(df, log_a_cada=0)
+    ph = cont["fora_de_ordem_por_hora"]
+    assert ph["09"] == [1, 0]
+    assert ph["18"] == [1, 1]

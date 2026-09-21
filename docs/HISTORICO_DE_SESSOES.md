@@ -2830,3 +2830,15 @@ conferir o MOTIVO da falha, declarar a previsao ANTES de rodar.
 **Proxima sessao:** confirmar no pregao (energia, 38 barras,
 `offer_book_chamadas`), backfill do 18/09, cabo/nobreak e E4. Pesquisa
 estacionada ate' o E4 comecar; ver ESTADO_E_CAMINHOS secao 3.
+- v3.28: os tres pequenos. (1) DIARIO: sinal bloqueado por posicao/
+  pendencia passa pelo gate sem efeito colateral (`avaliar`) e registra
+  `gate_passaria`; o relatorio mostra o custo do gate sobre TODOS os
+  sinais. Achado junto: `registrar_barra` nao era chamado nesses ramos,
+  contra a docstring -- corrigido. (2) RESIDUO: a particao sai da data do
+  PROPRIO evento; o record ao vivo agora quarentena (`raw/_quarentena/`)
+  evento de dia local anterior ao da sessao e loga os primeiros por
+  inteiro -- a causa (o que a DLL entrega na assinatura) sai do proximo
+  arranque. Opcional: o BACKFILL usa o mesmo writer e continua gravando
+  dias passados. (3) BOOK: fora de ordem por hora. Yaml do operador
+  validado: erro de indentacao em WDOV26/WDOX26 (o record nao subiria);
+  corrigido e com os dois contratos so' em trades. 963 testes.

@@ -6910,3 +6910,12 @@ tem historico: marcacoes em candles passados sao artefato, e em tempo real
 o "anterior" e' da execucao anterior, nao do candle anterior. Mesmo
 corrigido, esbarraria no que medimos: absorcao nao separa formador de
 iceberg sem olhar o lado.
+
+
+### Book: insercoes fora de ordem contadas POR HORA (v3.28, 2026-09-21)
+
+Item aberto da v3.26. `reconstruir` agora conta insercoes conferidas e fora
+de ordem por hora de Brasilia (relogio de recepcao), e o relatorio imprime
+a tabela somada dos dias. Serve para decidir se as violacoes (0-16% por
+dia, sempre no fim) sao o leilao de fechamento, o after ou outra coisa. A
+proxima rodada do `book-recomposicao` ja' traz a tabela.

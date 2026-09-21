@@ -1639,6 +1639,14 @@ def diario_cmd(
     typer.echo("\n--- CUSTO DAS REGRAS ---")
     typer.echo(f"  descartados={cr['descartados']} ({cr['fracao_dos_sinais']} dos sinais)")
     typer.echo(f"  por regra: {cr['por_regra']}")
+    gt = cr.get("gate_sobre_todos_os_sinais") or {}
+    if gt:
+        typer.echo(f"  GATE sobre TODOS os sinais (inclui os bloqueados por posicao): "
+                   f"barra {gt['fracao_que_o_gate_barra']} -- reprovou {gt['reprovados_de_fato']}, "
+                   f"indefinidos {gt['indefinidos']}, bloqueados que reprovaria "
+                   f"{gt['bloqueados_que_o_gate_reprovaria']}"
+                   + (f", bloqueados sem julgamento {gt['bloqueados_sem_julgamento']} "
+                      "(diario anterior a v3.28)" if gt["bloqueados_sem_julgamento"] else ""))
     cv = r["curva_e_drawdown_pts"]
     if cv:
         typer.echo("\n--- EXECUTADAS (pontos) ---")
@@ -2038,6 +2046,12 @@ def book_recomposicao_cmd(
     for n, e in a["por_limiar"].items():
         typer.echo(f"    {n:>4}  {e['observado_p50']:>12,.0f}  {e['baseline_p50']:>12,.0f}  "
                    f"{e['razao_p50']:>7.2f}")
+    ph = a.get("fora_de_ordem_por_hora") or {}
+    if ph:
+        typer.echo("\n  INSERCOES FORA DE ORDEM POR HORA (Brasilia; soma dos dias):")
+        typer.echo(f"    {'hora':>4}  {'conferidas':>12}  {'fora':>10}  {'fracao':>7}")
+        for h, (conf, fora) in ph.items():
+            typer.echo(f"    {h:>4}  {conf:>12,}  {fora:>10,}  {fora / conf if conf else 0:>7.2%}")
     rotulos = {"apos_consumo": "RECARGA DEPOIS DE CONSUMO (varredura por agressao)",
                "apos_saida_avulsa": "RECARGA DEPOIS DE SAIDA AVULSA (cancelamento OU consumo "
                                     "de 1 oferta -- mistura)"}

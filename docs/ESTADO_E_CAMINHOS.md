@@ -53,18 +53,19 @@
 | # | falta | quem |
 |---|---|---|
 | 1 | Aplicar até a v3.27 com o record parado | operador |
-| 2 | Próximo pregão: conferir `energia.mantendo_acordado` no arranque, ~38 barras sem `dia_incompleto`, e no `recorder.resumo` o `offer_book_chamadas` (`v1_suprimidas` ≈ `v2` prova a duplicata) | operador |
+| 2 | Próximo pregão: conferir `energia.mantendo_acordado` no arranque, ~38 barras sem `dia_incompleto`, e no `recorder.resumo` o `offer_book_chamadas` (`v1_suprimidas` ≈ `v2` prova a duplicata) e `eventos_de_dia_anterior` (+ as linhas `recorder.evento_de_dia_anterior`) | operador |
 | 3 | **Backfill do 18/09** (buraco 16:08–16:59) — janela de 30 dias fecha ~18/10 | operador |
 | 4 | Cabo + nobreak — agora com motivo medido (Wi-Fi em D3, espera) | operador |
 | 5 | **E4**: `dry_run: false` + `--ea-ticker-ordem`; E5.6 junto | operador |
 | 6 | ~50 pregões de forward; slippage ≤ 6 pts | calendário |
 
-### B. Pequenos, no código (não bloqueiam)
-- Diário: o gate não é avaliado quando há posição aberta → custo do gate
-  subestimado. Registrar o gate mesmo no sinal bloqueado.
-- Record: por que grava um evento do **dia anterior** ao subir (16/09 e
-  17/09)? A proteção da cura já impede estrago; falta a causa.
-- Book: horário das inserções fora de ordem (0–16% por dia, sempre no fim).
+### B. Pequenos, no código — FEITOS na v3.28
+- Diário: o gate agora julga também os sinais bloqueados por posição, e o
+  relatório mostra o custo do gate sobre TODOS os sinais.
+- Record: o resíduo do dia anterior vai para `raw/_quarentena/` e é logado
+  por inteiro (`recorder.evento_de_dia_anterior`) — **o log do próximo
+  arranque é que vai dizer O QUE a DLL entrega na assinatura**.
+- Book: inserções fora de ordem contadas por hora.
 
 ### C. Pesquisa — estacionada até o E4 começar
 - **Opções de PETR4**: outubro capturado o mês inteiro (vence 16/10); OI

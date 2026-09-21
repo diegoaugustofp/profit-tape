@@ -128,3 +128,68 @@ def test_arquivo_pelo_dia_do_sinal_nao_pelo_relogio(tmp_path: Path) -> None:
 def test_relatorio_sem_arquivo(tmp_path: Path) -> None:
     with pytest.raises(SystemExit, match="nenhum"):
         relatorio(tmp_path, "nao_existe")
+
+
+class _GateContador:
+    """Gate que PASSA o 1o sinal (para o EA armar) e reprova os demais pelo
+    volume. Conta chamadas para provar que a avaliacao dos bloqueados nao
+    mexe nos contadores reais."""
+
+    def __init__(self) -> None:
+        self.permite_chamadas = 0
+        self.avaliar_chamadas = 0
+        self.registradas = 0
+        self.ultimo: dict = {}
+
+    def permite(self, c: object, b: object) -> bool:
+        self.permite_chamadas += 1
+        self.ultimo = {"vol_total": 10, "mediana": 50, "confiavel": True}
+        return True
+
+    def avaliar(self, c: object, b: object) -> tuple[bool, dict]:
+        self.avaliar_chamadas += 1
+        return False, {"vol_total": 900, "mediana": 50, "confiavel": True}
+
+    def registrar_barra(self, b: object) -> None:
+        self.registradas += 1
+
+
+def test_sinal_bloqueado_por_posicao_passa_pelo_gate_sem_mexer_nos_contadores(
+        tmp_path: Path) -> None:
+    """2026-09-21: em 18/09, 5 de 7 sinais foram bloqueados por posicao
+    aberta SEM o gate julga-los -- o custo do gate saia subestimado. E o
+    registrar_barra nao era chamado nesses ramos."""
+    gate = _GateContador()
+    c, _d = _ciclo(tmp_path, gate=gate)
+    _armar(c)                                         # 1o sinal: gate passa, arma
+    assert c.estado == "entrada_pendente" and gate.permite_chamadas == 1
+    registradas_antes = gate.registradas
+    c.on_barra(_b(3, 140020.0, 140060.0, 139700.0, 140000.0))
+    c.on_barra(_b(4, 140000.0, 140050.0, 139900.0, 140030.0))
+    c.on_barra(_b(5, 140030.0, 140050.0, 139950.0, 140040.0))   # sinal com EA ocupado
+    assert c.ignorados_pendente == 1
+    assert gate.permite_chamadas == 1                 # contador REAL intocado
+    assert gate.avaliar_chamadas == 1 and c.rejeitados_gate == 0
+    assert gate.registradas == registradas_antes + 3  # toda barra alimenta o perfil
+    bloqueado = next(x for x in _linhas(tmp_path) if x["desfecho"] == "pendente")
+    assert bloqueado["motivo"]["gate_passaria"] is False
+    assert bloqueado["motivo"]["gate"]["vol_total"] == 900
+
+
+def test_relatorio_mostra_o_custo_do_gate_sobre_todos_os_sinais(tmp_path: Path) -> None:
+    gate = _GateContador()
+    c, _d = _ciclo(tmp_path, gate=gate)
+    _armar(c)
+    for k in range(3, 9, 3):                          # dois sinais com o EA ocupado
+        c.on_barra(_b(k, 140020.0, 140060.0, 139700.0, 140000.0))
+        c.on_barra(_b(k + 1, 140000.0, 140050.0, 139900.0, 140030.0))
+        c.on_barra(_b(k + 2, 140030.0, 140050.0, 139950.0, 140040.0))
+    r = relatorio(tmp_path, "ea_t")
+    gt = r["custo_das_regras"]["gate_sobre_todos_os_sinais"]
+    assert gt["bloqueados_que_o_gate_reprovaria"] == 2
+    assert gt["bloqueados_sem_julgamento"] == 0
+    assert gt["reprovados_de_fato"] == 0
+    # o sinal que ARMOU ainda nao fechou a operacao, entao nao tem linha no
+    # diario (so' entra ao fechar); a base sao os 2 bloqueados, e o gate
+    # barraria os 2
+    assert gt["fracao_que_o_gate_barra"] == 1.0

@@ -202,6 +202,12 @@ def reconstruir(df: pd.DataFrame, log_a_cada: int = 5_000_000) -> tuple[pd.DataF
     desconhecidas = edit_desconhecido = truncadas = 0
     adds_conferidos = fora_de_ordem = 0
     por_varredura = 0
+    # POR HORA LOCAL (2026-09-21): as insercoes fora de ordem variavam de 0% a
+    # 16% por dia e apareciam so' no fim (zero nos primeiros 25 M eventos). O
+    # horario diz se e' leilao de fechamento, after ou outra coisa. Relogio de
+    # recepcao em hora de Brasilia (-3); para contagem por hora, basta.
+    conf_h = [0] * 24
+    fora_h = [0] * 24
     cols = [df[c].tolist() for c in ("ts_recv_ns", "action", "side", "position",
                                      "price", "quantidade", "agente")]
     for i, (ts, acao, lado, pos, preco, qtd, ag) in enumerate(zip(*cols, strict=True)):
@@ -220,6 +226,8 @@ def reconstruir(df: pd.DataFrame, log_a_cada: int = 5_000_000) -> tuple[pd.DataF
             topo = lista[idx + 1] if idx + 1 < len(lista) else None
             if fundo is not None or topo is not None:
                 adds_conferidos += 1
+                hora = int((ts // 3_600_000_000_000 - 3) % 24)
+                conf_h[hora] += 1
                 if lado == 0:   # compra: preco sobe rumo ao topo
                     ruim = ((fundo is not None and fundo[0] > preco)
                             or (topo is not None and topo[0] < preco))
@@ -227,6 +235,8 @@ def reconstruir(df: pd.DataFrame, log_a_cada: int = 5_000_000) -> tuple[pd.DataF
                     ruim = ((fundo is not None and fundo[0] < preco)
                             or (topo is not None and topo[0] > preco))
                 fora_de_ordem += int(ruim)
+                if ruim:
+                    fora_h[hora] += 1
         elif acao == _DELETE:
             if pos < tam:
                 saiu = lista.pop(tam - pos - 1)
@@ -290,7 +300,9 @@ def reconstruir(df: pd.DataFrame, log_a_cada: int = 5_000_000) -> tuple[pd.DataF
             "insercoes_conferidas": adds_conferidos,
             "insercoes_fora_de_ordem": fora_de_ordem,
             "fracao_insercoes_fora_de_ordem": (round(fora_de_ordem / adds_conferidos, 4)
-                                               if adds_conferidos else None)}
+                                               if adds_conferidos else None),
+            "fora_de_ordem_por_hora": {f"{h:02d}": [conf_h[h], fora_h[h]]
+                                       for h in range(24) if conf_h[h]}}
     return pd.concat([entradas, saidas], ignore_index=True), cont
 
 
@@ -402,6 +414,16 @@ def medir_dia(raiz: Path, symbol: str, dia: dt.date, janela_s: float = JANELA_S,
     return r
 
 
+def _somar_por_hora(linhas: list[dict[str, Any]]) -> dict[str, list[int]]:
+    tot: dict[str, list[int]] = {}
+    for x in linhas:
+        for h, (c, f) in (x.get("fora_de_ordem_por_hora") or {}).items():
+            acc = tot.setdefault(h, [0, 0])
+            acc[0] += c
+            acc[1] += f
+    return dict(sorted(tot.items()))
+
+
 def descrever(raiz: Path, symbol: str, dias: list[dt.date], janela_s: float = JANELA_S,
               n_minimo: int = N_MINIMO, saida: Path | None = None) -> dict[str, Any]:
     linhas = [r for d in dias if (r := medir_dia(raiz, symbol, d, janela_s, n_minimo))]
@@ -417,6 +439,7 @@ def descrever(raiz: Path, symbol: str, dias: list[dt.date], janela_s: float = JA
         "dias_dobrados": int(sum(1 for x in linhas if x["dia_dobrado"])),
         "fracao_insercoes_fora_de_ordem_p50": float(np.median(
             [x["fracao_insercoes_fora_de_ordem"] or 0.0 for x in linhas])),
+        "fora_de_ordem_por_hora": _somar_por_hora(linhas),
         "fracao_saidas_desconhecidas_p50": float(np.median(
             [x["fracao_saidas_desconhecidas"] or 0.0 for x in linhas])),
         "por_limiar": {

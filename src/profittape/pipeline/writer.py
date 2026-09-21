@@ -11,7 +11,7 @@ from __future__ import annotations
 import threading
 import time
 from collections import defaultdict
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 
 import structlog
@@ -46,8 +46,26 @@ class WriterThread(threading.Thread):
         poll_timeout: float = 0.5,
         idle_close_s: float = 900.0,
         limiar_lote_lento_s: float = 1.0,
+        quarentena_antes_de: str | None = None,
+        quarentena_sink: ParquetSink | None = None,
+        tz_offset_horas: int = -3,
     ) -> None:
         super().__init__(name="parquet-writer", daemon=False)
+        # QUARENTENA DO DIA ANTERIOR (2026-09-21). Ao subir, o record gravava
+        # um RESIDUO do pregao anterior (16/09 e 17/09 confirmados; 9
+        # simbolos com 1 linha cada em 17/09), criando a pasta `dt=` de ONTEM
+        # no raw -- e uma cura sem `--dia` destruiu um pregao inteiro por
+        # causa disso. Evento cujo dia LOCAL e' anterior ao dia da sessao vai
+        # para `raiz/_quarentena/`, que a cura nao le, e os primeiros sao
+        # logados POR INTEIRO (`recorder.evento_de_dia_anterior`) -- e' esse
+        # log que vai dizer O QUE a DLL entrega na assinatura.
+        # OPCIONAL (None = desligado): o BACKFILL usa este mesmo writer e
+        # precisa gravar dias passados.
+        self.quarentena_antes_de = quarentena_antes_de
+        self.quarentena_sink = quarentena_sink
+        self._tz = timezone(timedelta(hours=tz_offset_horas))
+        self.quarentenados: dict[str, int] = {}
+        self._logados_quarentena = 0
         self.bus = bus
         self.sink = sink
         self.metrics = metrics
@@ -75,10 +93,36 @@ class WriterThread(threading.Thread):
             raise
         finally:
             caminhos = self.sink.close()
-            log.info("writer.encerrado", arquivos_fechados=len(caminhos))
+            if self.quarentena_sink is not None:
+                self.quarentena_sink.close()
+            log.info("writer.encerrado", arquivos_fechados=len(caminhos),
+                     quarentenados=self.quarentenados or None)
 
     def parar(self) -> None:
         self._parar.set()
+
+    # ------------------------------------------------------------------
+    def _e_de_dia_anterior(self, ts_ns: int) -> bool:
+        dia_local = datetime.fromtimestamp(ts_ns / 1e9, tz=self._tz).date().isoformat()
+        return bool(self.quarentena_antes_de and dia_local < self.quarentena_antes_de)
+
+    def _quarentenar(self, stream: Stream, ev: Any, ts_ns: int) -> None:
+        self.quarentenados[stream.value] = self.quarentenados.get(stream.value, 0) + 1
+        if self._logados_quarentena < 50:
+            self._logados_quarentena += 1
+            detalhe = {k: getattr(ev, k) for k in ("trade_id", "price", "quantidade",
+                                                    "trade_type", "action", "side")
+                       if hasattr(ev, k)}
+            log.warning("recorder.evento_de_dia_anterior", stream=stream.value,
+                        symbol=ev.symbol,
+                        ts_evento=datetime.fromtimestamp(ts_ns / 1e9, tz=self._tz).isoformat(),
+                        ts_recebido=datetime.fromtimestamp(ev.ts_recv_ns / 1e9,
+                                                           tz=self._tz).isoformat(),
+                        sessao=self.quarentena_antes_de, **detalhe,
+                        nota="gravado em _quarentena/, fora do raw normal (a cura nao le)")
+        if self.quarentena_sink is not None:
+            colunas = self._colunizar(stream, [ev])
+            self.quarentena_sink.write(stream, _dia_de(ts_ns), ev.symbol, colunas)
 
     # ------------------------------------------------------------------
     def _processar(self, lote: list[Envelope]) -> None:
@@ -103,6 +147,9 @@ class WriterThread(threading.Thread):
             # fallback de ts_recv_ns, igual None ja fazia.
             if ts is None or ts == 0:
                 ts = ev.ts_recv_ns
+            if self.quarentena_antes_de is not None and self._e_de_dia_anterior(ts):
+                self._quarentenar(env.stream, ev, ts)
+                continue
             grupos[(env.stream, _dia_de(ts), ev.symbol)].append(ev)
 
         linhas = 0

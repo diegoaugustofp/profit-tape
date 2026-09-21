@@ -108,6 +108,25 @@ def relatorio(diretorio: Path, ea: str | None = None) -> dict[str, Any]:
     if "infra.dia_completo" in df:
         infra["sinais_em_dia_incompleto"] = int(
             (~df["infra.dia_completo"].fillna(True).astype(bool)).sum())
+    # CUSTO DO GATE SOBRE TODOS OS SINAIS (2026-09-21): os que ele reprovou
+    # de fato + os bloqueados por posicao/pendencia que ele REPROVARIA (o
+    # ciclo agora registra `motivo.gate_passaria` nesses). Sem isto, a fracao
+    # rejeitada pelo gate sai subestimada sempre que ha' posicao aberta.
+    gate_total: dict[str, Any] = {}
+    if "motivo.gate_passaria" in df:
+        bloqueados = df[df["desfecho"].isin(("posicao_aberta", "pendente"))]
+        julgados = bloqueados["motivo.gate_passaria"].dropna()
+        reprovaria = int((~julgados.astype(bool)).sum())
+        reprovou = int(por_desfecho.get("rejeitado_gate", 0))
+        indef = int(por_desfecho.get("gate_indefinido", 0))
+        base = len(df) - len(bloqueados) + len(julgados)
+        gate_total = {
+            "reprovados_de_fato": reprovou, "indefinidos": indef,
+            "bloqueados_que_o_gate_reprovaria": reprovaria,
+            "bloqueados_sem_julgamento": int(len(bloqueados) - len(julgados)),
+            "fracao_que_o_gate_barra": (round((reprovou + indef + reprovaria) / base, 3)
+                                        if base else None),
+        }
     return {
         "arquivos": int(df["arquivos"].iloc[0]) if "arquivos" in df else 0,
         "sinais": n_sinais,
@@ -116,6 +135,7 @@ def relatorio(diretorio: Path, ea: str | None = None) -> dict[str, Any]:
             "descartados": len(descartados),
             "fracao_dos_sinais": (round(len(descartados) / n_sinais, 3) if n_sinais else None),
             "por_regra": {d: int(por_desfecho.get(d, 0)) for d in DESCARTES},
+            "gate_sobre_todos_os_sinais": gate_total,
         },
         "curva_e_drawdown_pts": _curva(exec_),
         "execucao": _execucao(exec_),

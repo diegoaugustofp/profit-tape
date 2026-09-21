@@ -141,7 +141,7 @@ em dia sem pregao.
 | Maquina dormindo | corrigido: record chama SetThreadExecutionState (OPERACAO) |
 | Cabo + nobreak | pendente -- agora com motivo MEDIDO |
 | E4 | `dry_run: false` + `--ea-ticker-ordem`, ate' o fim de setembro |
-| Diario: gate nao avaliado com posicao aberta | pendente (pequeno): o custo do gate sai subestimado |
+| Diario: gate nao avaliado com posicao aberta | **FEITO (v3.28)**: o sinal bloqueado passa pelo gate SEM efeito colateral (`avaliar`), `motivo.gate_passaria` no diario, e o relatorio mostra o custo do gate sobre TODOS os sinais. De quebra: `registrar_barra` agora e' chamado em todos os ramos, como a docstring prometia |
 
 
 Revisado linha a linha em 2026-09-11. As pendencias historicas listadas

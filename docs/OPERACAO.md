@@ -6,8 +6,14 @@
 1. No arranque: `energia.mantendo_acordado` no log (se vier
    `energia.pedido_recusado`, a maquina pode dormir). Notebook na TOMADA,
    tampa aberta.
-2. Depois de subir o record: se nasceu pasta `dt=` do DIA ANTERIOR em
-   `data/raw/trade/`, e' residuo -- apague antes de curar.
+2. RESIDUO DO DIA ANTERIOR (v3.28): o record ao vivo agora manda para
+   `data/raw/_quarentena/` todo evento cujo dia local e' anterior ao da
+   sessao -- a pasta `dt=` de ontem NAO deve mais nascer em `raw/trade/`.
+   Os primeiros aparecem por inteiro no log como
+   `recorder.evento_de_dia_anterior` (simbolo, hora do evento, hora de
+   recebimento, preco, quantidade, trade_id, tipo) e o total sai em
+   `recorder.resumo` -> `eventos_de_dia_anterior`. Se ainda nascer pasta
+   de ontem em `raw/trade/`, me avise. O backfill NAO e' afetado.
 3. Curar SEMPRE com `--dia`. A cura recusa sobrescrever com menos da
    metade das linhas (`--forcar "motivo"` libera).
 4. No fim: `recorder.resumo` -> `offer_book_chamadas` (`v1_suprimidas`

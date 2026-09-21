@@ -31,6 +31,10 @@ class SemFiltro:
     def permite(self, candidato: Candidato123, barra_t: BarraFechada) -> bool:
         return True
 
+    def avaliar(self, candidato: Candidato123,
+                barra_t: BarraFechada) -> tuple[bool, dict[str, Any]]:
+        return True, {}
+
 
 class GateVolumeBaixo:
     """
@@ -48,19 +52,31 @@ class GateVolumeBaixo:
         self.avaliados = 0
         self.ultimo: dict[str, Any] = {}
 
-    def permite(self, candidato: Candidato123, barra_t: BarraFechada) -> bool:
+    def avaliar(self, candidato: Candidato123,
+                barra_t: BarraFechada) -> tuple[bool, dict[str, Any]]:
+        """A decisao SEM efeito colateral (nao mexe em contador nem em
+        `ultimo`). Usada para os sinais que chegam com posicao aberta: o
+        gate e' avaliado e REGISTRADO no diario, sem inflar os contadores do
+        EA -- antes, esses sinais nem passavam pelo gate e o custo do gate
+        saia subestimado no relatorio (2026-09-21)."""
         import datetime as dt
         from zoneinfo import ZoneInfo
         t = dt.datetime.fromtimestamp(barra_t.ts_open_ns / 1e9, tz=ZoneInfo("America/Sao_Paulo"))
         dia, hhmm = t.date(), t.hour * 100 + t.minute
         med = self.perfil.mediana(hhmm, dia)
-        self.avaliados += 1
-        self.ultimo = {"hhmm": hhmm, "vol_total": barra_t.vol_total, "mediana": med,
-                       "confiavel": barra_t.volume_confiavel}
+        visto = {"hhmm": hhmm, "vol_total": barra_t.vol_total, "mediana": med,
+                 "confiavel": barra_t.volume_confiavel}
         if not barra_t.volume_confiavel or med is None:
+            return False, visto
+        return bool(barra_t.vol_total < med), visto
+
+    def permite(self, candidato: Candidato123, barra_t: BarraFechada) -> bool:
+        passou, visto = self.avaliar(candidato, barra_t)
+        self.avaliados += 1
+        self.ultimo = visto
+        if not visto["confiavel"] or visto["mediana"] is None:
             self.indefinidos += 1
-            return False
-        return bool(barra_t.vol_total < med)
+        return passou
 
     def registrar_barra(self, barra: BarraFechada) -> None:
         """Toda barra fechada (com ou sem candidato) alimenta o perfil."""

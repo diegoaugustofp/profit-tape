@@ -263,14 +263,31 @@ class CicloDeOrdens123:
                                       {"dono_da_vaga": self.vagas.dono(self.symbol)})
                 return
             self._armar(c)
-        elif self.estado == "posicionado" or self.estado == "saindo":
-            self.ignorados_posicao += 1
-            log.info("ea.123.ignorado_posicao", **c.resumo())
-            self._diario_descarte(c, "posicao_aberta", {"estado": self.estado})
         else:
-            self.ignorados_pendente += 1
-            log.info("ea.123.ignorado_pendente", **c.resumo())
-            self._diario_descarte(c, "pendente", {"estado": self.estado})
+            # Sinal que chega com o EA ocupado. ANTES (ate' 2026-09-21): ia direto
+            # para `posicao_aberta`/`pendente` sem passar pelo gate -- o diario
+            # nao sabia se o gate o reprovaria, e o custo do gate saia
+            # SUBESTIMADO (em 18/09, 5 de 7 sinais bloqueados, nenhum julgado).
+            # E o `registrar_barra` nao era chamado aqui, contra a propria
+            # docstring do gate. Agora: avaliacao SEM efeito colateral,
+            # registrada no diario; contadores reais intocados.
+            avaliar = getattr(self.gate, "avaliar", None)
+            sombra: dict[str, Any] = {"estado": self.estado}
+            if avaliar is not None:
+                passaria, visto = avaliar(c, b)
+                sombra.update({"gate_passaria": bool(passaria), "gate": visto})
+            if registrar is not None:
+                registrar(b)
+            if self.estado in ("posicionado", "saindo"):
+                self.ignorados_posicao += 1
+                log.info("ea.123.ignorado_posicao", **c.resumo(),
+                         gate_passaria=sombra.get("gate_passaria"))
+                self._diario_descarte(c, "posicao_aberta", sombra)
+            else:
+                self.ignorados_pendente += 1
+                log.info("ea.123.ignorado_pendente", **c.resumo(),
+                         gate_passaria=sombra.get("gate_passaria"))
+                self._diario_descarte(c, "pendente", sombra)
 
     def _diario_descarte(self, c: Candidato123, desfecho: str,
                          motivo: dict[str, Any]) -> None:

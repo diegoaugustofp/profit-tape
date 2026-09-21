@@ -95,6 +95,11 @@ class RecorderService:
             compressao=cfg.storage.compressao,
             nivel_compressao=cfg.storage.nivel_compressao,
         )
+        # dia LOCAL da sessao: evento anterior a ele vai para a quarentena
+        # (residuo do pregao anterior entregue na assinatura -- ver writer.py)
+        import datetime as _dt
+        _tz = _dt.timezone(_dt.timedelta(hours=cfg.runtime.tz_offset_horas))
+        dia_sessao = _dt.datetime.now(_tz).date().isoformat()
         self.writer = WriterThread(
             bus=self.bus,
             sink=self.sink,
@@ -103,6 +108,14 @@ class RecorderService:
             poll_timeout=cfg.pipeline.poll_timeout_s,
             idle_close_s=cfg.storage.idle_close_s,
             limiar_lote_lento_s=cfg.pipeline.limiar_lote_lento_s,
+            quarentena_antes_de=dia_sessao,
+            quarentena_sink=ParquetSink(
+                Path(cfg.storage.raiz) / "_quarentena",
+                max_rows_per_file=cfg.storage.max_rows_per_file,
+                compressao=cfg.storage.compressao,
+                nivel_compressao=cfg.storage.nivel_compressao,
+            ),
+            tz_offset_horas=cfg.runtime.tz_offset_horas,
         )
         # EA integrado (2026-08-27, decisao de arquitetura de longo prazo):
         # OPCIONAL, None por padrao -- todo caller existente (producao ha'
@@ -656,6 +669,7 @@ class RecorderService:
             por_stream=snap.eventos_por_stream,
             full_book_descartados=self.client.full_book_descartados,
             offer_book_chamadas=getattr(self.client, "offer_book_chamadas", None),
+            eventos_de_dia_anterior=self.writer.quarentenados or None,
             arquivos_verificados=self.writer.sink.arquivos_verificados,
             falhas_verificacao=len(self.writer.sink.falhas_verificacao),
             raiz=str(Path(self.cfg.storage.raiz).resolve()),
