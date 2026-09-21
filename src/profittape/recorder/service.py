@@ -655,6 +655,7 @@ class RecorderService:
             fila_pico=st.profundidade_maxima,
             por_stream=snap.eventos_por_stream,
             full_book_descartados=self.client.full_book_descartados,
+            offer_book_chamadas=getattr(self.client, "offer_book_chamadas", None),
             arquivos_verificados=self.writer.sink.arquivos_verificados,
             falhas_verificacao=len(self.writer.sink.falhas_verificacao),
             raiz=str(Path(self.cfg.storage.raiz).resolve()),

@@ -1,3 +1,31 @@
+## ACHADO 2026-09-21: o offer book estava sendo GRAVADO EM DOBRO
+
+**O que se viu.** O diagnostico do book de 17/09 mostrou todo `ADD` em
+PAR: mesmo `ts_ns`, `offer_id`, preco, quantidade e agente, com 0,2 a 0,3
+ms entre as recepcoes. O `client.py` registrava DOIS callbacks com o
+mesmo corpo -- o V1 (slot do init) e o V2 (setter `SetOfferBookCallbackV2`)
+-- sob a premissa, escrita no codigo, de que "o setter SOBREPOE o do init:
+nunca os dois ativos". Em 21/08 isso era verdade (o V1 ficou mudo); numa
+versao posterior da DLL os dois passaram a disparar.
+
+**Consequencias.** O `book_offer` gravado estava DOBRADO (~69 M de
+eventos/dia quando o real e' ~35 M): metade do disco do book, metade da
+pressao na fila do record, a toa. E qualquer reconstrucao do livro por
+posicao ficaria corrompida. O TRADE nao e' afetado (conferido contra o
+Times & Trades).
+
+**Correcao (v3.23).** O V1 so' publica enquanto o V2 NAO entregou nada --
+se alguma versao da DLL usar so' o V1, nada se perde. Contadores no
+`recorder.resumo`: `offer_book_chamadas={v1, v2, v1_suprimidas}`.
+**Confira no fim do proximo pregao:** se `v1_suprimidas` for da ordem de
+`v2`, o diagnostico esta' PROVADO em producao; se `v1` for zero, o V1 nao
+dispara e a duplicata vinha de outro lugar -- me avise.
+
+**O historico continua dobrado** e nao e' reescrito: o pesquisador de book
+(`book-recomposicao` v3) detecta o dia dobrado e desfaz o par na leitura.
+
+---
+
 ## INCIDENTE 2026-09-18: Modern Standby congelou o record por 26 minutos
 
 **O que aconteceu.** As 16:08 o notebook entrou em *Modern Standby*

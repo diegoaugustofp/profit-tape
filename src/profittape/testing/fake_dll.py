@@ -96,6 +96,8 @@ class FakeProfitDLL:
         self._ultima_data_offer = "01/01/1970 00:00:00.000"  # buffer "obsoleto" inicial
         self._parar = threading.Event()
         self.finalizado = False
+        self.dobra_offer_v1 = False  # reproduz o par V1+V2 de set/2026
+        self.offer_v2_entregues = 0
 
     # -- superficie que o ProfitClient consome ---------------------------
     def DLLInitializeMarketLogin(
@@ -657,7 +659,7 @@ class FakeProfitDLL:
                 tem_data = self.rng.random() < 0.05  # ~5%: so' o snapshot inicial
                 data_enviada = data if tem_data else self._ultima_data_offer
                 self._ultima_data_offer = data
-                destino(
+                args = (
                     ativo,
                     self.rng.choice([0, 1, 2]),
                     self.rng.randint(0, 9),
@@ -675,6 +677,13 @@ class FakeProfitDLL:
                     None,
                     None,
                 )
+                destino(*args)
+                self.offer_v2_entregues += 1
+                # TERCEIRO achado real (2026-09-21): numa versao posterior da
+                # DLL o slot V1 do init PASSOU a ser alimentado TAMBEM -- todo
+                # evento chega em PAR (V2 e V1, 0,2-0,3 ms de diferenca).
+                if self.dobra_offer_v1 and self._cb.get("offer") is not None:
+                    self._cb["offer"](*args)
             else:
                 self._cb["price"](
                     ativo,

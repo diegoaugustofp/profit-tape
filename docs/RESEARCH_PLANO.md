@@ -6687,3 +6687,32 @@ contraste `PETRJ550`/`PETRV550` (53,86, call wall), `PETRJ470`/`PETRV470`
 
 Se PETR4 andar mais de ~2% antes do inicio, o "perto do dinheiro" muda e
 a lista se refaz -- pela mesma regra, antes de ligar.
+
+
+### Book v3: livro reconstruido POR POSICAO (2026-09-21)
+
+**A v2 deu ZERO recargas em 8 dias** -- nao resultado, defeito. Diagnostico
+no dado real de 17/09 (75,2 M de linhas): `DELETE` e `DELETE_FROM` chegam
+com `offer_id`, preco e quantidade ZERADOS em 100% dos casos; `EDIT` traz
+so' a quantidade. **A remocao na DLL e' POSICIONAL.** A v2 casava saida e
+entrada pelo `offer_id`, sempre zero no DELETE. Erro meu: apliquei a
+ressalva do manual ao preco e nao ao `offer_id`.
+
+**v3:** livro posicional por lado, evento a evento, na ordem de chegada.
+`ADD` insere, `DELETE` remove (e ai' se sabe QUAL oferta saiu), `EDIT`
+troca a quantidade, `DELETE_FROM` trunca (reset, nao conta como saida).
+~0,5 us/evento (piso: o livro real pode ser mais fundo que o do teste).
+
+**Dois problemas do historico, tratados e REPORTADOS a cada dia:**
+1. **Par V1+V2** (ver OPERACAO): se >= 90% das linhas estao em sequencias
+   PARES de linhas identicas, o dia e' dobrado e o par e' desfeito.
+   `dia_dobrado` e `fracao_em_sequencia_par` saem no relatorio. Teste
+   prova que SEM desfazer o livro sai corrompido.
+2. **Livro inicial desconhecido** (o `atFullBook` e' descartado na
+   origem): posicoes nunca vistas viram DESCONHECIDAS; remover uma conta
+   como `saida_desconhecida`. **Se a fracao for alta, o dia nao serve** --
+   e o conserto definitivo e' passar a capturar o snapshot (pendente).
+
+**Antes de ler a curva:** `dia_dobrado` deve vir True nos dias antigos,
+`fracao_saidas_desconhecidas` deve ser pequena, e `niveis_defendidos` deve
+ser algo que faca sentido como EVENTO (nao um milhao por dia).

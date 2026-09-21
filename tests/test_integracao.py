@@ -492,3 +492,30 @@ def test_sem_ea_config_path_comportamento_identico_a_sempre(tmp_raiz: Path) -> N
     st = svc.bus.stats()
     assert st.total_descartado == 0
     assert st.total_recebido > 0
+
+
+def test_offer_book_com_v1_e_v2_disparando_nao_dobra(tmp_raiz: Path) -> None:
+    """
+    Regressao do achado de 2026-09-21: numa versao posterior da DLL, o slot V1
+    do init e o V2 do setter DISPARAM OS DOIS -- todo ADD de 17/09 apareceu em
+    PAR no raw (mesmo ts_ns, offer_id, preco, qtd, agente; 0,2-0,3 ms de
+    recepcao). O book_offer gravado estava dobrado. Agora o V1 so' publica
+    enquanto o V2 nao entregou nada; os contadores provam em producao.
+    """
+    fake = FakeProfitDLL(eventos_por_ativo=150)
+    fake.dobra_offer_v1 = True
+    svc = RecorderService(_config(tmp_raiz), _cred(), dll_injetada=fake)
+    t = threading.Thread(target=svc.run, daemon=True)
+    t.start()
+    time.sleep(2.5)
+    svc._parar.set()
+    t.join(timeout=60)
+
+    ch = svc.client.offer_book_chamadas
+    assert ch["v1"] > 0 and ch["v2"] > 0, ch            # os dois dispararam
+    assert ch["v1_suprimidas"] == ch["v1"], ch          # nenhum V1 publicou
+    livro = ds.dataset(tmp_raiz / "book_offer", format="parquet",
+                       partitioning="hive").to_table()
+    # o que foi gravado e' exatamente o que o V2 entregou (menos FULL_BOOK,
+    # que o fake nao manda) -- sem o par
+    assert livro.num_rows == fake.offer_v2_entregues

@@ -2750,3 +2750,21 @@ de medir: o OI agora esta' COLADO no spot (49,61, 15,4 M, o maior strike
 do vencimento, com +13,6 M novos num dia), ao contrario de setembro.
 Logo um nulo em outubro PESA contra a hipotese, e em setembro nao pesava.
 Captura do mes inteiro para ter baseline dentro da mesma serie.
+
+### 2026-09-21 — offer book gravado em dobro; book v3 posicional (v3.23)
+
+- A v2 do book deu ZERO recargas: o diagnostico no dado real mostrou que
+  DELETE vem sem offer_id/preco/quantidade -- remocao e' POSICIONAL -- e
+  que todo ADD aparece em PAR.
+- O PAR: V1 e V2 do offer book disparam os dois (a premissa no codigo
+  dizia que o setter sobrepunha). book_offer gravado em DOBRO. Correcao
+  no client: V1 so' publica enquanto o V2 nao entregou nada; contadores
+  no resumo do record provam em producao. Teste de integracao com o fake
+  reproduzindo o par: gravado == entregue pelo V2; na versao antiga
+  reprova. ATENCAO: ha' DOIS fakes (`profittape.testing` e `tests/fakes`);
+  o que os testes usam e' o primeiro -- editei o errado na 1a tentativa.
+- Book v3: livro posicional, desdobramento do historico com verificacao,
+  fracao de saidas desconhecidas (livro inicial descartado na origem).
+  ~0,5 us/evento. 9 testes (+1 integracao). 950 no total.
+- Pendente: capturar o atFullBook do offer book para a reconstrucao ser
+  exata desde o primeiro evento.

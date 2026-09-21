@@ -27,6 +27,36 @@ todos de VALIDEZ:
 3. Lia o RAW sem deduplicar -- e duplicata e' literalmente "a oferta
    apareceu duas vezes", que infla recarga por construcao.
 
+v3: LIVRO RECONSTRUIDO POR POSICAO (2026-09-21) -- substitui a v2
+------------------------------------------------------------------
+A v2 deu ZERO recargas em 8 dias. Diagnostico no dado real (17/09):
+`DELETE` e `DELETE_FROM` chegam com `offer_id`, preco e quantidade
+ZERADOS em 100% dos casos -- so' vem `side` e `position`. A remocao na DLL
+e' POSICIONAL. A v2 casava saida com entrada pelo `offer_id` (sempre 0 no
+DELETE), e a juncao dava vazio. Eu tinha aplicado a ressalva do manual ao
+PRECO e nao ao `offer_id`, que e' campo escalar do mesmo jeito.
+
+Agora o livro e' reconstruido evento a evento, por lado, como lista
+posicional: `ADD` insere na posicao, `DELETE` remove na posicao (e ai' se
+SABE qual oferta saiu), `EDIT` troca a quantidade na posicao,
+`DELETE_FROM` trunca da posicao em diante (reset, nao consumo: NAO conta
+como saida).
+
+DOIS PROBLEMAS DO HISTORICO, TRATADOS E REPORTADOS:
+
+1. **Eventos em PAR.** Ate' a v3.23, o V1 e o V2 do offer book disparavam
+   os dois e o raw tem cada evento DUAS vezes (0,2-0,3 ms entre eles).
+   Aplicar os dois corromperia as posicoes. Por dia, mede-se a fracao de
+   linhas em sequencias de tamanho PAR de linhas identicas (tudo menos
+   `ts_recv_ns`): se passar de 90%, o dia e' "dobrado" e cada sequencia e'
+   reduzida a` metade. Dias ja' capturados com a correcao nao sao tocados.
+2. **Livro inicial desconhecido.** O `atFullBook` e' descartado na origem,
+   entao as primeiras remocoes apontam para ofertas que nunca vimos. O
+   livro e' preenchido com DESCONHECIDOS nessas posicoes; remover um
+   desconhecido conta como `saida_desconhecida`. A fracao sai no
+   relatorio -- se for alta, a reconstrucao do dia nao serve.
+
+(historico da v2, mantido abaixo)
 v2: ESTADO POR `offer_id`
 -------------------------
 `ADD` registra (offer_id -> preco, quantidade, agente, lado). `DELETE` /
@@ -69,40 +99,128 @@ _SAIDAS = (int(BookAction.DELETE), int(BookAction.DELETE_FROM))
 _COLS = ["ts_recv_ns", "action", "side", "price", "quantidade", "agente", "offer_id"]
 
 
+_COLS_V3 = ["ts_recv_ns", "action", "side", "position", "offer_id", "price",
+            "quantidade", "agente"]
+_EDIT = int(BookAction.EDIT)
+_DELETE = int(BookAction.DELETE)
+_DELETE_FROM = int(BookAction.DELETE_FROM)
+LIMIAR_DIA_DOBRADO = 0.9
+
+
 def carregar_book(raiz: Path, symbol: str, dia: dt.date) -> tuple[pd.DataFrame, int]:
-    """Le o book do dia e DEDUPLICA (o raw nao passa por cura). Devolve
-    (df, duplicatas_removidas)."""
+    """Le o book do dia NA ORDEM DE CHEGADA (e' a ordem em que a DLL aplicou
+    os eventos -- o livro posicional so' faz sentido nela). O segundo valor
+    fica 0: a deduplicacao agora e' `desdobrar`, que sabe distinguir par
+    duplicado de evento legitimo."""
     pasta = raiz / "book_offer" / f"dt={dia.isoformat()}"
     if not pasta.exists():
         return pd.DataFrame(), 0
     dataset = ds.dataset(pasta, format="parquet", partitioning="hive",
                          exclude_invalid_files=True)
-    cols = [c for c in _COLS if c in dataset.schema.names]
+    cols = [c for c in _COLS_V3 if c in dataset.schema.names]
     t: pd.DataFrame = dataset.to_table(filter=ds.field("sym") == symbol,
                                        columns=cols).to_pandas()
-    antes = len(t)
-    t = t.drop_duplicates(subset=[c for c in ("ts_recv_ns", "offer_id", "action",
-                                              "price", "quantidade") if c in t])
-    return t.sort_values("ts_recv_ns").reset_index(drop=True), antes - len(t)
+    return t.sort_values("ts_recv_ns", kind="stable").reset_index(drop=True), 0
+
+
+def desdobrar(df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Desfaz o PAR V1+V2 do historico. Sequencia = linhas consecutivas
+    identicas em tudo menos `ts_recv_ns`. Se >= 90% das linhas estao em
+    sequencias PARES, o dia e' dobrado e cada sequencia vira a metade."""
+    if df.empty:
+        return df, {"dia_dobrado": False, "fracao_em_sequencia_par": None,
+                    "linhas_removidas": 0}
+    chave = [c for c in _COLS_V3 if c != "ts_recv_ns" and c in df]
+    igual = np.ones(len(df), dtype=bool)
+    igual[0] = False
+    for c in chave:
+        v = df[c].to_numpy()
+        igual[1:] &= v[1:] == v[:-1]
+    seq = np.cumsum(~igual) - 1
+    tam = np.bincount(seq)
+    tam_linha = tam[seq]
+    fracao_par = float((tam_linha % 2 == 0).mean())
+    dobrado = fracao_par >= LIMIAR_DIA_DOBRADO
+    if not dobrado:
+        return df, {"dia_dobrado": False, "fracao_em_sequencia_par": round(fracao_par, 4),
+                    "linhas_removidas": 0}
+    # posicao dentro da sequencia; fica a primeira metade (ceil)
+    inicio = np.zeros(len(tam), dtype=np.int64)
+    inicio[1:] = np.cumsum(tam)[:-1]
+    pos = np.arange(len(df)) - inicio[seq]
+    manter = pos < (tam_linha + 1) // 2
+    out = df[manter].reset_index(drop=True)
+    return out, {"dia_dobrado": True, "fracao_em_sequencia_par": round(fracao_par, 4),
+                 "linhas_removidas": int(len(df) - len(out))}
+
+
+def reconstruir(df: pd.DataFrame, log_a_cada: int = 5_000_000) -> tuple[pd.DataFrame,
+                                                                         dict[str, Any]]:
+    """Livro POSICIONAL, evento a evento, por lado. Devolve os eventos de
+    nivel (entradas e SAIDAS com a oferta resolvida) e os contadores."""
+    livro: dict[int, list[Any]] = {0: [], 1: []}
+    n = len(df)
+    s_ts = np.empty(n, dtype=np.int64)
+    s_pr = np.empty(n, dtype=np.float64)
+    s_sd = np.empty(n, dtype=np.int64)
+    s_q = np.empty(n, dtype=np.int64)
+    s_ag = np.empty(n, dtype=np.int64)
+    k = 0
+    desconhecidas = edit_desconhecido = truncadas = 0
+    cols = [df[c].tolist() for c in ("ts_recv_ns", "action", "side", "position",
+                                     "price", "quantidade", "agente")]
+    for i, (ts, acao, lado, pos, preco, qtd, ag) in enumerate(zip(*cols, strict=True)):
+        lista = livro.get(lado)
+        if lista is None:
+            continue
+        if acao == _ADD:
+            if pos > len(lista):
+                lista.extend([None] * (pos - len(lista)))
+            lista.insert(pos, (preco, qtd, ag))
+        elif acao == _DELETE:
+            if pos < len(lista):
+                saiu = lista.pop(pos)
+                if saiu is None:
+                    desconhecidas += 1
+                else:
+                    s_ts[k], s_pr[k], s_sd[k], s_q[k], s_ag[k] = ts, saiu[0], lado, saiu[1], saiu[2]
+                    k += 1
+            else:
+                desconhecidas += 1
+        elif acao == _EDIT:
+            if pos < len(lista) and lista[pos] is not None:
+                p_, _, a_ = lista[pos]
+                lista[pos] = (p_, qtd, a_)
+            else:
+                edit_desconhecido += 1
+        elif acao == _DELETE_FROM:
+            if pos < len(lista):
+                truncadas += len(lista) - pos
+                del lista[pos:]
+        if log_a_cada and i and i % log_a_cada == 0:
+            log.info("book_recomposicao.reconstruindo", eventos=i, de=n,
+                     saidas=k, desconhecidas=desconhecidas)
+    add = df[df["action"] == _ADD]
+    entradas = pd.DataFrame({"ts_recv_ns": add["ts_recv_ns"].to_numpy(),
+                             "price": add["price"].to_numpy(dtype=np.float64),
+                             "side": add["side"].to_numpy(dtype=np.int64),
+                             "quantidade": add["quantidade"].to_numpy(dtype=np.int64),
+                             "agente": add["agente"].to_numpy(dtype=np.int64),
+                             "entrada": True})
+    saidas = pd.DataFrame({"ts_recv_ns": s_ts[:k], "price": s_pr[:k], "side": s_sd[:k],
+                           "quantidade": s_q[:k], "agente": s_ag[:k], "entrada": False})
+    total_saidas = k + desconhecidas
+    cont = {"saidas_atribuidas": k, "saidas_desconhecidas": desconhecidas,
+            "fracao_saidas_desconhecidas": (round(desconhecidas / total_saidas, 4)
+                                            if total_saidas else None),
+            "edit_desconhecido": edit_desconhecido,
+            "removidas_por_delete_from": truncadas}
+    return pd.concat([entradas, saidas], ignore_index=True), cont
 
 
 def eventos_de_nivel(df: pd.DataFrame) -> pd.DataFrame:
-    """ENTRADAS e SAIDAS com o nivel resolvido.
-
-    Entrada = `ADD` (unica acao em que preco/quantidade sao garantidos).
-    Saida = `DELETE`/`DELETE_FROM`, com o nivel vindo do ultimo ADD
-    daquele `offer_id` -- nao dos campos do proprio evento.
-    """
-    add = df[df["action"] == _ADD]
-    if add.empty:
-        return pd.DataFrame()
-    estado = (add[["offer_id", "price", "quantidade", "agente", "side"]]
-              .drop_duplicates("offer_id", keep="last"))
-    saidas = df[df["action"].isin(_SAIDAS)][["ts_recv_ns", "offer_id"]]
-    saidas = saidas.merge(estado, on="offer_id", how="inner")
-    entradas = add[["ts_recv_ns", "offer_id", "price", "quantidade", "agente", "side"]]
-    ev = pd.concat([entradas.assign(entrada=True), saidas.assign(entrada=False)],
-                   ignore_index=True)
+    """Compatibilidade: desdobra e reconstroi, devolve so' os eventos."""
+    ev, _ = reconstruir(desdobrar(df)[0], log_a_cada=0)
     return ev
 
 
@@ -143,11 +261,13 @@ def _cadeias(ev: pd.DataFrame, janela_ns: int) -> np.ndarray:
 def medir_dia(raiz: Path, symbol: str, dia: dt.date, janela_s: float = JANELA_S,
               n_minimo: int = N_MINIMO, semente: int = 1) -> dict[str, Any]:
     t0 = time.monotonic()
-    df, dups = carregar_book(raiz, symbol, dia)
+    df, _ = carregar_book(raiz, symbol, dia)
     if df.empty:
         return {}
     seg_leitura = round(time.monotonic() - t0, 1)
-    ev = eventos_de_nivel(df)
+    deltas_brutos = len(df)
+    df, desdob = desdobrar(df)
+    ev, cont = reconstruir(df)
     if ev.empty:
         return {}
     janela_ns = int(janela_s * _NS)
@@ -167,7 +287,11 @@ def medir_dia(raiz: Path, symbol: str, dia: dt.date, janela_s: float = JANELA_S,
 
     obs, base = curva(tam), curva(tam_b)
     r = {
-        "dia": dia.isoformat(), "deltas": len(df), "duplicatas_removidas": int(dups),
+        "dia": dia.isoformat(), "deltas": int(deltas_brutos),
+        "duplicatas_removidas": int(desdob["linhas_removidas"]),
+        "dia_dobrado": desdob["dia_dobrado"],
+        "fracao_em_sequencia_par": desdob["fracao_em_sequencia_par"],
+        **cont,
         "entradas": int(ev["entrada"].sum()), "saidas": int((~ev["entrada"]).sum()),
         "recargas": int(tam.sum()),
         "niveis_defendidos": int((tam >= n_minimo).sum()),
@@ -196,6 +320,9 @@ def descrever(raiz: Path, symbol: str, dias: list[dt.date], janela_s: float = JA
         "recargas_p50": float(np.median([x["recargas"] for x in linhas])),
         "niveis_defendidos_p50": float(np.median([x["niveis_defendidos"] for x in linhas])),
         "cadeia_max": int(max(x["cadeia_max"] for x in linhas)),
+        "dias_dobrados": int(sum(1 for x in linhas if x["dia_dobrado"])),
+        "fracao_saidas_desconhecidas_p50": float(np.median(
+            [x["fracao_saidas_desconhecidas"] or 0.0 for x in linhas])),
         "por_limiar": {
             n: {"observado_p50": float(np.median([x["por_limiar"][n] for x in linhas])),
                 "baseline_p50": float(np.median([x["baseline"][n] for x in linhas])),
@@ -203,7 +330,8 @@ def descrever(raiz: Path, symbol: str, dias: list[dt.date], janela_s: float = JA
             for n in linhas[0]["por_limiar"]},
         "segundos_por_dia_p50": float(np.median([x["segundos_total"] for x in linhas])),
     }
-    r = {"symbol": symbol, "janela_s": janela_s, "n_minimo": n_minimo, "versao": "v2_offer_id",
+    r = {"symbol": symbol, "janela_s": janela_s, "n_minimo": n_minimo,
+         "versao": "v3_posicional",
          "agregado": agregado, "por_dia": linhas}
     if saida is not None:
         saida.mkdir(parents=True, exist_ok=True)

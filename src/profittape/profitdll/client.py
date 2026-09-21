@@ -206,6 +206,15 @@ class ProfitClient:
         # por corrida rara entre threads e' aceitavel para um contador de
         # diagnostico — nao e' dado, e' metrica.
         self.full_book_descartados = {"offer": 0, "price": 0}
+        # DUPLICATA DO OFFER BOOK (medida em 2026-09-21): V1 (slot do init) e
+        # V2 (setter) DISPARAM OS DOIS, apesar do comentario antigo afirmar
+        # que o setter sobrepoe. Prova no dado: todo ADD de 17/09 aparece em
+        # PAR -- mesmo ts_ns, offer_id, preco, quantidade e agente, com 0,2 a
+        # 0,3 ms entre as recepcoes. O book_offer gravado estava DOBRADO.
+        # Regra: o V1 so' publica enquanto o V2 NAO entregou nada (se alguma
+        # versao da DLL usar so' o V1, nada se perde). Os contadores saem no
+        # resumo do record e PROVAM o diagnostico em producao.
+        self.offer_book_chamadas = {"v1": 0, "v2": 0, "v1_suprimidas": 0}
 
     # ------------------------------------------------------------------
     # Ciclo de vida
@@ -641,6 +650,12 @@ class ProfitClient:
         def _offer_v1(ativo, action, position, side, qtd, agente, offer_id,
                       preco, has_price, has_qtd, has_date, has_id, has_agent,
                       data, arr_sell, arr_buy) -> None:
+            self.offer_book_chamadas["v1"] += 1
+            if self.offer_book_chamadas["v2"] > 0:
+                # o V2 esta' vivo: este evento ja' chegou (ou vai chegar) por
+                # la'. Publicar aqui DOBRAVA o book -- ver __init__.
+                self.offer_book_chamadas["v1_suprimidas"] += 1
+                return
             _corpo_offer(ativo, action, position, side, qtd, agente, offer_id,
                          preco, has_price, has_qtd, has_date, data)
 
@@ -648,6 +663,7 @@ class ProfitClient:
         def _offer_v2(ativo, action, position, side, qtd, agente, offer_id,
                       preco, has_price, has_qtd, has_date, has_id, has_agent,
                       data, arr_sell, arr_buy) -> None:
+            self.offer_book_chamadas["v2"] += 1
             _corpo_offer(ativo, action, position, side, qtd, agente, offer_id,
                          preco, has_price, has_qtd, has_date, data)
 
