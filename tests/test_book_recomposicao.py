@@ -149,3 +149,47 @@ def test_agregado_e_saida(tmp_path: Path) -> None:
 def test_sem_book_recusa(tmp_path: Path) -> None:
     with pytest.raises(SystemExit, match="nenhum dia"):
         br.descrever(tmp_path, "WINFUT", [dt.date(2026, 9, 10)])
+
+
+def test_posicao_e_contada_a_partir_do_FIM_como_diz_o_manual() -> None:
+    """ESTE teste distingue as duas semanticas -- os anteriores passavam nas
+    duas, e por isso nao pegaram o erro que produziu 3,7 BILHOES de
+    'removidas' num dia. Manual: size - nPosition - 1."""
+    # compra: tres ofertas entrando sempre no topo (posicao 0)
+    df = pd.DataFrame([_ev(1, ADD, 0, 0, 100.0, 1, 1), _ev(2, ADD, 0, 0, 101.0, 1, 2),
+                       _ev(3, ADD, 0, 0, 102.0, 1, 3),
+                       _ev(4, DELETE, 0, 2)])          # posicao 2 = a mais FUNDA
+    ev, cont = br.reconstruir(df, log_a_cada=0)
+    saida = ev[~ev["entrada"]].iloc[0]
+    assert saida["agente"] == 1 and saida["price"] == 100.0   # a do fundo, nao a do topo
+    assert cont["insercoes_fora_de_ordem"] == 0
+
+
+def test_add_no_meio_fica_na_posicao_pedida_e_em_ordem() -> None:
+    """Venda (lado 1): o topo e' o MENOR preco. Sequencia REAL de 17/09:
+    188.280 p0, 180.000 p0, 186.840 p1, 186.890 p2."""
+    df = pd.DataFrame([_ev(1, ADD, 1, 0, 188280.0, 55, 3), _ev(2, ADD, 1, 0, 180000.0, 7, 3),
+                       _ev(3, ADD, 1, 1, 186840.0, 2, 120), _ev(4, ADD, 1, 2, 186890.0, 1, 3),
+                       _ev(5, DELETE, 1, 1)])          # posicao 1 = segunda melhor
+    ev, cont = br.reconstruir(df, log_a_cada=0)
+    assert cont["insercoes_fora_de_ordem"] == 0
+    assert ev[~ev["entrada"]].iloc[0]["price"] == 186840.0
+
+
+def test_insercao_fora_de_ordem_e_detectada() -> None:
+    """A autoverificacao tem que DISPARAR quando a posicao nao bate com o
+    preco -- e' ela que denuncia semantica errada no dado real."""
+    df = pd.DataFrame([_ev(1, ADD, 0, 0, 100.0, 1, 1), _ev(2, ADD, 0, 0, 101.0, 1, 2),
+                       _ev(3, ADD, 0, 0, 90.0, 1, 3)])  # compra mais BARATA no topo: errado
+    _, cont = br.reconstruir(df, log_a_cada=0)
+    assert cont["insercoes_fora_de_ordem"] == 1
+
+
+def test_delete_from_remove_o_FUNDO_e_preserva_o_topo() -> None:
+    df = pd.DataFrame([_ev(1, ADD, 0, 0, 100.0, 1, 1), _ev(2, ADD, 0, 0, 101.0, 1, 2),
+                       _ev(3, ADD, 0, 0, 102.0, 1, 3),
+                       _ev(4, DELETE_FROM, 0, 1),      # tira posicoes >= 1 (o fundo)
+                       _ev(5, DELETE, 0, 0)])          # o topo sobreviveu
+    ev, cont = br.reconstruir(df, log_a_cada=0)
+    assert cont["removidas_por_delete_from"] == 2
+    assert ev[~ev["entrada"]].iloc[0]["agente"] == 3

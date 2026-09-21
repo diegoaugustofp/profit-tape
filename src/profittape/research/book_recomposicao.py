@@ -156,8 +156,31 @@ def desdobrar(df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, Any]]:
 
 def reconstruir(df: pd.DataFrame, log_a_cada: int = 5_000_000) -> tuple[pd.DataFrame,
                                                                          dict[str, Any]]:
-    """Livro POSICIONAL, evento a evento, por lado. Devolve os eventos de
-    nivel (entradas e SAIDAS com a oferta resolvida) e os contadores."""
+    """
+    Livro POSICIONAL, evento a evento, por lado, na semantica do MANUAL DA
+    DLL (TPriceBookCallbackV2, que o offer book segue): "todos os ajustes que
+    dependem de nPosition se referem a' posicao A PARTIR DO FINAL DA LISTA
+    (em listas com inicio em 0, size - nPosition - 1)".
+
+    Consequencia: o FIM da lista e' o TOPO do livro (posicao 0 = melhor
+    oferta). A primeira versao indexava a partir do INICIO -- cada
+    `DELETE_FROM` apagava o topo e o dia terminava com 3,7 BILHOES de
+    "removidas" contra 20 M de insercoes. Contando do fim, o livro parcial
+    fica alinhado pelo topo; o que falta (o livro inicial, descartado na
+    origem) fica no FUNDO, onde quase nada acontece.
+
+      ADD p        -> insere no indice size - p (a nova oferta fica na posicao p)
+      DELETE p     -> remove o indice size - p - 1
+      EDIT p       -> troca a quantidade no indice size - p - 1
+      DELETE_FROM p-> remove as posicoes >= p (o FUNDO: indices 0..size-p-1);
+                      reset, nao consumo -- NAO conta como saida
+
+    AUTOVERIFICACAO: cada ADD e' conferido contra os vizinhos conhecidos. O
+    lado de compra tem que crescer em preco rumo ao fim (melhor compra =
+    maior preco, no topo); o de venda, decrescer. `insercoes_fora_de_ordem`
+    sai no relatorio: com a semantica certa fica perto de zero; com a
+    errada, dispara.
+    """
     livro: dict[int, list[Any]] = {0: [], 1: []}
     n = len(df)
     s_ts = np.empty(n, dtype=np.int64)
@@ -167,39 +190,55 @@ def reconstruir(df: pd.DataFrame, log_a_cada: int = 5_000_000) -> tuple[pd.DataF
     s_ag = np.empty(n, dtype=np.int64)
     k = 0
     desconhecidas = edit_desconhecido = truncadas = 0
+    adds_conferidos = fora_de_ordem = 0
     cols = [df[c].tolist() for c in ("ts_recv_ns", "action", "side", "position",
                                      "price", "quantidade", "agente")]
     for i, (ts, acao, lado, pos, preco, qtd, ag) in enumerate(zip(*cols, strict=True)):
         lista = livro.get(lado)
         if lista is None:
             continue
+        tam = len(lista)
         if acao == _ADD:
-            if pos > len(lista):
-                lista.extend([None] * (pos - len(lista)))
-            lista.insert(pos, (preco, qtd, ag))
+            if pos > tam:                       # mais fundo que o conhecido
+                lista[:0] = [None] * (pos - tam)
+                tam = pos
+            idx = tam - pos
+            lista.insert(idx, (preco, qtd, ag))
+            # vizinhos: idx-1 e' mais FUNDO, idx+1 e' mais perto do TOPO
+            fundo = lista[idx - 1] if idx - 1 >= 0 else None
+            topo = lista[idx + 1] if idx + 1 < len(lista) else None
+            if fundo is not None or topo is not None:
+                adds_conferidos += 1
+                if lado == 0:   # compra: preco sobe rumo ao topo
+                    ruim = ((fundo is not None and fundo[0] > preco)
+                            or (topo is not None and topo[0] < preco))
+                else:           # venda: preco desce rumo ao topo
+                    ruim = ((fundo is not None and fundo[0] < preco)
+                            or (topo is not None and topo[0] > preco))
+                fora_de_ordem += int(ruim)
         elif acao == _DELETE:
-            if pos < len(lista):
-                saiu = lista.pop(pos)
+            if pos < tam:
+                saiu = lista.pop(tam - pos - 1)
                 if saiu is None:
                     desconhecidas += 1
                 else:
                     s_ts[k], s_pr[k], s_sd[k], s_q[k], s_ag[k] = ts, saiu[0], lado, saiu[1], saiu[2]
                     k += 1
             else:
-                desconhecidas += 1
+                desconhecidas += 1              # oferta mais funda que o conhecido
         elif acao == _EDIT:
-            if pos < len(lista) and lista[pos] is not None:
-                p_, _, a_ = lista[pos]
-                lista[pos] = (p_, qtd, a_)
+            if pos < tam and lista[tam - pos - 1] is not None:
+                p_, _, a_ = lista[tam - pos - 1]
+                lista[tam - pos - 1] = (p_, qtd, a_)
             else:
                 edit_desconhecido += 1
         elif acao == _DELETE_FROM:
-            if pos < len(lista):
-                truncadas += len(lista) - pos
-                del lista[pos:]
+            if pos < tam:
+                truncadas += tam - pos
+                del lista[:tam - pos]
         if log_a_cada and i and i % log_a_cada == 0:
-            log.info("book_recomposicao.reconstruindo", eventos=i, de=n,
-                     saidas=k, desconhecidas=desconhecidas)
+            log.info("book_recomposicao.reconstruindo", eventos=i, de=n, saidas=k,
+                     desconhecidas=desconhecidas, fora_de_ordem=fora_de_ordem)
     add = df[df["action"] == _ADD]
     entradas = pd.DataFrame({"ts_recv_ns": add["ts_recv_ns"].to_numpy(),
                              "price": add["price"].to_numpy(dtype=np.float64),
@@ -214,7 +253,11 @@ def reconstruir(df: pd.DataFrame, log_a_cada: int = 5_000_000) -> tuple[pd.DataF
             "fracao_saidas_desconhecidas": (round(desconhecidas / total_saidas, 4)
                                             if total_saidas else None),
             "edit_desconhecido": edit_desconhecido,
-            "removidas_por_delete_from": truncadas}
+            "removidas_por_delete_from": truncadas,
+            "insercoes_conferidas": adds_conferidos,
+            "insercoes_fora_de_ordem": fora_de_ordem,
+            "fracao_insercoes_fora_de_ordem": (round(fora_de_ordem / adds_conferidos, 4)
+                                               if adds_conferidos else None)}
     return pd.concat([entradas, saidas], ignore_index=True), cont
 
 
@@ -321,6 +364,8 @@ def descrever(raiz: Path, symbol: str, dias: list[dt.date], janela_s: float = JA
         "niveis_defendidos_p50": float(np.median([x["niveis_defendidos"] for x in linhas])),
         "cadeia_max": int(max(x["cadeia_max"] for x in linhas)),
         "dias_dobrados": int(sum(1 for x in linhas if x["dia_dobrado"])),
+        "fracao_insercoes_fora_de_ordem_p50": float(np.median(
+            [x["fracao_insercoes_fora_de_ordem"] or 0.0 for x in linhas])),
         "fracao_saidas_desconhecidas_p50": float(np.median(
             [x["fracao_saidas_desconhecidas"] or 0.0 for x in linhas])),
         "por_limiar": {

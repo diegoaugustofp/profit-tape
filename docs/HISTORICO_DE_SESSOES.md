@@ -2768,3 +2768,12 @@ Captura do mes inteiro para ter baseline dentro da mesma serie.
   ~0,5 us/evento. 9 testes (+1 integracao). 950 no total.
 - Pendente: capturar o atFullBook do offer book para a reconstrucao ser
   exata desde o primeiro evento.
+- v3.24: book v3 rodado em 6 dias; curva 1,39 -> 102 NAO lida. Sanidade:
+  par V1+V2 PROVADO (100% em sequencias pares); mas 60% de saidas
+  desconhecidas, crescendo o dia todo, e 3,7 BILHOES de removidas por
+  DELETE_FROM. Causa no MANUAL: nPosition conta a partir do FIM da lista;
+  eu contava do inicio. Corrigido, com testes que DISTINGUEM as semanticas
+  (os antigos passavam nas duas) e autoverificacao de ordem de preco no
+  dado real. Registrado o problema conceitual: o baseline nao separa
+  formador recotando de nivel defendido -- a separacao exige cruzar o
+  DELETE com o tape (consumo x cancelamento). 954 testes.

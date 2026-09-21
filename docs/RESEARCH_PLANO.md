@@ -6716,3 +6716,42 @@ troca a quantidade, `DELETE_FROM` trunca (reset, nao conta como saida).
 **Antes de ler a curva:** `dia_dobrado` deve vir True nos dias antigos,
 `fracao_saidas_desconhecidas` deve ser pequena, e `niveis_defendidos` deve
 ser algo que faca sentido como EVENTO (nao um milhao por dia).
+
+
+### Book v3 rodado: a reconstrucao estava INVERTIDA; e o baseline nao basta (2026-09-21)
+
+Seis dias (10 a 17/09). A curva deu 1,39 / 1,87 / 3,25 / 8,05 / **102** --
+a mais sedutora ate' agora -- e **NAO foi lida**, pelos criterios
+declarados antes:
+
+1. `dia_dobrado`: **PASSOU** e de forma inequivoca -- 100% das linhas em
+   sequencias pares, duplicatas exatamente metade. O par V1+V2 do
+   historico esta' provado.
+2. `fracao_saidas_desconhecidas` = **59-62%**: REPROVOU. E crescia em ritmo
+   CONSTANTE o dia inteiro -- se fosse so' o livro inicial, pararia de
+   crescer depois da abertura.
+3. `removidas_por_delete_from` = **3,7 BILHOES** num dia de 20 M de
+   insercoes: prova de que o livro estava sendo inflado.
+
+**Causa, no MANUAL DA DLL** (lido, nao deduzido): "todos os ajustes que
+dependem de nPosition se referem a' posicao A PARTIR DO FINAL DA LISTA
+(size - nPosition - 1)". Eu indexei a partir do INICIO. Cada `DELETE_FROM`
+apagava o TOPO do livro e as insercoes seguintes enchiam o fundo de vazio.
+
+**Por que os testes nao pegaram:** passavam nas DUAS semanticas. Entraram
+testes que as DISTINGUEM (inclusive a sequencia real de 17/09) -- dois
+deles reprovam na versao antiga -- e uma AUTOVERIFICACAO no dado real:
+cada insercao e' conferida contra os vizinhos pela ordem de preco do lado.
+`fracao_insercoes_fora_de_ordem` sai no relatorio; com a semantica certa
+fica perto de zero.
+
+**Segundo problema, CONCEITUAL, que continua mesmo com a reconstrucao
+certa:** o baseline permuta (quantidade, agente) e isso destroi tambem a
+REPOSICAO ROTINEIRA DO FORMADOR DE MERCADO -- que e' especifica de agente
+tanto quanto a "defesa de nivel". Um algoritmo recotando o mesmo tamanho
+no mesmo preco produz essa mesma curva. **O baseline nao separa as duas
+coisas.** A assinatura que separa: iceberg e' oferta CONSUMIDA (executada)
+e reposta; formador e' oferta CANCELADA e reposta. O DELETE nao diz qual
+dos dois -- cruzar com o tape (negocio no mesmo preco, milissegundos antes
+do DELETE, pelo `ts_recv_ns`, que e' o relogio comum aos dois) diz. E'
+o proximo desenho, ANTES de qualquer leitura de curva.
