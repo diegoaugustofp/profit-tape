@@ -465,6 +465,10 @@ class RecorderService:
     def run(self) -> int:
         self._instalar_sinais()
         self._em_execucao = True
+        # Modern Standby derrubou a rede e congelou o record por 26 min em
+        # 18/09 (ver infra/energia.py). Pedido ANTES de qualquer captura.
+        from ..infra.energia import manter_acordado
+        manter_acordado()
         self.writer.start()
         # Os bridges ja' foram iniciados por `registro.incluir` (o
         # despachante inicia cada um ao incluir) -- nada a fazer aqui.
@@ -620,6 +624,8 @@ class RecorderService:
     # ------------------------------------------------------------------
     def _encerrar(self) -> None:
         log.info("recorder.encerrando")
+        from ..infra.energia import liberar
+        liberar()
         self.client.disconnect()  # 1: para de entrar evento novo
         # ANTES do bus.close() -- protegido internamente (try/except em
         # torno de encerrar_dia(), ver bridge.py e despachante.py); um erro

@@ -1,3 +1,54 @@
+## INCIDENTE 2026-09-18: Modern Standby congelou o record por 26 minutos
+
+**O que aconteceu.** As 16:08 o notebook entrou em *Modern Standby*
+(Kernel-Power 172: "Disconnected, Adaptive Connected Standby"), desligou
+a rede (Wi-Fi Intel Netwtw10 para o estado D3), acordou as 16:34 por
+"Austerity Battery Drain Budget Exceeded" e VOLTOU a dormir as 16:34:22.
+O processo inteiro parou -- 26 min sem heartbeat --, a DLL reconectou
+depois, e o tape de WINFUT ficou com ~50 min faltando (35 barras em vez
+de 38). Os trades que chegaram com ~1.550 s de idade eram o que a DLL
+acumulou e entregou de uma vez ao voltar.
+
+**Como se diferencia de queda de rede:** na queda de 83 s do E1 o
+heartbeat CONTINUOU e `corretora_pronta` acompanhou. Aqui tudo parou
+junto -- assinatura de maquina, nao de rede.
+
+**Correcao (v3.21):** o record pede ao Windows para nao dormir enquanto
+roda (`SetThreadExecutionState` com CONTINUOUS | SYSTEM_REQUIRED |
+DISPLAY_REQUIRED -- no Modern Standby a espera e' disparada pela TELA
+desligar, entao so' SYSTEM nao basta). Log `energia.mantendo_acordado` no
+arranque. Custo: a tela fica ligada. NAO impede fechar a tampa nem o
+botao de energia.
+
+**Tambem configurar (redundancia, porque codigo sozinho nao cobre tudo):**
+plano de energia com "nunca suspender" na TOMADA, e o notebook SEMPRE na
+tomada durante o pregao. O motivo "Battery Drain Budget" sugere que a
+politica de bateria estava atuando -- vale conferir se estava na tomada.
+
+**Reforca o que estava pendente:** cabo (o adaptador Wi-Fi e' o que o
+Windows desliga primeiro) e nobreak (a bateria do notebook segura a
+maquina, mas nao o roteador).
+
+**Se isso acontecer com ordem REAL aberta:** stop e alvo estao na
+corretora -- a posicao segue protegida (foi por isso que se escolheu
+ordem real em vez de stop simulado). Ordem de ENTRADA pendente e' o caso
+de risco; a reconciliacao cancela ao voltar, e sabe os ClOrdIDs porque o
+processo nao morreu -- so' parou.
+
+**Duas metricas corrigidas no mesmo incidente:**
+- `ea.123.atrasado` media "tempo desde o ultimo trade", confundindo
+  SILENCIO com atraso (subiu 30 s a cada 30 s com o contador parado).
+  Agora e' a IDADE do trade no instante em que e' processado.
+- `ea_bridge.finalizado` mostrava so' a ultima janela de 5 min (zerada
+  pela linha periodica). Agora leva `atraso_max_dia_s` e
+  `trades_medidos_dia`.
+
+**Atraso REAL medido em 18/09, com fluxo:** media 0,03 a 6 s, maximo 1,6
+a 8 s. Para barra M15 nao e' bloqueio -- desempenho NAO e' pre-requisito
+do E4 no 123.
+
+---
+
 ## INCIDENTE 2026-09-17: a cura destruiu um pregao inteiro (e a protecao)
 
 **O que aconteceu.** Ao subir o record na manha de 17/09, um evento com

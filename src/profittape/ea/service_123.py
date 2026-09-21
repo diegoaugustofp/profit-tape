@@ -138,6 +138,7 @@ class EA123Service:
         self._ultimo_tick = 0.0
         self._ultimo_alerta = 0.0
         self.atraso_alerta_s = 5.0
+        self._atraso_ultimo_s = 0.0
         self.trades = 0
         self.barras = 0
         self._ultimo_ts_ns = 0
@@ -151,6 +152,13 @@ class EA123Service:
     def processar_trade_bruto(self, t: _TradeBruto) -> None:
         self.trades += 1
         self._ultimo_ts_ns = t.ts_ns
+        if self.ao_vivo:
+            # IDADE do trade no momento em que e' processado: e' o atraso
+            # REAL. A versao anterior media "tempo desde o ultimo trade", que
+            # confunde SILENCIO com atraso -- em 18/09 subiu 30 s a cada 30 s
+            # com o contador de trades PARADO (mercado quieto, ou maquina em
+            # espera), e eu li como "4,6 min atras".
+            self._atraso_ultimo_s = time.time() - t.ts_ns / _NS
         b = self.construtor.processar_trade(t.ts_ns, t.price, t.quantidade, t.trade_type)
         if b is not None:
             self._barra(b)
@@ -194,7 +202,7 @@ class EA123Service:
         # atrasa o SINAL (o EA arma quando processa o trade que cruza a
         # fronteira, nao quando ela passa). Sem log, isso ficaria invisivel.
         if self.ao_vivo and self._ultimo_ts_ns:
-            atraso_s = time.time() - self._ultimo_ts_ns / _NS
+            atraso_s = self._atraso_ultimo_s
             if atraso_s > self.atraso_alerta_s and agora - self._ultimo_alerta > 30:
                 self._ultimo_alerta = agora
                 log.warning("ea.123.atrasado", atraso_s=round(atraso_s, 1),

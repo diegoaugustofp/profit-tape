@@ -57,6 +57,10 @@ class EABridge:
         self._atraso_soma = 0.0
         self._atraso_n = 0
         self._fila_pico = 0
+        # DO DIA, nunca zerados: o resumo final so' via a ultima janela de
+        # 5 min (mercado fechado -> atraso 0, medidos 0) -- mentia.
+        self._atraso_max_dia_s = 0.0
+        self._atraso_n_dia = 0
         self._parar_evento = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -93,6 +97,8 @@ class EABridge:
             log.exception("ea_bridge.erro_ao_encerrar_dia")
         log.warning("ea_bridge.finalizado", descartados=self._descartados,
                     filtrados_outro_simbolo=self._filtrados_outro_simbolo,
+                    atraso_max_dia_s=round(self._atraso_max_dia_s, 3),
+                    trades_medidos_dia=self._atraso_n_dia,
                     **self.atraso(), **self.ea_service._hb())
 
     def _medir_atraso(self, trade: Trade) -> None:
@@ -105,6 +111,8 @@ class EABridge:
         self._atraso_max_s = max(self._atraso_max_s, atraso)
         self._atraso_soma += atraso
         self._atraso_n += 1
+        self._atraso_max_dia_s = max(self._atraso_max_dia_s, atraso)
+        self._atraso_n_dia += 1
         self._fila_pico = max(self._fila_pico, self._fila.qsize())
 
     def _alertar_atraso(self) -> None:

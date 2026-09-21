@@ -2724,3 +2724,21 @@ para datar contra o trade -- e isso ja' limita o desenho do passo 2.
   resolve. Nao era disco.
 - 8 testes (inclusive DELETE com preco ZERADO, que quebra se o detector
   usar os campos do evento em vez do estado). 944 no total.
+
+### 2026-09-19 — Modern Standby; o record passa a manter a maquina acordada (v3.21)
+
+- Primeiro dry_run AO VIVO limpo depois das correcoes (dia completo), mas
+  com 35 barras. A causa NAO era atraso: eu li "277 s atras" e estava
+  errado -- o contador de trades estava parado; a metrica media silencio.
+- A causa real, pelos eventos do Windows: Modern Standby as 16:08
+  (rede desligada), acordou 16:34, voltou a dormir 16:34:22. 26 min sem
+  heartbeat -- assinatura de MAQUINA, nao de rede. ~50 min de tape
+  faltando.
+- Correcao: `infra/energia.py` -- o record chama SetThreadExecutionState
+  (CONTINUOUS | SYSTEM | DISPLAY) no arranque e libera no encerramento.
+  Configurar tambem o plano de energia e manter na tomada.
+- Metricas: `ea.123.atrasado` passa a medir a IDADE do trade no
+  processamento; `ea_bridge.finalizado` leva o maximo do DIA.
+- Atraso real com fluxo: 0,03-6 s de media, 1,6-8 s de maximo --
+  desempenho NAO bloqueia o E4 do 123.
+- 4 testes; 948 no total. Pendente: backfill do 18/09.
