@@ -6658,3 +6658,32 @@ contra 3 min dos demais. Nao e' disco -- sao particoes anteriores a`
 correcao do writer (row groups de 15 linhas, v2.23). `profit-tape
 compact --dia ...` resolve, e e' o que explica tambem por que o
 `fluxo-vs-grafico` pareceu lento.
+
+
+### Opcao sobre acao: series de OUTUBRO e a expectativa DECLARADA ANTES (2026-09-21)
+
+Vencimento **16/10/2026**, 20 pregoes. Fechamento de 18/09, spot PETR4
+48,52. Mapeamento por OI (Trade Hunter), 14 series casando exatamente;
+semanais (sufixo W) excluidos.
+
+**O perfil mudou em relacao a setembro, e isso vai escrito ANTES de
+medir:**
+
+| | setembro | outubro |
+|---|---|---|
+| onde esta' o OI | 25 M em 36-44, **longe** do spot | maior strike do vencimento em **49,61 (15,4 M)**, 2,2% acima do spot |
+| posicionamento novo | modesto | **+6,6 M (call) e +7,0 M (put) em 49,61 num unico dia** |
+| expectativa de pinning | BAIXA | **com poder** |
+
+**Consequencia para a leitura:** em setembro, um resultado nulo era o
+esperado e nao pesava contra a hipotese. Em OUTUBRO, um nulo PESA CONTRA
+-- e' a configuracao em que o hedge forcado deveria aparecer, se existe.
+
+**Series capturadas** (trades, sem book): perto do dinheiro `PETRJ49`,
+`PETRV49` (47,86), `PETRJ493` (48,11), `PETRJ494`, `PETRV494` (48,36),
+`PETRJ500`, `PETRV500` (48,86), `PETRJ22`, `PETRV22` (49,61, put wall);
+contraste `PETRJ550`/`PETRV550` (53,86, call wall), `PETRJ470`/`PETRV470`
+(44,86, max pain), `PETRV480` (45,86). Mes INTEIRO, de 22/09 a 16/10.
+
+Se PETR4 andar mais de ~2% antes do inicio, o "perto do dinheiro" muda e
+a lista se refaz -- pela mesma regra, antes de ligar.

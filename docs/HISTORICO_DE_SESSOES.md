@@ -2742,3 +2742,11 @@ para datar contra o trade -- e isso ja' limita o desenho do passo 2.
 - Atraso real com fluxo: 0,03-6 s de media, 1,6-8 s de maximo --
   desempenho NAO bloqueia o E4 do 123.
 - 4 testes; 948 no total. Pendente: backfill do 18/09.
+
+### 2026-09-21 — series de opcao de OUTUBRO (v3.22)
+
+14 series de PETR4 (vencimento 16/10), mapeadas por OI. Declarado ANTES
+de medir: o OI agora esta' COLADO no spot (49,61, 15,4 M, o maior strike
+do vencimento, com +13,6 M novos num dia), ao contrario de setembro.
+Logo um nulo em outubro PESA contra a hipotese, e em setembro nao pesava.
+Captura do mes inteiro para ter baseline dentro da mesma serie.
