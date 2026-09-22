@@ -137,6 +137,7 @@ class EA123Service:
         self._corretora_pronta_antes: bool | None = None
         self._ultimo_tick = 0.0
         self._ultimo_alerta = 0.0
+        self._limpeza_feita = False
         self.atraso_alerta_s = 5.0
         self._atraso_ultimo_s = 0.0
         self.trades = 0
@@ -210,6 +211,10 @@ class EA123Service:
                             nota="o EA esta' atras da fila: o sinal sai atrasado o mesmo tanto")
         if self.client is not None and not self.config.dry_run:
             pronta = bool(getattr(self.client, "corretora_pronta", True))
+            if pronta and not self._limpeza_feita:
+                # uma vez, na PRIMEIRA vez que a corretora esta' pronta
+                self._limpeza_feita = True
+                self.ciclo.limpeza_na_subida()
             if self._corretora_pronta_antes is False and pronta:
                 log.warning("ea.123.reconectado", nota="reconciliando ordens e posicao")
                 self.ciclo.reconciliar_apos_reconexao()

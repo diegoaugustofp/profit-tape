@@ -319,3 +319,43 @@ def test_ao_vivo_com_ea_atrasado_nao_fragmenta_a_barra(
         s._ultimo_tick = 0.0                 # forca o tick a cada trade
         s.tick()
     assert s.barras == 23, f"esperava 23 barras, veio {s.barras}"
+
+
+def test_limpeza_na_subida_roda_uma_vez_quando_a_corretora_fica_pronta(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    from profittape.ea import service_123 as sv
+
+    class _Ciclo:
+        def __init__(self) -> None:
+            self.limpezas = 0
+            self.reconc = 0
+
+        def limpeza_na_subida(self) -> dict:
+            self.limpezas += 1
+            return {}
+
+        def reconciliar_apos_reconexao(self) -> dict:
+            self.reconc += 1
+            return {}
+
+        def tick(self) -> None:
+            pass
+
+    class _Cfg:
+        dry_run = False
+
+    class _Client:
+        corretora_pronta = False
+
+    s = sv.EA123Service.__new__(sv.EA123Service)
+    s.config, s.client, s.ciclo = _Cfg(), _Client(), _Ciclo()
+    s.ao_vivo, s._ultimo_ts_ns, s._ultimo_tick = False, 0, 0.0
+    s._limpeza_feita, s._corretora_pronta_antes = False, None
+    s.tick()
+    assert s.ciclo.limpezas == 0                      # corretora ainda nao pronta
+    s.client.corretora_pronta = True
+    for _ in range(3):
+        s._ultimo_tick = 0.0
+        s.tick()
+    assert s.ciclo.limpezas == 1                      # uma vez so'
+    assert s.ciclo.reconc == 1                        # e a transicao False->True reconcilia

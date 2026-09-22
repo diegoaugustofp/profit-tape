@@ -2886,3 +2886,29 @@ estacionada ate' o E4 comecar; ver ESTADO_E_CAMINHOS secao 3.
   loga a zeragem -- em modo real o EA sai antes de ver o fill, e o roteiro
   agora manda conferir a posicao no Profit.
 - 964 testes.
+
+### 2026-09-22 — E4 COMECOU; residuo explicado; stop e alvo nao sao OCO (v3.31)
+
+- **E4 no ar.** Arranque passou em toda a secao 2 do roteiro (energia,
+  corretora pronta, E4 com dry_run=False e semente valida). 1a operacao:
+  venda 11:15, entrada 186.700 (minima das 11:15 - 5), stop 187.670,
+  alvo 185.730 -- geometria conferida. Ordem enviada 14 ms depois da barra;
+  fill real 186.700 (slippage 0) cerca de 1 s depois do fill simulado do
+  gemeo; stop e alvo enviados 1-2 ms depois da confirmacao. O extrato do
+  Profit bate com o log (precos, horarios, conta Simulador). O
+  `latencia_ms` do diario para ordem stop mede a espera pelo preco, nao a
+  execucao -- a latencia certa e' real x simulado.
+- **Residuo do dia anterior EXPLICADO:** a quarentena pegou exatamente um
+  negocio por ticker assinado (25), todos recebidos no instante da
+  assinatura, cada um o ULTIMO negocio do pregao anterior daquele ticker.
+  WDOV26 e WDOFUT com o MESMO trade_id (sao o mesmo contrato hoje). E' a
+  DLL reenviando o ultimo negocio ao assinar; a quarentena e' o tratamento
+  certo.
+- **18/09 completo:** o backfill preencheu o buraco do standby.
+- **Stop e alvo NAO sao OCO na corretora** (observacao do operador;
+  extrato: duas ordens `Normal`). A DLL nao tem OCO nativo. Achado no
+  codigo por causa disso: a reconciliacao nao tratava a posicao INVERTIDA
+  (as duas pernas executadas com o EA parado) -- caia no ramo generico e
+  deixava a posicao aberta. Corrigido. E o `SendCancelOrders` foi REABERTO
+  para a subida do EA real (processo que morreu com ordens vivas), guardado
+  pela vaga; falta o teste ao vivo, com procedimento no roteiro. 970 testes.

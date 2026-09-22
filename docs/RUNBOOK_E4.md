@@ -50,6 +50,7 @@ profit-tape record -c C:\projetos\profit-tape\config\recorder.yaml --ea-dir C:\p
 | `recorder.heartbeat` | `login_ok=True`, `corretora_pronta=True` |
 | `ea.123.iniciado` do `ea_123_vb_e4` | `dry_run=False`, semente `valida=True`, perfil com 38 horários |
 | `ea_registro.incluido` | o E4 aparece com `dry_run=False` |
+| `ea.123.limpeza_na_subida` (v3.31) | `acao=limpo`: o EA real cancelou TODAS as ordens do `WINV26` na conta demo e não achou posição. `zerou_orfa` = havia posição sem dono e ele zerou — confira no Profit |
 
 **Não deve aparecer:** `recorder.ea_ordens_reais_sem_pre_requisito`,
 `recorder.ea_ticker_agregador_recusado`, `ea.123.sem_semente`. Se aparecer
@@ -80,14 +81,36 @@ ea.123.operacao_fechada  desfecho, slippage por ordem, latências
 |---|---|---|
 | `ea.123.aviso ... CONFIRA NO PROFIT` | timeout de callback, cancelamento ou zeragem não confirmados | olhe a ordem e a posição no Profit; anote o horário |
 | `ea.123.posicao_orfa` | posição que o ciclo não conhece | o ciclo zera a mercado; confira no Profit que zerou |
+| `ea.123.posicao_inesperada` (v3.31) | na volta de uma queda a posição real não bate com a esperada — p.ex. INVERTIDA porque stop e alvo executaram os dois | o ciclo cancela tudo do ativo e zera; confira no Profit |
 | `ea.123.reconectado` + `ea.123.reconciliado` | a conexão caiu e voltou | leia `acao` no `reconciliado`: re-armou saída, fechou como `reconciliado` ou zerou órfã |
 | heartbeat parado, ou `sem_evento_ha_s` alto no pregão | máquina ou rede | abra o Profit: **posição sem stop → zere à mão** (seção 5) |
 | `ea.123.atrasado` | EA mais de 5 s atrás do mercado | anote; se for constante, é assunto de desempenho |
 | ordem recusada pela corretora | — | pare o E4 (critério da seção 7) |
 
-**Limitação declarada:** ordem órfã de processo que MORREU (não só parou)
-não é cancelada sozinha — o EA novo não conhece o ClOrdID dela. Limpeza à
-mão no Profit.
+**Stop e alvo NÃO são OCO na corretora** (observado pelo operador em
+22/09 e confirmado no extrato: duas ordens `Normal`, independentes). A DLL
+não oferece OCO nativo; quem cancela a perna que sobra é o EA. Consequência:
+com o EA fora do ar, a perna que sobra pode **abrir uma posição nova** mais
+tarde. Coberturas (v3.31):
+- processo PAROU e voltou: a reconciliação cancela ordem a ordem, e trata
+  a posição invertida (`posicao_inesperada`);
+- processo MORREU: na subida, `limpeza_na_subida` cancela TODAS as ordens
+  do ativo na conta e zera o que houver. Custo declarado: cancela também
+  ordens manuais do ativo nessa conta.
+
+### Teste do cancelamento total (uma vez, num pregão)
+
+O `SendCancelOrders` nunca foi testado ao vivo. Procedimento, com o E4
+**livre** (sem posição nem entrada pendente) — de preferência entre 09:00
+e 09:30, antes do primeiro sinal possível:
+1. Tire o `ea_123_volume_baixo_e4.yaml` da pasta (o simulado fica).
+2. No Profit, na conta **Simulador**, ponha à mão uma ordem de `WINV26`
+   que não vá executar (compra limitada bem abaixo do mercado).
+3. Recoloque o yaml na pasta. Em ~3 min o EA sobe e, na primeira vez que a
+   corretora está pronta, loga `ea.123.limpeza_na_subida acao=limpo`.
+4. **No Profit, a sua ordem tem que aparecer como Cancelada.** Se não
+   aparecer, cancele à mão e me mande o log — a limpeza na subida não
+   funciona e a limitação volta a valer.
 
 ## 5. Intervir à mão sem confundir o EA
 

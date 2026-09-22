@@ -488,6 +488,50 @@ class CicloDeOrdens123:
         self.estado = "livre"
 
     # ------------------------------------------------- 4b: reconciliacao
+    def limpeza_na_subida(self) -> dict[str, Any]:
+        """
+        Ao subir em modo REAL (2026-09-22). Cobre o caso que a reconciliacao
+        nao cobre: o processo anterior MORREU com ordens vivas (queda de
+        energia, travamento). O EA novo nao conhece os ClOrdIDs, entao nao
+        consegue cancelar ordem a ordem -- e uma perna orfa de stop ou alvo
+        pode abrir uma posicao nova mais tarde. Aqui: `SendCancelOrders`
+        (TODAS as ordens do ativo na conta) e, se houver posicao, zera.
+
+        CUSTO DECLARADO: cancela TODAS as ordens do ativo naquela conta,
+        inclusive as manuais. Por isso so' roda se a vaga do ticker nao e' de
+        OUTRO EA -- senao cancelaria as ordens de um EA real ja' operando.
+        """
+        rel: dict[str, Any] = {}
+        if self.dry_run or self.executor is None:
+            return rel
+        dono = self.vagas.dono(self.symbol) if self.vagas is not None else None
+        if dono not in (None, self.nome):
+            rel["acao"] = "adiada_vaga_de_outro"
+            log.warning("ea.123.limpeza_na_subida", dono_da_vaga=dono, **rel,
+                        nota="outro EA real opera este ticker: nao cancela as ordens dele")
+            return rel
+        if self.estado != "livre":
+            rel["acao"] = "ignorada_ciclo_ocupado"
+            return rel
+        rel["cancel_todas_retorno"] = self.executor.cancelar_todas()
+        pos = self.executor.consultar_posicao()
+        real = int(pos.quantidade_liquida) if pos.plausivel else None
+        rel["posicao_real"] = real
+        if real is None:
+            self._aviso("posicao implausivel na subida -- CONFIRA NO PROFIT")
+            rel["acao"] = "posicao_implausivel"
+        elif real != 0:
+            log.error("ea.123.posicao_orfa", real=real, momento="subida")
+            self.executor.zerar()
+            self._aviso(f"posicao orfa na SUBIDA (real={real}) zerada a mercado "
+                        "-- CONFIRA NO PROFIT")
+            rel["acao"] = "zerou_orfa"
+        else:
+            rel["acao"] = "limpo"
+        log.warning("ea.123.limpeza_na_subida", **rel,
+                    nota="confira no Profit: nenhuma ordem de " + self.symbol + " viva nesta conta")
+        return rel
+
     def reconciliar_apos_reconexao(self) -> dict[str, Any]:
         """
         Chamado quando a corretora volta a ficar pronta (ou no arranque com
@@ -547,12 +591,25 @@ class CicloDeOrdens123:
         elif esperado != 0 and real == 0:
             self._fechar_op("reconciliado", "posicao zerada durante a queda: uma perna executou")
             rel["acao"] = "fechou_reconciliado"
-        elif esperado == 0 and real != 0:
-            log.error("ea.123.posicao_orfa", real=real)
+        elif real != esperado:
+            # Qualquer posicao REAL diferente da esperada e diferente de zero.
+            # Inclui a orfa (esperado 0) E a INVERTIDA -- o caso levantado pelo
+            # operador em 22/09: stop e alvo sao ordens INDEPENDENTES na
+            # corretora (a DLL nao tem OCO nativo); com o EA parado, se as
+            # DUAS pernas executarem, a posicao inverte. Antes, esse caso caia
+            # no `else` abaixo: registrava `nao_executou`, deixava a posicao
+            # invertida ABERTA e sem protecao, e liberava o EA para operar por
+            # cima. Agora: cancela o que houver do ativo, zera a mercado
+            # (SendZeroPositionAtMarket zera seja qual for o sentido) e avisa.
+            log.error("ea.123.posicao_inesperada", real=real, esperado=esperado)
+            self.executor.cancelar_todas()
             self.executor.zerar()
             if self.op is not None:
-                self._fechar_op("erro", "posicao orfa zerada na reconciliacao")
-            rel["acao"] = "zerou_orfa"
+                self._fechar_op("erro", f"posicao inesperada na reconciliacao: "
+                                        f"real={real} esperado={esperado}")
+            self._aviso(f"posicao inesperada (real={real}, esperado={esperado}) zerada a "
+                        "mercado -- CONFIRA NO PROFIT")
+            rel["acao"] = "zerou_orfa" if esperado == 0 else "zerou_inesperada"
         else:
             if self.op is not None:
                 self._fechar_op("nao_executou", "reconexao: ordens canceladas")

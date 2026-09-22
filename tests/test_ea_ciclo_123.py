@@ -345,3 +345,63 @@ def test_ea_simulado_nao_toma_nem_respeita_vaga() -> None:
     # e um simulado armado nao impede um real de ocupar
     v.liberar("WINFUT", "ea_real")
     assert v.tentar_ocupar("WINFUT", "outro_real")
+
+
+def test_reconciliacao_com_posicao_INVERTIDA_zera_em_vez_de_deixar_aberta() -> None:
+    """Caso levantado pelo operador em 22/09: stop e alvo sao ordens
+    INDEPENDENTES na corretora (a DLL nao tem OCO nativo). Com o EA parado,
+    se as DUAS pernas executarem, a posicao inverte. Antes caia no `else`:
+    registrava `nao_executou` e deixava a posicao invertida aberta."""
+    ex = ExecutorFakeReconc(posicao=-1)        # EA comprado; na volta, VENDIDO 1
+    c = _ciclo(ex)
+    _armar_compra(c)
+    c.tick()
+    ex.preencher(101, 140060.0)
+    c.tick()
+    assert c.estado == "posicionado"
+    c.tick()
+    rel = c.reconciliar_apos_reconexao()
+    assert rel["acao"] == "zerou_inesperada"
+    nomes = [n for n, _ in ex.chamadas]
+    assert "zerar" in nomes and "cancelar_todas" in nomes
+    assert c.operacoes[-1].desfecho == "erro"
+    assert c.estado == "livre"
+
+
+def test_reconciliacao_com_posicao_orfa_continua_zerando() -> None:
+    ex = ExecutorFakeReconc(posicao=1)          # posicao sem operacao conhecida
+    c = _ciclo(ex)
+    rel = c.reconciliar_apos_reconexao()
+    assert rel["acao"] == "zerou_orfa" and "zerar" in [n for n, _ in ex.chamadas]
+
+
+def test_limpeza_na_subida_cancela_tudo_e_zera_orfa() -> None:
+    """Processo anterior MORREU com ordens vivas: o EA novo nao conhece os
+    ClOrdIDs. Na subida: cancela TODAS as ordens do ativo e zera se houver
+    posicao."""
+    ex = ExecutorFakeReconc(posicao=0)
+    c = _ciclo(ex)
+    assert c.limpeza_na_subida()["acao"] == "limpo"
+    assert [n for n, _ in ex.chamadas] == ["cancelar_todas"]
+    ex2 = ExecutorFakeReconc(posicao=-1)
+    c2 = _ciclo(ex2)
+    assert c2.limpeza_na_subida()["acao"] == "zerou_orfa"
+    assert [n for n, _ in ex2.chamadas] == ["cancelar_todas", "zerar"]
+
+
+def test_limpeza_na_subida_nao_cancela_ordens_de_outro_ea_real() -> None:
+    """SendCancelOrders cancela TODAS as ordens do ativo na conta: se outro
+    EA real ja' opera o ticker, cancelaria as dele."""
+    from profittape.ea.vagas import VagasPorTicker
+    v = VagasPorTicker()
+    assert v.tentar_ocupar("WINFUT", "outro_real")
+    ex = ExecutorFakeReconc(posicao=1)
+    c = CicloDeOrdens123(SinalPreco123(IndicadorMME(80, 139000.0)), executor=ex,
+                         vagas=v, symbol="WINFUT", nome="ea_novo")
+    assert c.limpeza_na_subida()["acao"] == "adiada_vaga_de_outro"
+    assert ex.chamadas == []
+
+
+def test_limpeza_na_subida_nao_roda_em_dry_run() -> None:
+    c = _ciclo()
+    assert c.limpeza_na_subida() == {}
