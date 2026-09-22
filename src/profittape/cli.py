@@ -2183,7 +2183,8 @@ def opcoes_vencimento_cmd(
     papel: str = typer.Option("PETR4", "--papel"),
     series: str = typer.Option("", "--series", help="tickers das opcoes, separados por virgula"),
     curated: Path = typer.Option(Path("data/curated"), "--curated"),
-    tol_pct: float = typer.Option(0.004, "--tol-pct"),
+    tol_frac: float = typer.Option(
+        0.2, "--tol-frac", help="largura da faixa, em FRACAO do espacamento entre strikes"),
     saida: Path = typer.Option(Path("data/research/opcoes"), "--saida"),
     log_level: str = typer.Option("INFO", "--log-level"),
 ) -> None:
@@ -2203,10 +2204,10 @@ def opcoes_vencimento_cmd(
     lista = [float(s) for s in strikes.split(",") if s.strip()]
     sers = [s.strip() for s in series.split(",") if s.strip()]
     r = descrever(curated, papel, dias, lista, dt.date.fromisoformat(vencimento),
-                  sers or None, tol_pct, saida=saida)
+                  sers or None, tol_frac, saida=saida)
     typer.echo("=" * 72)
-    typer.echo(f"OPCAO SOBRE ACAO — {papel}, vencimento {vencimento}, "
-               f"{len(lista)} strikes (+-{100 * tol_pct:g}%)")
+    typer.echo(f"OPCAO SOBRE ACAO — {papel}, vencimento {vencimento}, {len(lista)} strikes; "
+               f"placebo no MEIO entre eles, faixa = {100 * tol_frac:g}% do espacamento")
     typer.echo("=" * 72)
     for nome, bloco in (("SEMANA DO VENCIMENTO (<= 5 pregoes)", r["semana_do_vencimento"]),
                         ("DEMAIS PREGOES", r["demais_pregoes"])):
@@ -2218,17 +2219,24 @@ def opcoes_vencimento_cmd(
                    f"amplitude p50={bloco['amplitude_pct_p50']:.2f}%   "
                    f"|retorno| p50={bloco['retorno_abs_pct_p50']:.2f}%")
         typer.echo(f"    concentracao nos strikes / PLACEBO: "
-                   f"{bloco['razao_strike_vs_placebo_p50']}")
+                   f"{bloco['razao_strike_vs_placebo_p50']}"
+                   + ("  (INDEFINIDA em algum dia -- ver a coluna razao)"
+                      if bloco["razao_strike_vs_placebo_p50"] is None else ""))
     typer.echo(f"\n  {'dia':>12} {'ate venc':>9} {'volume':>12} {'ampl%':>7} "
                f"{'perto strike':>13} {'placebo':>9} {'razao':>7} {'neg. series':>12}")
     for x in r["por_dia"]:
         pv = x["strikes"].get("fracao_do_volume_perto")
         pp = x["strikes_PLACEBO"].get("fracao_do_volume_perto")
+        razao = (f"{x['razao_strike_vs_placebo']:.2f}"
+                 if x["razao_strike_vs_placebo"] is not None else "indef.")
         typer.echo(f"  {x['dia']:>12} {x['pregoes_ate_o_vencimento']:>9} {x['volume']:>12,} "
                    f"{x['amplitude_pct']:>7.2f} "
                    f"{(pv if pv is not None else 0):>13.3f} {(pp if pp is not None else 0):>9.3f} "
-                   f"{(x['razao_strike_vs_placebo'] or 0):>7.2f} "
-                   f"{x.get('negocios_nas_series', 0):>12,}")
+                   f"{razao:>7} {x.get('negocios_nas_series', 0):>12,}")
+    indef = [x for x in r["por_dia"] if x["razao_strike_vs_placebo"] is None]
+    if indef:
+        typer.echo(f"\n  {len(indef)} dia(s) com razao INDEFINIDA: "
+                   f"{indef[0]['razao_indefinida_porque']}")
     typer.echo("\n  LEITURA: volume/amplitude maiores na semana do vencimento, SOZINHOS, sao "
                "sazonalidade. O que tem mecanismo e' a razao strike/PLACEBO: perto de 1 = o "
                "volume esta' onde o preco andou, nao ha' atracao pelos strikes. Bem acima de 1, "

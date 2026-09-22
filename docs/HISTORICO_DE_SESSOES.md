@@ -2944,3 +2944,11 @@ estacionada ate' o E4 comecar; ver ESTADO_E_CAMINHOS secao 3.
   reenviado tinha 12h40 de idade, 45.601 s, e os EAs so' subiram depois
   do reenvio). Em vez de uma quarta suposicao, procedencia no log.
   998 testes.
+- v3.36: o ENSAIO das opcoes (17-18/09) achou um defeito no meu placebo
+  antes de qualquer conclusao: deslocar os strikes +1,7% jogou os falsos
+  para FORA da faixa negociada (volume zero por construcao, razao de 310
+  milhoes), e a tolerancia fixa de 0,4% era maior que meio intervalo da
+  grade (a faixa engolia 86% do volume). v2: placebo no MEIO entre
+  strikes consecutivos, tolerancia como FRACAO do espacamento, e razao
+  indefinida quando alguma faixa quase nao toca o intervalo do dia.
+  3 testes novos (inclusive o caso que aconteceu). 1.000 testes.

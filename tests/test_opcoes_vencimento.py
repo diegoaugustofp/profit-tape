@@ -36,10 +36,13 @@ def _dia(precos: list[float], dia: dt.date) -> pd.DataFrame:
                          "price": precos, "quantidade": 100, "trade_type": 2})
 
 
-def test_preco_colado_no_strike_da_razao_alta(
+def test_preco_colado_nos_strikes_da_razao_alta(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Metade do volume em cima de um strike, metade em cima de outro: as
+    duas pontas da grade sao negociadas (o placebo, no meio, recebe pouco),
+    entao a comparacao e' justa E a razao e' alta."""
     dia = dt.date(2026, 9, 17)
-    precos = [48.36, 48.37, 48.35, 48.36, 48.34] * 20      # em cima de um strike
+    precos = ([47.86, 47.87] * 50) + ([48.86, 48.85] * 50)
     c = _tape(monkeypatch, tmp_path, {dia: _dia(precos, dia)})
     r = ov.medir_dia(c, "PETR4", dia, STRIKES, dt.date(2026, 9, 18))
     assert r["strikes"]["fracao_do_volume_perto"] == 1.0
@@ -56,18 +59,42 @@ def test_preco_longe_dos_strikes_nao_acusa(
     assert r["strikes"]["fracao_do_volume_perto"] == 0.0
 
 
-def test_placebo_pega_o_caso_em_que_o_preco_so_andou_ali(
+def test_preco_espalhado_pela_grade_da_razao_perto_de_um(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """O preco passou o dia num nivel que por acaso esta' perto de um strike
-    FALSO tambem: a razao tem que ficar perto de 1, nao acusar atracao."""
+    """Preco passeando por toda a grade, sem preferir strike: a razao tem
+    que ficar perto de 1 -- e' o caso que o placebo existe para pegar."""
     dia = dt.date(2026, 9, 17)
     rng = np.random.default_rng(1)
-    # meio do caminho entre um strike (48.36) e o seu placebo (48.36*1.017)
-    centro = (48.36 + 48.36 * 1.017) / 2
-    precos = list(centro + rng.normal(0, 0.25, 300))
+    precos = list(rng.uniform(47.86, 48.86, 2000))
     c = _tape(monkeypatch, tmp_path, {dia: _dia(precos, dia)})
     r = ov.medir_dia(c, "PETR4", dia, STRIKES, dt.date(2026, 9, 18))
-    assert 0.3 < r["razao_strike_vs_placebo"] < 3.0, r["razao_strike_vs_placebo"]
+    assert 0.5 < r["razao_strike_vs_placebo"] < 2.0, r["razao_strike_vs_placebo"]
+
+
+def test_placebo_fora_da_faixa_negociada_da_razao_INDEFINIDA(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """O DEFEITO que o ensaio de setembro achou: com o placebo fora do
+    intervalo do dia ele recebe volume ZERO por construcao, e a razao
+    explodia (310 milhoes). Agora sai INDEFINIDA, com o motivo."""
+    dia = dt.date(2026, 9, 17)
+    # negocios so' em torno de 47.86; os placebos (48.11 e 48.61) ficam fora
+    precos = [47.86, 47.87, 47.85] * 50
+    c = _tape(monkeypatch, tmp_path, {dia: _dia(precos, dia)})
+    r = ov.medir_dia(c, "PETR4", dia, STRIKES, dt.date(2026, 9, 18))
+    assert r["razao_strike_vs_placebo"] is None
+    assert "nao e' justa" in r["razao_indefinida_porque"]
+
+
+def test_faixa_nunca_engole_o_intervalo_entre_strikes(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A v1 usava +-0,4% (= +-0,19 em PETR4) com strikes a 0,25: a faixa
+    cobria quase tudo. Agora a largura e' fracao do espacamento."""
+    dia = dt.date(2026, 9, 17)
+    c = _tape(monkeypatch, tmp_path, {dia: _dia(list(np.linspace(47.8, 48.9, 500)), dia)})
+    r = ov.medir_dia(c, "PETR4", dia, STRIKES, dt.date(2026, 9, 18))
+    assert r["tolerancia"] == pytest.approx(0.2 * 0.5, abs=1e-6)   # espacamento 0.5
+    assert r["strikes"]["cobertura_da_faixa_do_dia"] < 0.5
+    assert r["strikes_PLACEBO"]["cobertura_da_faixa_do_dia"] < 0.5
 
 
 def test_pregoes_ate_o_vencimento_e_a_separacao_da_semana(

@@ -6990,3 +6990,35 @@ em outubro PESA contra a hipotese.
 **Limites declarados:** o OI vem do Trade Hunter e e' EOD, nao
 intradiario, e e' posicao em aberto, nao fluxo; os strikes entram como
 parametro (o modulo nao busca dado externo).
+
+
+### O ENSAIO DE SETEMBRO ACHOU UM DEFEITO NO PLACEBO (2026-09-22)
+
+Rodado com 17 e 18/09 (dois pregoes; a captura das series comecou as
+14:03 de 17/09). **Nada foi concluido -- e nem era para ser.** O que o
+ensaio produziu foi melhor: um defeito de desenho, achado ANTES de a
+medicao valer alguma coisa.
+
+**Sintoma:** razao strike/placebo de **310 milhoes** e **862 milhoes**.
+
+**Causa:** o placebo deslocava os strikes +1,7%. Os de setembro (48,67 e
+49,92) viraram 49,50 e 50,77, **fora da faixa em que a PETR4 negociou**
+(~48). Placebo fora do intervalo recebe volume ZERO por construcao -- nao
+testa nada, e a divisao explode.
+
+**Segundo defeito, visivel nos mesmos numeros:** a tolerancia de +-0,4%
+(+-0,19 em PETR4) era maior que meio intervalo da grade (0,25 entre
+strikes de setembro): a faixa "perto de um strike" engolia quase tudo --
+86% do volume em 18/09.
+
+**v2 do desenho:**
+- placebo no **MEIO do caminho** entre strikes consecutivos -- dentro da
+  faixa negociada por construcao;
+- tolerancia = **fracao do espacamento** da grade (default 20%), de modo
+  que as duas faixas tenham a mesma largura e nunca se toquem;
+- a razao so' sai quando as DUAS faixas cobrem parte do intervalo
+  negociado no dia (>= 2%); senao sai `None` com o motivo. Um teste cobre
+  exatamente o caso que aconteceu.
+
+**Nota de amostra:** as 12 series tiveram ~1.000 negocios por dia somadas
+-- pouco para analise por serie. O peso da ficha esta' no PAPEL.
