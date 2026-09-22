@@ -2122,6 +2122,120 @@ def e4_comparar_cmd(
     typer.echo(f"\n  Saida: {saida}/e4_comparacao.json e .csv")
 
 
+@app.command(name="rolagem-par")
+def rolagem_par_cmd(
+    de: str = typer.Option(..., "--de", help="YYYY-MM-DD"),
+    ate: str = typer.Option(..., "--ate", help="YYYY-MM-DD"),
+    vencendo: str = typer.Option("WDOV26", "--vencendo"),
+    proximo: str = typer.Option("WDOX26", "--proximo"),
+    curated: Path = typer.Option(Path("data/curated"), "--curated"),
+    janela_s: float = typer.Option(2.0, "--janela-s"),
+    saida: Path = typer.Option(Path("data/research/rolagem_par"), "--saida"),
+    log_level: str = typer.Option("INFO", "--log-level"),
+) -> None:
+    """
+    ROLAGEM pelo PAR CASADO: o mesmo agente vendendo num contrato e
+    comprando no outro, em segundos. E' a assinatura que a serie continua
+    APAGA -- por isso a v1 (no agregado) foi teste fraco. Sem direcao,
+    zero trial.
+    """
+    import datetime as dt
+
+    configurar(log_level)
+    from .research.rolagem_par import descrever
+
+    d0, d1 = dt.date.fromisoformat(de), dt.date.fromisoformat(ate)
+    dias = [d0 + dt.timedelta(days=k) for k in range((d1 - d0).days + 1)
+            if (d0 + dt.timedelta(days=k)).weekday() < 5]
+    r = descrever(curated, vencendo, proximo, dias, janela_s, saida)
+    typer.echo("=" * 72)
+    typer.echo(f"ROLAGEM -- PAR CASADO {vencendo} x {proximo} ({r['dias']} dias, "
+               f"janela {janela_s:g}s)")
+    typer.echo("=" * 72)
+    for nome, a in r["agregado"].items():
+        typer.echo(f"\n  {nome.replace('_', ' ')}")
+        typer.echo(f"    pares/dia (p50): {a['pares_p50']:,.0f}   "
+                   f"baseline embaralhado: {a['baseline_p50']:,.0f}   "
+                   f"RAZAO: {a['razao_p50']:.2f}")
+        typer.echo(f"    volume nos pares: {100 * a['fracao_do_volume_p50']:.2f}% do contrato "
+                   f"que vence")
+    typer.echo("\n  POR DIA (o interessante e' a VIRADA):")
+    typer.echo(f"    {'dia':>12} {'neg. vencendo':>14} {'neg. proximo':>13} "
+               f"{'razao V->C':>11} {'razao C->V':>11}")
+    for x in r["por_dia"]:
+        typer.echo(f"    {x['dia']:>12} {x['negocios_vencendo']:>14,} "
+                   f"{x['negocios_proximo']:>13,} "
+                   f"{x['vende_A_compra_B']['razao']:>11.2f} "
+                   f"{x['compra_A_vende_B']['razao']:>11.2f}")
+    typer.echo("\n  LEITURA: razao perto de 1 = os pares sao ACASO (duas corretoras grandes "
+               "negociando nos dois contratos ao mesmo tempo). Razao bem acima de 1 nos dias da "
+               "VIRADA, com fracao de volume relevante, = a rolagem deixa marca -- e ai' o passo "
+               "2 pergunta se ela move preco, com a direcao declarada antes.")
+    typer.echo(f"\n  Saida: {saida}/rolagem_par.json")
+
+
+@app.command(name="opcoes-vencimento")
+def opcoes_vencimento_cmd(
+    de: str = typer.Option(..., "--de", help="YYYY-MM-DD"),
+    ate: str = typer.Option(..., "--ate", help="YYYY-MM-DD"),
+    vencimento: str = typer.Option(..., "--vencimento", help="YYYY-MM-DD"),
+    strikes: str = typer.Option(..., "--strikes", help="ex: 47.86,48.11,48.36,48.86,49.61"),
+    papel: str = typer.Option("PETR4", "--papel"),
+    series: str = typer.Option("", "--series", help="tickers das opcoes, separados por virgula"),
+    curated: Path = typer.Option(Path("data/curated"), "--curated"),
+    tol_pct: float = typer.Option(0.004, "--tol-pct"),
+    saida: Path = typer.Option(Path("data/research/opcoes"), "--saida"),
+    log_level: str = typer.Option("INFO", "--log-level"),
+) -> None:
+    """
+    OPCAO SOBRE ACAO, passo 1: a semana do vencimento e' diferente, e o
+    volume do papel se concentra perto dos STRIKES? O que decide e' o
+    PLACEBO (strikes falsos, deslocados). Sem direcao, zero trial.
+    """
+    import datetime as dt
+
+    configurar(log_level)
+    from .research.opcoes_vencimento import descrever
+
+    d0, d1 = dt.date.fromisoformat(de), dt.date.fromisoformat(ate)
+    dias = [d0 + dt.timedelta(days=k) for k in range((d1 - d0).days + 1)
+            if (d0 + dt.timedelta(days=k)).weekday() < 5]
+    lista = [float(s) for s in strikes.split(",") if s.strip()]
+    sers = [s.strip() for s in series.split(",") if s.strip()]
+    r = descrever(curated, papel, dias, lista, dt.date.fromisoformat(vencimento),
+                  sers or None, tol_pct, saida=saida)
+    typer.echo("=" * 72)
+    typer.echo(f"OPCAO SOBRE ACAO — {papel}, vencimento {vencimento}, "
+               f"{len(lista)} strikes (+-{100 * tol_pct:g}%)")
+    typer.echo("=" * 72)
+    for nome, bloco in (("SEMANA DO VENCIMENTO (<= 5 pregoes)", r["semana_do_vencimento"]),
+                        ("DEMAIS PREGOES", r["demais_pregoes"])):
+        if not bloco:
+            typer.echo(f"\n  {nome}: sem pregao na amostra")
+            continue
+        typer.echo(f"\n  {nome} ({bloco['pregoes']} pregoes)")
+        typer.echo(f"    volume p50={bloco['volume_p50']:,.0f}   "
+                   f"amplitude p50={bloco['amplitude_pct_p50']:.2f}%   "
+                   f"|retorno| p50={bloco['retorno_abs_pct_p50']:.2f}%")
+        typer.echo(f"    concentracao nos strikes / PLACEBO: "
+                   f"{bloco['razao_strike_vs_placebo_p50']}")
+    typer.echo(f"\n  {'dia':>12} {'ate venc':>9} {'volume':>12} {'ampl%':>7} "
+               f"{'perto strike':>13} {'placebo':>9} {'razao':>7} {'neg. series':>12}")
+    for x in r["por_dia"]:
+        pv = x["strikes"].get("fracao_do_volume_perto")
+        pp = x["strikes_PLACEBO"].get("fracao_do_volume_perto")
+        typer.echo(f"  {x['dia']:>12} {x['pregoes_ate_o_vencimento']:>9} {x['volume']:>12,} "
+                   f"{x['amplitude_pct']:>7.2f} "
+                   f"{(pv if pv is not None else 0):>13.3f} {(pp if pp is not None else 0):>9.3f} "
+                   f"{(x['razao_strike_vs_placebo'] or 0):>7.2f} "
+                   f"{x.get('negocios_nas_series', 0):>12,}")
+    typer.echo("\n  LEITURA: volume/amplitude maiores na semana do vencimento, SOZINHOS, sao "
+               "sazonalidade. O que tem mecanismo e' a razao strike/PLACEBO: perto de 1 = o "
+               "volume esta' onde o preco andou, nao ha' atracao pelos strikes. Bem acima de 1, "
+               "e crescendo perto do vencimento, = ha' o que testar no passo 2.")
+    typer.echo(f"\n  Saida: {saida}/opcoes_vencimento.json")
+
+
 @app.command(name="eas-preco-teste")
 def eas_preco_teste(
     log: Path = typer.Argument(..., help="Dump PRCBARRA| contendo SO' os dias da amostra pedida"),

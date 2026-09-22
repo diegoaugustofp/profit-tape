@@ -2927,3 +2927,11 @@ estacionada ate' o E4 comecar; ver ESTADO_E_CAMINHOS secao 3.
   decide se o E4 em demo mede slippage ou so' latencia e robustez.
   7 testes (inclusive demo ideal x demo que reproduz a fila, mercado calmo
   e janela que limita o que conta). 984 testes.
+- v3.34: duas pesquisas preparadas para rodar depois do fechamento.
+  (1) `rolagem-par`: par casado entre os dois contratos do WDO (mesmo
+  agente vendendo num e comprando no outro em 2 s), com baseline de
+  agentes permutados dentro de cada contrato; prazo, porque a virada do
+  WDO e' nesta semana. (2) `opcoes-vencimento`: magnitude na semana do
+  vencimento MAIS concentracao do volume do papel perto dos strikes,
+  contra um PLACEBO de strikes deslocados 1,7% -- e' o placebo que separa
+  "semana agitada" de "preco atraido pelo strike". 12 testes; 996 no total.

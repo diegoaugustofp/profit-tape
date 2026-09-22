@@ -6942,3 +6942,51 @@ seguintes.
 Declarado antes: com poucas operacoes isso nao decide -- e' preciso ver
 varias ordens com mercado pior na janela. Se ao longo do E4 nenhuma ordem
 tiver mercado pior, a pergunta fica em aberto (e o mercado foi calmo).
+
+
+## DUAS PESQUISAS PREPARADAS (2026-09-22) -- rodam depois do fechamento
+
+### ROLAGEM pelo PAR CASADO (`profit-tape rolagem-par`)
+
+A v1 mediu no AGREGADO da serie continua -- e a serie continua APAGA a
+rolagem. Agora: o mesmo agente vendendo num contrato e comprando no outro
+em ate' 2 s. **Baseline**: os mesmos negocios com os rotulos de AGENTE
+permutados dentro de cada contrato (preserva volume, horario e preco;
+destroi so' a identidade). Sem o embaralhado, qualquer contagem parece
+grande -- licao do iceberg no tape.
+
+**Prazo:** o WDO vence no 1o dia util do mes, entao a virada de
+`WDOV26` -> `WDOX26` e' nesta semana; os dois contratos entraram no record
+em 22/09 (so' trades). Rodar depois da virada, com os dias em volta dela.
+
+**Leitura:** razao perto de 1 = acaso (duas corretoras grandes operando os
+dois contratos). Razao bem acima de 1 NOS DIAS DA VIRADA, com fracao de
+volume relevante = a rolagem deixa marca, e o passo 2 pergunta se ela move
+preco, com direcao declarada antes.
+
+**Limite declarado:** agente e' CORRETORA -- um "par" pode ser dois
+clientes da mesma casa. Reduz o poder; o embaralhado sofre o mesmo.
+
+### OPCAO SOBRE ACAO, passo 1 (`profit-tape opcoes-vencimento`)
+
+Duas perguntas, e a segunda e' a que importa:
+1. a semana do vencimento difere em MAGNITUDE (volume, amplitude,
+   |retorno| do papel)? Sozinha, e' sazonalidade;
+2. o volume do papel se CONCENTRA perto dos strikes com OI relevante?
+
+**O que decide: o PLACEBO.** A mesma conta com strikes FALSOS, deslocados
+1,7% (meio intervalo tipico entre strikes de PETR4). Se a concentracao nos
+strikes de verdade for igual a` dos falsos, o volume esta' apenas onde o
+preco andou -- nao ha' atracao. Um teste cobre exatamente esse caso: preco
+oscilando no meio do caminho entre um strike e o seu placebo -> razao
+perto de 1.
+
+**Amostra:** setembro so' tem 17 e 18/09 (a captura das series comecou na
+tarde de 17/09), entao a semana do vencimento existe mas as semanas
+NORMAIS nao -- serve de ensaio. **Outubro tem o mes inteiro**, e a
+expectativa ja' esta' declarada: o OI esta' colado no spot, entao um nulo
+em outubro PESA contra a hipotese.
+
+**Limites declarados:** o OI vem do Trade Hunter e e' EOD, nao
+intradiario, e e' posicao em aberto, nao fluxo; os strikes entram como
+parametro (o modulo nao busca dado externo).
