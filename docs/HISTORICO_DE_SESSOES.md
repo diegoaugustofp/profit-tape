@@ -2912,3 +2912,11 @@ estacionada ate' o E4 comecar; ver ESTADO_E_CAMINHOS secao 3.
   deixava a posicao aberta. Corrigido. E o `SendCancelOrders` foi REABERTO
   para a subida do EA real (processo que morreu com ordens vivas), guardado
   pela vaga; falta o teste ao vivo, com procedimento no roteiro. 970 testes.
+- v3.32: implementada a protecao pre-registrada (stop que dispara num
+  salto alem do limite e nao executa -> cancela as duas pernas e zera a
+  mercado; desfecho segue `stop`, com `stop_protegido`), mais o bug da
+  POSICAO CONTRARIA (dizia "4b zera", mas a 4b so' roda na volta de uma
+  queda -> agora zera na hora). Cinco testes do pre-registro; os dois de
+  protecao reprovam no codigo antigo POR ASSERCAO (conferido o motivo, a
+  licao da sessao). Junto: correcao do CI (`idxmax` -> Hashable nos
+  pandas-stubs novos), com equivalencia provada em 200 casos. 977 testes.

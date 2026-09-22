@@ -663,6 +663,11 @@ ou processo separado.
 
 > Escrito e COMMITADO antes do codigo, como manda a disciplina. Aprovado
 > pelo operador em 22/09, com o E4 ja' rodando.
+> **IMPLEMENTADO na v3.32**, com os cinco testes. O caso (5) -- o que o
+> verificador deveria reprovar -- foi conferido pelo MOTIVO: no codigo
+> antigo os dois testes de protecao reprovam por ASSERCAO (`zerar` nao e'
+> chamado), nao por erro de atributo. Para isso os testes calculam o
+> limite a partir do candidato, e nao do campo novo.
 
 **MOTIVO.** O stop do 123 e' stop-LIMITE com 50 pts de folga (22/09:
 gatilho 187.670, limite 187.720). Num salto alem do limite a ordem

@@ -87,6 +87,7 @@ class OrdemViva:
     status: list[str] = field(default_factory=list)
     t_cancel_envio: float | None = None
     t_cancel_confirmado: float | None = None
+    limite: float | None = None    # stop-LIMITE: o preco limite enviado
     viva: bool = True
 
     @property
@@ -117,6 +118,11 @@ class OperacaoRegistrada:
     zeragem: OrdemViva | None = None
     desfecho: str = ""             # nao_executou | alvo | stop | zeragem | erro | reconciliado
     pnl_pts: float | None = None
+    # protecao do stop (EA_ARQUITETURA sec. 9, 2026-09-22): o stop-limite
+    # disparou num salto e nao executou; o EA zerou a mercado. O desfecho
+    # continua `stop`, que e' o resultado da ficha.
+    stop_protegido: bool = False
+    preco_disparou_protecao: float | None = None
     avisos: list[str] = field(default_factory=list)
     barra_gatilho: dict[str, Any] | None = None    # fluxo de t+1 (passo 6)
     infra: dict[str, Any] = field(default_factory=dict)   # estado da infra ao armar
@@ -125,9 +131,13 @@ class OperacaoRegistrada:
         ordens = {k: v.resumo() for k, v in
                   (("entrada", self.entrada), ("stop", self.stop), ("alvo", self.alvo),
                    ("zeragem", self.zeragem)) if v is not None}
-        return {"candidato": self.candidato.resumo(), "desfecho": self.desfecho,
-                "pnl_pts": self.pnl_pts, "avisos": self.avisos, "ordens": ordens,
-                "barra_gatilho": self.barra_gatilho, "infra": self.infra}
+        r = {"candidato": self.candidato.resumo(), "desfecho": self.desfecho,
+             "pnl_pts": self.pnl_pts, "avisos": self.avisos, "ordens": ordens,
+             "barra_gatilho": self.barra_gatilho, "infra": self.infra}
+        if self.stop_protegido:          # so' aparece quando houve protecao
+            r["stop_protegido"] = True
+            r["preco_disparou_protecao"] = self.preco_disparou_protecao
+        return r
 
 
 class CicloDeOrdens123:
@@ -159,6 +169,8 @@ class CicloDeOrdens123:
         self.ignorados_posicao = 0
         self.ignorados_pendente = 0
         self._t_limite = 0.0
+        self._ts_alem_do_limite: int | None = None   # protecao do stop (sec. 9)
+        self._desfecho_da_zeragem = "zeragem"
         self._zerado_hoje: dt.date | None = None
 
     # ------------------------------------------------------------------ util
@@ -325,6 +337,8 @@ class CicloDeOrdens123:
         if self.op is None:
             return
         c = self.op.candidato
+        if self.estado == "posicionado" and not self.dry_run:
+            self._proteger_stop(ts_ns, price)
         if self.estado == "entrada_pendente":
             if ts_ns >= c.valido_ate_ns:
                 self._cancelar_entrada()
@@ -385,8 +399,13 @@ class CicloDeOrdens123:
             if outra.t_cancel_confirmado is not None:
                 self._fechar_op(self._desfecho_pendente)
             elif outra.fill is not None:
+                # BUG (corrigido 2026-09-22): dizia "(4b zera)", mas a 4b so'
+                # roda quando a conexao cai e VOLTA. Com o EA no ar, a posicao
+                # invertida ficava aberta e o EA seguia operando por cima.
                 self._aviso(f"{outra.papel} executou depois da outra perna: POSICAO CONTRARIA "
-                            "-- CONFIRA NO PROFIT (4b zera)")
+                            "-- zerando a mercado, CONFIRA NO PROFIT")
+                if not self.dry_run and self.executor is not None:
+                    self.executor.zerar()
                 self._fechar_op(self._desfecho_pendente)
             elif time.monotonic() > self._t_limite:
                 self._aviso("cancelamento da perna restante nao confirmado -- CONFIRA NO PROFIT")
@@ -397,7 +416,7 @@ class CicloDeOrdens123:
             if self.op.zeragem.fill is not None or time.monotonic() > self._t_limite:
                 if self.op.zeragem.fill is None:
                     self._aviso("zeragem sem fill -- CONFIRA A POSICAO NO PROFIT")
-                self._fechar_op("zeragem")
+                self._fechar_op(self._desfecho_da_zeragem)
 
     # -------------------------------------------------------- transicoes
     def _cancelar_entrada(self) -> None:
@@ -417,6 +436,7 @@ class CicloDeOrdens123:
         a = OrdemViva("alvo", lado_saida, c.alvo)
         self.op.stop, self.op.alvo = s, a
         lim = c.stop - self.slack if lado_saida == "venda" else c.stop + self.slack
+        s.limite = lim
         ok_s = self._enviar(s, "enviar_stop", lado=lado_saida, gatilho=c.stop, limite=lim)
         ok_a = self._enviar(a, "enviar_limitada", lado=lado_saida, preco=c.alvo)
         if not (ok_s and ok_a):
@@ -426,6 +446,42 @@ class CicloDeOrdens123:
         self.estado = "posicionado"
         log.info("ea.123.posicionado", lado=c.lado, fill=self.op.entrada.fill,
                  slippage_entrada_pts=self.op.entrada.slippage_pts, stop=c.stop, alvo=c.alvo)
+
+    CARENCIA_STOP_PROTEGIDO_NS = 2 * _NS
+
+    def _proteger_stop(self, ts_ns: int, price: float) -> None:
+        """
+        PRE-REGISTRO 2026-09-22 (EA_ARQUITETURA secao 9). Stop-LIMITE que
+        dispara num salto ALEM do limite vira uma limitada que nao executa:
+        a posicao fica aberta e sem protecao ate' a zeragem das 17:30.
+        Regra: negocio estritamente alem do LIMITE do stop + 2 s de tempo de
+        MERCADO sem fill -> cancela as duas pernas, zera a mercado, avisa.
+        Desfecho continua `stop` (e' o resultado da ficha), com
+        `stop_protegido=True`.
+        """
+        assert self.op is not None
+        o = self.op.stop
+        if o is None or o.limite is None or o.fill is not None:
+            return
+        # o stop de saida COMPRA quando a posicao e' vendida
+        alem = price > o.limite if o.lado == "compra" else price < o.limite
+        if not alem:
+            self._ts_alem_do_limite = None          # voltou: o limite ainda pode executar
+            return
+        if self._ts_alem_do_limite is None:
+            self._ts_alem_do_limite = ts_ns
+            return
+        if ts_ns - self._ts_alem_do_limite < self.CARENCIA_STOP_PROTEGIDO_NS:
+            return
+        log.error("ea.123.stop_protegido", preco_gatilho=o.nivel, limite=o.limite,
+                  preco_do_tape=price, segundos_alem=round(
+                      (ts_ns - self._ts_alem_do_limite) / _NS, 2),
+                  nota="stop-limite nao executou num salto: zerando a mercado")
+        self.op.stop_protegido = True
+        self.op.preco_disparou_protecao = price
+        self._aviso(f"stop disparou e NAO executou (tape {price:.0f} alem do limite "
+                    f"{o.limite:.0f}) -- zerando a mercado, CONFIRA NO PROFIT")
+        self._zeragem_forcada(None, desfecho="stop")
 
     def _apos_saida(self, papel: str) -> None:
         assert self.op is not None and self.op.stop is not None and self.op.alvo is not None
@@ -438,7 +494,7 @@ class CicloDeOrdens123:
         else:
             self.estado = "saindo"
 
-    def _zeragem_forcada(self, preco_dry: float | None) -> None:
+    def _zeragem_forcada(self, preco_dry: float | None, desfecho: str = "zeragem") -> None:
         assert self.op is not None
         for o in (self.op.entrada, self.op.stop, self.op.alvo):
             if o is not None and o.viva:
@@ -450,12 +506,13 @@ class CicloDeOrdens123:
             if self.dry_run:
                 z.fill, z.t_fill, z.viva = preco_dry, time.monotonic(), False
                 z.status.append("DRY_FILL")
-                self._fechar_op("zeragem")
+                self._fechar_op(desfecho)
                 return
             z.t_envio = time.monotonic()
             assert self.executor is not None
             z.profit_id = self.executor.zerar()
             self._t_limite = time.monotonic() + self.timeout
+            self._desfecho_da_zeragem = desfecho
             self.estado = "zerando"
             return
         self._fechar_op("nao_executou", "zeragem 17:30 com entrada pendente")

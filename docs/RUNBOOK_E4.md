@@ -85,6 +85,8 @@ ea.123.operacao_fechada  desfecho, slippage por ordem, latências
 | `ea.123.reconectado` + `ea.123.reconciliado` | a conexão caiu e voltou | leia `acao` no `reconciliado`: re-armou saída, fechou como `reconciliado` ou zerou órfã |
 | heartbeat parado, ou `sem_evento_ha_s` alto no pregão | máquina ou rede | abra o Profit: **posição sem stop → zere à mão** (seção 5) |
 | `ea.123.atrasado` | EA mais de 5 s atrás do mercado | anote; se for constante, é assunto de desempenho |
+| `ea.123.stop_protegido` (v3.32) | o stop disparou num salto além do limite e **não executou**; o EA cancelou as duas pernas e zerou a mercado | confira no Profit que zerou e anote o preço; no diário a operação vem com `stop_protegido` e desfecho `stop` |
+| `POSICAO CONTRARIA -- zerando a mercado` (v3.32) | as duas pernas executaram; o EA zera na hora | confira no Profit |
 | ordem recusada pela corretora | — | pare o E4 (critério da seção 7) |
 
 **Stop e alvo NÃO são OCO na corretora** (observado pelo operador em

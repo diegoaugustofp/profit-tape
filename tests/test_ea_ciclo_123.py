@@ -405,3 +405,125 @@ def test_limpeza_na_subida_nao_cancela_ordens_de_outro_ea_real() -> None:
 def test_limpeza_na_subida_nao_roda_em_dry_run() -> None:
     c = _ciclo()
     assert c.limpeza_na_subida() == {}
+
+
+def _posicionar_vendido(ex: Any) -> CicloDeOrdens123:
+    """Ciclo REAL e VENDIDO. MME 141.000 (close abaixo -> regime de venda);
+    barra do meio com a MAIOR maxima. O stop de saida e' de COMPRA, e o
+    limite fica 50 pts ACIMA do gatilho."""
+    c = CicloDeOrdens123(SinalPreco123(IndicadorMME(80, 141000.0)), executor=ex)
+    c.on_barra(_b(0, 140000.0, 140100.0, 139900.0, 140050.0))
+    c.on_barra(_b(1, 140050.0, 140200.0, 139950.0, 140000.0))   # maior maxima
+    c.on_barra(_b(2, 140000.0, 140050.0, 139900.0, 139950.0))   # t
+    assert c.estado == "entrada_pendente" and c.op is not None
+    assert c.op.entrada.nivel == 139895.0                       # minima de t - 5
+    c.tick()
+    ex.preencher(c.op.entrada.profit_id, 139895.0)
+    c.tick()
+    assert c.estado == "posicionado" and c.op.stop is not None
+    assert c.op.candidato.stop == 140205.0                      # maxima de t-1 + 5
+    assert c.op.stop.lado == "compra"
+    return c
+
+
+LIMITE_DO_STOP = 140205.0 + 50.0        # gatilho + folga: calculado AQUI, de
+                                        # proposito, para estes testes rodarem
+                                        # tambem no codigo ANTIGO (sem o campo
+                                        # `limite`) e reprovarem por ASSERCAO
+
+
+def test_o_stop_guarda_o_limite_enviado() -> None:
+    c = _posicionar_vendido(ExecutorFakeReconc(posicao=-1))
+    assert c.op is not None and c.op.stop is not None
+    assert c.op.stop.limite == LIMITE_DO_STOP
+
+
+def test_stop_que_dispara_e_NAO_executa_zera_a_mercado() -> None:
+    """PRE-REGISTRO 22/09 (EA_ARQUITETURA 9), caso 1: negocio alem do LIMITE
+    e sem fill em 2 s de tempo de mercado -> cancela as duas pernas, zera a
+    mercado, desfecho `stop` com `stop_protegido`."""
+    ex = ExecutorFakeReconc(posicao=-1)
+    c = _posicionar_vendido(ex)
+    alem = LIMITE_DO_STOP + 30.0                        # saltou por cima do limite
+    t0 = T0900 + 20 * P15
+    c.on_trade(t0, alem)                                # 1o negocio alem: so' marca
+    assert c.estado == "posicionado" and "zerar" not in [n for n, _ in ex.chamadas]
+    c.on_trade(t0 + 1 * NS, alem + 5)                   # 1 s: ainda na carencia
+    assert c.estado == "posicionado"
+    c.on_trade(t0 + 3 * NS, alem + 10)                  # 3 s: protege
+    assert "zerar" in [n for n, _ in ex.chamadas]
+    assert c.op.stop_protegido is True
+    assert c.op.resumo()["preco_disparou_protecao"] == alem + 10
+    ex.preencher(ex._n, alem + 10)                      # fill da zeragem
+    c.tick()
+    assert c.operacoes[-1].desfecho == "stop" and c.estado == "livre"
+
+
+def test_fill_do_stop_dentro_da_carencia_NAO_dispara_protecao() -> None:
+    """Caso 2: o callback do fill chega dentro dos 2 s -> saida normal."""
+    ex = ExecutorFakeReconc(posicao=-1)
+    c = _posicionar_vendido(ex)
+    alem = LIMITE_DO_STOP + 30.0
+    t0 = T0900 + 20 * P15
+    c.on_trade(t0, alem)
+    ex.preencher(c.op.stop.profit_id, c.op.candidato.stop)   # stop executou no gatilho
+    c.tick()
+    assert c.op.stop.fill == c.op.candidato.stop
+    c.on_trade(t0 + 5 * NS, alem)                            # passou dos 2 s
+    assert "zerar" not in [n for n, _ in ex.chamadas]
+    assert c.op.stop_protegido is False
+
+
+def test_preco_entre_o_gatilho_e_o_limite_NAO_dispara_protecao() -> None:
+    """Caso 3: o limite ainda pode executar -- nao e' salto."""
+    ex = ExecutorFakeReconc(posicao=-1)
+    c = _posicionar_vendido(ex)
+    entre = c.op.candidato.stop + 20.0                       # < limite (stop+50)
+    t0 = T0900 + 20 * P15
+    for k in range(6):
+        c.on_trade(t0 + k * NS, entre)
+    assert c.op.stop_protegido is False
+    assert "zerar" not in [n for n, _ in ex.chamadas]
+
+
+def test_volta_para_dentro_do_limite_reinicia_a_carencia() -> None:
+    ex = ExecutorFakeReconc(posicao=-1)
+    c = _posicionar_vendido(ex)
+    alem, dentro = LIMITE_DO_STOP + 30.0, c.op.candidato.stop + 10.0
+    t0 = T0900 + 20 * P15
+    c.on_trade(t0, alem)
+    c.on_trade(t0 + 1 * NS, dentro)                          # voltou
+    c.on_trade(t0 + 3 * NS, alem)                            # conta do zero
+    assert c.op.stop_protegido is False
+    c.on_trade(t0 + 6 * NS, alem)                            # 3 s depois do reinicio
+    assert c.op.stop_protegido is True
+
+
+def test_fill_atrasado_depois_da_zeragem_fecha_a_operacao_uma_vez_so() -> None:
+    """Caso 4: o stop tinha executado e o callback chegou depois. A zeragem
+    a mercado e' idempotente (posicao ja' zerada) e a operacao fecha UMA vez."""
+    ex = ExecutorFakeReconc(posicao=-1)
+    c = _posicionar_vendido(ex)
+    alem = LIMITE_DO_STOP + 30.0
+    t0 = T0900 + 20 * P15
+    c.on_trade(t0, alem)
+    c.on_trade(t0 + 3 * NS, alem)                            # protege
+    assert c.estado == "zerando"
+    ex.preencher(c.op.stop.profit_id, c.op.candidato.stop)   # callback atrasado do stop
+    ex.preencher(ex._n, alem)                                # e o da zeragem
+    c.tick()
+    assert len(c.operacoes) == 1 and c.estado == "livre"
+
+
+def test_posicao_contraria_zera_na_hora_em_vez_de_esperar_a_4b() -> None:
+    """Bug corrigido em 22/09: dizia '(4b zera)', mas a 4b so' roda na volta
+    de uma queda de conexao."""
+    ex = ExecutorFakeReconc(posicao=-1)
+    c = _posicionar_vendido(ex)
+    ex.preencher(c.op.stop.profit_id, c.op.candidato.stop)   # stop executou
+    c.tick()
+    assert c.estado == "saindo"
+    ex.preencher(c.op.alvo.profit_id, c.op.candidato.alvo)   # e o alvo tambem
+    c.tick()
+    assert "zerar" in [n for n, _ in ex.chamadas]
+    assert c.operacoes[-1].desfecho == "stop"
