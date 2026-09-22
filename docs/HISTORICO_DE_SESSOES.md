@@ -2935,3 +2935,12 @@ estacionada ate' o E4 comecar; ver ESTADO_E_CAMINHOS secao 3.
   vencimento MAIS concentracao do volume do papel perto dos strikes,
   contra um PLACEBO de strikes deslocados 1,7% -- e' o placebo que separa
   "semana agitada" de "preco atraido pelo strike". 12 testes; 996 no total.
+- v3.35: o `atraso_max_dia_s` passa a dizer de QUE negocio veio (symbol,
+  ts do evento, ts da medicao, trade_id, trade_type). Motivo: em 22/09 o
+  resumo trouxe 5.575 s com o WINFUT rodando a 2-5 s o dia inteiro, e
+  TRES hipoteses minhas foram derrubadas pelo dado: print de leilao (nao
+  ha' negocio antes de 09:02:41), negocio de outro ticker (o filtro por
+  simbolo e' ANTES de enfileirar) e residuo do dia anterior (o negocio
+  reenviado tinha 12h40 de idade, 45.601 s, e os EAs so' subiram depois
+  do reenvio). Em vez de uma quarta suposicao, procedencia no log.
+  998 testes.

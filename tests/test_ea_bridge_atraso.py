@@ -83,3 +83,31 @@ def test_sem_atraso_nao_alerta() -> None:
     b._medir_atraso(_Trade(int((time.time() - 1) * 1e9)))
     b._alertar_atraso()
     assert b._ultimo_alerta_atraso == 0.0
+
+
+def test_maximo_do_dia_diz_de_QUE_negocio_veio() -> None:
+    """22/09: o resumo trouxe `atraso_max_dia_s=5575` com o WINFUT rodando a
+    2-5 s o dia inteiro, e nao houve como investigar. Minhas duas hipoteses
+    (print de leilao; negocio de outro ticker) foram derrubadas pelo dado.
+    Agora o maximo carrega o negocio que o produziu."""
+    b = EABridge(_ServicoFalso())  # type: ignore[arg-type]
+    agora = time.time()
+    b._medir_atraso(_Trade(int((agora - 3) * 1e9)))
+    velho = _Trade(int((agora - 5575) * 1e9))
+    velho.trade_id = 987654
+    velho.trade_type = 4
+    b._medir_atraso(velho)
+    b._medir_atraso(_Trade(int((agora - 1) * 1e9)))
+    assert 5574 < b._atraso_max_dia_s < 5576
+    info = b._atraso_max_dia_info
+    assert info["trade_id"] == 987654 and info["trade_type"] == 4
+    assert info["symbol"] == "WINFUT" and info["ts_evento"] < info["ts_medido"]
+
+
+def test_maximo_do_dia_sobrevive_ao_reset_da_janela_com_a_procedencia() -> None:
+    b = EABridge(_ServicoFalso())  # type: ignore[arg-type]
+    b._medir_atraso(_Trade(int((time.time() - 42) * 1e9)))
+    b._ultimo_periodico = 0.0
+    b._alertar_atraso()                       # zera a JANELA
+    assert b.atraso()["trades_medidos"] == 0
+    assert 41 < b._atraso_max_dia_s < 43 and b._atraso_max_dia_info["trade_id"] == 1

@@ -24,6 +24,7 @@ from __future__ import annotations
 import queue
 import threading
 import time
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
@@ -61,6 +62,14 @@ class EABridge:
         # 5 min (mercado fechado -> atraso 0, medidos 0) -- mentia.
         self._atraso_max_dia_s = 0.0
         self._atraso_n_dia = 0
+        # QUEM fez o maximo do dia (2026-09-22): em 22/09 o resumo trouxe
+        # `atraso_max_dia_s=5575` com o WINFUT rodando a 2-5 s o dia inteiro,
+        # e nao houve como investigar -- as duas hipoteses que levantei
+        # (print de leilao; negocio de outro ticker) foram DERRUBADAS pelo
+        # dado: nao ha' negocio antes das 09:02:41 e a fila ja' e' filtrada
+        # por simbolo antes de enfileirar. Agora o maximo diz de QUE negocio
+        # veio.
+        self._atraso_max_dia_info: dict[str, Any] = {}
         self._parar_evento = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -98,7 +107,9 @@ class EABridge:
         log.warning("ea_bridge.finalizado", descartados=self._descartados,
                     filtrados_outro_simbolo=self._filtrados_outro_simbolo,
                     atraso_max_dia_s=round(self._atraso_max_dia_s, 3),
+                    atraso_max_dia_info=self._atraso_max_dia_info or None,
                     trades_medidos_dia=self._atraso_n_dia,
+
                     **self.atraso(), **self.ea_service._hb())
 
     def _medir_atraso(self, trade: Trade) -> None:
@@ -111,7 +122,15 @@ class EABridge:
         self._atraso_max_s = max(self._atraso_max_s, atraso)
         self._atraso_soma += atraso
         self._atraso_n += 1
-        self._atraso_max_dia_s = max(self._atraso_max_dia_s, atraso)
+        if atraso > self._atraso_max_dia_s:
+            self._atraso_max_dia_s = atraso
+            self._atraso_max_dia_info = {
+                "symbol": getattr(trade, "symbol", None),
+                "ts_evento": datetime.fromtimestamp(ts / 1e9, tz=UTC).isoformat(),
+                "ts_medido": datetime.now(tz=UTC).isoformat(),
+                "trade_id": getattr(trade, "trade_id", None),
+                "trade_type": getattr(trade, "trade_type", None),
+            }
         self._atraso_n_dia += 1
         self._fila_pico = max(self._fila_pico, self._fila.qsize())
 
