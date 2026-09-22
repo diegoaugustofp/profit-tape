@@ -2070,6 +2070,58 @@ def book_recomposicao_cmd(
     typer.echo(f"\n  Saida: {saida}/book_recomposicao.json")
 
 
+@app.command(name="e4-comparar")
+def e4_comparar_cmd(
+    real: Path = typer.Option(Path("data/forward/ea_123_vb_e4"), "--real"),
+    simulado: Path = typer.Option(Path("data/forward/ea_123_vb"), "--simulado"),
+    curated: Path | None = typer.Option(
+        None, "--curated", help="tape, para a checagem do simulador"),
+    symbol: str = typer.Option("WINFUT", "--symbol"),
+    dia: str | None = typer.Option(None, "--dia", help="YYYY-MM-DD; sem isto, todos"),
+    janela_s: float = typer.Option(2.0, "--janela-s"),
+    saida: Path = typer.Option(Path("data/research/e4"), "--saida"),
+    log_level: str = typer.Option("INFO", "--log-level"),
+) -> None:
+    """
+    Compara o E4 (ordem real na demo) com o gemeo SIMULADO, ordem a ordem, e
+    responde se o simulador preenche no IDEAL -- o que decide se o E4 em
+    demo consegue medir slippage.
+    """
+    import datetime as dt
+
+    configurar(log_level)
+    from .research.e4_comparar import comparar
+
+    d = dt.date.fromisoformat(dia) if dia else None
+    r = comparar(real, simulado, curated, symbol, d, janela_s, saida)
+    typer.echo("=" * 72)
+    typer.echo(f"E4 x SIMULADO — {r['operacoes_reais']} operacoes reais, "
+               f"{r['pareadas']} pareadas com o simulado")
+    typer.echo("=" * 72)
+    typer.echo(f"  ordens com fill: {r['ordens_com_fill']}   "
+               f"custo medio: {r['custo_medio_pts']} pts   total: {r['custo_total_pts']} pts")
+    typer.echo(f"  fills EXATAMENTE no nivel: {r['fills_exatamente_no_nivel']}"
+               f" de {r['ordens_com_fill']}")
+    typer.echo(f"\n  {'dia':>10} {'hhmm':>5} {'papel':>8} {'nivel':>9} {'real':>9} {'sim':>9} "
+               f"{'custo':>6} {'pior no tape':>13}")
+    for x in r["linhas"]:
+        pior = (f"{x['pior_que_o_nivel_pts']:+.0f}" if x.get("pior_que_o_nivel_pts") is not None
+                else "-")
+        sim = f"{x['fill_simulado']:.0f}" if x["fill_simulado"] is not None else "-"
+        typer.echo(f"  {x['dia']:>10} {x['hhmm']:>5} {x['papel']:>8} {x['nivel']:>9.0f} "
+                   f"{x['fill_real']:>9.0f} {sim:>9} {x['custo_pts']:>6.0f} {pior:>13}")
+    s_ = r["simulador"]
+    typer.echo(f"\n--- O SIMULADOR PREENCHE NO IDEAL? (janela de {s_['janela_s']:g}s) ---")
+    typer.echo(f"  ordens conferidas no tape: {s_['ordens_conferidas_no_tape']}")
+    typer.echo(f"  com mercado PIOR que o nivel na janela: {s_['com_mercado_PIOR_na_janela']}")
+    typer.echo(f"  ...dessas, executadas NO NIVEL pela demo: {s_['dessas_executadas_no_NIVEL']}")
+    typer.echo("\n  LEITURA: se as duas ultimas linhas forem IGUAIS e maiores que zero, a demo "
+               "preenche no IDEAL -- o E4 em demo mede latencia e robustez, mas NAO mede "
+               "slippage, e o criterio de <= 6 pts so' pode ser julgado na conta real. Se houver "
+               "ordens com mercado pior e custo > 0, a demo reproduz alguma coisa da fila.")
+    typer.echo(f"\n  Saida: {saida}/e4_comparacao.json e .csv")
+
+
 @app.command(name="eas-preco-teste")
 def eas_preco_teste(
     log: Path = typer.Argument(..., help="Dump PRCBARRA| contendo SO' os dias da amostra pedida"),

@@ -6919,3 +6919,26 @@ de ordem por hora de Brasilia (relogio de recepcao), e o relatorio imprime
 a tabela somada dos dias. Serve para decidir se as violacoes (0-16% por
 dia, sempre no fim) sao o leilao de fechamento, o after ou outra coisa. A
 proxima rodada do `book-recomposicao` ja' traz a tabela.
+
+
+## COMPARADOR E4 x GEMEO SIMULADO (2026-09-22)
+
+Os dois EAs recebem os mesmos sinais; a diferenca de fill, ordem a ordem,
+e' o custo de execucao. `profit-tape e4-comparar`.
+
+**A pergunta que ele responde antes de qualquer numero de slippage:** em
+22/09 as duas ordens executaram EXATAMENTE no gatilho. Mercado calmo ou
+regra do simulador? Para cada ordem preenchida, o comparador acha no TAPE
+o primeiro negocio que cruza o nivel e o PIOR preco negociado nos 2 s
+seguintes.
+
+- ordens com mercado PIOR na janela **e** executadas NO NIVEL -> a demo
+  preenche no IDEAL. Nesse caso **o E4 em demo nao mede slippage**, e o
+  criterio de <= 6 pts so' pode ser julgado na conta real; o que o E4
+  mede e' latencia, robustez e o comportamento das protecoes.
+- ordens com mercado pior e custo > 0 -> a demo reproduz alguma coisa da
+  fila, e o numero de slippage tem algum valor.
+
+Declarado antes: com poucas operacoes isso nao decide -- e' preciso ver
+varias ordens com mercado pior na janela. Se ao longo do E4 nenhuma ordem
+tiver mercado pior, a pergunta fica em aberto (e o mercado foi calmo).

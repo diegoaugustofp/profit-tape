@@ -2920,3 +2920,10 @@ estacionada ate' o E4 comecar; ver ESTADO_E_CAMINHOS secao 3.
   protecao reprovam no codigo antigo POR ASSERCAO (conferido o motivo, a
   licao da sessao). Junto: correcao do CI (`idxmax` -> Hashable nos
   pandas-stubs novos), com equivalencia provada em 200 casos. 977 testes.
+- v3.33: comparador E4 x gemeo simulado (`profit-tape e4-comparar`):
+  pareia as operacoes por (dia, hhmm, lado), mostra custo por ordem
+  (positivo = executou pior) e, no tape, o pior preco nos 2 s seguintes ao
+  cruzamento do nivel. Responde se o simulador preenche no IDEAL -- o que
+  decide se o E4 em demo mede slippage ou so' latencia e robustez.
+  7 testes (inclusive demo ideal x demo que reproduz a fila, mercado calmo
+  e janela que limita o que conta). 984 testes.

@@ -141,8 +141,18 @@ profit-tape diario data\forward\ea_123_vb --ea ea_123_vb
 
 - **EXECUCAO** do E4: slippage por papel (entrada, stop, alvo, zeragem) e
   latências de aceite e fill.
-- Compare com o simulado **sinal a sinal** (mesmo `hhmm`): a diferença de
-  preço de fill é o custo de execução do dia.
+- Compare com o simulado **sinal a sinal** com o comparador (v3.33):
+
+```
+profit-tape e4-comparar --real data\forward\ea_123_vb_e4 --simulado data\forward\ea_123_vb --curated data\curated --dia 2026-09-22
+```
+
+  Ele mostra, por ordem: nível, fill real, fill simulado, **custo em
+  pontos** (positivo = executou pior) e o **pior preço negociado no tape**
+  nos 2 s seguintes ao cruzamento. O bloco final responde se a demo
+  preenche no ideal: se as ordens com mercado pior forem as mesmas que
+  executaram no nível, a demo não reproduz a fila — e o E4 em demo mede
+  latência e robustez, **não slippage**.
 - Confira o **extrato da conta Simulador no Profit**: operações, preços e
   quantidades batem com o diário do E4?
 - Cure o dia (`--dia`) e registre no histórico: operações, slippage médio,
