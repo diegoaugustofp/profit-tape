@@ -2864,3 +2864,25 @@ estacionada ate' o E4 comecar; ver ESTADO_E_CAMINHOS secao 3.
   residuo do arranque de 21/09 -- com o fim de semana, o "dia anterior"
   virou 18/09). Sem ela, o 18/09 desses simbolos teria sido destruido como
   o 16/09. Pendente: saber se o buraco 16:08-16:59 do WINFUT foi preenchido.
+
+### 2026-09-21 (noite) — E4 pronto: yaml, roteiro e a regra da vaga (v3.30)
+
+- **Regra da vaga:** EA em dry_run nao toma nem respeita vaga (a vaga
+  protege contra duas posicoes REAIS). Motivo: com o 123 real e o
+  z_agf_win simulado, uma posicao simulada podia bloquear um sinal real.
+  Testes de disputa de vaga passaram para EAs em modo real. Efeito
+  declarado: o z_agf_win passa a pegar os sinais que perdia por vaga.
+- **`config/ea_123_volume_baixo_e4.yaml`:** o mesmo EA com tres diferencas
+  (dry_run false, nome e registro_dir proprios) -- conferidas por diff.
+- **`docs/RUNBOOK_E4.md`:** uma pagina para o dia -- antes de ligar, o que
+  tem que aparecer no arranque, a vida de uma operacao no log, sinais de
+  problema e o que fazer, como intervir a mao, o que conferir depois, e os
+  criterios de parada declarados antes.
+- **Duas correcoes minhas no caminho:** (1) eu tinha tratado a janela
+  "maquina congelada com posicao sem stop" como risco de dinheiro, sem
+  conferir que o E4 e' conta DEMO com trava FIXA no record -- o risco e'
+  de medicao, e a recomendacao mudou para "E4 pode comecar em 22/09 se o
+  arranque passar"; (2) o roteiro dizia que a retirada graciosa sempre
+  loga a zeragem -- em modo real o EA sai antes de ver o fill, e o roteiro
+  agora manda conferir a posicao no Profit.
+- 964 testes.

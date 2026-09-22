@@ -307,8 +307,11 @@ def test_gate_e_vagas_no_ciclo() -> None:
     from profittape.ea.vagas import VagasPorTicker
     v = VagasPorTicker()
     assert v.tentar_ocupar("WINFUT", "outro")
+    # a DISPUTA de vaga so' existe entre EAs REAIS (2026-09-21): o ciclo aqui
+    # tem executor (modo real, com o executor falso do E2b)
+    ex = ExecutorFake()
     c2 = CicloDeOrdens123(SinalPreco123(IndicadorMME(80, 139000.0)), vagas=v,
-                          symbol="WINFUT", nome="ea_123")
+                          symbol="WINFUT", nome="ea_123", executor=ex)
     c2.on_barra(_b(0, 140000.0, 140100.0, 139900.0, 140050.0))
     c2.on_barra(_b(1, 140050.0, 140080.0, 139800.0, 140000.0))
     c2.on_barra(_b(2, 140000.0, 140050.0, 139900.0, 140020.0))
@@ -318,5 +321,27 @@ def test_gate_e_vagas_no_ciclo() -> None:
     c2.on_barra(_b(4, 140000.0, 140050.0, 139900.0, 140030.0))
     c2.on_barra(_b(5, 140030.0, 140050.0, 139950.0, 140040.0))
     assert c2.estado == "entrada_pendente" and v.dono("WINFUT") == "ea_123"
-    c2.on_trade(T0900 + 7 * P15, 140000.0)                  # fim de t+1: cancela, libera
+    c2.tick()                                               # absorve o aceite
+    c2.on_trade(T0900 + 7 * P15, 140000.0)                  # fim de t+1: pede cancel
+    for pid in list(ex.eventos):
+        ex.confirmar_cancel(pid)
+    c2.tick()
     assert c2.estado == "livre" and v.dono("WINFUT") is None
+
+
+def test_ea_simulado_nao_toma_nem_respeita_vaga() -> None:
+    """2026-09-21: com o 123 REAL e o z_agf_win SIMULADO, uma posicao
+    simulada nao pode bloquear um sinal real (nem o contrario contaminar a
+    medicao do simulado). A vaga so' protege contra duas posicoes REAIS."""
+    from profittape.ea.vagas import VagasPorTicker
+    v = VagasPorTicker()
+    assert v.tentar_ocupar("WINFUT", "ea_real")                    # dono REAL
+    c = CicloDeOrdens123(SinalPreco123(IndicadorMME(80, 139000.0)), vagas=v,
+                         symbol="WINFUT", nome="ea_simulado")      # dry_run
+    _armar_compra(c)                                               # NAO bloqueado
+    assert c.sinais_sem_vaga == 0
+    assert v.dono("WINFUT") == "ea_real"                           # e nao tomou
+    assert v.simulados["ea_simulado"] == 1
+    # e um simulado armado nao impede um real de ocupar
+    v.liberar("WINFUT", "ea_real")
+    assert v.tentar_ocupar("WINFUT", "outro_real")

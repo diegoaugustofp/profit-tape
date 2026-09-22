@@ -140,7 +140,8 @@ em dia sem pregao.
 | Atraso do EA | medido (sec. 8): 0,03-6 s media, 8 s max com fluxo -- nao bloqueia o E4 do 123 |
 | Maquina dormindo | corrigido: record chama SetThreadExecutionState (OPERACAO) |
 | Cabo + nobreak | pendente -- agora com motivo MEDIDO |
-| E4 | `dry_run: false` + `--ea-ticker-ordem`, ate' o fim de setembro |
+| E4 | **pronto para comecar** (v3.30): `config/ea_123_volume_baixo_e4.yaml` + `docs/RUNBOOK_E4.md`. Conta DEMO com trava fixa no record (`usar_conta_real=False`, `apenas_simulador=True`). Conferido: o `ExecutorDeOrdens` implementa tudo que o ciclo do 123 chama |
+| Vaga com EA simulado | **FEITO (v3.30)**: EA em dry_run nao toma nem respeita vaga -- a vaga protege contra duas posicoes REAIS. Permite rodar o 123 real e o simulado juntos (mesmos sinais) e o z_agf_win sem bloquear o real. Muda os numeros do z_agf_win (pega os sinais que perdia por vaga) |
 | Diario: gate nao avaliado com posicao aberta | **FEITO (v3.28)**: o sinal bloqueado passa pelo gate SEM efeito colateral (`avaliar`), `motivo.gate_passaria` no diario, e o relatorio mostra o custo do gate sobre TODOS os sinais. De quebra: `registrar_barra` agora e' chamado em todos os ramos, como a docstring prometia |
 
 

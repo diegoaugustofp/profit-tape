@@ -15,7 +15,7 @@ from profittape.ea.semente import IndicadorMME
 from profittape.ea.sinal_123 import SinalPreco123
 from profittape.ea.vagas import VagasPorTicker
 from profittape.research.diario_relatorio import relatorio
-from tests.test_ea_ciclo_123 import P15, T0900, _b
+from tests.test_ea_ciclo_123 import P15, T0900, ExecutorFake, _b
 
 NS = 1_000_000_000
 
@@ -57,7 +57,9 @@ def test_operacao_executada_entra_no_diario(tmp_path: Path) -> None:
 def test_descartes_por_vaga_posicao_e_pendente(tmp_path: Path) -> None:
     v = VagasPorTicker()
     assert v.tentar_ocupar("WINFUT", "outro")
-    c, _d = _ciclo(tmp_path, vagas=v, symbol="WINFUT", nome="ea_t")
+    # disputa de vaga so' entre EAs REAIS (2026-09-21) -> ciclo com executor
+    c, _d = _ciclo(tmp_path, vagas=v, symbol="WINFUT", nome="ea_t",
+                   executor=ExecutorFake())
     _armar(c)                                   # sem vaga
     assert c.sinais_sem_vaga == 1
     v.liberar("WINFUT", "outro")
@@ -97,11 +99,21 @@ def test_gate_separa_rejeitado_de_indefinido(tmp_path: Path) -> None:
 
 
 def test_relatorio_conta_custo_das_regras_e_curva(tmp_path: Path) -> None:
-    v = VagasPorTicker()
-    v.tentar_ocupar("WINFUT", "outro")
-    c, _ = _ciclo(tmp_path, vagas=v, symbol="WINFUT", nome="ea_t")
-    _armar(c)                                            # sem_vaga
-    v.liberar("WINFUT", "outro")
+    class _NegaUmaVez:
+        """Reprova o 1o sinal e passa os seguintes: gera um descarte por
+        REGRA sem depender de vaga (EA simulado nao disputa vaga desde
+        2026-09-21)."""
+
+        def __init__(self) -> None:
+            self.n = 0
+            self.ultimo = {"vol_total": 900, "mediana": 50, "confiavel": True}
+
+        def permite(self, c: object, b: object) -> bool:
+            self.n += 1
+            return self.n > 1
+
+    c, _ = _ciclo(tmp_path, gate=_NegaUmaVez())
+    _armar(c)                                            # rejeitado_gate
     c.on_barra(_b(3, 140020.0, 140060.0, 139700.0, 140000.0))
     c.on_barra(_b(4, 140000.0, 140050.0, 139900.0, 140030.0))   # t: padrao 2-3-4
     c.on_trade(T0900 + 5 * P15 + NS, 140100.0)           # dentro de t+1: fill
@@ -109,7 +121,7 @@ def test_relatorio_conta_custo_das_regras_e_curva(tmp_path: Path) -> None:
     r = relatorio(tmp_path, "ea_t")
     assert r["sinais"] == 2
     assert r["custo_das_regras"]["descartados"] == 1
-    assert r["custo_das_regras"]["por_regra"]["sem_vaga"] == 1
+    assert r["custo_das_regras"]["por_regra"]["rejeitado_gate"] == 1
     cv = r["curva_e_drawdown_pts"]
     assert cv["operacoes"] == 1 and cv["pnl_total_pts"] > 0 and cv["drawdown_max_pts"] == 0.0
     assert r["execucao"]["entrada"]["n"] == 1

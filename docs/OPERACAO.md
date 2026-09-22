@@ -19,6 +19,7 @@
 4. No fim: `recorder.resumo` -> `offer_book_chamadas` (`v1_suprimidas`
    ~ `v2` = o book esta' sendo gravado uma vez so').
 5. Opcoes: a lista de series muda a CADA vencimento (rotina mensal).
+6. **Dias de E4 (ordem real na conta demo): seguir `docs/RUNBOOK_E4.md`.**
 
 ## ACHADO 2026-09-21: o offer book estava sendo GRAVADO EM DOBRO
 

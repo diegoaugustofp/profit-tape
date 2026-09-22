@@ -1,0 +1,35 @@
+# EA 123 com o gate de volume baixo -- E4: ORDENS REAIS NA CONTA DEMO.
+#
+# E' o MESMO EA da ficha 12 (ea_123_volume_baixo.yaml), com tres diferencas:
+#   - dry_run: false        -> envia ordem de verdade, SO' na conta Simulador
+#                              (32006). A trava e' do record, nao deste yaml:
+#                              usar_conta_real=False e apenas_simulador=True
+#                              estao FIXOS no codigo, e cada envio confere o
+#                              nome da corretora. Nao ha' como tocar a conta real.
+#   - nome e registro_dir   -> proprios. O carimbo (sha256 deste yaml) e'
+#                              outro, entao o forward COM ORDEM comeca uma
+#                              contagem nova -- dias simulados nao contam como
+#                              forward de execucao.
+# Requer no record: --login-completo e --ea-ticker-ordem WINV26 (ate' a
+# rolagem de outubro; o WIN vence em 14/10 -> trocar para WINZ26 antes).
+#
+# Roteiro do primeiro dia: docs/RUNBOOK_E4.md
+tipo: "123"
+nome: ea_123_vb_e4
+symbol: WINFUT
+periodo_barra_s: 900
+fim_sessao_hhmm: 1830
+zeragem_hhmm: 1730
+slack_limite_pts: 50.0
+tamanho_posicao: 1
+custo_pontos_estimado: 11.0
+dry_run: false
+
+semente_parquet: C:/projetos/profit-tape/data/research/eas_preco/p123_2026/barras_123.parquet
+curated: C:/projetos/profit-tape/data/curated
+registro_dir: C:/projetos/profit-tape/data/forward/ea_123_vb_e4
+feriados: []
+filtro_fluxo:
+  tipo: volume_baixo
+  janela_pregoes: 20
+d_mediano_pts_informativo: 485.0

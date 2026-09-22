@@ -227,7 +227,7 @@ class EAService:
             # DEPOIS de decidir e ANTES de executar -- assim a decisao
             # continua sendo contabilizada como do EA, mas nao vira ordem.
             if self.vagas is not None and not self.vagas.tentar_ocupar(
-                    self.config.symbol, self.nome):
+                    self.config.symbol, self.nome, simulado=self.config.dry_run):
                 self.stats.sinais_descartados_sem_vaga += 1
                 continue
             decisoes.append(d)

@@ -65,8 +65,9 @@ class VagasPorTicker:
     _dono: dict[str, str] = field(default_factory=dict)
     _lock: threading.Lock = field(default_factory=threading.Lock)
     descartes: dict[str, int] = field(default_factory=dict)
+    simulados: dict[str, int] = field(default_factory=dict)
 
-    def tentar_ocupar(self, ticker: str, ea: str) -> bool:
+    def tentar_ocupar(self, ticker: str, ea: str, simulado: bool = False) -> bool:
         """
         True se a vaga era livre (ou ja' era deste EA) e agora e' dele.
         False se outro EA esta' posicionado -- o chamador DESCARTA o
@@ -74,7 +75,18 @@ class VagasPorTicker:
 
         Reentrante de proposito: o mesmo EA pedindo de novo recebe True,
         para nao quebrar se houver um caminho que peca duas vezes.
+
+        `simulado=True` (EA em dry_run, 2026-09-21): **EA simulado NAO toma
+        nem respeita vaga.** A vaga existe para impedir DUAS POSICOES REAIS no
+        mesmo ticker; um EA em dry_run nao tem posicao real a proteger. Antes,
+        um simulado ocupando a vaga podia BLOQUEAR um sinal REAL (e o
+        contrario: em 18/09 o 123 simulado tirou 8 sinais do z_agf_win) --
+        com o E4 isso contaminaria a medicao do forward. Agora cada EA
+        simulado mede como se estivesse sozinho, e so' os reais disputam.
         """
+        if simulado:
+            self.simulados[ea] = self.simulados.get(ea, 0) + 1
+            return True
         with self._lock:
             atual = self._dono.get(ticker)
             if atual is None or atual == ea:

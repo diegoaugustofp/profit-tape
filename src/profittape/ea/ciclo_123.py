@@ -256,7 +256,8 @@ class CicloDeOrdens123:
                 log.info(f"ea.123.{desfecho}", gate=type(self.gate).__name__, **c.resumo())
                 self._diario_descarte(c, desfecho, visto)
                 return
-            if self.vagas is not None and not self.vagas.tentar_ocupar(self.symbol, self.nome):
+            if self.vagas is not None and not self.vagas.tentar_ocupar(
+                    self.symbol, self.nome, simulado=self.dry_run):
                 self.sinais_sem_vaga += 1
                 log.info("ea.123.sinal_sem_vaga", **c.resumo())
                 self._diario_descarte(c, "sem_vaga",
