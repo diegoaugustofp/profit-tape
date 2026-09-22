@@ -9,7 +9,7 @@
 
 | linha | estado |
 |---|---|
-| **EA 123 + gate volume baixo** | código completo; replay e ao vivo validados contra o gráfico; **falta 1 pregão limpo** e a infra |
+| **EA 123 + gate volume baixo** | **7a FECHADO em 21/09**: pregão ao vivo limpo (37 barras, 6 candidatos, gate barrou 3), volumes das barras na escala certa (316 mil a 1,25 M) e sinal conferido no gráfico. Antes do E4 falta só infra |
 | **Pesquisa de preço (M15)** | fechada; o único efeito vivo (123 volume baixo) atravessa a quebra de 2020 |
 | **Pesquisa por contraparte** | rolagem, fechamento e defasagem descritos; opção sobre ação em captura |
 | **Book (livro de ofertas)** | reconstrução validada; hipótese de nível defendido = **teste sem poder**; linha **estacionada** até o E4 |
@@ -53,8 +53,8 @@
 | # | falta | quem |
 |---|---|---|
 | 1 | Aplicar até a v3.27 com o record parado | operador |
-| 2 | Próximo pregão: conferir `energia.mantendo_acordado` no arranque, ~38 barras sem `dia_incompleto`, e no `recorder.resumo` o `offer_book_chamadas` (`v1_suprimidas` ≈ `v2` prova a duplicata) e `eventos_de_dia_anterior` (+ as linhas `recorder.evento_de_dia_anterior`) | operador |
-| 3 | **Backfill do 18/09** (buraco 16:08–16:59) — janela de 30 dias fecha ~18/10 | operador |
+| 2 | Próximo pregão (1º com a v3.28): `energia.mantendo_acordado` no arranque; as linhas `recorder.evento_de_dia_anterior` (mandar: dizem o que a DLL entrega); **37 barras** sem `dia_incompleto` (a das 18:15 fica aberta — é o certo); no `recorder.resumo`, `offer_book_chamadas` (`v1_suprimidas` ≈ `v2`) e `eventos_de_dia_anterior`; nenhuma pasta de ontem em `raw/trade/` | operador |
+| 3 | **18/09: conferir se o buraco 16:08–16:59 do WINFUT foi preenchido** (negócios por 10 min no curated); se não, backfill + cura `--dia 2026-09-18`. Janela de 30 dias fecha ~18/10. Em 21/09 a proteção da cura RECUSOU 18 partições de resíduo e salvou o 18/09 dos outros símbolos | operador |
 | 4 | Cabo + nobreak — agora com motivo medido (Wi-Fi em D3, espera) | operador |
 | 5 | **E4**: `dry_run: false` + `--ea-ticker-ordem`; E5.6 junto | operador |
 | 6 | ~50 pregões de forward; slippage ≤ 6 pts | calendário |

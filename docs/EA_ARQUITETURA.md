@@ -135,7 +135,7 @@ em dia sem pregao.
 
 | pendencia | estado |
 |---|---|
-| 7a -- dry_run ao vivo do 123 | replay 16 e 17/09 OK e conferido no grafico; ao vivo 17/09 achou a fragmentacao (corrigida, sec. 7); 18/09 limpo mas com 35 barras pelo Modern Standby. **Falta 1 pregao limpo com a v3.21+** |
+| 7a -- dry_run ao vivo do 123 | **FECHADO 2026-09-21.** Ao vivo limpo: 37 barras (a das 18:15 fica aberta porque quem fecha barra e' o trade -- e' o certo), 6 candidatos, gate barrou 3, volumes das barras entre 316 mil e 1,25 M (no dia da fragmentacao eram 329 e 231), sinal das 12:45 conferido no grafico. Historico: replay 16-17/09, fragmentacao achada em 17/09, standby em 18/09 |
 | SendCancelOrders (plural) | **descartada** por decisao do operador; reconciliacao ordem a ordem com a singular (E2b). Limitacao: ordem orfa de processo morto -> limpeza manual |
 | Atraso do EA | medido (sec. 8): 0,03-6 s media, 8 s max com fluxo -- nao bloqueia o E4 do 123 |
 | Maquina dormindo | corrigido: record chama SetThreadExecutionState (OPERACAO) |

@@ -2842,3 +2842,25 @@ estacionada ate' o E4 comecar; ver ESTADO_E_CAMINHOS secao 3.
   dias passados. (3) BOOK: fora de ordem por hora. Yaml do operador
   validado: erro de indentacao em WDOV26/WDOX26 (o record nao subiria);
   corrigido e com os dois contratos so' em trades. 963 testes.
+
+### 2026-09-21 (pregao) — 7a FECHADO; a protecao da cura salvou o 18/09 (v3.29, docs)
+
+- Primeiro pregao ao vivo limpo do EA 123: 37 barras (a das 18:15 fica
+  aberta porque quem fecha barra e' o trade; eu tinha dito "~38" -- o
+  certo e' 37), 6 candidatos, gate barrou 3, 2 operacoes, nenhum negocio
+  perdido (5.266.849 + 630.356 de outros simbolos = gravados). Volumes das
+  barras dos candidatos entre 316 mil e 1,25 M: a correcao da fragmentacao
+  CONFIRMADA ao vivo. O operador conferiu o sinal das 12:45 no grafico.
+  **7a FECHADO.** Ainda rodou versao anterior a v3.21 (book em dobro, sem
+  keep-awake, sem quarentena) -- esses tres se conferem no proximo pregao.
+- Observacao do operador: o sinal das 12:45, bloqueado por posicao aberta,
+  teria dado alvo na mesma barra que a operacao das 11:15. E' o custo da
+  regra de uma posicao por vez -- registrado no diario, regra NAO muda (a
+  ficha foi testada com ela; trocar depois de um dia seria escolher regra
+  pelo resultado).
+- O diario grava cada linha no DESFECHO, nao na hora do sinal (a ordem no
+  arquivo nao e' cronologica).
+- Cura de 18/09: a protecao da v3.14 RECUSOU 18 particoes (1 linha cada,
+  residuo do arranque de 21/09 -- com o fim de semana, o "dia anterior"
+  virou 18/09). Sem ela, o 18/09 desses simbolos teria sido destruido como
+  o 16/09. Pendente: saber se o buraco 16:08-16:59 do WINFUT foi preenchido.
