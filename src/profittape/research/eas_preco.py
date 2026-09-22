@@ -361,7 +361,10 @@ def equivalencia(d: pd.DataFrame, tolerancia: float = 0.5,
                 detalhe[c] = {"comparaveis": 0}
                 continue
             dif = (d.loc[m, campo] - d.loc[m, c]).abs()
-            i_max = int(dif.idxmax())
+            # `idxmax()` devolve `Hashable` nos pandas-stubs novos e o CI
+            # reprovava em `int(...)`. O par argmax+index da' o MESMO rotulo
+            # (ambos o PRIMEIRO maximo) e e' tipado.
+            i_max = int(dif.index.to_numpy()[int(dif.to_numpy().argmax())])
             hhmm_max = int(d["hhmm"].to_numpy()[i_max])
             pos_max = int(pos.to_numpy()[i_max])
             r = {"comparaveis": int(m.sum()),

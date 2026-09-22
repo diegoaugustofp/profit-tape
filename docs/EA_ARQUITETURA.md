@@ -659,6 +659,75 @@ ou processo separado.
 
 ---
 
+## 9. PRE-REGISTRO: protecao do stop que dispara e nao executa (2026-09-22)
+
+> Escrito e COMMITADO antes do codigo, como manda a disciplina. Aprovado
+> pelo operador em 22/09, com o E4 ja' rodando.
+
+**MOTIVO.** O stop do 123 e' stop-LIMITE com 50 pts de folga (22/09:
+gatilho 187.670, limite 187.720). Num salto alem do limite a ordem
+dispara e vira uma limitada que NAO executa enquanto o preco ficar do
+lado errado. Posicionado, o ciclo so' espera callbacks -- nao olha preco.
+A posicao fica aberta e SEM PROTECAO ate' a zeragem das 17:30.
+
+**MECANISMO, em uma frase.** Se o mercado negociou alem do limite do stop
+e o stop nao executou, ele nao vai executar sozinho; zerar a mercado
+entrega a saida que a ficha manda.
+
+**REGRA (fixa; nao se calibra depois):**
+1. So' em modo REAL e so' com o ciclo POSICIONADO.
+2. Condicao: negocio no tape ESTRITAMENTE alem do limite do stop (acima,
+   para stop de compra; abaixo, para stop de venda) e stop sem fill.
+3. Carencia: **2 s de tempo de MERCADO** desde esse primeiro negocio.
+   Justificativa medida: em 22/09 a confirmacao de fill chegou 0,7-1,0 s
+   depois do cruzamento, nas duas ordens.
+4. Acao: cancela stop e alvo, zera a mercado, avisa CONFIRA NO PROFIT.
+5. Registro: desfecho continua `stop` (e' o resultado da ficha), mais
+   `stop_protegido=True`, o preco que disparou a protecao e o da zeragem.
+   Log `ea.123.stop_protegido`.
+
+**Por que e' seguro com callback atrasado:** se o stop tiver executado e a
+confirmacao chegar depois dos 2 s, a zeragem encontra a posicao ja' zerada
+e nao faz nada. E com o preco alem do stop, o alvo esta' do outro lado e
+nao pode executar junto.
+
+**O QUE NAO MUDA:** a ENTRADA (entrada que salta alem do limite continua
+`nao_executou` -- correr atras seria entrar pior, e isso e' decisao de
+estrategia; e' uma divergencia conhecida do teste de 10 anos, que supoe
+fill no nivel, e o diario vai medir quantas vezes acontece); o alvo; os
+parametros da estrategia; a folga de 50 pts; o `dry_run` (o gemeo
+simulado segue executando no nivel -- a diferenca entre os dois diarios
+mede o custo do salto).
+
+**CONTAGEM: NAO reinicia.** Pela regra 2 da disciplina de forward, o que
+reinicia e' mudanca de parametro, limiar ou regra de saida; o que nao
+reinicia e' "correcao de bug que faz o codigo passar a fazer o que a
+ficha ja' dizia". A ficha diz "sai quando o preco atinge o stop"; o
+stop-limite e' a IMPLEMENTACAO dessa regra, e falha no salto. O preco
+pior da saida protegida e' custo de EXECUCAO -- exatamente o que o E4
+mede.
+
+**VERIFICACAO (antes de ligar):** (1) alem do limite e sem fill em 2 s ->
+cancela, zera, `stop_protegido`; (2) alem do limite com fill dentro dos
+2 s -> saida normal, SEM zerar; (3) alem do gatilho mas dentro do limite
+-> espera, nao protege; (4) fill atrasado depois da zeragem -> uma
+operacao so', fechada uma vez; (5) o teste (1) rodado no codigo ANTIGO
+tem que REPROVAR POR ASSERCAO -- o caso que o verificador deveria
+reprovar.
+
+**O QUE ESPERAR.** Na demo talvez nunca dispare (se o simulador executa
+sempre no gatilho, o salto nao aparece). Na conta real, raro -- noticia,
+abertura, leilao. Mede-se no forward: quantas saidas precisaram de
+protecao e o preco delas contra o stop.
+
+**JUNTO, sem pre-registro por ser bug puro:** no estado `saindo`, se a
+segunda perna executar antes do cancelamento, o ciclo avisa
+`POSICAO CONTRARIA -- (4b zera)` e segue -- mas a 4b so' roda quando a
+conexao cai e volta. Com o EA no ar, a posicao invertida ficaria aberta.
+Passa a zerar na hora, mantendo o desfecho da primeira perna.
+
+---
+
 ## Indice por assunto
 
 (2026-08-28, adicionado -- o arquivo cresceu demais para navegar so' por
