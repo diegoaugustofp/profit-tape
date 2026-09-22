@@ -2952,3 +2952,10 @@ estacionada ate' o E4 comecar; ver ESTADO_E_CAMINHOS secao 3.
   strikes consecutivos, tolerancia como FRACAO do espacamento, e razao
   indefinida quando alguma faixa quase nao toca o intervalo do dia.
   3 testes novos (inclusive o caso que aconteceu). 1.000 testes.
+- v3.37 (docs): ensaio de setembro refeito com o placebo v2 -- coberturas
+  parecidas (comparacao justa) e razao 2,45 em 17/09 contra 0,12 em
+  18/09. Oposto em cada dia: com o preco andando pouco, a razao de UM dia
+  mede onde o preco passou, nao atracao. Declarado antes de outubro: a
+  leitura sera' a TENDENCIA ao longo do mes, nunca o valor de um dia.
+  Captura das opcoes conferida no curated (10 de 12 series em 18/09; as
+  duas ausentes sao puts sem negocio no vencimento).

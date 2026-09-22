@@ -7022,3 +7022,32 @@ strikes de setembro): a faixa "perto de um strike" engolia quase tudo --
 
 **Nota de amostra:** as 12 series tiveram ~1.000 negocios por dia somadas
 -- pouco para analise por serie. O peso da ficha esta' no PAPEL.
+
+
+### Ensaio de setembro, depois da correcao: o que ele ensina para OUTUBRO
+
+Com o placebo v2 (grade de 6 strikes), os numeros passaram a fazer
+sentido -- coberturas parecidas nas duas faixas (0,40 x 0,32 em 17/09;
+0,48 x 0,51 em 18/09), ou seja, comparacao justa.
+
+| dia | perto do strike | placebo | razao |
+|---|---|---|---|
+| 17/09 | 0,484 | 0,198 | **2,45** |
+| 18/09 (vencimento) | 0,103 | 0,842 | **0,12** |
+
+**Oposto em cada dia -- e isso e' a licao.** Com o preco andando pouco e a
+grade densa, a razao de UM dia mede basicamente onde o preco passou a
+maior parte do tempo, nao atracao. E' amostra sem poder se comportando
+como tal (melhor assim do que um numero grande e convincente).
+
+**DECLARADO ANTES de medir outubro:** a leitura sera' a **TENDENCIA ao
+longo do mes** -- a razao cresce conforme o vencimento se aproxima? --,
+nunca o valor de um dia. Com ~20 pregoes da MESMA serie, as semanas
+normais servem de base para a semana do vencimento. Um dia isolado alto
+nao conta, e um dia isolado baixo tambem nao.
+
+**Captura conferida:** 10 das 12 series de setembro tem particao em 18/09.
+As duas ausentes (`PETRU447`, `PETRU457`) sao puts profundamente fora do
+dinheiro que nao negociaram no dia do vencimento -- sem negocio, sem
+particao. Esperado. Em outubro, series sem negocio reduzem o que se pode
+dizer POR SERIE; o peso da ficha esta' no PAPEL.
