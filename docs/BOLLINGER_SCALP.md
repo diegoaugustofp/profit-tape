@@ -1,7 +1,9 @@
 # Scalp de Bollinger modificada (15s) — hipótese em formalização
 
-Estado (2026-10-01): **FAMÍLIA FECHADA. As três variantes testadas são
-CONTRA** — retorno (null), rompimento (negativo) e rompimento +
+Estado (2026-10-01, revisto): **REABERTO por defeito de especificação** —
+o "rompimento" usava ordem limitada e nunca esperava romper (seção 9).
+As medições anteriores valem para o que de fato testaram. As variantes
+testadas foram CONTRA — retorno (null), rompimento (negativo) e rompimento +
 estocástico de contexto de 6 min (negativo, IC98,3% inteiro abaixo de
 zero). Ver 5.8 e 8.7/8.8. Nenhum EA de scalp de Bollinger vai a
 produção.
@@ -571,6 +573,88 @@ dispara", teríamos fechado pelo motivo errado.
 
 Reabrir exigiria **mecanismo novo**, não parâmetro novo — e dado que não
 foi usado aqui.
+
+## 9. DEFEITO DE ESPECIFICAÇÃO: o "rompimento" nunca foi rompimento
+
+> Achado pelo operador em 2026-10-01, **depois** do veredito de 8.7, a
+> partir da observação do gráfico — não de estatística.
+
+### 9.1 O que aconteceu
+
+O operador contestou a explicação de `recuo = 0`: *"no gráfico a
+abertura do candle fica na maioria das vezes no fechamento do candle
+anterior"*. Isso é incompatível com "o preço já estava além do gatilho".
+
+A verificação deu razão a ele, e revelou algo pior que uma explicação
+errada:
+
+**Uma ordem LIMITADA de compra colocada ACIMA do preço corrente executa
+imediatamente.** No sinal de compra, t−1 é branca, logo
+`close(t−1) ≤ high(t−1)`. A barra t abre perto de `close(t−1)` — abaixo
+do gatilho `high(t−1)`. A limitada, portanto, sempre executava **na
+abertura, ao preço de abertura**, sem nunca esperar o rompimento.
+
+Exemplo medido: gatilho 107, barra abre em 105 → a limitada entra a
+**105**; uma stop entraria a **107**.
+
+`recuo = 0` em 320 casos não era "o preço nunca recuou". Era a
+assinatura de que **a ordem nunca precisou esperar nada**.
+
+### 9.2 O que isso invalida
+
+O veredito CONTRA de 8.7 (e o de 5.8 para a variante rompimento)
+**não se aplica ao rompimento**. Ele se aplica a *"entrar a mercado na
+abertura da barra seguinte ao padrão"* — que é o que o código fez.
+
+A cláusula de parada (8.6) proíbe testar outro limiar/timeframe sobre a
+mesma amostra. **Isto não é outro limiar**: é a constatação de que a
+regra testada não era a regra especificada. Pela disciplina 7.1,
+questionar a FÓRMULA é achar defeito de especificação — explicitamente
+permitido; o que é proibido é ajustar CALIBRAÇÃO depois de ver
+resultado, e não é o caso.
+
+### 9.3 Correção
+
+`replay_pregao(..., tipo_ordem="stop")` e `--tipo-ordem stop`:
+
+| | limitada (era) | stop (correto) |
+|---|---|---|
+| compra executa quando | preço **≤** gatilho | preço **≥** gatilho |
+| preço de entrada | gatilho **ou melhor** | gatilho **ou pior** |
+| tipos de execução | abertura / recuo | rompimento / gap |
+
+O default segue `limitada` (retrocompatível, com teste).
+
+**O custo real aparece agora**: no modo stop, se a barra abre além do
+gatilho, a entrada sai **pior** que ele (tipo `gap`). A limitada nunca
+tinha esse custo — ela entrava melhor. Parte da diferença de resultado
+que vier vai ser isso, e é legítimo: é o preço de uma stop de verdade.
+
+### 9.4 Pré-registro da remedição
+
+Mesma regra de 8.3 (rompimento + estocástico de contexto <20/>80),
+**única mudança**: `--tipo-ordem stop`.
+
+**Contagem de tentativas.** A medição anterior não testou o mecanismo
+pretendido, então não conta como tentativa *do rompimento*. Mas a
+família já consumiu rodadas, e ignorar isso seria conveniente demais.
+Mantenho a correção de **Bonferroni para 3 testes (IC 98,3%)** — o mesmo
+rigor de 8.5, sem afrouxar por a medição anterior ter sido defeituosa.
+
+| veredito | condição (IC98,3% da borda bruta) |
+|---|---|
+| FAVORÁVEL | limite inferior > 0 |
+| CONTRA | limite superior < 0 |
+| INCONCLUSIVO | cruza zero |
+
+Poder: n ≥ 60. Parada: um tiro; inconclusivo **não** autoriza mexer em
+mais nada.
+
+**Expectativa honesta, registrada antes:** a entrada da stop é pior que
+a da limitada (entra no gatilho ou além, nunca antes). Se a limitada —
+que entrava em preço melhor — deu −26 pts/operação, há razão mecânica
+para esperar que a stop dê **pior**, não melhor. O que muda é que
+estaremos medindo o mecanismo certo.
 
 ## 6. Dúvidas — fechadas em 2026-09-05, exceto as que o dump responde
 

@@ -3123,3 +3123,44 @@ no grafico maior, com o gatilho de rompimento. Nao num recorte, nao por
 um acoplamento de indicadores que nos mesmos criamos. Se em setembro
 tivessemos parado no "a clausula nunca dispara", teriamos fechado pelo
 motivo errado -- e ficaria a duvida para sempre.
+
+### 2026-10-01 — DEFEITO: o "rompimento" nunca foi rompimento (v3.44)
+
+Operador contestou a explicacao de `recuo = 0`: "no grafico a abertura
+do candle fica na maioria das vezes no fechamento do candle anterior".
+Incompativel com "o preco ja' estava alem do gatilho".
+
+**Ele estava certo, e o defeito e' pior que a explicacao errada.**
+
+1. Minha explicacao estava INVERTIDA: numa limitada de COMPRA, abrir
+   ABAIXO do limite e' favoravel (compra mais barato), nao desfavoravel.
+2. E dai' sai o defeito real: **uma limitada de compra colocada ACIMA do
+   preco corrente executa IMEDIATAMENTE**. Com gatilho em high(t-1) e a
+   barra abrindo perto de close(t-1) (menor, porque t-1 e' branca), a
+   ordem sempre executava NA ABERTURA. `recuo = 0` em 320 casos nao era
+   "o preco nunca recuou" -- era "a ordem nunca precisou esperar".
+
+A variante "rompimento" mediu **entrada a mercado na abertura da barra
+seguinte**, nao rompimento. O veredito CONTRA de 8.7 e 5.8 vale para o
+que de fato testou, nao para o mecanismo pretendido.
+
+Pela disciplina 7.1 isto e' permitido: questionar a FORMULA e' achar
+defeito de especificacao; proibido e' ajustar CALIBRACAO apos ver
+resultado. A clausula de parada falava em outro limiar sobre a mesma
+amostra -- nao e' o caso.
+
+Implementado `tipo_ordem="stop"` (`--tipo-ordem stop`): compra dispara
+com preco >= gatilho e entra no gatilho OU PIOR; tipos `rompimento` e
+`gap`. Default segue `limitada`, com teste de retrocompatibilidade.
+
+Conferido A MAO nos 4 casos (dispara no gatilho, gap entra pior, nao
+dispara se nao alcanca, venda espelhada) e pelo caminho real do replay:
+mesmo tape e gatilho 107, limitada entra a 105, stop entra a 107.
+
+Ficha da remedicao escrita (secao 9.4), com Bonferroni mantido em 3
+testes -- nao afrouxei o criterio por a medicao anterior ter sido
+defeituosa. **Expectativa registrada ANTES**: a stop entra em preco
+PIOR que a limitada, entao ha' razao mecanica para esperar resultado
+pior, nao melhor. O que muda e' medir o mecanismo certo.
+
+5 testes novos. Suite verde, ruff e mypy limpos.

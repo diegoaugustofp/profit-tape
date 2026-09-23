@@ -3070,6 +3070,15 @@ def bollinger_replay(
         "--ignorar-circuit-breaker",
         help="Mede a regra INTEIRA (o circuit breaker fecha o pregao na 3a perda seguida)",
     ),
+    tipo_ordem: str = typer.Option(
+        "limitada",
+        "--tipo-ordem",
+        help="limitada (default, comportamento historico) | stop. DEFEITO "
+        "CORRIGIDO 2026-10-01: a variante 'rompimento' usava LIMITADA no "
+        "gatilho, e uma limitada de compra ACIMA do preco executa na hora "
+        "-- nunca espera romper. As 320 execucoes vieram 100% 'abertura' e "
+        "ZERO 'recuo'. Um rompimento de verdade exige --tipo-ordem stop.",
+    ),
     filtro_contexto: bool = typer.Option(
         False,
         "--filtro-contexto",
@@ -3124,6 +3133,7 @@ def bollinger_replay(
             ignorar_circuit_breaker=ignorar_circuit_breaker,
             variante_entrada=v,
             filtro_contexto=filtro_contexto,
+            tipo_ordem=tipo_ordem,
         )
         resultados[v] = r["resumo"]
         _imprimir_resumo_bollinger_replay(r["resumo"], v, ignorar_circuit_breaker, saida)

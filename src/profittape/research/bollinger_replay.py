@@ -295,6 +295,7 @@ def replay_pregao(
     contratos: int = CONTRATOS,
     max_perdas: int = MAX_PERDAS_CONSECUTIVAS,
     ignorar_circuit_breaker: bool = False,
+    tipo_ordem: str = "limitada",
 ) -> list[dict[str, Any]]:
     """
     `sinais` = saida de `indicadores_e_sinais_do_tape` para o pregao.
@@ -338,9 +339,30 @@ def replay_pregao(
             preco_limite=limite,
             stop_pts=float(s["stop_pts"]),
         )
-        # --- preenchimento da limitada dentro da barra t ---
+        # --- preenchimento dentro da barra t ---
+        # LIMITADA e STOP sao OPOSTAS, e confundi-las foi o defeito de
+        # 2026-10-01: com o gatilho do "rompimento" em high(t-1) (ACIMA
+        # do preco corrente), uma ordem LIMITADA de compra executa na
+        # hora, na abertura -- nunca espera romper. Por isso as 320
+        # execucoes vieram 100% como "abertura" e zero "recuo": nao era
+        # rompimento nenhum, era entrada a mercado na abertura seguinte.
+        #
+        #   LIMITADA compra: executa com preco <= limite (entra no limite
+        #                    OU MELHOR). Condicao: lado*(px-limite) <= 0.
+        #   STOP     compra: DISPARA com preco >= limite (entra no limite
+        #                    OU PIOR). Condicao: lado*(px-limite) >= 0.
         j_fill = -1
-        if lado * (px[i0] - limite) <= 0:  # abertura ja' a favor
+        if tipo_ordem == "stop":
+            if lado * (px[i0] - limite) >= 0:
+                # abertura ja' alem do gatilho: a stop dispara na abertura,
+                # ao preco de abertura (pior que o gatilho) -- e' o gap.
+                j_fill, op.preco_entrada, op.tipo_execucao = i0, float(px[i0]), "gap"
+            else:
+                atravessa = np.where(lado * (px[i0:i1] - limite) >= 0)[0]
+                if len(atravessa):
+                    j_fill, op.preco_entrada, op.tipo_execucao = (
+                        i0 + int(atravessa[0]), limite, "rompimento")
+        elif lado * (px[i0] - limite) <= 0:  # limitada, abertura ja' a favor
             j_fill, op.preco_entrada, op.tipo_execucao = i0, float(px[i0]), "abertura"
         else:
             atravessa = np.where(lado * (px[i0:i1] - limite) < 0)[0]
@@ -515,6 +537,7 @@ def rodar(
     tipos_ohlc: tuple[int, ...] = TIPOS_OHLC_GRAFICO,
     variante_entrada: str = "retorno",
     filtro_contexto: bool = False,
+    tipo_ordem: str = "limitada",
 ) -> dict[str, Any]:
     origem = curated / "trade"
     pastas = _dias_do_symbol(origem, symbol)
@@ -550,7 +573,8 @@ def rodar(
                 s_c = (indicadores_e_sinais_do_tape(b_c, variante_entrada)
                       if not b_c.empty else b_c)
                 comparacoes[dia][nome] = comparar_com_dump(s_c, dump)
-        ops = replay_pregao(sinais, trades, dia, ignorar_circuit_breaker=ignorar_circuit_breaker)
+        ops = replay_pregao(sinais, trades, dia, tipo_ordem=tipo_ordem,
+                            ignorar_circuit_breaker=ignorar_circuit_breaker)
         todas_ops.extend(ops)
         n_ex = sum(1 for o in ops if o["executou"])
         log.info(
