@@ -770,3 +770,83 @@ Divisão de fontes, então:
 Ordem: dump → equivalência medida → funil (TAXA) → ficha de seis linhas
 → replay pelo tape com 3 pernas → só então execução. Nada de EA antes
 de a ficha existir (skill disciplina, regra 1).
+
+## 10. FICHA DE FORWARD: book "menos resistência à frente" (2026-09-23)
+
+> Escrita ANTES de ligar. Formato curto da disciplina de forward.
+
+### 10.1 A ficha
+
+```
+HIPOTESE   Um rompimento continua quando ha' pouca resistencia NO
+           CAMINHO. O topo do livro no instante do sinal mede essa
+           resistencia diretamente: romper para cima com o ask minguado
+           e' diferente de romper contra uma oferta grande.
+
+EVENTO     Regra do rompimento + contexto (secao 8.3), MAIS:
+             compra passa se desequilibrio > 0  (mais bid que ask:
+                    o obstaculo, que e' o ASK, esta' fino)
+             venda  passa se desequilibrio < 0  (o obstaculo, que e' o
+                    BID, esta' fino)
+           desequilibrio = (qtd_bid - qtd_ask)/(qtd_bid + qtd_ask), do
+           ULTIMO estado do tiny_book na barra de 15s do sinal.
+
+TAXA       ~3,2 operacoes/pregao (6,5 medido x ~50% do filtro, medido
+           em 9 pregoes: 1110 de 1169 candidatos com dado, corte ~50/50)
+
+EFEITO     p1 (alvo1 antes do stop), barreiras simetricas, nula = 0,50.
+
+HORIZONTE  126 pregoes (6 meses), n ~ 403
+
+CRITERIO   IC95 de Wilson sobre p1 vs 0,50
+           FAVORAVEL: limite inferior > 0,50
+           CONTRA:    limite superior < 0,50
+           INCONCLUSIVO: cruza
+
+PARADA     Placar FECHADO ate' n=150. Mudanca de regra reinicia a
+           contagem (carimbo de versao).
+```
+
+### 10.2 A limitação, declarada antes de ligar
+
+Com ~3,2 operações/pregão, em 6 meses o forward tem:
+
+| p1 real | poder em 126 pregões |
+|---|---|
+| 0,42 | 90% |
+| 0,43 | 81% |
+| 0,44 | 67% |
+
+**Ou seja: ele detecta bem que a estratégia é RUIM, e mal que é BOA.**
+Uma melhora moderada — `p1` saindo de 0,432 para 0,47, por exemplo —
+ficaria invisível nesse horizonte (precisaria de ~32 meses).
+
+Isso não invalida o forward, mas define o que ele significa:
+
+- **CONTRA** será conclusivo, e fecha a família de vez.
+- **FAVORÁVEL** será raro, e só aparece se o efeito for grande.
+- **INCONCLUSIVO** é o desfecho mais provável, e significará "o book não
+  produziu melhora GRANDE" — não "o book não ajuda".
+
+### 10.3 Por que ligar mesmo assim
+
+Três razões que não dependem do resultado:
+
+1. **Mede o preenchimento real da ordem stop.** O replay assume execução
+   no gatilho; ao vivo a stop vira ordem a mercado e pode preencher
+   pior. Os 37 casos de `gap` no replay sugerem que não é desprezível.
+   Isso serve a QUALQUER estratégia de rompimento do projeto.
+2. **Estreia o `tiny_book` como feature.** São ~1 milhão de eventos por
+   pregão capturados e nunca usados. Se o alinhamento funcionar ao vivo,
+   destrava o eixo para as outras estratégias.
+3. **Não compete com nada.** Em dry_run os EAs não disputam vaga
+   (`simulado=True`), então conviveria com `z_agf_3` e o 123 sem sujar
+   a medição de nenhum deles.
+
+### 10.4 O que NÃO fazer
+
+- Não trocar o corte de 0 para a mediana depois de ver o resultado.
+- Não adicionar o RLP no meio do caminho — ele é hipótese INDEPENDENTE
+  (as 4 combinações deram ~25% cada, confirmando que os eixos medem
+  coisas diferentes). Entra como ficha própria, depois, se entrar.
+- Não olhar o placar antes de n=150.

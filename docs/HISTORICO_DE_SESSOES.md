@@ -3304,3 +3304,43 @@ algo, e ele nao decide (os 42 pregoes estao queimados; o teste e'
 forward).
 
 4 testes novos. Suite verde, ruff e mypy limpos.
+
+### 2026-09-23 — Funil rodado; ficha de forward do book escrita (v3.49)
+
+Funil em 9 pregões (a partir de 10/09, pós-correção de gravação):
+
+    rlp    compra/venda   ~50% cada lado   cobertura 100% (1169/1169)
+    book   compra/venda   ~50% cada lado   cobertura  95% (1110/1169)
+    4 combinacoes: 25,8% / 24,2% / 23,7% / 26,3%
+
+**Leitura separando o tautológico do real**: os ~50% por eixo são
+tautológicos (corte pela mediana dá 50% por construção) e servem só
+para confirmar que não há degeneração. O achado REAL são as 4
+combinações em ~25% cada: **RLP e book são praticamente independentes**.
+Se fossem redundantes, veríamos concentração nas diagonais. Isso é a
+triagem de redundância da disciplina, respondida com número.
+
+**Decisão do operador**: seguir só com o BOOK, direção "menos
+resistência à frente". RLP e agente guardados como fichas futuras.
+
+Ficha escrita (BOLLINGER_SCALP secção 10), com duas escolhas de
+desenho registradas:
+- **corte em ZERO, não na mediana**: a mediana medida (0,024 e −0,041)
+  veio do dado já visto, e usá-la seria calibrar com dado visto. Zero é
+  o ponto neutro (bid = ask), declarável sem olhar nada, e as medianas
+  ficaram perto dele — a taxa se mantém em ~50%.
+- **direção ASSIMÉTRICA**: compra passa com desequilíbrio > 0 (o
+  obstáculo é o ask); venda com < 0 (o obstáculo é o bid). "À frente"
+  muda de lado conforme a direção do rompimento.
+
+**LIMITAÇÃO DECLARADA ANTES DE LIGAR**: com ~3,2 ops/pregão, em 6 meses
+o poder é 90% para p1=0,42, 81% para 0,43 e só 67% para 0,44. O forward
+detecta bem que é RUIM e mal que é BOA — uma melhora moderada (p1 indo
+a 0,47) precisaria de ~32 meses. INCONCLUSIVO é o desfecho mais
+provável, e significará "o book não produziu melhora GRANDE", não "o
+book não ajuda".
+
+Registrado por que ligar mesmo assim: mede o preenchimento REAL da stop
+(o replay só assume), estreia o tiny_book como feature (~1M
+eventos/pregão nunca usados), e não compete com os EAs vivos (em
+dry_run `simulado=True` desliga a disputa de vaga).

@@ -7134,3 +7134,43 @@ de 6 meses da disciplina de forward. DUAS clausulas a ~50% cada levam a
 
 **PENDENTE**: rodar o funil e decidir a direcao de cada eixo POR
 MECANISMO antes de escrever a ficha de forward.
+
+### Eixos de regime GUARDADOS (não usados ainda, 2026-09-23)
+
+Decisão do operador: seguir só com o **book**; RLP e agente ficam para
+depois. O que torna isso possível sem contaminar nada é a medida de
+independência do funil — as 4 combinações de RLP x book deram 25,8% /
+24,2% / 23,7% / 26,3%, ou seja **quase exatamente 25% cada**. Se os
+eixos fossem redundantes, veríamos concentração nas diagonais (algo
+como 40/10/10/40). São dois eixos que medem coisas diferentes, e por
+isso cada um pode virar ficha própria mais tarde sem herdar o resultado
+do outro.
+
+**1. RLP** (`trade_type == 13`, já é feature em `flow.py`, funil já
+medido: ~50% de corte, cobertura 100%). Mecanismo candidato: RLP baixo =
+movimento sustentado por agressão institucional no livro, não por
+varejo internalizado. O argumento é mais especulativo que o do book
+(depende de uma teoria sobre quem é o varejo), e foi por isso que ficou
+para depois.
+
+**2. AGENTE (corretora)** — pedido do operador, ainda sem funil medido.
+É o que este projeto tem de mais distintivo: cada negócio traz
+`agente_comprador` e `agente_vendedor`, e `features/flow.py` já calcula
+`agf_*` por agente. Já rendeu o `z_agf_3`.
+
+Candidatos de mecanismo para regime de rompimento, para escolher ANTES
+de medir:
+  - **concentração**: rompimento com UM agente grande dominando a
+    agressão é diferente de rompimento pulverizado entre muitos;
+  - **identidade**: certos agentes são proxy de fluxo institucional e
+    outros de varejo — mas isso exige mapear quem é quem, e o mapa
+    pode mudar;
+  - **mudança de mão**: o agente dominante no rompimento é o mesmo das
+    barras anteriores, ou trocou?
+
+A terceira é a mais interessante e a menos trivial de medir. Nenhuma
+foi medida ainda -- o funil de agente é trabalho novo.
+
+**Regra que vale para os dois**: entram como ficha PRÓPRIA, com
+mecanismo declarado antes, e nunca no meio de um forward em andamento
+(isso reiniciaria a contagem).
