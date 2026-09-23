@@ -2959,3 +2959,44 @@ estacionada ate' o E4 comecar; ver ESTADO_E_CAMINHOS secao 3.
   leitura sera' a TENDENCIA ao longo do mes, nunca o valor de um dia.
   Captura das opcoes conferida no curated (10 de 12 series em 18/09; as
   duas ausentes sao puts sem negocio no vencimento).
+
+### 2026-10-01 — Estocastico de contexto: a medicao de setembro estava no timeframe errado (v3.38)
+
+- Operador trouxe a especificacao do estocastico lento como filtro de
+  exaustao (venda: preco abaixo da banda + est SOBRECOMPRADO; compra:
+  acima da banda + est SOBREVENDIDO) e apontou: **"o estocastico <20 ou
+  >80 e' no timeframe maior e acho q estamos olhando para o menor"**.
+- **Ele estava certo.** Confirmado no codigo: `EST_PERIODO = 8` com
+  `rolling(8)` sobre as barras de 15s -- janela de 2 minutos, a MESMA
+  das bandas. O dump NTSL tambem veio do grafico de 15s. Nunca houve
+  estocastico de 6 min em lugar nenhum da medicao.
+- Isso invalida a conclusao da secao 7.6 ("a clausula nunca dispara, e'
+  estrutural"). O argumento geometrico -- um branco que fecha acima da
+  banda fecha no topo da faixa de 8 barras, e o %K lento nao pode estar
+  no fundo dela ao mesmo tempo -- e' CORRETO quando os dois indicadores
+  dividem a janela, e e' exatamente por isso que dava zero. Com 8 barras
+  de 6 min (48 min) a dependencia desaparece. A hipotese nunca foi
+  medida; o que foi medido foi um acoplamento que nos criamos.
+- Consequencia metodologica: **nao e' a terceira variante de uma familia
+  reprovada**. As duas reprovacoes (retorno, rompimento) foram ambas SEM
+  filtro de contexto. E' a primeira medicao correta.
+- `research/bollinger_contexto.py` + `profit-tape bollinger-contexto`:
+  agrega 15s -> 6 min, calcula o %K lento 8/3 no timeframe maior, e mede
+  o FUNIL nos dois limiares (extremo 20/80 e direcao 50, os dois pedidos
+  pelo operador). Categoria `features`, zero trial -- responde a pergunta
+  da disciplina 7.4 (a hipotese admite eventos suficientes?) ANTES de
+  qualquer pre-registro.
+- **LOOK-AHEAD tratado explicitamente**: uma barra de 6 min so' existe
+  depois de fechar. O alinhamento usa a ultima barra de contexto JA'
+  FECHADA (merge_asof backward), nao a que contem o sinal. O modo
+  `--permitir-look-ahead` existe so' para medir o custo da defasagem, e
+  ha' teste que exige que os dois modos DIVIRJAM -- se nao divergissem,
+  a trava nao estaria travando nada (disciplina 7.3).
+- Agregacao e alinhamento conferidos A MAO antes dos testes (disciplina
+  4): 48 barras de 15s -> 2 de 6 min, OHLC batendo no papel, e a barra
+  de indice 24 usando o valor da barra que fechou em t=360.
+- 7 testes novos, suite completa verde, ruff e mypy limpos.
+
+**PENDENTE (Diego)**: rodar `profit-tape bollinger-contexto` sobre os
+pregoes capturados. O funil decide se vale pre-registrar -- e qual dos
+dois limiares.

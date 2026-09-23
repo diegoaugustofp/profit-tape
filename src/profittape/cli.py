@@ -2928,6 +2928,79 @@ def fase2_score(
 
 
 @app.command()
+def bollinger_contexto(
+    symbol: str = typer.Argument("WINFUT"),
+    curated: Path = typer.Option(Path("data/curated"), "--curated"),
+    dias: str | None = typer.Option(None, "--dias", help="Lista 2026-09-01,2026-09-02"),
+    segundos: int = typer.Option(360, "--segundos",
+                                help="Timeframe do contexto (360 = 6 min)"),
+    permitir_look_ahead: bool = typer.Option(
+        False, "--permitir-look-ahead",
+        help="SO' PARA MEDIR o custo da defasagem. Usa a barra de contexto "
+             "que CONTEM o sinal -- informacao do futuro. NUNCA decida nada "
+             "com isto."),
+    log_level: str = typer.Option("WARNING", "--log-level"),
+) -> None:
+    """
+    Scalp de Bollinger: FUNIL do estocastico de CONTEXTO (6 min).
+
+    Corrige o erro de 2026-09: a clausula de estocastico foi medida com o
+    %K sobre as MESMAS barras de 15s das bandas (janela de 2 min), e deu
+    1 disparo em 164 na compra / ZERO na venda -- mas isso era o
+    acoplamento geometrico dos dois indicadores na mesma janela, nao a
+    hipotese. A spec sempre falou do grafico MAIOR.
+
+    Responde UMA pergunta (disciplina 7.4): com contexto de 6 min, a
+    hipotese admite eventos suficientes para valer um pre-registro?
+    Categoria `features` -- zero trial, nenhuma regra de saida.
+    """
+    configurar(log_level)
+    import pandas as pd
+
+    from .features.pipeline import _carregar_dia, _dias_do_symbol
+    from .research import bollinger_contexto as bc
+    from .research import bollinger_replay as br
+
+    sym = symbol.strip().upper()
+    pastas = _dias_do_symbol(curated / "trade", sym)
+    if dias:
+        alvo = {d.strip() for d in dias.split(",")}
+        pastas = [p for p in pastas if p.name.split("=", 1)[1] in alvo]
+    if not pastas:
+        raise typer.BadParameter(f"nenhum pregao de {sym} em {curated / 'trade'}")
+
+    partes = []
+    for pasta in pastas:
+        dia = pasta.name.split("=", 1)[1]
+        barras = br.barras_15s_do_tape(_carregar_dia(pasta, sym), dia)
+        if not barras.empty:
+            partes.append(br.indicadores_e_sinais_do_tape(barras))
+    if not partes:
+        raise typer.BadParameter("nenhuma barra montada")
+    todas = pd.concat(partes, ignore_index=True)
+
+    linhas, _ = bc.medir_funil(todas, permitir_look_ahead, segundos)
+    typer.echo("=" * 74)
+    typer.echo(f"ESTOCASTICO DE CONTEXTO ({segundos}s) — funil — {len(pastas)} pregoes")
+    if permitir_look_ahead:
+        typer.echo("*** COM LOOK-AHEAD: numeros NAO valem para decidir nada ***")
+    typer.echo("=" * 74)
+    typer.echo(f"{'lado':8} {'candidatos':>11} {'com contexto':>13} "
+               f"{'extremo (20/80)':>18} {'direcao (50)':>16}")
+    for linha in linhas:
+        d = linha.como_dict()
+        typer.echo(f"{d['lado']:8} {d['candidatos']:>11} {d['com_contexto']:>13} "
+                   f"{d['extremo']:>18} {d['direcao']:>16}")
+    typer.echo("")
+    typer.echo("Referencia (medicao ERRADA de 2026-09, estocastico nos mesmos 15s):")
+    typer.echo("  compra 1/164 no dia, 3/238 nas manhas | venda ZERO")
+    typer.echo("")
+    typer.echo("Leitura: se o extremo continuar perto de zero, a clausula nao")
+    typer.echo("e' mensuravel nem no contexto maior. Se a direcao (50) mantiver")
+    typer.echo("volume, ela e' a versao que da' para pre-registrar.")
+
+
+@app.command()
 def bollinger_direcao(
     symbol: str = typer.Argument("WINFUT"),
     curated: Path = typer.Option(Path("data/curated"), "--curated"),

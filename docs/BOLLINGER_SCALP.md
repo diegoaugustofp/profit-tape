@@ -202,6 +202,20 @@ para um scalp de 15s) e **sem entrada nas primeiras 21 barras** do dia
 (~09:08). Diverge do gráfico só nesses 5 minutos. Aguardando
 confirmação.
 
+> **CORREÇÃO (2026-10-01): a medição abaixo estava no timeframe errado.**
+> O %K foi calculado sobre as MESMAS barras de 15s das bandas — janela de
+> 8 barras de 15s = 2 minutos. O operador apontou que a especificação
+> sempre falou do **gráfico de 6 minutos**, e o último parágrafo dela diz
+> isso explicitamente. O argumento geométrico abaixo ("o branco fecha no
+> topo da faixa, o %K não pode estar no fundo dela") é **correto para
+> dois indicadores na mesma janela** e é justamente por isso que dava
+> zero: as duas condições eram quase mutuamente exclusivas por
+> construção. Com janela de 8 barras de 6 min (48 minutos) essa
+> dependência não existe. Conclusão: "a cláusula nunca dispara" era
+> propriedade do acoplamento que criamos, **não da hipótese** — que
+> nunca foi medida. Ver `research/bollinger_contexto.py` e
+> `profit-tape bollinger-contexto`. Funil pendente de rodar.
+
 **O estocástico seca a hipótese, e é estrutural (7.6)**: entre os
 candidatos a compra, `Est(t−1)` tem mediana 72 e p5 = 41; abaixo de 20,
 1 em 164 no dia, 3 em 238 nas manhãs. Venda acima de 80: zero. Um
