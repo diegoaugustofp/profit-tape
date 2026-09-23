@@ -2928,6 +2928,91 @@ def fase2_score(
 
 
 @app.command()
+def regime_funil(
+    symbol: str = typer.Argument("WINFUT"),
+    curated: Path = typer.Option(Path("data/curated"), "--curated"),
+    dias: str | None = typer.Option(None, "--dias"),
+    quantil: float = typer.Option(0.5, "--quantil",
+                                 help="Corte. 0,5 = mediana (nao calibra nada)."),
+    log_level: str = typer.Option("WARNING", "--log-level"),
+) -> None:
+    """
+    REGIME: funil de RLP e topo do livro (tiny_book) sobre os sinais.
+
+    Responde UMA pergunta: sobra evento suficiente para valer um forward?
+    Mede os DOIS lados de cada eixo -- taxa diz se da' para MEDIR, nunca
+    qual lado esta' CERTO (a direcao vem de mecanismo declarado).
+
+    Categoria `features`: zero trial. Mas o numero que DECIDE nao pode
+    sair daqui -- estes pregoes ja' foram vistos. Isto responde "vale
+    ligar o forward?", nao "funciona?".
+    """
+    configurar(log_level)
+    import pandas as pd
+
+    from .features.pipeline import _carregar_dia, _dias_do_symbol
+    from .research import bollinger_replay as br
+    from .research import regime_rlp_book as rr
+
+    sym = symbol.strip().upper()
+    pastas = _dias_do_symbol(curated / "trade", sym)
+    if dias:
+        alvo = {d.strip() for d in dias.split(",")}
+        pastas = [p for p in pastas if p.name.split("=", 1)[1] in alvo]
+    if not pastas:
+        raise typer.BadParameter(f"nenhum pregao de {sym} em {curated / 'trade'}")
+
+    b_all, t_all, tb_all = [], [], []
+    sem_livro = []
+    for pasta in pastas:
+        dia = pasta.name.split("=", 1)[1]
+        trades = _carregar_dia(pasta, sym)
+        barras = br.barras_15s_do_tape(trades, dia)
+        if barras.empty:
+            continue
+        pasta_tb = curated / "tiny_book" / f"dt={dia}" / f"sym={sym}"
+        if not pasta_tb.exists():
+            sem_livro.append(dia)
+            continue
+        import pyarrow.dataset as ds
+        tb = ds.dataset(pasta_tb, format="parquet").to_table(
+            columns=["ts_ns", "side", "price", "quantidade"]).to_pandas()
+        b_all.append(br.indicadores_e_sinais_do_tape(barras, "rompimento"))
+        t_all.append(trades)
+        tb_all.append(tb)
+    if not b_all:
+        raise typer.BadParameter(
+            "nenhum pregao com tiny_book curado. O funil do livro precisa de "
+            f"{curated / 'tiny_book'} -- rode o curate para esse stream.")
+    barras, trades, tiny = (pd.concat(b_all, ignore_index=True),
+                            pd.concat(t_all, ignore_index=True),
+                            pd.concat(tb_all, ignore_index=True))
+
+    typer.echo("=" * 76)
+    typer.echo(f"REGIME — funil de RLP e topo do livro — {len(b_all)} pregoes")
+    if sem_livro:
+        typer.echo(f"  ({len(sem_livro)} pregoes SEM tiny_book curado, fora da conta)")
+    typer.echo("=" * 76)
+    typer.echo(f"{'eixo':6} {'lado':7} {'corte':24} {'passa':>7} {'de':>7} {'%':>7}")
+    for x in rr.medir(barras, trades, tiny, quantil):
+        typer.echo(f"{x.eixo:6} {x.lado:7} {x.corte:24} {x.passa:>7} "
+                   f"{x.com_dado:>7} {x.pct():>6.1f}%")
+    c = rr.combinado(barras, trades, tiny, quantil)
+    typer.echo("")
+    typer.echo("COMBINADO (as duas clausulas juntas):")
+    typer.echo(f"  candidatos {c['candidatos']} | com os dois dados {c['com_os_dois_dados']}")
+    for k, v in c.items():
+        if "+" in k:
+            pct = 100.0 * v / max(c["com_os_dois_dados"], 1)
+            typer.echo(f"  {k:24} {v:>6}  ({pct:4.1f}%)")
+    typer.echo("")
+    typer.echo("LEITURA: taxa diz se da' para MEDIR, nao qual lado esta' certo.")
+    typer.echo("A direcao do corte tem que vir de MECANISMO declarado antes.")
+    typer.echo("Com ~6,5 op/pregao e uma clausula de ~50%, sobram ~3,2/pregao:")
+    typer.echo("  para n=150 (placar do forward) -> ~47 pregoes (~2,2 meses).")
+
+
+@app.command()
 def bollinger_contexto(
     symbol: str = typer.Argument("WINFUT"),
     curated: Path = typer.Option(Path("data/curated"), "--curated"),

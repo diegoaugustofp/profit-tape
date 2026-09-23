@@ -3227,3 +3227,36 @@ mais provavel de amostra maior e' CONTRA, nao aprovacao.
 **Familia SUSPENSA, nao fechada.** A distincao importa: fechada =
 refutada; suspensa = o teste correto foi feito e nao decidiu, e reabrir
 exige DADO novo, nao argumento novo.
+
+### 2026-09-23 — Regime: RLP + topo do livro; funil pronto (v3.47)
+
+Operador decidiu retomar por REGIME depois das tres variantes sem
+borda, com a leitura de que "essas estrategias conseguiriam gerar
+retorno se descobrissemos onde ou em qual momento performam melhor".
+
+Discutido e registrado que isso NAO e' proibido -- a linha entre regime
+e p-hacking e' a ORDEM (declarar por mecanismo antes x fatiar o
+resultado depois), e o projeto ja' tem precedente legitimo: a restricao
+"venda apenas" do z_agf_3.
+
+**Decisoes**: 42 pregoes QUEIMADOS para esta pergunta (nos dois ja'
+vimos os resultados); 2025 NAO se toca; o teste sera' FORWARD. Eixos:
+RLP (ja' e' feature) e topo do livro via `tiny_book` -- que ja' esta'
+capturado (~1M eventos/dia) e dispensa reconstruir os 40M do book
+completo.
+
+**IV Rank verificado e descartado por ora**: o Trade Hunter nao tem
+volatilidade implicita (a tool de opcoes diz "NAO e' gamma nem
+cadeia/greeks"; da' OI e max pain). Exigiria fonte nova, e' filtro
+diario e tem mecanismo mais indireto que o book.
+
+`research/regime_rlp_book.py` + `profit-tape regime-funil`: mede a taxa
+dos DOIS lados de cada eixo e as 4 combinacoes. Corte pela MEDIANA (nao
+calibra nada). Conferido A MAO antes dos testes: RLP 30/(30+20)=0,60 e
+desequilibrio usando o ULTIMO estado do livro no balde (80/20=0,60),
+nao a media.
+
+**Limite declarado no codigo e no doc**: taxa diz se da' para MEDIR,
+nunca qual lado esta' CERTO. A direcao vem de mecanismo declarado.
+
+8 testes novos. Suite verde, ruff e mypy limpos.

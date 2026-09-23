@@ -7051,3 +7051,86 @@ As duas ausentes (`PETRU447`, `PETRU457`) sao puts profundamente fora do
 dinheiro que nao negociaram no dia do vencimento -- sem negocio, sem
 particao. Esperado. Em outubro, series sem negocio reduzem o que se pode
 dizer POR SERIE; o peso da ficha esta' no PAPEL.
+
+## REGIME: RLP e topo do livro (proposta, 2026-09-23)
+
+### Por que regime, e por que agora
+
+Leitura do operador apos as tres variantes do Bollinger sem borda:
+*"essas estrategias conseguiriam gerar retorno se descobrissemos ONDE
+ou em QUAL MOMENTO elas performam melhor"*. Regime, nao parametro.
+
+**A linha que separa isso de p-hacking** e' a ORDEM, nao o assunto:
+
+    PROIBIDO  rodar -> olhar -> cortar por horario -> achar que a manha
+              foi boa -> adotar
+    LEGITIMO  declarar o eixo por MECANISMO antes -> congelar -> medir
+              uma vez, em dado nao usado
+
+Precedente no proprio projeto: a restricao "venda apenas" do z_agf_3 foi
+exatamente um corte de regime declarado antes, com hipotese e criterio.
+
+**Os 42 pregoes estao QUEIMADOS para esta pergunta.** Operador e Claude
+ja' viram os resultados (venda pior que compra nas tres rodadas, gap
+melhor que rompimento). Qualquer corte "declarado agora" ja' estaria
+informado por isso. O funil roda neles (e' `features`, de graca), mas o
+TESTE tem que ser forward ou 2025.
+
+### Os eixos escolhidos, e por que estes
+
+Criterio: o que este projeto TEM e quase ninguem tem.
+
+**RLP** (`trade_type == 13`, ja' e' feature em `flow.py`): negocio
+internalizado, essencialmente varejo que nem chega ao livro. Uma barra
+sustentada por RLP tem composicao de fluxo diferente de uma sustentada
+por agressao institucional.
+
+**BOOK** (`tiny_book`: melhor bid/ask com quantidade, ~1M eventos/dia,
+JA' CAPTURADO): desequilibrio do topo no instante do sinal. Para
+rompimento o mecanismo e' o mais direto de todos -- romper para cima com
+o ask minguado e' diferente de romper contra uma oferta grande. Mede
+RESISTENCIA AO MOVIMENTO no instante exato, nao inferida depois.
+
+Nota: o book COMPLETO (~40M eventos/dia) continua sem feature nenhuma.
+O `tiny_book` e' o "mais simples" e dispensa reconstruir o livro.
+
+### IV Rank: verificado, descartado por ora
+
+Ideia do operador, com mecanismo plausivel (IV alta = mercado precifica
+movimento, e rompimento precisa de movimento). **Mas o Trade Hunter nao
+tem volatilidade implicita** -- `derivatives-options-walls` diz
+explicitamente "NAO e' gamma nem cadeia/greeks"; da' open interest e max
+pain. `market-stats-performance` da' vol REALIZADA (passado).
+
+Fontes possiveis: ProfitDLL (`GetTheoreticalValues`, dado novo daqui
+para frente), B3 (inversao de Black-Scholes sobre premios, ingestao
+nova), provedor pago. Alem disso e' filtro DIARIO, nao do instante.
+Pior relacao custo/beneficio dos tres. Guardado, nao descartado.
+
+### O que o funil mede -- e o que NAO decide
+
+`profit-tape regime-funil` (categoria `features`, zero trial) mede a
+taxa dos DOIS lados de cada eixo, e as quatro combinacoes.
+
+**Taxa diz se da' para MEDIR, nunca qual lado esta' CERTO.** Escolher a
+direcao pelo lado com mais eventos seria conveniencia disfarcada de
+mecanismo. A direcao tem que ser declarada por argumento.
+
+O corte e' a MEDIANA do proprio periodo por default: divide em dois sem
+escolher numero nenhum, entao a pergunta "sobra evento?" fica respondida
+sem calibrar nada -- calibrar antes do mecanismo e' a licao 0.
+
+**Custo de somar clausulas** (7.4): ja' matou um desenho neste projeto
+(326 eventos -> 62 com uma linha de contexto, 5x no calendario). Por
+isso o comando reporta as quatro combinacoes, nao so' os eixos
+isolados.
+
+### Horizonte estimado
+
+Com ~6,5 operacoes/pregao (medido) e uma clausula de ~50%, sobram ~3,2
+por pregao; para n=150 sao ~47 pregoes (~2,2 meses) -- dentro do limite
+de 6 meses da disciplina de forward. DUAS clausulas a ~50% cada levam a
+~1,6/pregao e ~94 pregoes (~4,5 meses): ainda passa, mas aperta.
+
+**PENDENTE**: rodar o funil e decidir a direcao de cada eixo POR
+MECANISMO antes de escrever a ficha de forward.
