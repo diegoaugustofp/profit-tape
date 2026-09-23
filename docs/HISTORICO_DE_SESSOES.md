@@ -3088,3 +3088,38 @@ dos testes: 86 candidatos -> 48, batendo com a contagem manual de
 intactos. 3 testes novos (12 no modulo). Suite verde.
 
 **PENDENTE**: rodar. Consome trial.
+
+### 2026-10-01 — VEREDITO: CONTRA. Familia Bollinger FECHADA (v3.43)
+
+Rodado UMA vez, como a ficha manda. 42 pregoes, 611 sinais, 320
+operacoes.
+
+    p1            0,438  IC95 (0,384; 0,492)
+    borda bruta  -26,0 pts/op  IC95 (-43,8; -8,2)
+    borda bruta  IC98,3% (-47,7; -4,3)  <- criterio da ficha (Bonferroni/3)
+    custo max suportado  -8,7 pts/contrato  (custo real: 11,0)
+
+- **Poder**: n=320 >= 60. Passa.
+- **Criterio**: limite SUPERIOR do IC98,3% = -4,3 < 0 -> **CONTRA**.
+- Em pontos: mesmo no melhor cenario que o IC admite, perde 1,4 pt por
+  contrato ANTES de custo.
+
+As tres tentativas: retorno -4,7 (null); rompimento -22,0 (negativo);
+rompimento+contexto -26,0 (negativo). **O filtro nao salvou** -- a borda
+piorou frente a versao sem filtro, ainda que dentro do ruido.
+
+Detalhe que reforca o mecanismo: `recuo = 0`. As 320 entradas foram
+todas na ABERTURA -- a limitada nunca executou por recuo, o preco ja'
+estava alem do gatilho quando a barra abriu. Entrada sistematicamente no
+pior lado, que e' o que se espera de rompimento em escala de 15s.
+
+**FAMILIA FECHADA** pela clausula de parada (8.6). Nao se testa outro
+limiar/timeframe/gatilho sobre esta amostra -- seria a 4a tentativa
+disfarcada. Reabrir exige MECANISMO novo e dado nao usado aqui.
+
+**O que fica de positivo**: a hipotese foi refutada na forma COMPLETA
+que a especificacao descreve -- banda de 15s + estocastico de contexto
+no grafico maior, com o gatilho de rompimento. Nao num recorte, nao por
+um acoplamento de indicadores que nos mesmos criamos. Se em setembro
+tivessemos parado no "a clausula nunca dispara", teriamos fechado pelo
+motivo errado -- e ficaria a duvida para sempre.

@@ -1,8 +1,10 @@
 # Scalp de Bollinger modificada (15s) — hipótese em formalização
 
-Estado (2026-09-11): **FECHADO. As duas variantes testadas (retorno e
-rompimento) são CONTRA.** Ver 5.8. Nenhum EA de scalp de Bollinger vai a
-produção com o desenho atual.
+Estado (2026-10-01): **FAMÍLIA FECHADA. As três variantes testadas são
+CONTRA** — retorno (null), rompimento (negativo) e rompimento +
+estocástico de contexto de 6 min (negativo, IC98,3% inteiro abaixo de
+zero). Ver 5.8 e 8.7/8.8. Nenhum EA de scalp de Bollinger vai a
+produção.
 
 ## 0. Ficha de seis linhas (v1, `entregue-v2.11`)
 
@@ -516,6 +518,59 @@ repetir a MESMA regra.
 
 Se der CONTRA, a família fecha definitivamente: terá sido refutada na
 forma completa que a especificação descreve, não num recorte.
+
+### 8.7 RESULTADO: CONTRA (2026-10-01)
+
+Rodado uma vez, como a ficha manda. 42 pregões, 611 sinais, **320
+operações** (7,6 por pregão).
+
+    p1                  0,438   IC95 (0,384; 0,492)   nula a custo zero = 0,50
+    borda bruta        -26,0 pts/operacao  IC95 (-43,8; -8,2)
+    borda bruta        IC98,3% (-47,7; -4,3)   <- o criterio da ficha
+    custo max suportado -8,7 pts/contrato    (custo real: 11,0)
+
+**Poder**: n = 320 ≥ 60. Passa — o resultado vale como veredito.
+
+**Critério**: o limite SUPERIOR do IC98,3% é −4,3, abaixo de zero. Pela
+tabela de 8.5: **CONTRA**.
+
+Em pontos, que é o que decide: mesmo no cenário mais otimista que o
+intervalo admite, perde-se **1,4 pt por contrato antes de qualquer
+custo**. O custo real é 11 pts/contrato.
+
+**As três tentativas da família:**
+
+| variante | p1 | borda bruta | veredito |
+|---|---|---|---|
+| retorno, sem filtro | 0,480 | −4,7 (IC cruza zero) | null |
+| rompimento, sem filtro | 0,415 | −22,0 | negativo |
+| rompimento + contexto 6 min | 0,438 | −26,0 | **negativo** |
+
+O filtro de contexto **não salvou a variante**. A borda não ficou perto
+do limiar nem faltou amostra — piorou frente à versão sem filtro (−26,0
+contra −22,0), ainda que a diferença esteja dentro do ruído.
+
+Detalhe que reforça o mecanismo: **`recuo = 0`** — as 320 entradas foram
+todas na abertura da barra. A limitada nunca executou por recuo, ou
+seja, o preço já estava além do gatilho quando a barra abriu. Entrada
+sistematicamente no pior lado do movimento, que é o que se esperaria de
+um rompimento em escala de 15 segundos.
+
+### 8.8 FAMÍLIA FECHADA
+
+Pela cláusula de parada (8.6), o assunto encerra. Não se testa outro
+limiar, outro timeframe ou outro gatilho sobre esta amostra — seria a
+4ª tentativa disfarçada.
+
+**O que fica de positivo, e não é pouco:** a hipótese foi refutada na
+forma COMPLETA que a especificação descreve — banda de 15s + estocástico
+de contexto no gráfico maior, com o gatilho de rompimento que a spec
+pede. Não num recorte, não por um acoplamento de indicadores que nós
+mesmos criamos. Se em setembro tivéssemos parado no "a cláusula nunca
+dispara", teríamos fechado pelo motivo errado.
+
+Reabrir exigiria **mecanismo novo**, não parâmetro novo — e dado que não
+foi usado aqui.
 
 ## 6. Dúvidas — fechadas em 2026-09-05, exceto as que o dump responde
 
