@@ -1,0 +1,1271 @@
+18:45:53.859 +   0.029s  python=3.14.4 plataforma=win32 modo=salvar
+18:45:53.860 +   0.030s  dll_path=C:\DLLs\Win64\ProfitDLL.dll existe=True versao=4.0.0.42
+18:45:53.860 +   0.031s  credenciais: key=34***************** user=di********************** senha=St********
+18:45:54.071 +   0.241s  chamando DLLInitializeMarketLogin...
+18:45:54.286 +   0.457s  DLLInitializeMarketLogin retornou 0 = NL_OK
+18:45:54.287 +   0.457s  esperando MARKET_DATA conectado (ate' 30.0s)...
+18:45:54.989 +   1.159s  CALLBACK state: tipo=3 (ATIVACAO) valor=0
+18:45:55.007 +   1.177s  CALLBACK state: tipo=0 (LOGIN) valor=0
+18:45:55.342 +   1.512s  CALLBACK state: tipo=2 (MARKET_DATA) valor=1
+18:45:55.380 +   1.550s  CALLBACK state: tipo=2 (MARKET_DATA) valor=2
+18:45:55.381 +   1.551s  conectado: login_ok=True market_ok=True
+18:45:56.043 +   2.213s  CALLBACK state: tipo=2 (MARKET_DATA) valor=4
+18:45:56.387 +   2.557s  modo SALVAR: WINFUT de 24/08/2026 a 15/09/2026 (17 dia(s) uteis) -> data/raw
+18:45:56.405 +   2.575s  SubscribeTicker(WINFUT,F) retornou 0 = NL_OK
+18:45:57.406 +   3.576s  --- PRIMING (descartado) GetHistoryTrades('WINFUT', 'F', '24/08/2026 09:00:00', '24/08/2026 18:35:00') ---
+18:45:57.407 +   3.578s  priming retornou 0 = NL_OK
+18:45:57.408 +   3.578s  CALLBACK progress: ticker=WINFUT progresso=0
+18:45:58.014 +   4.184s  CALLBACK progress: ticker=WINFUT progresso=87
+18:45:58.084 +   4.255s  CALLBACK progress: ticker=WINFUT progresso=88
+18:45:58.170 +   4.340s  CALLBACK progress: ticker=WINFUT progresso=89
+18:45:58.258 +   4.428s  CALLBACK progress: ticker=WINFUT progresso=90
+18:45:58.376 +   4.546s  CALLBACK progress: ticker=WINFUT progresso=91
+18:45:58.423 +   4.594s  CALLBACK progress: ticker=WINFUT progresso=92
+18:45:58.489 +   4.659s  CALLBACK progress: ticker=WINFUT progresso=93
+18:45:58.584 +   4.755s  CALLBACK progress: ticker=WINFUT progresso=94
+18:45:58.643 +   4.814s  CALLBACK progress: ticker=WINFUT progresso=95
+18:45:58.673 +   4.843s  CALLBACK progress: ticker=WINFUT progresso=96
+18:45:58.717 +   4.887s  CALLBACK progress: ticker=WINFUT progresso=97
+18:45:58.758 +   4.929s  CALLBACK progress: ticker=WINFUT progresso=98
+18:45:58.760 +   4.931s  CALLBACK progress: ticker=WINFUT progresso=99
+18:45:58.763 +   4.933s  CALLBACK progress: ticker=WINFUT progresso=99
+18:45:59.538 +   5.708s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:00.224 +   6.395s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:00.811 +   6.981s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:01.486 +   7.656s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:02.058 +   8.229s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:02.602 +   8.772s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:03.184 +   9.354s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:03.726 +   9.896s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:04.308 +  10.478s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:04.838 +  11.008s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:05.384 +  11.554s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:05.989 +  12.159s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:06.573 +  12.743s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:07.177 +  13.347s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:07.732 +  13.903s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:08.259 +  14.429s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:08.804 +  14.974s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:09.373 +  15.544s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:09.881 +  16.051s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:10.463 +  16.633s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:11.065 +  17.235s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:11.641 +  17.812s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:12.201 +  18.372s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:12.777 +  18.947s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:13.363 +  19.534s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:13.932 +  20.102s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:14.471 +  20.641s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:15.010 +  21.180s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:15.532 +  21.702s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:16.051 +  22.222s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:16.607 +  22.778s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:17.151 +  23.321s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:17.749 +  23.920s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:18.287 +  24.457s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:18.773 +  24.943s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:19.280 +  25.450s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:19.814 +  25.984s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:20.313 +  26.483s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:20.813 +  26.984s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:21.358 +  27.528s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:21.895 +  28.066s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:22.412 +  28.583s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:22.944 +  29.114s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:23.475 +  29.646s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:24.011 +  30.182s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:24.557 +  30.727s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:25.088 +  31.258s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:25.601 +  31.772s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:26.107 +  32.277s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:26.690 +  32.861s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:27.242 +  33.412s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:27.420 +  33.591s  CALLBACK progress: ticker=WINFUT progresso=99
+18:46:27.533 +  33.703s  CALLBACK history #1: ticker=WINFUT data=24/08/2026 09:00:44.997 num=10 preco=173480.0 qtd=1200 tipo=4
+18:46:27.534 +  33.704s  CALLBACK history #2: ticker=WINFUT data=24/08/2026 09:00:44.997 num=20 preco=173480.0 qtd=800 tipo=4
+18:46:27.535 +  33.705s  CALLBACK history #3: ticker=WINFUT data=24/08/2026 09:00:44.997 num=30 preco=173480.0 qtd=1200 tipo=4
+18:46:27.535 +  33.705s  CALLBACK history #4: ticker=WINFUT data=24/08/2026 09:00:44.997 num=40 preco=173480.0 qtd=200 tipo=4
+18:46:27.535 +  33.705s  CALLBACK history #5: ticker=WINFUT data=24/08/2026 09:00:44.997 num=50 preco=173480.0 qtd=300 tipo=4
+18:47:04.930 +  71.100s  CALLBACK progress: ticker=WINFUT progresso=100
+18:47:15.148 +  81.318s  priming concluido: ok
+18:47:15.148 +  81.319s  --- GetHistoryTrades('WINFUT', 'F', '24/08/2026 09:00:00', '24/08/2026 18:35:00') ---
+18:47:15.152 +  81.322s  GetHistoryTrades retornou 0 = NL_OK em 1.4 ms
+18:47:15.153 +  81.323s  CALLBACK progress: ticker=WINFUT progresso=0
+18:47:15.191 +  81.361s  CALLBACK progress: ticker=WINFUT progresso=87
+18:47:15.223 +  81.394s  CALLBACK progress: ticker=WINFUT progresso=88
+18:47:15.251 +  81.421s  CALLBACK progress: ticker=WINFUT progresso=89
+18:47:15.304 +  81.474s  CALLBACK progress: ticker=WINFUT progresso=90
+18:47:15.359 +  81.529s  CALLBACK progress: ticker=WINFUT progresso=91
+18:47:15.377 +  81.547s  CALLBACK progress: ticker=WINFUT progresso=92
+18:47:15.417 +  81.587s  CALLBACK progress: ticker=WINFUT progresso=93
+18:47:15.479 +  81.649s  CALLBACK progress: ticker=WINFUT progresso=94
+18:47:15.549 +  81.719s  CALLBACK progress: ticker=WINFUT progresso=95
+18:47:15.576 +  81.747s  CALLBACK progress: ticker=WINFUT progresso=96
+18:47:15.618 +  81.789s  CALLBACK progress: ticker=WINFUT progresso=97
+18:47:15.646 +  81.816s  CALLBACK progress: ticker=WINFUT progresso=98
+18:47:15.649 +  81.819s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:15.653 +  81.823s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:16.099 +  82.269s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:16.626 +  82.796s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:17.118 +  83.288s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:17.599 +  83.770s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:17.982 +  84.152s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:18.457 +  84.628s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:19.070 +  85.240s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:19.832 +  86.002s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:21.031 +  87.202s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:23.126 +  89.296s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:23.683 +  89.853s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:24.140 +  90.310s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:24.597 +  90.767s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:25.349 +  91.519s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:26.175 +  92.345s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:27.034 +  93.204s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:27.847 +  94.018s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:28.613 +  94.783s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:29.201 +  95.372s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:29.662 +  95.832s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:30.112 +  96.283s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:30.559 +  96.729s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:30.970 +  97.141s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:31.386 +  97.557s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:31.780 +  97.950s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:32.195 +  98.366s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:32.608 +  98.778s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:33.012 +  99.182s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:33.487 +  99.657s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:33.938 + 100.109s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:34.458 + 100.628s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:34.897 + 101.068s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:35.278 + 101.448s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:35.715 + 101.886s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:36.209 + 102.379s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:36.638 + 102.809s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:37.039 + 103.209s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:37.549 + 103.720s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:37.936 + 104.106s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:38.350 + 104.521s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:38.795 + 104.965s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:39.168 + 105.338s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:39.614 + 105.784s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:39.993 + 106.163s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:40.377 + 106.548s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:40.774 + 106.945s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:41.192 + 107.363s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:41.616 + 107.786s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:42.086 + 108.257s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:42.509 + 108.679s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:42.892 + 109.062s  CALLBACK progress: ticker=WINFUT progresso=99
+18:47:43.037 + 109.208s  CALLBACK progress: ticker=WINFUT progresso=99
+18:48:27.879 + 154.050s  CALLBACK progress: ticker=WINFUT progresso=100
+18:48:38.098 + 164.269s  RESULTADO 24/08/2026: negocios=5346168 terminou_por=ok
+18:48:58.120 + 184.290s  salvo: data\raw\trade\dt=2026-08-24\sym=WINFUT\part-0000.parquet (5346168 negocios)
+18:48:58.494 + 184.664s  dia 24/08/2026 -> data\raw\trade\dt=2026-08-24\sym=WINFUT\part-0000.parquet
+18:48:58.494 + 184.664s  --- GetHistoryTrades('WINFUT', 'F', '25/08/2026 09:00:00', '25/08/2026 18:35:00') ---
+18:48:58.792 + 184.963s  GetHistoryTrades retornou 0 = NL_OK em 0.5 ms
+18:48:58.793 + 184.963s  CALLBACK progress: ticker=WINFUT progresso=0
+18:48:58.834 + 185.005s  CALLBACK progress: ticker=WINFUT progresso=91
+18:48:58.936 + 185.106s  CALLBACK progress: ticker=WINFUT progresso=92
+18:48:59.036 + 185.206s  CALLBACK progress: ticker=WINFUT progresso=93
+18:48:59.232 + 185.403s  CALLBACK progress: ticker=WINFUT progresso=94
+18:48:59.336 + 185.506s  CALLBACK progress: ticker=WINFUT progresso=95
+18:48:59.437 + 185.607s  CALLBACK progress: ticker=WINFUT progresso=96
+18:48:59.586 + 185.756s  CALLBACK progress: ticker=WINFUT progresso=97
+18:48:59.629 + 185.799s  CALLBACK progress: ticker=WINFUT progresso=98
+18:48:59.634 + 185.804s  CALLBACK progress: ticker=WINFUT progresso=99
+18:48:59.637 + 185.807s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:00.086 + 186.256s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:00.525 + 186.695s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:00.929 + 187.100s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:01.341 + 187.511s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:01.788 + 187.959s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:02.186 + 188.356s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:02.826 + 188.996s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:03.340 + 189.510s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:03.765 + 189.935s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:04.187 + 190.358s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:04.733 + 190.904s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:05.161 + 191.331s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:05.563 + 191.734s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:05.994 + 192.164s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:06.410 + 192.581s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:06.893 + 193.063s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:07.291 + 193.461s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:07.696 + 193.866s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:08.135 + 194.305s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:08.599 + 194.769s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:09.128 + 195.298s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:09.741 + 195.911s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:10.219 + 196.390s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:10.748 + 196.918s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:11.253 + 197.423s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:11.805 + 197.975s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:12.310 + 198.480s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:12.908 + 199.079s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:13.443 + 199.613s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:13.966 + 200.136s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:14.590 + 200.760s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:15.084 + 201.254s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:15.533 + 201.704s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:15.989 + 202.159s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:16.449 + 202.619s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:16.988 + 203.158s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:17.512 + 203.682s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:18.059 + 204.230s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:18.582 + 204.753s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:19.061 + 205.231s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:19.569 + 205.740s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:20.074 + 206.245s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:20.500 + 206.670s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:20.912 + 207.083s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:21.314 + 207.485s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:21.762 + 207.932s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:22.168 + 208.338s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:22.564 + 208.734s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:22.964 + 209.134s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:23.345 + 209.515s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:23.779 + 209.949s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:24.164 + 210.334s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:24.674 + 210.844s  CALLBACK progress: ticker=WINFUT progresso=99
+18:49:24.798 + 210.969s  CALLBACK progress: ticker=WINFUT progresso=99
+18:50:10.461 + 256.631s  CALLBACK progress: ticker=WINFUT progresso=100
+18:50:20.679 + 266.849s  RESULTADO 25/08/2026: negocios=5542718 terminou_por=ok
+18:50:39.810 + 285.981s  salvo: data\raw\trade\dt=2026-08-25\sym=WINFUT\part-0000.parquet (5542718 negocios)
+18:50:40.279 + 286.449s  dia 25/08/2026 -> data\raw\trade\dt=2026-08-25\sym=WINFUT\part-0000.parquet
+18:50:40.279 + 286.449s  --- GetHistoryTrades('WINFUT', 'F', '26/08/2026 09:00:00', '26/08/2026 18:35:00') ---
+18:50:40.590 + 286.760s  GetHistoryTrades retornou 0 = NL_OK em 0.3 ms
+18:50:40.590 + 286.760s  CALLBACK progress: ticker=WINFUT progresso=0
+18:50:40.663 + 286.833s  CALLBACK progress: ticker=WINFUT progresso=90
+18:50:40.771 + 286.941s  CALLBACK progress: ticker=WINFUT progresso=91
+18:50:40.831 + 287.001s  CALLBACK progress: ticker=WINFUT progresso=92
+18:50:40.872 + 287.043s  CALLBACK progress: ticker=WINFUT progresso=93
+18:50:40.912 + 287.083s  CALLBACK progress: ticker=WINFUT progresso=94
+18:50:40.980 + 287.150s  CALLBACK progress: ticker=WINFUT progresso=95
+18:50:41.063 + 287.233s  CALLBACK progress: ticker=WINFUT progresso=96
+18:50:41.108 + 287.278s  CALLBACK progress: ticker=WINFUT progresso=97
+18:50:41.141 + 287.311s  CALLBACK progress: ticker=WINFUT progresso=98
+18:50:41.166 + 287.337s  CALLBACK progress: ticker=WINFUT progresso=99
+18:50:41.172 + 287.342s  CALLBACK progress: ticker=WINFUT progresso=99
+18:50:41.703 + 287.873s  CALLBACK progress: ticker=WINFUT progresso=99
+18:50:42.191 + 288.361s  CALLBACK progress: ticker=WINFUT progresso=99
+18:50:42.657 + 288.827s  CALLBACK progress: ticker=WINFUT progresso=99
+18:50:43.074 + 289.244s  CALLBACK progress: ticker=WINFUT progresso=99
+18:50:43.520 + 289.691s  CALLBACK progress: ticker=WINFUT progresso=99
+18:50:43.959 + 290.129s  CALLBACK progress: ticker=WINFUT progresso=99
+18:50:44.548 + 290.719s  CALLBACK progress: ticker=WINFUT progresso=99
+18:50:44.967 + 291.137s  CALLBACK progress: ticker=WINFUT progresso=99
+18:50:45.462 + 291.632s  CALLBACK progress: ticker=WINFUT progresso=99
+18:50:45.952 + 292.122s  CALLBACK progress: ticker=WINFUT progresso=99
+18:50:46.485 + 292.655s  CALLBACK progress: ticker=WINFUT progresso=99
+18:50:47.245 + 293.415s  CALLBACK progress: ticker=WINFUT progresso=99
+18:50:47.944 + 294.114s  CALLBACK progress: ticker=WINFUT progresso=99
+18:50:48.592 + 294.762s  CALLBACK progress: ticker=WINFUT progresso=99
+18:50:49.173 + 295.343s  CALLBACK progress: ticker=WINFUT progresso=99
+18:50:49.759 + 295.930s  CALLBACK progress: ticker=WINFUT progresso=99
+18:50:50.824 + 296.994s  CALLBACK progress: ticker=WINFUT progresso=99
+18:50:51.860 + 298.030s  CALLBACK progress: ticker=WINFUT progresso=99
+18:50:52.849 + 299.019s  CALLBACK progress: ticker=WINFUT progresso=99
+18:50:54.012 + 300.183s  CALLBACK progress: ticker=WINFUT progresso=99
+18:50:54.653 + 300.823s  CALLBACK progress: ticker=WINFUT progresso=99
+18:50:55.223 + 301.393s  CALLBACK progress: ticker=WINFUT progresso=99
+18:50:55.965 + 302.136s  CALLBACK progress: ticker=WINFUT progresso=99
+18:50:56.585 + 302.755s  CALLBACK progress: ticker=WINFUT progresso=99
+18:50:57.184 + 303.354s  CALLBACK progress: ticker=WINFUT progresso=99
+18:50:57.732 + 303.902s  CALLBACK progress: ticker=WINFUT progresso=99
+18:50:58.274 + 304.445s  CALLBACK progress: ticker=WINFUT progresso=99
+18:50:58.796 + 304.966s  CALLBACK progress: ticker=WINFUT progresso=99
+18:50:59.495 + 305.666s  CALLBACK progress: ticker=WINFUT progresso=99
+18:51:00.043 + 306.214s  CALLBACK progress: ticker=WINFUT progresso=99
+18:51:00.475 + 306.645s  CALLBACK progress: ticker=WINFUT progresso=99
+18:51:00.893 + 307.063s  CALLBACK progress: ticker=WINFUT progresso=99
+18:51:01.300 + 307.470s  CALLBACK progress: ticker=WINFUT progresso=99
+18:51:01.697 + 307.867s  CALLBACK progress: ticker=WINFUT progresso=99
+18:51:04.387 + 310.558s  CALLBACK progress: ticker=WINFUT progresso=99
+18:51:11.759 + 317.929s  CALLBACK progress: ticker=WINFUT progresso=99
+18:51:12.283 + 318.453s  CALLBACK progress: ticker=WINFUT progresso=99
+18:51:12.819 + 318.989s  CALLBACK progress: ticker=WINFUT progresso=99
+18:51:13.388 + 319.558s  CALLBACK progress: ticker=WINFUT progresso=99
+18:51:13.943 + 320.113s  CALLBACK progress: ticker=WINFUT progresso=99
+18:51:14.433 + 320.603s  CALLBACK progress: ticker=WINFUT progresso=99
+18:51:15.013 + 321.183s  CALLBACK progress: ticker=WINFUT progresso=99
+18:51:15.515 + 321.686s  CALLBACK progress: ticker=WINFUT progresso=99
+18:51:16.137 + 322.308s  CALLBACK progress: ticker=WINFUT progresso=99
+18:51:16.805 + 322.975s  CALLBACK progress: ticker=WINFUT progresso=99
+18:51:17.551 + 323.721s  CALLBACK progress: ticker=WINFUT progresso=99
+18:51:18.237 + 324.407s  CALLBACK progress: ticker=WINFUT progresso=99
+18:51:18.889 + 325.060s  CALLBACK progress: ticker=WINFUT progresso=99
+18:52:15.555 + 381.725s  CALLBACK progress: ticker=WINFUT progresso=100
+18:52:25.769 + 391.939s  RESULTADO 26/08/2026: negocios=5008994 terminou_por=ok
+18:52:44.892 + 411.062s  salvo: data\raw\trade\dt=2026-08-26\sym=WINFUT\part-0000.parquet (5008994 negocios)
+18:52:45.339 + 411.510s  dia 26/08/2026 -> data\raw\trade\dt=2026-08-26\sym=WINFUT\part-0000.parquet
+18:52:45.340 + 411.510s  --- GetHistoryTrades('WINFUT', 'F', '27/08/2026 09:00:00', '27/08/2026 18:35:00') ---
+18:52:45.691 + 411.861s  GetHistoryTrades retornou 0 = NL_OK em 0.6 ms
+18:52:45.691 + 411.862s  CALLBACK progress: ticker=WINFUT progresso=0
+18:52:45.743 + 411.914s  CALLBACK progress: ticker=WINFUT progresso=87
+18:52:46.007 + 412.178s  CALLBACK progress: ticker=WINFUT progresso=88
+18:52:46.022 + 412.193s  CALLBACK progress: ticker=WINFUT progresso=89
+18:52:46.030 + 412.200s  CALLBACK progress: ticker=WINFUT progresso=90
+18:52:46.035 + 412.205s  CALLBACK progress: ticker=WINFUT progresso=91
+18:52:46.038 + 412.208s  CALLBACK progress: ticker=WINFUT progresso=92
+18:52:46.047 + 412.217s  CALLBACK progress: ticker=WINFUT progresso=93
+18:52:46.110 + 412.280s  CALLBACK progress: ticker=WINFUT progresso=94
+18:52:46.241 + 412.411s  CALLBACK progress: ticker=WINFUT progresso=95
+18:52:46.319 + 412.489s  CALLBACK progress: ticker=WINFUT progresso=96
+18:52:46.401 + 412.571s  CALLBACK progress: ticker=WINFUT progresso=97
+18:52:46.441 + 412.612s  CALLBACK progress: ticker=WINFUT progresso=98
+18:52:46.443 + 412.613s  CALLBACK progress: ticker=WINFUT progresso=99
+18:52:46.444 + 412.615s  CALLBACK progress: ticker=WINFUT progresso=99
+18:52:47.002 + 413.172s  CALLBACK progress: ticker=WINFUT progresso=99
+18:52:47.594 + 413.764s  CALLBACK progress: ticker=WINFUT progresso=99
+18:52:48.148 + 414.318s  CALLBACK progress: ticker=WINFUT progresso=99
+18:52:48.712 + 414.882s  CALLBACK progress: ticker=WINFUT progresso=99
+18:52:49.299 + 415.469s  CALLBACK progress: ticker=WINFUT progresso=99
+18:52:49.915 + 416.085s  CALLBACK progress: ticker=WINFUT progresso=99
+18:52:50.557 + 416.727s  CALLBACK progress: ticker=WINFUT progresso=99
+18:52:51.046 + 417.216s  CALLBACK progress: ticker=WINFUT progresso=99
+18:52:51.494 + 417.664s  CALLBACK progress: ticker=WINFUT progresso=99
+18:52:51.931 + 418.101s  CALLBACK progress: ticker=WINFUT progresso=99
+18:52:52.393 + 418.564s  CALLBACK progress: ticker=WINFUT progresso=99
+18:52:52.962 + 419.133s  CALLBACK progress: ticker=WINFUT progresso=99
+18:52:53.509 + 419.679s  CALLBACK progress: ticker=WINFUT progresso=99
+18:52:54.028 + 420.198s  CALLBACK progress: ticker=WINFUT progresso=99
+18:52:54.534 + 420.704s  CALLBACK progress: ticker=WINFUT progresso=99
+18:52:55.039 + 421.210s  CALLBACK progress: ticker=WINFUT progresso=99
+18:52:55.551 + 421.721s  CALLBACK progress: ticker=WINFUT progresso=99
+18:52:56.094 + 422.264s  CALLBACK progress: ticker=WINFUT progresso=99
+18:52:56.608 + 422.779s  CALLBACK progress: ticker=WINFUT progresso=99
+18:52:57.111 + 423.282s  CALLBACK progress: ticker=WINFUT progresso=99
+18:52:57.671 + 423.842s  CALLBACK progress: ticker=WINFUT progresso=99
+18:52:58.195 + 424.365s  CALLBACK progress: ticker=WINFUT progresso=99
+18:52:58.709 + 424.880s  CALLBACK progress: ticker=WINFUT progresso=99
+18:52:59.234 + 425.405s  CALLBACK progress: ticker=WINFUT progresso=99
+18:52:59.731 + 425.901s  CALLBACK progress: ticker=WINFUT progresso=99
+18:53:00.226 + 426.396s  CALLBACK progress: ticker=WINFUT progresso=99
+18:53:00.735 + 426.906s  CALLBACK progress: ticker=WINFUT progresso=99
+18:53:01.226 + 427.396s  CALLBACK progress: ticker=WINFUT progresso=99
+18:53:01.788 + 427.958s  CALLBACK progress: ticker=WINFUT progresso=99
+18:53:02.330 + 428.500s  CALLBACK progress: ticker=WINFUT progresso=99
+18:53:02.876 + 429.046s  CALLBACK progress: ticker=WINFUT progresso=99
+18:53:03.393 + 429.563s  CALLBACK progress: ticker=WINFUT progresso=99
+18:53:03.944 + 430.114s  CALLBACK progress: ticker=WINFUT progresso=99
+18:53:04.509 + 430.679s  CALLBACK progress: ticker=WINFUT progresso=99
+18:53:05.048 + 431.219s  CALLBACK progress: ticker=WINFUT progresso=99
+18:53:05.556 + 431.726s  CALLBACK progress: ticker=WINFUT progresso=99
+18:53:06.131 + 432.301s  CALLBACK progress: ticker=WINFUT progresso=99
+18:53:06.631 + 432.801s  CALLBACK progress: ticker=WINFUT progresso=99
+18:53:07.268 + 433.439s  CALLBACK progress: ticker=WINFUT progresso=99
+18:53:07.826 + 433.996s  CALLBACK progress: ticker=WINFUT progresso=99
+18:53:08.474 + 434.644s  CALLBACK progress: ticker=WINFUT progresso=99
+18:53:09.071 + 435.242s  CALLBACK progress: ticker=WINFUT progresso=99
+18:53:10.064 + 436.234s  CALLBACK progress: ticker=WINFUT progresso=99
+18:53:10.685 + 436.855s  CALLBACK progress: ticker=WINFUT progresso=99
+18:53:11.340 + 437.510s  CALLBACK progress: ticker=WINFUT progresso=99
+18:53:11.964 + 438.134s  CALLBACK progress: ticker=WINFUT progresso=99
+18:53:12.518 + 438.688s  CALLBACK progress: ticker=WINFUT progresso=99
+18:53:12.708 + 438.878s  CALLBACK progress: ticker=WINFUT progresso=99
+18:53:55.395 + 481.565s  CALLBACK progress: ticker=WINFUT progresso=100
+18:54:05.612 + 491.782s  RESULTADO 27/08/2026: negocios=4942038 terminou_por=ok
+18:54:23.084 + 509.254s  salvo: data\raw\trade\dt=2026-08-27\sym=WINFUT\part-0000.parquet (4942038 negocios)
+18:54:23.521 + 509.692s  dia 27/08/2026 -> data\raw\trade\dt=2026-08-27\sym=WINFUT\part-0000.parquet
+18:54:23.522 + 509.692s  --- GetHistoryTrades('WINFUT', 'F', '28/08/2026 09:00:00', '28/08/2026 18:35:00') ---
+18:54:23.854 + 510.024s  GetHistoryTrades retornou 0 = NL_OK em 0.4 ms
+18:54:23.854 + 510.024s  CALLBACK progress: ticker=WINFUT progresso=0
+18:54:23.910 + 510.080s  CALLBACK progress: ticker=WINFUT progresso=90
+18:54:24.166 + 510.336s  CALLBACK progress: ticker=WINFUT progresso=91
+18:54:24.437 + 510.607s  CALLBACK progress: ticker=WINFUT progresso=92
+18:54:24.519 + 510.689s  CALLBACK progress: ticker=WINFUT progresso=93
+18:54:24.593 + 510.763s  CALLBACK progress: ticker=WINFUT progresso=94
+18:54:24.665 + 510.835s  CALLBACK progress: ticker=WINFUT progresso=95
+18:54:24.755 + 510.925s  CALLBACK progress: ticker=WINFUT progresso=96
+18:54:24.819 + 510.989s  CALLBACK progress: ticker=WINFUT progresso=97
+18:54:24.836 + 511.006s  CALLBACK progress: ticker=WINFUT progresso=98
+18:54:24.839 + 511.009s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:24.843 + 511.013s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:25.400 + 511.570s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:26.000 + 512.170s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:26.731 + 512.901s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:27.365 + 513.536s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:27.935 + 514.106s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:28.619 + 514.789s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:29.007 + 515.178s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:29.529 + 515.700s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:30.039 + 516.209s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:30.540 + 516.711s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:30.999 + 517.170s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:31.468 + 517.639s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:31.892 + 518.062s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:32.309 + 518.480s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:32.770 + 518.940s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:33.167 + 519.337s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:33.612 + 519.782s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:34.056 + 520.226s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:34.517 + 520.687s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:34.954 + 521.125s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:35.391 + 521.562s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:35.801 + 521.971s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:36.216 + 522.387s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:36.657 + 522.827s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:37.042 + 523.213s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:37.440 + 523.610s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:37.852 + 524.022s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:38.267 + 524.437s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:38.690 + 524.860s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:39.079 + 525.250s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:39.725 + 525.895s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:40.130 + 526.300s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:40.695 + 526.865s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:41.099 + 527.269s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:41.541 + 527.711s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:41.951 + 528.122s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:42.358 + 528.528s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:42.773 + 528.944s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:43.155 + 529.325s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:43.550 + 529.720s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:43.950 + 530.120s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:44.336 + 530.506s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:44.749 + 530.919s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:45.171 + 531.341s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:45.593 + 531.763s  CALLBACK progress: ticker=WINFUT progresso=99
+18:54:45.690 + 531.860s  CALLBACK progress: ticker=WINFUT progresso=99
+18:55:25.587 + 571.757s  CALLBACK progress: ticker=WINFUT progresso=100
+18:55:35.808 + 581.978s  RESULTADO 28/08/2026: negocios=4725036 terminou_por=ok
+18:55:52.120 + 598.290s  salvo: data\raw\trade\dt=2026-08-28\sym=WINFUT\part-0000.parquet (4725036 negocios)
+18:55:52.500 + 598.670s  dia 28/08/2026 -> data\raw\trade\dt=2026-08-28\sym=WINFUT\part-0000.parquet
+18:55:52.500 + 598.670s  --- GetHistoryTrades('WINFUT', 'F', '31/08/2026 09:00:00', '31/08/2026 18:35:00') ---
+18:55:52.829 + 598.999s  GetHistoryTrades retornou 0 = NL_OK em 0.4 ms
+18:55:52.830 + 599.000s  CALLBACK progress: ticker=WINFUT progresso=0
+18:55:52.910 + 599.080s  CALLBACK progress: ticker=WINFUT progresso=89
+18:55:52.932 + 599.102s  CALLBACK progress: ticker=WINFUT progresso=90
+18:55:52.993 + 599.163s  CALLBACK progress: ticker=WINFUT progresso=91
+18:55:53.032 + 599.203s  CALLBACK progress: ticker=WINFUT progresso=92
+18:55:53.065 + 599.235s  CALLBACK progress: ticker=WINFUT progresso=93
+18:55:53.101 + 599.271s  CALLBACK progress: ticker=WINFUT progresso=94
+18:55:53.210 + 599.381s  CALLBACK progress: ticker=WINFUT progresso=95
+18:55:53.312 + 599.482s  CALLBACK progress: ticker=WINFUT progresso=96
+18:55:53.383 + 599.553s  CALLBACK progress: ticker=WINFUT progresso=97
+18:55:53.437 + 599.608s  CALLBACK progress: ticker=WINFUT progresso=98
+18:55:53.440 + 599.611s  CALLBACK progress: ticker=WINFUT progresso=99
+18:55:53.444 + 599.614s  CALLBACK progress: ticker=WINFUT progresso=99
+18:55:54.116 + 600.287s  CALLBACK progress: ticker=WINFUT progresso=99
+18:55:54.736 + 600.907s  CALLBACK progress: ticker=WINFUT progresso=99
+18:55:55.382 + 601.552s  CALLBACK progress: ticker=WINFUT progresso=99
+18:55:55.951 + 602.121s  CALLBACK progress: ticker=WINFUT progresso=99
+18:55:56.811 + 602.982s  CALLBACK progress: ticker=WINFUT progresso=99
+18:55:57.463 + 603.634s  CALLBACK progress: ticker=WINFUT progresso=99
+18:55:58.013 + 604.184s  CALLBACK progress: ticker=WINFUT progresso=99
+18:55:58.562 + 604.733s  CALLBACK progress: ticker=WINFUT progresso=99
+18:55:59.098 + 605.268s  CALLBACK progress: ticker=WINFUT progresso=99
+18:55:59.612 + 605.782s  CALLBACK progress: ticker=WINFUT progresso=99
+18:56:00.204 + 606.375s  CALLBACK progress: ticker=WINFUT progresso=99
+18:56:00.757 + 606.928s  CALLBACK progress: ticker=WINFUT progresso=99
+18:56:01.259 + 607.429s  CALLBACK progress: ticker=WINFUT progresso=99
+18:56:01.805 + 607.975s  CALLBACK progress: ticker=WINFUT progresso=99
+18:56:02.302 + 608.472s  CALLBACK progress: ticker=WINFUT progresso=99
+18:56:02.837 + 609.007s  CALLBACK progress: ticker=WINFUT progresso=99
+18:56:03.388 + 609.558s  CALLBACK progress: ticker=WINFUT progresso=99
+18:56:03.997 + 610.167s  CALLBACK progress: ticker=WINFUT progresso=99
+18:56:04.676 + 610.847s  CALLBACK progress: ticker=WINFUT progresso=99
+18:56:05.319 + 611.489s  CALLBACK progress: ticker=WINFUT progresso=99
+18:56:05.990 + 612.161s  CALLBACK progress: ticker=WINFUT progresso=99
+18:56:06.619 + 612.790s  CALLBACK progress: ticker=WINFUT progresso=99
+18:56:07.340 + 613.510s  CALLBACK progress: ticker=WINFUT progresso=99
+18:56:07.994 + 614.164s  CALLBACK progress: ticker=WINFUT progresso=99
+18:56:08.605 + 614.775s  CALLBACK progress: ticker=WINFUT progresso=99
+18:56:09.222 + 615.393s  CALLBACK progress: ticker=WINFUT progresso=99
+18:56:09.835 + 616.005s  CALLBACK progress: ticker=WINFUT progresso=99
+18:56:10.472 + 616.643s  CALLBACK progress: ticker=WINFUT progresso=99
+18:56:11.248 + 617.418s  CALLBACK progress: ticker=WINFUT progresso=99
+18:56:11.887 + 618.057s  CALLBACK progress: ticker=WINFUT progresso=99
+18:56:12.479 + 618.649s  CALLBACK progress: ticker=WINFUT progresso=99
+18:56:13.032 + 619.202s  CALLBACK progress: ticker=WINFUT progresso=99
+18:56:13.434 + 619.604s  CALLBACK progress: ticker=WINFUT progresso=99
+18:56:13.852 + 620.023s  CALLBACK progress: ticker=WINFUT progresso=99
+18:56:14.372 + 620.542s  CALLBACK progress: ticker=WINFUT progresso=99
+18:56:14.818 + 620.988s  CALLBACK progress: ticker=WINFUT progresso=99
+18:56:15.202 + 621.372s  CALLBACK progress: ticker=WINFUT progresso=99
+18:56:15.773 + 621.943s  CALLBACK progress: ticker=WINFUT progresso=99
+18:56:16.311 + 622.481s  CALLBACK progress: ticker=WINFUT progresso=99
+18:56:16.769 + 622.939s  CALLBACK progress: ticker=WINFUT progresso=99
+18:56:17.137 + 623.307s  CALLBACK progress: ticker=WINFUT progresso=99
+18:56:17.594 + 623.764s  CALLBACK progress: ticker=WINFUT progresso=99
+18:56:18.147 + 624.317s  CALLBACK progress: ticker=WINFUT progresso=99
+18:56:18.618 + 624.788s  CALLBACK progress: ticker=WINFUT progresso=99
+18:56:19.073 + 625.243s  CALLBACK progress: ticker=WINFUT progresso=99
+18:56:19.494 + 625.664s  CALLBACK progress: ticker=WINFUT progresso=99
+18:56:20.040 + 626.210s  CALLBACK progress: ticker=WINFUT progresso=99
+18:56:20.444 + 626.614s  CALLBACK progress: ticker=WINFUT progresso=99
+18:56:20.568 + 626.738s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:02.259 + 668.429s  CALLBACK progress: ticker=WINFUT progresso=100
+18:57:12.478 + 678.648s  RESULTADO 31/08/2026: negocios=5020544 terminou_por=ok
+18:57:30.216 + 696.386s  salvo: data\raw\trade\dt=2026-08-31\sym=WINFUT\part-0000.parquet (5020544 negocios)
+18:57:30.661 + 696.832s  dia 31/08/2026 -> data\raw\trade\dt=2026-08-31\sym=WINFUT\part-0000.parquet
+18:57:30.662 + 696.832s  --- GetHistoryTrades('WINFUT', 'F', '01/09/2026 09:00:00', '01/09/2026 18:35:00') ---
+18:57:31.128 + 697.298s  GetHistoryTrades retornou 0 = NL_OK em 0.3 ms
+18:57:31.128 + 697.298s  CALLBACK progress: ticker=WINFUT progresso=0
+18:57:31.344 + 697.514s  CALLBACK progress: ticker=WINFUT progresso=90
+18:57:31.621 + 697.792s  CALLBACK progress: ticker=WINFUT progresso=91
+18:57:31.682 + 697.852s  CALLBACK progress: ticker=WINFUT progresso=92
+18:57:31.712 + 697.882s  CALLBACK progress: ticker=WINFUT progresso=93
+18:57:32.511 + 698.681s  CALLBACK progress: ticker=WINFUT progresso=94
+18:57:32.571 + 698.741s  CALLBACK progress: ticker=WINFUT progresso=95
+18:57:32.704 + 698.874s  CALLBACK progress: ticker=WINFUT progresso=96
+18:57:32.746 + 698.916s  CALLBACK progress: ticker=WINFUT progresso=97
+18:57:32.779 + 698.949s  CALLBACK progress: ticker=WINFUT progresso=98
+18:57:32.786 + 698.956s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:32.789 + 698.959s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:33.277 + 699.447s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:33.727 + 699.898s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:34.224 + 700.394s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:34.672 + 700.843s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:35.766 + 701.936s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:36.401 + 702.571s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:36.875 + 703.045s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:37.284 + 703.454s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:37.728 + 703.899s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:38.366 + 704.536s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:38.896 + 705.066s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:39.449 + 705.619s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:39.909 + 706.079s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:40.496 + 706.667s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:41.045 + 707.215s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:41.543 + 707.713s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:41.988 + 708.158s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:42.430 + 708.600s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:42.867 + 709.037s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:43.275 + 709.446s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:43.725 + 709.895s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:44.141 + 710.311s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:44.567 + 710.737s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:45.008 + 711.178s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:45.790 + 711.961s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:46.505 + 712.675s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:46.954 + 713.125s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:47.381 + 713.551s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:47.867 + 714.037s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:48.319 + 714.489s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:48.820 + 714.990s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:49.280 + 715.450s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:50.002 + 716.173s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:50.688 + 716.858s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:51.275 + 717.445s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:51.864 + 718.034s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:52.393 + 718.563s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:52.903 + 719.073s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:53.351 + 719.521s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:53.873 + 720.043s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:54.373 + 720.544s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:55.115 + 721.285s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:55.576 + 721.746s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:56.251 + 722.421s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:56.709 + 722.880s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:57.119 + 723.289s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:57.517 + 723.687s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:57.928 + 724.098s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:58.318 + 724.488s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:58.726 + 724.896s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:59.151 + 725.322s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:59.563 + 725.733s  CALLBACK progress: ticker=WINFUT progresso=99
+18:57:59.982 + 726.153s  CALLBACK progress: ticker=WINFUT progresso=99
+18:58:00.408 + 726.578s  CALLBACK progress: ticker=WINFUT progresso=99
+18:58:00.835 + 727.005s  CALLBACK progress: ticker=WINFUT progresso=99
+18:58:01.058 + 727.228s  CALLBACK progress: ticker=WINFUT progresso=99
+18:58:49.404 + 775.574s  CALLBACK progress: ticker=WINFUT progresso=100
+18:58:59.623 + 785.794s  RESULTADO 01/09/2026: negocios=5781016 terminou_por=ok
+18:59:19.739 + 805.909s  salvo: data\raw\trade\dt=2026-09-01\sym=WINFUT\part-0000.parquet (5781016 negocios)
+18:59:20.215 + 806.386s  dia 01/09/2026 -> data\raw\trade\dt=2026-09-01\sym=WINFUT\part-0000.parquet
+18:59:20.216 + 806.386s  --- GetHistoryTrades('WINFUT', 'F', '02/09/2026 09:00:00', '02/09/2026 18:35:00') ---
+18:59:20.616 + 806.787s  GetHistoryTrades retornou 0 = NL_OK em 0.8 ms
+18:59:20.617 + 806.787s  CALLBACK progress: ticker=WINFUT progresso=0
+18:59:20.659 + 806.830s  CALLBACK progress: ticker=WINFUT progresso=88
+18:59:20.693 + 806.863s  CALLBACK progress: ticker=WINFUT progresso=89
+18:59:20.743 + 806.913s  CALLBACK progress: ticker=WINFUT progresso=90
+18:59:20.795 + 806.966s  CALLBACK progress: ticker=WINFUT progresso=91
+18:59:20.846 + 807.016s  CALLBACK progress: ticker=WINFUT progresso=92
+18:59:20.865 + 807.035s  CALLBACK progress: ticker=WINFUT progresso=93
+18:59:20.899 + 807.069s  CALLBACK progress: ticker=WINFUT progresso=94
+18:59:20.946 + 807.116s  CALLBACK progress: ticker=WINFUT progresso=95
+18:59:20.994 + 807.164s  CALLBACK progress: ticker=WINFUT progresso=96
+18:59:21.047 + 807.218s  CALLBACK progress: ticker=WINFUT progresso=97
+18:59:21.081 + 807.252s  CALLBACK progress: ticker=WINFUT progresso=98
+18:59:21.084 + 807.255s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:21.088 + 807.258s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:21.591 + 807.762s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:22.024 + 808.194s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:22.429 + 808.599s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:22.849 + 809.019s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:23.259 + 809.429s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:23.849 + 810.019s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:24.337 + 810.508s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:24.878 + 811.049s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:25.302 + 811.472s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:25.776 + 811.946s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:26.211 + 812.381s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:26.658 + 812.829s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:27.063 + 813.234s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:27.481 + 813.651s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:27.920 + 814.090s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:28.389 + 814.560s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:28.836 + 815.007s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:29.283 + 815.453s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:29.705 + 815.875s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:30.206 + 816.376s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:30.865 + 817.035s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:31.319 + 817.489s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:31.754 + 817.925s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:32.211 + 818.381s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:32.633 + 818.803s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:33.142 + 819.313s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:33.648 + 819.818s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:34.162 + 820.332s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:34.701 + 820.871s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:35.201 + 821.372s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:35.792 + 821.962s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:36.558 + 822.728s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:37.280 + 823.451s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:37.992 + 824.162s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:38.567 + 824.737s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:39.141 + 825.312s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:39.820 + 825.990s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:40.679 + 826.849s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:41.285 + 827.455s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:41.762 + 827.933s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:42.270 + 828.440s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:42.834 + 829.004s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:43.493 + 829.664s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:43.921 + 830.091s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:44.329 + 830.499s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:44.759 + 830.929s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:45.173 + 831.343s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:45.613 + 831.783s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:46.068 + 832.238s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:46.594 + 832.764s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:47.390 + 833.560s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:47.797 + 833.967s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:48.212 + 834.383s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:48.635 + 834.805s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:49.030 + 835.201s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:49.476 + 835.646s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:49.881 + 836.051s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:50.270 + 836.440s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:50.674 + 836.844s  CALLBACK progress: ticker=WINFUT progresso=99
+18:59:50.755 + 836.926s  CALLBACK progress: ticker=WINFUT progresso=99
+19:00:42.321 + 888.491s  CALLBACK progress: ticker=WINFUT progresso=100
+19:00:52.541 + 898.711s  RESULTADO 02/09/2026: negocios=6148231 terminou_por=ok
+19:01:13.606 + 919.776s  salvo: data\raw\trade\dt=2026-09-02\sym=WINFUT\part-0000.parquet (6148231 negocios)
+19:01:14.064 + 920.234s  dia 02/09/2026 -> data\raw\trade\dt=2026-09-02\sym=WINFUT\part-0000.parquet
+19:01:14.064 + 920.235s  --- GetHistoryTrades('WINFUT', 'F', '03/09/2026 09:00:00', '03/09/2026 18:35:00') ---
+19:01:14.436 + 920.607s  GetHistoryTrades retornou 0 = NL_OK em 0.3 ms
+19:01:14.437 + 920.607s  CALLBACK progress: ticker=WINFUT progresso=0
+19:01:14.490 + 920.660s  CALLBACK progress: ticker=WINFUT progresso=89
+19:01:14.535 + 920.705s  CALLBACK progress: ticker=WINFUT progresso=90
+19:01:14.607 + 920.777s  CALLBACK progress: ticker=WINFUT progresso=91
+19:01:14.662 + 920.832s  CALLBACK progress: ticker=WINFUT progresso=92
+19:01:14.711 + 920.882s  CALLBACK progress: ticker=WINFUT progresso=93
+19:01:14.807 + 920.977s  CALLBACK progress: ticker=WINFUT progresso=94
+19:01:14.861 + 921.031s  CALLBACK progress: ticker=WINFUT progresso=95
+19:01:14.927 + 921.097s  CALLBACK progress: ticker=WINFUT progresso=96
+19:01:14.982 + 921.152s  CALLBACK progress: ticker=WINFUT progresso=97
+19:01:15.007 + 921.177s  CALLBACK progress: ticker=WINFUT progresso=98
+19:01:15.012 + 921.182s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:15.016 + 921.186s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:15.721 + 921.891s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:16.186 + 922.356s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:16.666 + 922.837s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:17.082 + 923.252s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:17.503 + 923.673s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:17.936 + 924.106s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:18.345 + 924.515s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:18.771 + 924.942s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:19.187 + 925.357s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:19.669 + 925.840s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:20.078 + 926.249s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:20.538 + 926.708s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:20.970 + 927.140s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:21.391 + 927.562s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:21.866 + 928.036s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:22.274 + 928.444s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:22.743 + 928.913s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:23.158 + 929.328s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:23.602 + 929.773s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:24.051 + 930.221s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:24.485 + 930.655s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:24.888 + 931.058s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:25.336 + 931.506s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:25.825 + 931.995s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:26.291 + 932.461s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:26.729 + 932.899s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:27.150 + 933.320s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:27.566 + 933.737s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:28.060 + 934.230s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:28.462 + 934.632s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:28.881 + 935.051s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:29.331 + 935.501s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:29.763 + 935.933s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:30.215 + 936.385s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:30.657 + 936.827s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:31.096 + 937.267s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:31.566 + 937.737s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:32.029 + 938.199s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:32.456 + 938.626s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:32.907 + 939.077s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:33.304 + 939.475s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:33.746 + 939.916s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:34.183 + 940.353s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:34.615 + 940.786s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:35.100 + 941.270s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:35.534 + 941.704s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:36.132 + 942.302s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:36.545 + 942.715s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:36.988 + 943.159s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:37.467 + 943.637s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:37.987 + 944.157s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:38.396 + 944.566s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:38.824 + 944.994s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:39.273 + 945.444s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:39.733 + 945.903s  CALLBACK progress: ticker=WINFUT progresso=99
+19:01:40.097 + 946.268s  CALLBACK progress: ticker=WINFUT progresso=99
+19:02:27.846 + 994.016s  CALLBACK progress: ticker=WINFUT progresso=100
+19:02:38.063 +1004.234s  RESULTADO 03/09/2026: negocios=5821205 terminou_por=ok
+19:02:58.871 +1025.042s  salvo: data\raw\trade\dt=2026-09-03\sym=WINFUT\part-0000.parquet (5821205 negocios)
+19:02:59.332 +1025.502s  dia 03/09/2026 -> data\raw\trade\dt=2026-09-03\sym=WINFUT\part-0000.parquet
+19:02:59.332 +1025.502s  --- GetHistoryTrades('WINFUT', 'F', '04/09/2026 09:00:00', '04/09/2026 18:35:00') ---
+19:02:59.719 +1025.889s  GetHistoryTrades retornou 0 = NL_OK em 0.4 ms
+19:02:59.719 +1025.889s  CALLBACK progress: ticker=WINFUT progresso=0
+19:02:59.784 +1025.954s  CALLBACK progress: ticker=WINFUT progresso=89
+19:02:59.805 +1025.976s  CALLBACK progress: ticker=WINFUT progresso=90
+19:02:59.881 +1026.051s  CALLBACK progress: ticker=WINFUT progresso=91
+19:02:59.967 +1026.137s  CALLBACK progress: ticker=WINFUT progresso=92
+19:03:00.026 +1026.196s  CALLBACK progress: ticker=WINFUT progresso=93
+19:03:00.084 +1026.254s  CALLBACK progress: ticker=WINFUT progresso=94
+19:03:00.134 +1026.304s  CALLBACK progress: ticker=WINFUT progresso=95
+19:03:00.304 +1026.474s  CALLBACK progress: ticker=WINFUT progresso=96
+19:03:00.357 +1026.528s  CALLBACK progress: ticker=WINFUT progresso=97
+19:03:00.388 +1026.559s  CALLBACK progress: ticker=WINFUT progresso=98
+19:03:00.402 +1026.572s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:00.406 +1026.576s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:01.014 +1027.184s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:01.607 +1027.777s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:02.092 +1028.263s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:02.504 +1028.674s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:02.917 +1029.087s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:03.349 +1029.520s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:03.782 +1029.952s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:04.212 +1030.382s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:04.649 +1030.819s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:05.117 +1031.287s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:05.527 +1031.697s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:06.171 +1032.341s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:06.806 +1032.976s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:07.528 +1033.698s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:08.143 +1034.314s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:08.702 +1034.872s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:09.211 +1035.381s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:09.613 +1035.784s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:10.010 +1036.180s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:10.409 +1036.579s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:10.817 +1036.987s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:11.237 +1037.407s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:11.647 +1037.817s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:12.042 +1038.213s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:12.429 +1038.599s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:12.830 +1039.000s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:13.228 +1039.399s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:13.634 +1039.804s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:14.040 +1040.211s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:14.485 +1040.655s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:14.868 +1041.038s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:15.284 +1041.454s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:15.690 +1041.860s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:16.103 +1042.273s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:16.538 +1042.709s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:16.934 +1043.104s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:17.403 +1043.573s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:17.830 +1044.000s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:18.277 +1044.447s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:18.653 +1044.823s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:19.070 +1045.240s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:19.450 +1045.621s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:19.897 +1046.068s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:20.355 +1046.525s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:20.769 +1046.939s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:21.196 +1047.366s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:21.601 +1047.771s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:22.074 +1048.244s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:22.504 +1048.674s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:22.921 +1049.091s  CALLBACK progress: ticker=WINFUT progresso=99
+19:03:23.197 +1049.368s  CALLBACK progress: ticker=WINFUT progresso=99
+19:04:06.519 +1092.689s  CALLBACK progress: ticker=WINFUT progresso=100
+19:04:16.739 +1102.910s  RESULTADO 04/09/2026: negocios=5287536 terminou_por=ok
+19:04:35.842 +1122.012s  salvo: data\raw\trade\dt=2026-09-04\sym=WINFUT\part-0000.parquet (5287536 negocios)
+19:04:36.233 +1122.403s  dia 04/09/2026 -> data\raw\trade\dt=2026-09-04\sym=WINFUT\part-0000.parquet
+19:04:36.234 +1122.404s  --- GetHistoryTrades('WINFUT', 'F', '07/09/2026 09:00:00', '07/09/2026 18:35:00') ---
+19:04:36.611 +1122.782s  GetHistoryTrades retornou 0 = NL_OK em 0.4 ms
+19:04:36.612 +1122.782s  CALLBACK progress: ticker=WINFUT progresso=0
+19:04:36.655 +1122.825s  CALLBACK progress: ticker=WINFUT progresso=100
+19:04:46.871 +1133.041s  RESULTADO 07/09/2026: negocios=0 terminou_por=sem_negocios
+19:04:46.871 +1133.041s  AVISO: 07/09/2026 sem nenhum negocio -- particao NAO criada (feriado? fora da janela de 30 dias? servidor sem o dia?)
+19:04:46.874 +1133.044s  --- GetHistoryTrades('WINFUT', 'F', '08/09/2026 09:00:00', '08/09/2026 18:35:00') ---
+19:04:46.875 +1133.045s  GetHistoryTrades retornou 0 = NL_OK em 1.2 ms
+19:04:46.876 +1133.046s  CALLBACK progress: ticker=WINFUT progresso=0
+19:04:46.917 +1133.087s  CALLBACK progress: ticker=WINFUT progresso=88
+19:04:46.972 +1133.142s  CALLBACK progress: ticker=WINFUT progresso=89
+19:04:47.004 +1133.174s  CALLBACK progress: ticker=WINFUT progresso=90
+19:04:47.061 +1133.231s  CALLBACK progress: ticker=WINFUT progresso=91
+19:04:47.092 +1133.262s  CALLBACK progress: ticker=WINFUT progresso=92
+19:04:47.112 +1133.283s  CALLBACK progress: ticker=WINFUT progresso=93
+19:04:47.154 +1133.324s  CALLBACK progress: ticker=WINFUT progresso=94
+19:04:47.206 +1133.376s  CALLBACK progress: ticker=WINFUT progresso=95
+19:04:47.264 +1133.434s  CALLBACK progress: ticker=WINFUT progresso=96
+19:04:47.295 +1133.465s  CALLBACK progress: ticker=WINFUT progresso=97
+19:04:47.309 +1133.479s  CALLBACK progress: ticker=WINFUT progresso=98
+19:04:47.311 +1133.481s  CALLBACK progress: ticker=WINFUT progresso=99
+19:04:47.313 +1133.484s  CALLBACK progress: ticker=WINFUT progresso=99
+19:04:47.726 +1133.896s  CALLBACK progress: ticker=WINFUT progresso=99
+19:04:48.132 +1134.302s  CALLBACK progress: ticker=WINFUT progresso=99
+19:04:48.529 +1134.699s  CALLBACK progress: ticker=WINFUT progresso=99
+19:04:48.969 +1135.140s  CALLBACK progress: ticker=WINFUT progresso=99
+19:04:49.374 +1135.544s  CALLBACK progress: ticker=WINFUT progresso=99
+19:04:49.813 +1135.983s  CALLBACK progress: ticker=WINFUT progresso=99
+19:04:50.325 +1136.495s  CALLBACK progress: ticker=WINFUT progresso=99
+19:04:50.716 +1136.886s  CALLBACK progress: ticker=WINFUT progresso=99
+19:04:51.132 +1137.302s  CALLBACK progress: ticker=WINFUT progresso=99
+19:04:51.582 +1137.753s  CALLBACK progress: ticker=WINFUT progresso=99
+19:04:51.978 +1138.148s  CALLBACK progress: ticker=WINFUT progresso=99
+19:04:52.386 +1138.556s  CALLBACK progress: ticker=WINFUT progresso=99
+19:04:52.817 +1138.987s  CALLBACK progress: ticker=WINFUT progresso=99
+19:04:53.217 +1139.387s  CALLBACK progress: ticker=WINFUT progresso=99
+19:04:53.622 +1139.792s  CALLBACK progress: ticker=WINFUT progresso=99
+19:04:54.077 +1140.247s  CALLBACK progress: ticker=WINFUT progresso=99
+19:04:54.508 +1140.678s  CALLBACK progress: ticker=WINFUT progresso=99
+19:04:54.941 +1141.111s  CALLBACK progress: ticker=WINFUT progresso=99
+19:04:55.350 +1141.520s  CALLBACK progress: ticker=WINFUT progresso=99
+19:04:55.755 +1141.926s  CALLBACK progress: ticker=WINFUT progresso=99
+19:04:56.228 +1142.399s  CALLBACK progress: ticker=WINFUT progresso=99
+19:04:56.700 +1142.871s  CALLBACK progress: ticker=WINFUT progresso=99
+19:04:57.109 +1143.279s  CALLBACK progress: ticker=WINFUT progresso=99
+19:04:57.558 +1143.728s  CALLBACK progress: ticker=WINFUT progresso=99
+19:04:57.963 +1144.133s  CALLBACK progress: ticker=WINFUT progresso=99
+19:04:58.364 +1144.534s  CALLBACK progress: ticker=WINFUT progresso=99
+19:04:58.797 +1144.967s  CALLBACK progress: ticker=WINFUT progresso=99
+19:04:59.187 +1145.357s  CALLBACK progress: ticker=WINFUT progresso=99
+19:04:59.572 +1145.742s  CALLBACK progress: ticker=WINFUT progresso=99
+19:05:00.037 +1146.207s  CALLBACK progress: ticker=WINFUT progresso=99
+19:05:00.411 +1146.581s  CALLBACK progress: ticker=WINFUT progresso=99
+19:05:00.811 +1146.982s  CALLBACK progress: ticker=WINFUT progresso=99
+19:05:01.233 +1147.403s  CALLBACK progress: ticker=WINFUT progresso=99
+19:05:01.616 +1147.786s  CALLBACK progress: ticker=WINFUT progresso=99
+19:05:02.084 +1148.254s  CALLBACK progress: ticker=WINFUT progresso=99
+19:05:02.470 +1148.641s  CALLBACK progress: ticker=WINFUT progresso=99
+19:05:02.880 +1149.050s  CALLBACK progress: ticker=WINFUT progresso=99
+19:05:03.305 +1149.476s  CALLBACK progress: ticker=WINFUT progresso=99
+19:05:03.761 +1149.931s  CALLBACK progress: ticker=WINFUT progresso=99
+19:05:04.154 +1150.324s  CALLBACK progress: ticker=WINFUT progresso=99
+19:05:04.530 +1150.701s  CALLBACK progress: ticker=WINFUT progresso=99
+19:05:04.965 +1151.135s  CALLBACK progress: ticker=WINFUT progresso=99
+19:05:05.376 +1151.546s  CALLBACK progress: ticker=WINFUT progresso=99
+19:05:05.767 +1151.938s  CALLBACK progress: ticker=WINFUT progresso=99
+19:05:06.160 +1152.330s  CALLBACK progress: ticker=WINFUT progresso=99
+19:05:06.583 +1152.753s  CALLBACK progress: ticker=WINFUT progresso=99
+19:05:07.037 +1153.207s  CALLBACK progress: ticker=WINFUT progresso=99
+19:05:07.411 +1153.581s  CALLBACK progress: ticker=WINFUT progresso=99
+19:05:07.815 +1153.985s  CALLBACK progress: ticker=WINFUT progresso=99
+19:05:08.261 +1154.431s  CALLBACK progress: ticker=WINFUT progresso=99
+19:05:08.695 +1154.865s  CALLBACK progress: ticker=WINFUT progresso=99
+19:05:09.105 +1155.276s  CALLBACK progress: ticker=WINFUT progresso=99
+19:05:09.544 +1155.714s  CALLBACK progress: ticker=WINFUT progresso=99
+19:05:09.983 +1156.153s  CALLBACK progress: ticker=WINFUT progresso=99
+19:05:10.448 +1156.619s  CALLBACK progress: ticker=WINFUT progresso=99
+19:05:10.893 +1157.063s  CALLBACK progress: ticker=WINFUT progresso=99
+19:05:11.322 +1157.492s  CALLBACK progress: ticker=WINFUT progresso=99
+19:05:57.271 +1203.442s  CALLBACK progress: ticker=WINFUT progresso=100
+19:06:07.491 +1213.661s  RESULTADO 08/09/2026: negocios=5919322 terminou_por=ok
+19:06:27.519 +1233.690s  salvo: data\raw\trade\dt=2026-09-08\sym=WINFUT\part-0000.parquet (5919322 negocios)
+19:06:27.989 +1234.160s  dia 08/09/2026 -> data\raw\trade\dt=2026-09-08\sym=WINFUT\part-0000.parquet
+19:06:27.990 +1234.160s  --- GetHistoryTrades('WINFUT', 'F', '09/09/2026 09:00:00', '09/09/2026 18:35:00') ---
+19:06:28.378 +1234.548s  GetHistoryTrades retornou 0 = NL_OK em 0.4 ms
+19:06:28.379 +1234.549s  CALLBACK progress: ticker=WINFUT progresso=0
+19:06:28.445 +1234.615s  CALLBACK progress: ticker=WINFUT progresso=91
+19:06:28.517 +1234.687s  CALLBACK progress: ticker=WINFUT progresso=92
+19:06:28.569 +1234.739s  CALLBACK progress: ticker=WINFUT progresso=93
+19:06:28.669 +1234.839s  CALLBACK progress: ticker=WINFUT progresso=94
+19:06:28.808 +1234.979s  CALLBACK progress: ticker=WINFUT progresso=95
+19:06:28.921 +1235.091s  CALLBACK progress: ticker=WINFUT progresso=96
+19:06:28.992 +1235.163s  CALLBACK progress: ticker=WINFUT progresso=97
+19:06:29.019 +1235.190s  CALLBACK progress: ticker=WINFUT progresso=98
+19:06:29.022 +1235.192s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:29.023 +1235.194s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:29.792 +1235.962s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:30.609 +1236.779s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:31.394 +1237.565s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:31.979 +1238.149s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:32.635 +1238.805s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:33.404 +1239.575s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:34.022 +1240.192s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:34.596 +1240.766s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:35.116 +1241.286s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:35.657 +1241.827s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:36.200 +1242.370s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:36.748 +1242.918s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:37.284 +1243.455s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:37.755 +1243.925s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:38.276 +1244.446s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:38.782 +1244.952s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:39.202 +1245.372s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:39.616 +1245.786s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:40.053 +1246.223s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:40.475 +1246.645s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:40.898 +1247.068s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:41.337 +1247.508s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:41.786 +1247.956s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:42.234 +1248.404s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:42.640 +1248.810s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:43.133 +1249.304s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:43.631 +1249.801s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:44.118 +1250.288s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:44.534 +1250.704s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:44.988 +1251.159s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:45.404 +1251.574s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:45.868 +1252.038s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:46.265 +1252.435s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:46.655 +1252.825s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:47.070 +1253.240s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:47.481 +1253.651s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:47.908 +1254.078s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:48.283 +1254.453s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:48.818 +1254.988s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:49.213 +1255.383s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:49.603 +1255.773s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:50.078 +1256.249s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:50.502 +1256.672s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:50.924 +1257.094s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:51.351 +1257.522s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:51.738 +1257.908s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:52.164 +1258.335s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:52.565 +1258.735s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:52.986 +1259.156s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:53.381 +1259.551s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:53.780 +1259.950s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:54.219 +1260.389s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:54.616 +1260.786s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:55.009 +1261.179s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:55.431 +1261.601s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:55.831 +1262.001s  CALLBACK progress: ticker=WINFUT progresso=99
+19:06:55.901 +1262.071s  CALLBACK progress: ticker=WINFUT progresso=99
+19:07:43.879 +1310.049s  CALLBACK progress: ticker=WINFUT progresso=100
+19:07:54.098 +1320.268s  RESULTADO 09/09/2026: negocios=5842599 terminou_por=ok
+19:08:16.864 +1343.035s  salvo: data\raw\trade\dt=2026-09-09\sym=WINFUT\part-0000.parquet (5842599 negocios)
+19:08:17.346 +1343.517s  dia 09/09/2026 -> data\raw\trade\dt=2026-09-09\sym=WINFUT\part-0000.parquet
+19:08:17.347 +1343.517s  --- GetHistoryTrades('WINFUT', 'F', '10/09/2026 09:00:00', '10/09/2026 18:35:00') ---
+19:08:17.785 +1343.955s  GetHistoryTrades retornou 0 = NL_OK em 0.6 ms
+19:08:17.785 +1343.955s  CALLBACK progress: ticker=WINFUT progresso=0
+19:08:17.955 +1344.125s  CALLBACK progress: ticker=WINFUT progresso=88
+19:08:17.980 +1344.151s  CALLBACK progress: ticker=WINFUT progresso=89
+19:08:17.992 +1344.162s  CALLBACK progress: ticker=WINFUT progresso=90
+19:08:18.001 +1344.171s  CALLBACK progress: ticker=WINFUT progresso=91
+19:08:18.007 +1344.177s  CALLBACK progress: ticker=WINFUT progresso=92
+19:08:18.061 +1344.231s  CALLBACK progress: ticker=WINFUT progresso=93
+19:08:18.084 +1344.254s  CALLBACK progress: ticker=WINFUT progresso=94
+19:08:18.134 +1344.305s  CALLBACK progress: ticker=WINFUT progresso=95
+19:08:18.177 +1344.347s  CALLBACK progress: ticker=WINFUT progresso=96
+19:08:18.258 +1344.428s  CALLBACK progress: ticker=WINFUT progresso=97
+19:08:18.278 +1344.448s  CALLBACK progress: ticker=WINFUT progresso=98
+19:08:18.279 +1344.450s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:18.284 +1344.454s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:18.760 +1344.930s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:19.192 +1345.362s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:19.587 +1345.757s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:20.028 +1346.198s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:20.428 +1346.598s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:20.876 +1347.046s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:21.291 +1347.461s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:21.705 +1347.875s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:22.103 +1348.273s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:22.525 +1348.695s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:22.959 +1349.129s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:23.376 +1349.547s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:23.801 +1349.971s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:24.210 +1350.381s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:24.656 +1350.827s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:25.083 +1351.253s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:25.720 +1351.891s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:26.295 +1352.465s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:26.848 +1353.019s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:27.401 +1353.571s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:27.936 +1354.106s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:28.478 +1354.648s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:29.057 +1355.227s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:29.630 +1355.800s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:30.183 +1356.354s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:30.665 +1356.835s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:31.060 +1357.230s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:31.553 +1357.723s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:31.983 +1358.153s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:32.374 +1358.545s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:32.788 +1358.958s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:33.205 +1359.375s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:33.595 +1359.766s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:34.027 +1360.197s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:34.429 +1360.599s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:34.823 +1360.993s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:35.264 +1361.435s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:35.674 +1361.844s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:36.083 +1362.253s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:36.597 +1362.767s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:36.990 +1363.161s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:37.422 +1363.592s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:37.807 +1363.978s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:38.201 +1364.371s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:38.599 +1364.770s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:39.015 +1365.186s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:39.434 +1365.605s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:39.846 +1366.017s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:40.273 +1366.444s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:40.661 +1366.831s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:41.070 +1367.240s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:41.479 +1367.649s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:41.888 +1368.058s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:42.296 +1368.466s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:42.696 +1368.866s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:43.110 +1369.281s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:43.540 +1369.710s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:43.969 +1370.139s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:44.404 +1370.575s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:44.798 +1370.968s  CALLBACK progress: ticker=WINFUT progresso=99
+19:08:44.895 +1371.065s  CALLBACK progress: ticker=WINFUT progresso=99
+19:09:35.796 +1421.966s  CALLBACK progress: ticker=WINFUT progresso=100
+19:09:46.015 +1432.185s  RESULTADO 10/09/2026: negocios=6262194 terminou_por=ok
+19:10:08.758 +1454.928s  salvo: data\raw\trade\dt=2026-09-10\sym=WINFUT\part-0000.parquet (6262194 negocios)
+19:10:09.241 +1455.411s  dia 10/09/2026 -> data\raw\trade\dt=2026-09-10\sym=WINFUT\part-0000.parquet
+19:10:09.242 +1455.412s  --- GetHistoryTrades('WINFUT', 'F', '11/09/2026 09:00:00', '11/09/2026 18:35:00') ---
+19:10:09.694 +1455.864s  GetHistoryTrades retornou 0 = NL_OK em 0.4 ms
+19:10:09.694 +1455.865s  CALLBACK progress: ticker=WINFUT progresso=0
+19:10:09.810 +1455.981s  CALLBACK progress: ticker=WINFUT progresso=90
+19:10:09.820 +1455.991s  CALLBACK progress: ticker=WINFUT progresso=91
+19:10:09.860 +1456.030s  CALLBACK progress: ticker=WINFUT progresso=92
+19:10:09.883 +1456.053s  CALLBACK progress: ticker=WINFUT progresso=93
+19:10:09.977 +1456.148s  CALLBACK progress: ticker=WINFUT progresso=94
+19:10:10.041 +1456.211s  CALLBACK progress: ticker=WINFUT progresso=95
+19:10:10.080 +1456.251s  CALLBACK progress: ticker=WINFUT progresso=96
+19:10:10.471 +1456.641s  CALLBACK progress: ticker=WINFUT progresso=97
+19:10:10.476 +1456.646s  CALLBACK progress: ticker=WINFUT progresso=98
+19:10:10.477 +1456.647s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:10.478 +1456.648s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:10.926 +1457.096s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:11.355 +1457.526s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:11.760 +1457.930s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:12.218 +1458.388s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:12.651 +1458.821s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:13.165 +1459.336s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:13.778 +1459.948s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:14.469 +1460.639s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:15.089 +1461.260s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:15.718 +1461.888s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:16.241 +1462.411s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:16.824 +1462.994s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:17.436 +1463.607s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:17.973 +1464.143s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:18.501 +1464.672s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:19.089 +1465.260s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:19.538 +1465.708s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:20.005 +1466.175s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:20.470 +1466.640s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:20.890 +1467.061s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:21.408 +1467.578s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:21.805 +1467.975s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:22.336 +1468.506s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:23.082 +1469.252s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:23.707 +1469.877s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:24.313 +1470.483s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:24.892 +1471.062s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:25.424 +1471.594s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:26.147 +1472.317s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:26.757 +1472.927s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:27.330 +1473.500s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:28.032 +1474.202s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:28.652 +1474.822s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:29.193 +1475.363s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:29.681 +1475.851s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:30.263 +1476.434s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:30.852 +1477.022s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:31.376 +1477.547s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:31.914 +1478.084s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:32.404 +1478.574s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:32.924 +1479.095s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:33.476 +1479.646s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:33.966 +1480.136s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:34.617 +1480.787s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:35.448 +1481.619s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:36.004 +1482.175s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:36.519 +1482.690s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:37.098 +1483.269s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:37.527 +1483.697s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:37.936 +1484.106s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:38.347 +1484.517s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:38.817 +1484.987s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:39.246 +1485.416s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:39.671 +1485.841s  CALLBACK progress: ticker=WINFUT progresso=99
+19:10:39.938 +1486.108s  CALLBACK progress: ticker=WINFUT progresso=99
+19:11:26.186 +1532.368s  CALLBACK progress: ticker=WINFUT progresso=100
+19:11:36.416 +1542.586s  RESULTADO 11/09/2026: negocios=5687907 terminou_por=ok
+19:11:57.362 +1563.533s  salvo: data\raw\trade\dt=2026-09-11\sym=WINFUT\part-0000.parquet (5687907 negocios)
+19:11:57.926 +1564.096s  dia 11/09/2026 -> data\raw\trade\dt=2026-09-11\sym=WINFUT\part-0000.parquet
+19:11:57.926 +1564.109s  --- GetHistoryTrades('WINFUT', 'F', '14/09/2026 09:00:00', '14/09/2026 18:35:00') ---
+19:11:58.379 +1564.549s  GetHistoryTrades retornou 0 = NL_OK em 0.5 ms
+19:11:58.379 +1564.549s  CALLBACK progress: ticker=WINFUT progresso=0
+19:11:58.422 +1564.593s  CALLBACK progress: ticker=WINFUT progresso=90
+19:11:58.505 +1564.676s  CALLBACK progress: ticker=WINFUT progresso=91
+19:11:58.572 +1564.743s  CALLBACK progress: ticker=WINFUT progresso=92
+19:11:58.618 +1564.789s  CALLBACK progress: ticker=WINFUT progresso=93
+19:11:58.687 +1564.858s  CALLBACK progress: ticker=WINFUT progresso=94
+19:11:58.809 +1564.979s  CALLBACK progress: ticker=WINFUT progresso=95
+19:11:58.897 +1565.067s  CALLBACK progress: ticker=WINFUT progresso=96
+19:11:58.944 +1565.125s  CALLBACK progress: ticker=WINFUT progresso=97
+19:11:58.965 +1565.136s  CALLBACK progress: ticker=WINFUT progresso=98
+19:11:58.976 +1565.147s  CALLBACK progress: ticker=WINFUT progresso=99
+19:11:58.978 +1565.149s  CALLBACK progress: ticker=WINFUT progresso=99
+19:11:59.653 +1565.823s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:00.183 +1566.354s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:00.770 +1566.940s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:01.234 +1567.404s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:01.760 +1567.930s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:02.252 +1568.423s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:02.721 +1568.891s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:03.130 +1569.300s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:03.558 +1569.729s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:03.993 +1570.163s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:04.546 +1570.716s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:04.964 +1571.134s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:05.408 +1571.579s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:05.825 +1571.995s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:06.333 +1572.503s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:06.777 +1572.947s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:07.186 +1573.357s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:07.586 +1573.756s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:08.010 +1574.180s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:08.510 +1574.680s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:08.932 +1575.103s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:09.375 +1575.546s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:09.764 +1575.935s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:10.188 +1576.358s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:10.632 +1576.802s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:11.150 +1577.320s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:11.584 +1577.754s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:12.067 +1578.237s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:12.636 +1578.806s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:13.053 +1579.223s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:13.473 +1579.644s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:13.918 +1580.088s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:14.390 +1580.560s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:14.841 +1581.012s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:15.294 +1581.464s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:15.727 +1581.897s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:16.348 +1582.519s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:16.900 +1583.071s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:17.311 +1583.481s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:17.764 +1583.935s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:18.170 +1584.341s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:18.653 +1584.823s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:19.084 +1585.254s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:19.536 +1585.706s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:19.963 +1586.133s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:20.463 +1586.633s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:20.889 +1587.060s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:21.299 +1587.469s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:21.688 +1587.858s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:22.118 +1588.288s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:22.683 +1588.853s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:23.113 +1589.284s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:23.492 +1589.663s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:23.879 +1590.050s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:24.469 +1590.640s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:24.928 +1591.098s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:25.370 +1591.540s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:25.803 +1591.974s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:26.273 +1592.443s  CALLBACK progress: ticker=WINFUT progresso=99
+19:12:26.478 +1592.648s  CALLBACK progress: ticker=WINFUT progresso=99
+19:13:22.531 +1648.701s  CALLBACK progress: ticker=WINFUT progresso=100
+19:13:32.750 +1658.920s  RESULTADO 14/09/2026: negocios=6159521 terminou_por=ok
+19:13:54.665 +1680.836s  salvo: data\raw\trade\dt=2026-09-14\sym=WINFUT\part-0000.parquet (6159521 negocios)
+19:13:55.196 +1681.366s  dia 14/09/2026 -> data\raw\trade\dt=2026-09-14\sym=WINFUT\part-0000.parquet
+19:13:55.197 +1681.367s  --- GetHistoryTrades('WINFUT', 'F', '15/09/2026 09:00:00', '15/09/2026 18:35:00') ---
+19:13:55.700 +1681.870s  GetHistoryTrades retornou 0 = NL_OK em 0.3 ms
+19:13:55.700 +1681.870s  CALLBACK progress: ticker=WINFUT progresso=0
+19:13:55.771 +1681.942s  CALLBACK progress: ticker=WINFUT progresso=89
+19:13:55.962 +1682.132s  CALLBACK progress: ticker=WINFUT progresso=90
+19:13:55.982 +1682.152s  CALLBACK progress: ticker=WINFUT progresso=91
+19:13:55.992 +1682.163s  CALLBACK progress: ticker=WINFUT progresso=92
+19:13:56.088 +1682.258s  CALLBACK progress: ticker=WINFUT progresso=93
+19:13:56.171 +1682.341s  CALLBACK progress: ticker=WINFUT progresso=94
+19:13:56.776 +1682.947s  CALLBACK progress: ticker=WINFUT progresso=95
+19:13:56.794 +1682.964s  CALLBACK progress: ticker=WINFUT progresso=96
+19:13:56.812 +1682.982s  CALLBACK progress: ticker=WINFUT progresso=97
+19:13:56.819 +1682.989s  CALLBACK progress: ticker=WINFUT progresso=98
+19:13:56.820 +1682.990s  CALLBACK progress: ticker=WINFUT progresso=99
+19:13:56.826 +1682.996s  CALLBACK progress: ticker=WINFUT progresso=99
+19:13:57.831 +1684.001s  CALLBACK progress: ticker=WINFUT progresso=99
+19:13:58.614 +1684.784s  CALLBACK progress: ticker=WINFUT progresso=99
+19:13:59.462 +1685.632s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:00.245 +1686.415s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:01.010 +1687.180s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:01.733 +1687.904s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:02.314 +1688.484s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:02.897 +1689.068s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:03.528 +1689.698s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:04.180 +1690.350s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:04.763 +1690.933s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:05.424 +1691.594s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:06.012 +1692.182s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:06.601 +1692.771s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:07.216 +1693.386s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:07.969 +1694.140s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:08.630 +1694.800s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:09.492 +1695.662s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:10.180 +1696.350s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:10.898 +1697.069s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:11.529 +1697.699s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:12.340 +1698.510s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:13.104 +1699.275s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:14.263 +1700.433s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:15.000 +1701.171s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:15.491 +1701.662s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:16.047 +1702.217s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:16.540 +1702.710s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:17.018 +1703.188s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:17.734 +1703.905s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:18.176 +1704.346s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:18.592 +1704.762s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:19.030 +1705.200s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:19.542 +1705.712s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:19.954 +1706.124s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:20.445 +1706.615s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:20.889 +1707.059s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:21.297 +1707.467s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:21.738 +1707.908s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:22.187 +1708.357s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:22.631 +1708.801s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:23.049 +1709.219s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:23.464 +1709.634s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:23.880 +1710.050s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:24.295 +1710.465s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:24.742 +1710.912s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:25.214 +1711.384s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:25.689 +1711.859s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:26.188 +1712.358s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:26.678 +1712.848s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:27.139 +1713.310s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:27.618 +1713.789s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:28.029 +1714.199s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:28.418 +1714.588s  CALLBACK progress: ticker=WINFUT progresso=99
+19:14:28.652 +1714.822s  CALLBACK progress: ticker=WINFUT progresso=99
+19:15:19.301 +1765.471s  CALLBACK progress: ticker=WINFUT progresso=100
+19:15:29.520 +1775.690s  RESULTADO 15/09/2026: negocios=5681509 terminou_por=ok
+19:15:49.572 +1795.742s  salvo: data\raw\trade\dt=2026-09-15\sym=WINFUT\part-0000.parquet (5681509 negocios)
+19:15:50.081 +1796.251s  dia 15/09/2026 -> data\raw\trade\dt=2026-09-15\sym=WINFUT\part-0000.parquet
+19:15:50.082 +1796.253s  ======================================================================
+19:15:50.086 +1796.257s  CONCLUIDO. Proximo passo: profit-tape curate --de 2026-08-24 --ate 2026-09-15 (raiz=data\raw)
+19:15:50.115 +1796.285s  CALLBACK state: tipo=0 (LOGIN) valor=1
+19:15:50.115 +1796.285s  CALLBACK state: tipo=1 (ROTEAMENTO) valor=0
+19:15:50.115 +1796.285s  CALLBACK state: tipo=2 (MARKET_DATA) valor=0
+19:15:50.115 +1796.286s  CALLBACK state: tipo=3 (ATIVACAO) valor=1
+19:15:51.946 +1798.116s  DLLFinalize retornou 0
+19:15:51.947 +1798.117s  log gravado em diagnostico_historico_20260915_184553.log

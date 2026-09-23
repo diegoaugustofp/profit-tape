@@ -70,6 +70,7 @@ class EABridge:
         # por simbolo antes de enfileirar. Agora o maximo diz de QUE negocio
         # veio.
         self._atraso_max_dia_info: dict[str, Any] = {}
+        self._edicoes_ignoradas = 0
         self._parar_evento = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -109,10 +110,20 @@ class EABridge:
                     atraso_max_dia_s=round(self._atraso_max_dia_s, 3),
                     atraso_max_dia_info=self._atraso_max_dia_info or None,
                     trades_medidos_dia=self._atraso_n_dia,
+                    edicoes_ignoradas=self._edicoes_ignoradas,
 
                     **self.atraso(), **self.ea_service._hb())
 
     def _medir_atraso(self, trade: Trade) -> None:
+        # EDICAO NAO ENTRA (2026-09-23): a B3 corrige negocios e a DLL entrega
+        # a correcao com o TIMESTAMP ORIGINAL (`is_edit`). Uma correcao que
+        # chega 8 min depois vira "atraso de 509 s" em UM negocio, enquanto os
+        # 33 mil da mesma janela ficam em 2,3 s -- foi esse o padrao de 22 e
+        # 23/09. Correcao nao atrasa sinal: o EA ja' processou o negocio
+        # original. A metrica existe para explicar atraso de SINAL.
+        if getattr(trade, "is_edit", False):
+            self._edicoes_ignoradas += 1
+            return
         ts = getattr(trade, "ts_ns", 0) or 0
         if not ts:
             return
@@ -130,6 +141,7 @@ class EABridge:
                 "ts_medido": datetime.now(tz=UTC).isoformat(),
                 "trade_id": getattr(trade, "trade_id", None),
                 "trade_type": getattr(trade, "trade_type", None),
+                "is_edit": getattr(trade, "is_edit", None),
             }
         self._atraso_n_dia += 1
         self._fila_pico = max(self._fila_pico, self._fila.qsize())

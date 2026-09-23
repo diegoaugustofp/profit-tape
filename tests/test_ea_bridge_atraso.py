@@ -36,6 +36,7 @@ class _ServicoFalso:
 class _Trade:
     def __init__(self, ts_ns: int) -> None:
         self.ts_ns = ts_ns
+        self.is_edit = False
         self.symbol = "WINFUT"
         self.price = 140000.0
         self.quantidade = 1
@@ -111,3 +112,25 @@ def test_maximo_do_dia_sobrevive_ao_reset_da_janela_com_a_procedencia() -> None:
     b._alertar_atraso()                       # zera a JANELA
     assert b.atraso()["trades_medidos"] == 0
     assert 41 < b._atraso_max_dia_s < 43 and b._atraso_max_dia_info["trade_id"] == 1
+
+
+def test_negocio_EDITADO_nao_entra_na_metrica() -> None:
+    """A B3 corrige negocios e a DLL entrega a correcao com o TIMESTAMP
+    ORIGINAL: em 22 e 23/09 isso virou 'atraso' de 5.575 s e 509 s em UM
+    negocio, com os milhares da mesma janela em 2 s. Correcao nao atrasa
+    sinal -- o EA ja' processou o original."""
+    b = EABridge(_ServicoFalso())  # type: ignore[arg-type]
+    normal = _Trade(int((time.time() - 2) * 1e9))
+    b._medir_atraso(normal)
+    edicao = _Trade(int((time.time() - 509) * 1e9))
+    edicao.is_edit = True
+    b._medir_atraso(edicao)
+    assert b._edicoes_ignoradas == 1
+    assert b._atraso_max_dia_s < 5              # a edicao NAO virou maximo
+    assert b.atraso()["trades_medidos"] == 1
+
+
+def test_procedencia_do_maximo_marca_se_era_edicao() -> None:
+    b = EABridge(_ServicoFalso())  # type: ignore[arg-type]
+    b._medir_atraso(_Trade(int((time.time() - 7) * 1e9)))
+    assert b._atraso_max_dia_info["is_edit"] is False

@@ -1,0 +1,18 @@
+20:26:07.166 +   0.036s  python=3.14.4 plataforma=win32 modo=salvar
+20:26:07.422 +   0.292s  dll_path=C:\DLLs\Win64\ProfitDLL.dll existe=True versao=4.0.0.42
+20:26:07.422 +   0.292s  credenciais: key=34***************** user=di********************** senha=St********
+20:26:07.838 +   0.708s  chamando DLLInitializeMarketLogin...
+20:26:08.017 +   0.887s  DLLInitializeMarketLogin retornou 0 = NL_OK
+20:26:08.017 +   0.887s  esperando MARKET_DATA conectado (ate' 30.0s)...
+20:26:08.883 +   1.753s  CALLBACK state: tipo=3 (ATIVACAO) valor=0
+20:26:08.885 +   1.756s  CALLBACK state: tipo=0 (LOGIN) valor=0
+20:26:09.089 +   1.959s  CALLBACK state: tipo=2 (MARKET_DATA) valor=1
+20:26:09.165 +   2.035s  CALLBACK state: tipo=2 (MARKET_DATA) valor=2
+20:26:09.165 +   2.036s  conectado: login_ok=True market_ok=True
+20:26:09.818 +   2.689s  CALLBACK state: tipo=2 (MARKET_DATA) valor=4
+20:26:10.180 +   3.050s  CALLBACK state: tipo=0 (LOGIN) valor=1
+20:26:10.180 +   3.051s  CALLBACK state: tipo=1 (ROTEAMENTO) valor=0
+20:26:10.182 +   3.052s  CALLBACK state: tipo=2 (MARKET_DATA) valor=0
+20:26:10.182 +   3.053s  CALLBACK state: tipo=3 (ATIVACAO) valor=1
+20:26:13.409 +   6.279s  DLLFinalize retornou 0
+20:26:13.409 +   6.279s  log gravado em diagnostico_historico_20260921_202607.log

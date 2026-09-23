@@ -1,0 +1,22 @@
+02:15:28.465 +   0.032s  python=3.14.4 plataforma=win32 modo=salvar
+02:15:28.466 +   0.032s  dll_path=C:\DLLs\Win64\ProfitDLL.dll existe=True versao=4.0.0.42
+02:15:28.467 +   0.033s  credenciais: key=34***************** user=di********************** senha=St********
+02:15:28.681 +   0.248s  chamando DLLInitializeMarketLogin...
+02:15:28.915 +   0.481s  DLLInitializeMarketLogin retornou 0 = NL_OK
+02:15:28.915 +   0.482s  esperando MARKET_DATA conectado (ate' 30.0s)...
+02:15:29.645 +   1.211s  CALLBACK state: tipo=3 (ATIVACAO) valor=0
+02:15:29.656 +   1.223s  CALLBACK state: tipo=0 (LOGIN) valor=0
+02:15:29.882 +   1.449s  CALLBACK state: tipo=2 (MARKET_DATA) valor=1
+02:15:29.899 +   1.465s  CALLBACK state: tipo=2 (MARKET_DATA) valor=2
+02:15:29.899 +   1.465s  conectado: login_ok=True market_ok=True
+02:15:30.513 +   2.080s  CALLBACK state: tipo=2 (MARKET_DATA) valor=4
+02:15:30.906 +   2.473s  modo SALVAR: WINFUT de 02/03/2026 a 03/03/2026 (2 dia(s) uteis) -> data/raw
+02:15:30.932 +   2.498s  SubscribeTicker(WINFUT,F) retornou 0 = NL_OK
+02:15:31.933 +   3.499s  --- PRIMING (descartado) GetHistoryTrades('WINFUT', 'F', '02/03/2026 09:00:00', '02/03/2026 18:35:00') ---
+02:15:31.933 +   3.500s  priming retornou -2147483602 (hex 0x8000002e, NL base+46) = NL_HISTORY_PERIOD_LIMIT (data inicial > 30 dias ou intervalo > 10 dias)
+02:16:13.602 +  45.169s  CALLBACK state: tipo=0 (LOGIN) valor=1
+02:16:13.603 +  45.169s  CALLBACK state: tipo=1 (ROTEAMENTO) valor=0
+02:16:13.604 +  45.171s  CALLBACK state: tipo=2 (MARKET_DATA) valor=0
+02:16:13.604 +  45.171s  CALLBACK state: tipo=3 (ATIVACAO) valor=1
+02:16:14.254 +  45.821s  DLLFinalize retornou 0
+02:16:14.254 +  45.821s  log gravado em diagnostico_historico_20260911_021528.log

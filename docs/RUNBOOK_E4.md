@@ -100,19 +100,23 @@ tarde. Coberturas (v3.31):
   do ativo na conta e zera o que houver. Custo declarado: cancela também
   ordens manuais do ativo nessa conta.
 
-### Teste do cancelamento total (uma vez, num pregão)
+### Teste do cancelamento total — FEITO em 23/09, PASSOU
 
-O `SendCancelOrders` nunca foi testado ao vivo. Procedimento, com o E4
-**livre** (sem posição nem entrada pendente) — de preferência entre 09:00
-e 09:30, antes do primeiro sinal possível:
-1. Tire o `ea_123_volume_baixo_e4.yaml` da pasta (o simulado fica).
-2. No Profit, na conta **Simulador**, ponha à mão uma ordem de `WINV26`
-   que não vá executar (compra limitada bem abaixo do mercado).
-3. Recoloque o yaml na pasta. Em ~3 min o EA sobe e, na primeira vez que a
-   corretora está pronta, loga `ea.123.limpeza_na_subida acao=limpo`.
-4. **No Profit, a sua ordem tem que aparecer como Cancelada.** Se não
-   aparecer, cancele à mão e me mande o log — a limpeza na subida não
-   funciona e a limitação volta a valer.
+`ea.cancel_todas_enviado retorno=0`, `acao=limpo`, `posicao_real=0`, e a
+ordem manual apareceu **Cancelada** no Profit. A limitação da ordem órfã
+de processo morto deixa de valer.
+
+Dois aprendizados do teste, para quando precisar repetir:
+
+- **Antes da abertura a chamada é recusada** (`NL_INVALID_ARGS`, com a
+  posição também implausível). Desde a v3.38 o EA repete a cada 60 s até
+  conseguir, então basta esperar o mercado abrir.
+- **Não use o próprio E4 para o teste.** Ao ser recolocado na pasta no
+  meio do pregão, o EA recomeça a montar barras e cai em
+  `ea.dia_incompleto` — **não arma mais nenhum sinal naquele dia** (foi o
+  que aconteceu em 23/09). Use um **yaml descartável**: copie o do E4 com
+  outro `nome` e outro `registro_dir`, coloque na pasta, confira a
+  limpeza no log, e tire depois. O E4 fica intocado.
 
 ## 5. Intervir à mão sem confundir o EA
 

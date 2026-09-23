@@ -13,10 +13,11 @@ slack_limite_pts: 50.0
 tamanho_posicao: 1
 custo_pontos_estimado: 11.0
 dry_run: true
-semente_parquet: data/research/eas_preco/p123_2026/barras_123.parquet
-curated: data/curated
+
+semente_parquet: C:/projetos/profit-tape/data/research/eas_preco/p123_2026/barras_123.parquet
+curated: C:/projetos/profit-tape/data/curated
+registro_dir: C:/projetos/profit-tape/data/forward/ea_123_vb
 feriados: []
-registro_dir: data/forward/ea_123_vb
 filtro_fluxo:
   tipo: volume_baixo        # vol_total(t) < mediana do horario nos 20 pregoes anteriores
   janela_pregoes: 20
