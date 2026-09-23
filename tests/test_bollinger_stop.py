@@ -86,3 +86,21 @@ def test_default_continua_LIMITADA() -> None:
     explicito = br.replay_pregao(sin, trades, "2026-09-01", tipo_ordem="limitada")[0]
     assert sem["tipo_execucao"] == explicito["tipo_execucao"] == "abertura"
     assert sem["preco_entrada"] == explicito["preco_entrada"] == 105.0
+
+
+def test_resumo_MOSTRA_o_tipo_real_de_preenchimento() -> None:
+    """Disciplina 7.3: o resumo so' contava abertura/recuo. No modo stop
+    os dois davam ZERO e nao havia como ver, pelo resultado, se a stop
+    tinha rodado -- foi exatamente o que confundiu a leitura em
+    2026-10-01 (o operador rodou com --tipo-ordem stop e o resumo ainda
+    dizia 'abertura 320')."""
+    trades, sin = _tape([105.0, 106.0, 107.0, 108.0]), _sinal(107.0)
+    for modo, esperado in (("limitada", "abertura"), ("stop", "rompimento")):
+        ops = br.replay_pregao(sin, trades, "2026-09-01", tipo_ordem=modo)
+        r = br.resumo(pd.DataFrame(ops), 1)
+        assert r["tipos_execucao"] == {esperado: 1}, f"{modo} deveria mostrar {esperado}"
+        assert r[esperado] == 1
+    # e o modo stop NAO pode aparecer como abertura/recuo
+    ops = br.replay_pregao(sin, trades, "2026-09-01", tipo_ordem="stop")
+    r = br.resumo(pd.DataFrame(ops), 1)
+    assert r["abertura"] == 0 and r["recuo"] == 0

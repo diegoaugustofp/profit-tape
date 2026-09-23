@@ -2,7 +2,7 @@
 Estocastico de CONTEXTO (timeframe maior) como filtro do scalp de
 Bollinger -- medicao de FUNIL, categoria `features`, zero trial.
 
-O ERRO QUE ISTO CORRIGE (2026-10-01)
+O ERRO QUE ISTO CORRIGE (2026-09-23)
 -------------------------------------
 A clausula de estocastico da v1 foi medida com o %K lento calculado
 sobre as MESMAS barras de 15s das Bollinger -- janela de 8 barras de
@@ -16,7 +16,7 @@ fecha ACIMA da banda superior fecha, por construcao, no topo da faixa
 de 8 barras -- o %K lento nao pode estar no fundo dela ao mesmo tempo.
 As duas condicoes eram quase mutuamente exclusivas POR DEFINICAO.
 
-O operador apontou (2026-10-01) que a spec sempre disse outra coisa: o
+O operador apontou (2026-09-23) que a spec sempre disse outra coisa: o
 estocastico e' do GRAFICO MAIOR (6 minutos), nao da barra de 15s. Com
 janela de 8 barras de 6 min (48 minutos), a dependencia geometrica
 desaparece: onde o preco esta' dentro de 48 minutos nao e' determinado
@@ -54,7 +54,7 @@ from . import bollinger_scalp as bs
 
 log = structlog.get_logger(__name__)
 
-SEGUNDOS_CONTEXTO = 360          # 6 minutos, escolha do operador (2026-10-01)
+SEGUNDOS_CONTEXTO = 360          # 6 minutos, escolha do operador (2026-09-23)
 EST_PERIODO_CONTEXTO = 8         # mesmos parametros do estocastico lento da v1
 EST_MEDIA_CONTEXTO = 3
 
@@ -65,7 +65,7 @@ def _ts_em_segundos(ts: pd.Series) -> pd.Series:
     `pd.to_datetime(..., unit="s")`, ja' com o offset de fuso somado) --
     mas testes e outros caminhos podem passar epoch inteiro. Normalizar
     aqui e' o que impede o `MergeError: incompatible merge keys` que o
-    dado REAL provocou em 2026-10-01 (os testes usavam int64 e por isso
+    dado REAL provocou em 2026-09-23 (os testes usavam int64 e por isso
     nunca exercitaram o tipo de verdade).
 
     Segundos bastam: o balde de 15s ja' e' a menor granularidade aqui.

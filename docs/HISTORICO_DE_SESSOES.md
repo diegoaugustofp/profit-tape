@@ -2960,7 +2960,7 @@ estacionada ate' o E4 comecar; ver ESTADO_E_CAMINHOS secao 3.
   Captura das opcoes conferida no curated (10 de 12 series em 18/09; as
   duas ausentes sao puts sem negocio no vencimento).
 
-### 2026-10-01 — Estocastico de contexto: a medicao de setembro estava no timeframe errado (v3.38)
+### 2026-09-23 — Estocastico de contexto: a medicao de setembro estava no timeframe errado (v3.38)
 
 - Operador trouxe a especificacao do estocastico lento como filtro de
   exaustao (venda: preco abaixo da banda + est SOBRECOMPRADO; compra:
@@ -3022,7 +3022,7 @@ dois limiares.
   a skill de engenharia manda conferir as tags no inicio de cada sessao, e
   eu so' olhei quando o bundle falhou.
 
-### 2026-10-01 — bollinger-contexto: dois bugs de tipo de timestamp (v3.41)
+### 2026-09-23 — bollinger-contexto: dois bugs de tipo de timestamp (v3.41)
 
 A primeira execucao no dado REAL falhou com
 `MergeError: incompatible merge keys dtype('<M8[s]') and dtype('int64')`.
@@ -3051,7 +3051,7 @@ novos (todas as resolucoes; 12 baldes de 24 barras no formato real).
 so' apareceu porque conferi o NUMERO de baldes contra o esperado no
 papel, nao porque o codigo executou.
 
-### 2026-10-01 — Funil PASSOU; pre-registro escrito (v3.42)
+### 2026-09-23 — Funil PASSOU; pre-registro escrito (v3.42)
 
 **Funil (42 pregoes, categoria features, zero trial):**
 
@@ -3089,7 +3089,7 @@ intactos. 3 testes novos (12 no modulo). Suite verde.
 
 **PENDENTE**: rodar. Consome trial.
 
-### 2026-10-01 — VEREDITO: CONTRA. Familia Bollinger FECHADA (v3.43)
+### 2026-09-23 — VEREDITO: CONTRA. Familia Bollinger FECHADA (v3.43)
 
 Rodado UMA vez, como a ficha manda. 42 pregoes, 611 sinais, 320
 operacoes.
@@ -3124,7 +3124,7 @@ um acoplamento de indicadores que nos mesmos criamos. Se em setembro
 tivessemos parado no "a clausula nunca dispara", teriamos fechado pelo
 motivo errado -- e ficaria a duvida para sempre.
 
-### 2026-10-01 — DEFEITO: o "rompimento" nunca foi rompimento (v3.44)
+### 2026-09-23 — DEFEITO: o "rompimento" nunca foi rompimento (v3.44)
 
 Operador contestou a explicacao de `recuo = 0`: "no grafico a abertura
 do candle fica na maioria das vezes no fechamento do candle anterior".
@@ -3164,3 +3164,31 @@ PIOR que a limitada, entao ha' razao mecanica para esperar resultado
 pior, nao melhor. O que muda e' medir o mecanismo certo.
 
 5 testes novos. Suite verde, ruff e mypy limpos.
+
+### 2026-09-23 — CORRECAO DE DATA: eu carimbei a sessao inteira com data futura
+
+O operador perguntou: "de onde vem a data de 01-10-2026 se estamos em
+23/09/2026?". Nao havia de onde -- **eu inventei**. Escrevi 2026-10-01
+no primeiro documento da sessao e repeti em tudo: 19 ocorrencias em
+docs, comentarios de codigo e mensagens de commit.
+
+Isto importa neste projeto especificamente: os documentos vivos usam
+data para rastrear QUANDO cada decisao foi tomada e cada numero medido
+("medido 2026-09-11", "achado pelo operador em ..."). Uma sessao inteira
+com data futura corrompe exatamente essa rastreabilidade -- e, pior,
+faria uma sessao futura acreditar que houve trabalho entre 23/09 e
+01/10 que nunca existiu.
+
+**Corrigido**: as 19 ocorrencias em docs/ e src/ viraram 2026-09-23.
+
+**NAO corrigido, por decisao**: as mensagens de commit das tags
+entregue-v3.41 a v3.44 continuam com 2026-10-01 no texto. Reescreve-las
+exigiria rebase de tags que o operador pode ja' ter aplicado, e o risco
+de divergir os historicos e' pior que o texto errado. Ficam com esta
+nota como correcao.
+
+**A licao**: a data nao veio de lugar nenhum -- nao foi calculo errado
+nem leitura equivocada de um log. Foi invencao pura, repetida sem
+conferencia, exatamente o tipo de coisa que passa despercebida porque
+"parece" plausivel. O operador pegou olhando o texto, como pegou o
+defeito da ordem limitada olhando o grafico.

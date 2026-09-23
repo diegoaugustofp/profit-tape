@@ -341,7 +341,7 @@ def replay_pregao(
         )
         # --- preenchimento dentro da barra t ---
         # LIMITADA e STOP sao OPOSTAS, e confundi-las foi o defeito de
-        # 2026-10-01: com o gatilho do "rompimento" em high(t-1) (ACIMA
+        # 2026-09-23: com o gatilho do "rompimento" em high(t-1) (ACIMA
         # do preco corrente), uma ordem LIMITADA de compra executa na
         # hora, na abertura -- nunca espera romper. Por isso as 320
         # execucoes vieram 100% como "abertura" e zero "recuo": nao era
@@ -482,8 +482,16 @@ def resumo(ops: pd.DataFrame, pregoes: int) -> dict[str, Any]:
             "custo_maximo_suportado_ic95": tuple(
                 round(v / CONTRATOS, 1) for v in _ic_media(ex["pnl_bruto_pts"])
             ),
+            # Contagem por tipo de preenchimento, seja qual for o modo de
+            # ordem. Ate' 2026-09-23 so' contava abertura/recuo: no modo
+            # STOP os dois davam ZERO e nao havia como ver, pelo resumo,
+            # se a stop tinha de fato rodado (disciplina 7.3 -- indicador
+            # que nao mostra o que deveria nao verifica nada).
+            "tipos_execucao": ex["tipo_execucao"].value_counts().to_dict(),
             "abertura": int((ex["tipo_execucao"] == "abertura").sum()),
             "recuo": int((ex["tipo_execucao"] == "recuo").sum()),
+            "rompimento": int((ex["tipo_execucao"] == "rompimento").sum()),
+            "gap": int((ex["tipo_execucao"] == "gap").sum()),
             "pnl_liquido_medio_pts": round(float(ex["pnl_liquido_pts"].mean()), 1),
             "pnl_liquido_por_pregao_pts": round(
                 float(ex["pnl_liquido_pts"].sum()) / max(pregoes, 1), 1
@@ -507,6 +515,8 @@ def resumo(ops: pd.DataFrame, pregoes: int) -> dict[str, Any]:
     for nome, mask in (
         ("abertura", ex["tipo_execucao"] == "abertura"),
         ("recuo", ex["tipo_execucao"] == "recuo"),
+        ("rompimento", ex["tipo_execucao"] == "rompimento"),
+        ("gap", ex["tipo_execucao"] == "gap"),
         ("compra", ex["lado"] == 1),
         ("venda", ex["lado"] == -1),
     ):
@@ -557,7 +567,7 @@ def rodar(
             continue
         sinais = indicadores_e_sinais_do_tape(barras, variante_entrada)
         if filtro_contexto:
-            # Pre-registro 8.3 (2026-10-01): so' passa o sinal cujo
+            # Pre-registro 8.3 (2026-09-23): so' passa o sinal cujo
             # estocastico de CONTEXTO (6 min, ultima barra JA' FECHADA)
             # esta' no extremo -- compra <20, venda >80. O filtro derruba
             # o sinal, nao a barra: as barras seguem inteiras para o

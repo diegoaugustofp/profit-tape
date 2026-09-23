@@ -1,6 +1,6 @@
 # Scalp de Bollinger modificada (15s) — hipótese em formalização
 
-Estado (2026-10-01, revisto): **REABERTO por defeito de especificação** —
+Estado (2026-09-23, revisto): **REABERTO por defeito de especificação** —
 o "rompimento" usava ordem limitada e nunca esperava romper (seção 9).
 As medições anteriores valem para o que de fato testaram. As variantes
 testadas foram CONTRA — retorno (null), rompimento (negativo) e rompimento +
@@ -206,7 +206,7 @@ para um scalp de 15s) e **sem entrada nas primeiras 21 barras** do dia
 (~09:08). Diverge do gráfico só nesses 5 minutos. Aguardando
 confirmação.
 
-> **CORREÇÃO (2026-10-01): a medição abaixo estava no timeframe errado.**
+> **CORREÇÃO (2026-09-23): a medição abaixo estava no timeframe errado.**
 > O %K foi calculado sobre as MESMAS barras de 15s das bandas — janela de
 > 8 barras de 15s = 2 minutos. O operador apontou que a especificação
 > sempre falou do **gráfico de 6 minutos**, e o último parágrafo dela diz
@@ -433,7 +433,7 @@ rodar antes de qualquer código novo de execução.
 
 ## 8. PRÉ-REGISTRO: rompimento + estocástico de contexto (6 min)
 
-> **Escrito em 2026-10-01, ANTES de rodar qualquer replay desta
+> **Escrito em 2026-09-23, ANTES de rodar qualquer replay desta
 > variante.** Regra 1 da disciplina: o critério é escolhido antes de ver
 > o resultado, senão não é critério.
 
@@ -521,7 +521,7 @@ repetir a MESMA regra.
 Se der CONTRA, a família fecha definitivamente: terá sido refutada na
 forma completa que a especificação descreve, não num recorte.
 
-### 8.7 RESULTADO: CONTRA (2026-10-01)
+### 8.7 RESULTADO: CONTRA (2026-09-23)
 
 Rodado uma vez, como a ficha manda. 42 pregões, 611 sinais, **320
 operações** (7,6 por pregão).
@@ -576,7 +576,7 @@ foi usado aqui.
 
 ## 9. DEFEITO DE ESPECIFICAÇÃO: o "rompimento" nunca foi rompimento
 
-> Achado pelo operador em 2026-10-01, **depois** do veredito de 8.7, a
+> Achado pelo operador em 2026-09-23, **depois** do veredito de 8.7, a
 > partir da observação do gráfico — não de estatística.
 
 ### 9.1 O que aconteceu

@@ -3074,7 +3074,7 @@ def bollinger_replay(
         "limitada",
         "--tipo-ordem",
         help="limitada (default, comportamento historico) | stop. DEFEITO "
-        "CORRIGIDO 2026-10-01: a variante 'rompimento' usava LIMITADA no "
+        "CORRIGIDO 2026-09-23: a variante 'rompimento' usava LIMITADA no "
         "gatilho, e uma limitada de compra ACIMA do preco executa na hora "
         "-- nunca espera romper. As 320 execucoes vieram 100% 'abertura' e "
         "ZERO 'recuo'. Um rompimento de verdade exige --tipo-ordem stop.",
@@ -3082,7 +3082,7 @@ def bollinger_replay(
     filtro_contexto: bool = typer.Option(
         False,
         "--filtro-contexto",
-        help="PRE-REGISTRO 8.3 (2026-10-01): exige o estocastico de contexto "
+        help="PRE-REGISTRO 8.3 (2026-09-23): exige o estocastico de contexto "
         "(6 min, ultima barra JA' FECHADA) no extremo -- compra <20, venda "
         ">80. Funil medido: 366 compras e 537 vendas em 42 pregoes. CONSOME "
         "TRIAL: 3a tentativa da familia, criterio corrigido para 3 testes "
@@ -3174,9 +3174,14 @@ def _imprimir_resumo_bollinger_replay(
             f"  p1 (alvo1 antes do stop) = {res['p1']}  IC95 {res['p1_ic95']}  "
             f"| nula de lucro apos custo = {res['p1_nula_lucro']}"
         )
+        # Mostra os tipos REALMENTE observados, nao um par fixo: no modo
+        # stop os tipos sao rompimento/gap, e imprimir "abertura 0 recuo 0"
+        # (ou pior, o par da limitada) esconderia se a stop rodou mesmo.
+        tipos = res.get("tipos_execucao") or {}
+        tipos_txt = " ".join(f"{k} {v}" for k, v in sorted(tipos.items())) or "--"
         typer.echo(
-            f"  compra {res['compra']} venda {res['venda']} | abertura {res['abertura']} "
-            f"recuo {res['recuo']} | stop mediano {res['stop_mediano_pts']} pts "
+            f"  compra {res['compra']} venda {res['venda']} | {tipos_txt} "
+            f"| stop mediano {res['stop_mediano_pts']} pts "
             f"| duracao mediana {res['duracao_mediana_s']} s"
         )
         typer.echo(
