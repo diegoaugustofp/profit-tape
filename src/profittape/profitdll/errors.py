@@ -22,29 +22,45 @@ class SubscriptionFailed(ProfitDLLError):
 # Codigos de retorno documentados. Confirme contra o manual da sua versao.
 NL_OK = 0
 _ERRORS: dict[int, str] = {
-    -2147483647: "Erro interno da DLL",
-    -2147483646: "Login nao efetuado",
-    -2147483645: "Login invalido",
-    -2147483644: "DLL ja inicializada",
-    -2147483643: "Ticker invalido",
-    -2147483642: "Sem permissao para o ativo",
-    -2147483640: "Falta de parametro obrigatorio",
-    -2147483639: "Parametro invalido",
-    -2147483637: "DLL nao inicializada",
-    # Confirmado no manual (2026-08-21): GetHistoryTrades so' aceita
-    # 'data inicial' dentro dos ultimos 30 dias corridos a partir de hoje.
-    # Nao e' restricao de conta/conexao — e' limite documentado da funcao.
-    # Ver docs/OPERACAO.md para o que isso implica no backfill.
-    # Encontrado ao vivo (2026-09-11): GetSubAccounts devolve isto quando
-    # a chave de ativacao nao tem o recurso de subcontas liberado. NAO e'
-    # erro de codigo nem "conta sem subconta" -- o app de teste oficial da
-    # Nelogica devolve o mesmo. So' a Nelogica/corretora libera.
-    -2147483630: "Recurso nao liberado na licenca (NL_LICENSE_NOT_ALLOWED) "
-                 "— a chave de ativacao nao tem permissao para este "
-                 "recurso; pedir liberacao a Nelogica/corretora",
-    -2147483602: "Periodo de historico excede o limite permitido "
-                 "(data inicial com mais de 30 dias) — GetHistoryTrades "
-                 "so' cobre os ultimos ~30 dias corridos a partir de hoje",
+    # TABELA OFICIAL do manual (conferida em 2026-09-23, secao "Codigos de
+    # erro"). A anterior estava ERRADA de -2147483646 em diante -- traduzia
+    # NL_INVALID_ARGS como "Login invalido" e inventou "DLL ja inicializada",
+    # "Ticker invalido" e "DLL nao inicializada" em codigos que sao outra
+    # coisa. Isso ja' me levou a um diagnostico errado (22-23/09, na recusa
+    # do SendCancelOrders).
+    -2147483647: "NL_INTERNAL_ERROR: erro interno",
+    -2147483646: "NL_NOT_INITIALIZED: nao inicializado",
+    -2147483645: "NL_INVALID_ARGS: argumentos invalidos",
+    -2147483644: "NL_WAITING_SERVER: aguardando dados do servidor",
+    -2147483643: "NL_NO_LOGIN: nenhum login encontrado",
+    -2147483642: "NL_NO_LICENSE: nenhuma licenca encontrada",
+    -2147483639: "NL_OUT_OF_RANGE: count do parametro maior que o array",
+    -2147483638: "NL_MARKET_ONLY: nao possui roteamento",
+    -2147483637: "NL_NO_POSITION: nao possui posicao",
+    -2147483636: "NL_NOT_FOUND: recurso nao encontrado",
+    -2147483635: "NL_VERSION_NOT_SUPPORTED: versao do recurso nao suportada",
+    -2147483634: "NL_OCO_NO_RULES: OCO sem nenhuma regra",
+    -2147483633: "NL_EXCHANGE_UNKNOWN: bolsa desconhecida",
+    -2147483632: "NL_NO_OCO_DEFINED: nenhuma OCO encontrada para a ordem",
+    -2147483631: "NL_INVALID_SERIE: (level + offset + factor) invalido",
+    -2147483630: "NL_LICENSE_NOT_ALLOWED: recurso nao liberado na licenca",
+    -2147483629: "NL_NOT_HARD_LOGOUT: nao esta em HardLogout",
+    -2147483628: "NL_SERIE_NO_HISTORY: serie sem historico no servidor",
+    -2147483627: "NL_ASSET_NO_DATA: ativo sem TData carregado",
+    -2147483626: "NL_SERIE_NO_DATA: serie sem dados (count = 0)",
+    -2147483625: "NL_HAS_STRATEGY_RUNNING: existe uma estrategia rodando",
+    -2147483624: "NL_SERIE_NO_MORE_HISTORY: nao ha' mais dados para a serie",
+    -2147483623: "NL_SERIE_MAX_COUNT: serie no limite de dados",
+    -2147483622: "NL_DUPLICATE_RESOURCE: recurso duplicado",
+    -2147483621: "NL_UNSIGNED_CONTRACT: contrato nao assinado",
+    -2147483620: "NL_NO_PASSWORD: nenhuma senha informada",
+    -2147483619: "NL_NO_USER: nenhum usuario informado no login",
+    -2147483618: "NL_FILE_ALREADY_EXISTS: arquivo ja' existe",
+    -2147483617: "NL_INVALID_TICKER: ativo e' invalido",
+    -2147483616: "NL_NOT_MASTER_ACCOUNT: conta nao e' master",
+    -2147483602: ("NL_HISTORY_PERIOD_LIMIT: periodo de historico excede o limite "
+                  "(data inicial com mais de 30 dias) — GetHistoryTrades "
+                  "so' aceita os ultimos 30 dias corridos"),
 }
 
 

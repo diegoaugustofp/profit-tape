@@ -262,7 +262,17 @@ class ExecutorDeOrdens:
         dll = self._trava()
         r = int(dll.SendCancelOrders(self._conta, self._corretora, self._rot.senha_roteamento,
                                      self._ticker, self._bolsa))
-        log.warning("ea.cancel_todas_enviado", retorno=r, ticker=self._ticker)
+        if r < 0:
+            # 23/09: veio NL_INVALID_ARGS as 08:22 (antes da abertura). A ordem
+            # dos argumentos esta' conferida no manual, entao o problema e' de
+            # VALOR ou de momento -- por isso os argumentos vao no log (senha
+            # so' como presente/ausente).
+            from ..profitdll.errors import describe
+            log.error("ea.cancel_todas_recusado", retorno=r, motivo=describe(r),
+                      conta=self._conta, corretora=self._corretora, ticker=self._ticker,
+                      bolsa=self._bolsa, tem_senha=bool(self._rot.senha_roteamento))
+        else:
+            log.warning("ea.cancel_todas_enviado", retorno=r, ticker=self._ticker)
         return r
 
     def consultar_posicao(self) -> Any:

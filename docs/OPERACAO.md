@@ -1,5 +1,28 @@
 # Operacao
 
+## ACHADO 2026-09-23: a nossa TABELA DE ERROS da DLL estava errada
+
+O `SendCancelOrders` foi recusado com **-2147483645** e o nosso
+`errors.py` traduziu como "Login invalido" -- o que me levou a um
+diagnostico errado. Pelo manual (secao "Codigos de erro"), esse codigo e'
+**NL_INVALID_ARGS, "argumentos invalidos"**; "login invalido" nem existe
+na tabela (o proximo e' NL_NO_LOGIN, -2147483643).
+
+A tabela antiga errava de -2147483646 em diante e inventava nomes ("DLL
+ja inicializada", "Ticker invalido", "DLL nao inicializada") em codigos
+que sao outra coisa. **Qualquer diagnostico antigo que tenha citado uma
+dessas mensagens deve ser relido.** Substituida pela tabela oficial
+completa (v3.40).
+
+Sobre a recusa em si: a ORDEM dos argumentos esta' conferida no manual
+(`conta, corretora, senha, ticker, bolsa`). A chamada saiu as 08:22, com o
+mercado fechado, e a consulta de posicao veio implausivel no mesmo
+instante -- o suspeito e' o MOMENTO, nao a chamada. Agora o EA repete a
+limpeza a cada 60 s ate' conseguir, e os argumentos entram no log quando
+ha' recusa.
+
+---
+
 ## Setembro/2026: incidentes, achados e a rotina que eles criaram
 
 **Rotina (vale todo pregao):**

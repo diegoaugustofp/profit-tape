@@ -570,13 +570,18 @@ class CicloDeOrdens123:
         if self.estado != "livre":
             rel["acao"] = "ignorada_ciclo_ocupado"
             return rel
-        rel["cancel_todas_retorno"] = self.executor.cancelar_todas()
+        r_cancel = int(self.executor.cancelar_todas())
+        rel["cancel_todas_retorno"] = r_cancel
+        rel["cancel_todas_ok"] = r_cancel >= 0
         pos = self.executor.consultar_posicao()
         real = int(pos.quantidade_liquida) if pos.plausivel else None
         rel["posicao_real"] = real
-        if real is None:
-            self._aviso("posicao implausivel na subida -- CONFIRA NO PROFIT")
-            rel["acao"] = "posicao_implausivel"
+        if real is None or not rel["cancel_todas_ok"]:
+            # NAO e' conclusao: e' "ainda nao deu certo". Quem chama tenta de
+            # novo (service_123) -- em 23/09 a 1a tentativa saiu as 08:22, com
+            # o mercado fechado, e o desenho antigo desistia para sempre.
+            rel["acao"] = "incompleta_tentar_de_novo"
+            rel["posicao_implausivel"] = real is None
         elif real != 0:
             log.error("ea.123.posicao_orfa", real=real, momento="subida")
             self.executor.zerar()
@@ -586,7 +591,9 @@ class CicloDeOrdens123:
         else:
             rel["acao"] = "limpo"
         log.warning("ea.123.limpeza_na_subida", **rel,
-                    nota="confira no Profit: nenhuma ordem de " + self.symbol + " viva nesta conta")
+                    nota=("confira no Profit: nenhuma ordem de " + self.symbol + " viva nesta "
+                          "conta" if rel["acao"] in ("limpo", "zerou_orfa")
+                          else "tentativa incompleta -- sera' repetida"))
         return rel
 
     def reconciliar_apos_reconexao(self) -> dict[str, Any]:

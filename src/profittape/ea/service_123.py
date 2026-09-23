@@ -138,6 +138,9 @@ class EA123Service:
         self._ultimo_tick = 0.0
         self._ultimo_alerta = 0.0
         self._limpeza_feita = False
+        self._ultima_limpeza = 0.0
+        self._tentativas_limpeza = 0
+        self._max_limpezas = 30
         self.atraso_alerta_s = 5.0
         self._atraso_ultimo_s = 0.0
         self.trades = 0
@@ -211,10 +214,24 @@ class EA123Service:
                             nota="o EA esta' atras da fila: o sinal sai atrasado o mesmo tanto")
         if self.client is not None and not self.config.dry_run:
             pronta = bool(getattr(self.client, "corretora_pronta", True))
-            if pronta and not self._limpeza_feita:
-                # uma vez, na PRIMEIRA vez que a corretora esta' pronta
-                self._limpeza_feita = True
-                self.ciclo.limpeza_na_subida()
+            if pronta and not self._limpeza_feita and agora - self._ultima_limpeza > 60:
+                # TENTA ATE' DAR CERTO (23/09): a 1a tentativa saiu as 08:22,
+                # antes da abertura, e a DLL recusou (NL_INVALID_ARGS) com a
+                # posicao implausivel. O desenho antigo marcava "feita" e
+                # desistia -- o EA ficava o dia sem a limpeza. Agora repete a
+                # cada 60 s ate' concluir, no maximo `_max_limpezas` vezes.
+                self._ultima_limpeza = agora
+                self._tentativas_limpeza += 1
+                rel = self.ciclo.limpeza_na_subida()
+                if rel.get("acao") in ("limpo", "zerou_orfa", "adiada_vaga_de_outro",
+                                       "ignorada_ciclo_ocupado"):
+                    self._limpeza_feita = True
+                elif self._tentativas_limpeza >= self._max_limpezas:
+                    self._limpeza_feita = True
+                    log.error("ea.123.limpeza_na_subida_desistiu",
+                              tentativas=self._tentativas_limpeza,
+                              nota=("a limpeza NAO foi feita: ordem orfa de processo morto NAO "
+                                    "sera' cancelada -- CONFIRA AS ORDENS NO PROFIT"))
             if self._corretora_pronta_antes is False and pronta:
                 log.warning("ea.123.reconectado", nota="reconciliando ordens e posicao")
                 self.ciclo.reconciliar_apos_reconexao()

@@ -332,7 +332,7 @@ def test_limpeza_na_subida_roda_uma_vez_quando_a_corretora_fica_pronta(
 
         def limpeza_na_subida(self) -> dict:
             self.limpezas += 1
-            return {}
+            return {"acao": "limpo"}
 
         def reconciliar_apos_reconexao(self) -> dict:
             self.reconc += 1
@@ -351,6 +351,7 @@ def test_limpeza_na_subida_roda_uma_vez_quando_a_corretora_fica_pronta(
     s.config, s.client, s.ciclo = _Cfg(), _Client(), _Ciclo()
     s.ao_vivo, s._ultimo_ts_ns, s._ultimo_tick = False, 0, 0.0
     s._limpeza_feita, s._corretora_pronta_antes = False, None
+    s._ultima_limpeza, s._tentativas_limpeza, s._max_limpezas = 0.0, 0, 30
     s.tick()
     assert s.ciclo.limpezas == 0                      # corretora ainda nao pronta
     s.client.corretora_pronta = True
@@ -359,3 +360,80 @@ def test_limpeza_na_subida_roda_uma_vez_quando_a_corretora_fica_pronta(
         s.tick()
     assert s.ciclo.limpezas == 1                      # uma vez so'
     assert s.ciclo.reconc == 1                        # e a transicao False->True reconcilia
+
+
+def test_limpeza_incompleta_e_TENTADA_DE_NOVO(monkeypatch: pytest.MonkeyPatch) -> None:
+    """23/09: a 1a tentativa saiu com o mercado fechado e falhou; o desenho
+    antigo marcava 'feita' e o EA passava o dia sem limpeza."""
+    from profittape.ea import service_123 as sv
+
+    class _Ciclo:
+        def __init__(self) -> None:
+            self.limpezas = 0
+
+        def limpeza_na_subida(self) -> dict:
+            self.limpezas += 1
+            # so' na 3a tentativa da' certo
+            return {"acao": "limpo" if self.limpezas >= 3 else "incompleta_tentar_de_novo"}
+
+        def reconciliar_apos_reconexao(self) -> dict:
+            return {}
+
+        def tick(self) -> None:
+            pass
+
+    class _Cfg:
+        dry_run = False
+
+    class _Client:
+        corretora_pronta = True
+
+    s = sv.EA123Service.__new__(sv.EA123Service)
+    s.config, s.client, s.ciclo = _Cfg(), _Client(), _Ciclo()
+    s.ao_vivo, s._ultimo_ts_ns, s._ultimo_tick = False, 0, 0.0
+    s._limpeza_feita, s._corretora_pronta_antes = False, True
+    s._ultima_limpeza, s._tentativas_limpeza, s._max_limpezas = 0.0, 0, 30
+    agora = [1_000_000.0]
+    monkeypatch.setattr(sv.time, "time", lambda: agora[0])
+    for _ in range(5):
+        s._ultimo_tick = 0.0
+        s.tick()
+        agora[0] += 61.0                      # passa a carencia de 60 s
+    assert s.ciclo.limpezas == 3 and s._limpeza_feita is True
+
+
+def test_limpeza_desiste_depois_do_limite_e_AVISA(monkeypatch: pytest.MonkeyPatch) -> None:
+    from profittape.ea import service_123 as sv
+
+    class _Ciclo:
+        def __init__(self) -> None:
+            self.limpezas = 0
+
+        def limpeza_na_subida(self) -> dict:
+            self.limpezas += 1
+            return {"acao": "incompleta_tentar_de_novo"}
+
+        def reconciliar_apos_reconexao(self) -> dict:
+            return {}
+
+        def tick(self) -> None:
+            pass
+
+    class _Cfg:
+        dry_run = False
+
+    class _Client:
+        corretora_pronta = True
+
+    s = sv.EA123Service.__new__(sv.EA123Service)
+    s.config, s.client, s.ciclo = _Cfg(), _Client(), _Ciclo()
+    s.ao_vivo, s._ultimo_ts_ns, s._ultimo_tick = False, 0, 0.0
+    s._limpeza_feita, s._corretora_pronta_antes = False, True
+    s._ultima_limpeza, s._tentativas_limpeza, s._max_limpezas = 0.0, 0, 3
+    agora = [1_000_000.0]
+    monkeypatch.setattr(sv.time, "time", lambda: agora[0])
+    for _ in range(6):
+        s._ultimo_tick = 0.0
+        s.tick()
+        agora[0] += 61.0
+    assert s.ciclo.limpezas == 3 and s._limpeza_feita is True

@@ -51,6 +51,7 @@ profit-tape record -c C:\projetos\profit-tape\config\recorder.yaml --ea-dir C:\p
 | `ea.123.iniciado` do `ea_123_vb_e4` | `dry_run=False`, semente `valida=True`, perfil com 38 horários |
 | `ea_registro.incluido` | o E4 aparece com `dry_run=False` |
 | `ea.123.limpeza_na_subida` (v3.31) | `acao=limpo`: o EA real cancelou TODAS as ordens do `WINV26` na conta demo e não achou posição. `zerou_orfa` = havia posição sem dono e ele zerou — confira no Profit |
+| `acao=incompleta_tentar_de_novo` (v3.40) | a DLL recusou o cancelamento ou a posição veio implausível — normal **antes da abertura**. O EA repete a cada 60 s até conseguir. Se aparecer `ea.123.limpeza_na_subida_desistiu`, a limpeza não foi feita: **confira as ordens no Profit** |
 
 **Não deve aparecer:** `recorder.ea_ordens_reais_sem_pre_requisito`,
 `recorder.ea_ticker_agregador_recusado`, `ea.123.sem_semente`. Se aparecer
@@ -109,7 +110,7 @@ de processo morto deixa de valer.
 Dois aprendizados do teste, para quando precisar repetir:
 
 - **Antes da abertura a chamada é recusada** (`NL_INVALID_ARGS`, com a
-  posição também implausível). Desde a v3.38 o EA repete a cada 60 s até
+  posição também implausível). Desde a v3.40 o EA repete a cada 60 s até
   conseguir, então basta esperar o mercado abrir.
 - **Não use o próprio E4 para o teste.** Ao ser recolocado na pasta no
   meio do pregão, o EA recomeça a montar barras e cai em

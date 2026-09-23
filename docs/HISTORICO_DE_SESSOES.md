@@ -3000,3 +3000,24 @@ estacionada ate' o E4 comecar; ver ESTADO_E_CAMINHOS secao 3.
 **PENDENTE (Diego)**: rodar `profit-tape bollinger-contexto` sobre os
 pregoes capturados. O funil decide se vale pre-registrar -- e qual dos
 dois limiares.
+### 2026-09-23 — tabela de erros da DLL errada; limpeza que desistia (v3.40)
+
+- A limpeza na subida foi recusada com -2147483645 e o nosso `errors.py`
+  dizia "Login invalido". Pelo MANUAL e' **NL_INVALID_ARGS**. A tabela
+  errava de -2147483646 em diante -- substituida pela oficial completa.
+  Diagnosticos antigos que citaram essas mensagens precisam ser relidos.
+- A ordem dos argumentos do `SendCancelOrders` esta' certa (conferida no
+  manual). A recusa veio as 08:22, mercado fechado, com a posicao tambem
+  implausivel: o suspeito e' o MOMENTO. Como o desenho antigo marcava
+  "feita" e desistia, o EA passaria o dia sem limpeza -- agora repete a
+  cada 60 s (ate' 30 vezes) e avisa se desistir. Argumentos no log quando
+  ha' recusa.
+- Correcao de leitura minha, de novo: o operador leu `atraso_max_s=2.095`
+  como 2.095 s; sao 2,095 s (separador decimal). O atraso esta' normal.
+- **NUMERACAO:** esta entrega saiu como v3.38 na minha copia, mas as tags
+  v3.38 e v3.39 ja' estavam ocupadas no repositorio (a v3.38 e' o
+  "estocastico de contexto", de outra sessao). Entra como **v3.40**,
+  aplicada por cherry-pick sobre a historia real. Licao de processo: eu
+  entreguei tres versoes seguidas sem conferir o `git log` do operador --
+  a skill de engenharia manda conferir as tags no inicio de cada sessao, e
+  eu so' olhei quando o bundle falhou.

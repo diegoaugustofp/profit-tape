@@ -236,16 +236,21 @@ class _Pos:
 
 
 class ExecutorFakeReconc(ExecutorFake):
-    def __init__(self, posicao: int) -> None:
+    def __init__(self, posicao: int, plausivel: bool = True) -> None:
         super().__init__()
         self.posicao = posicao
+        self.plausivel = plausivel
+
+    retorno_cancelar_todas: int = 0
 
     def cancelar_todas(self) -> int:
         self.chamadas.append(("cancelar_todas", {}))
+        if self.retorno_cancelar_todas:
+            return self.retorno_cancelar_todas
         return 0
 
     def consultar_posicao(self) -> _Pos:
-        return _Pos(self.posicao)
+        return _Pos(self.posicao, self.plausivel)
 
 
 def test_reconciliacao_posicionado_e_posicao_igual_rearma_saida() -> None:
@@ -373,6 +378,21 @@ def test_reconciliacao_com_posicao_orfa_continua_zerando() -> None:
     c = _ciclo(ex)
     rel = c.reconciliar_apos_reconexao()
     assert rel["acao"] == "zerou_orfa" and "zerar" in [n for n, _ in ex.chamadas]
+
+
+def test_limpeza_incompleta_quando_a_dll_recusa_ou_a_posicao_e_implausivel() -> None:
+    """23/09: a 1a tentativa saiu as 08:22 (mercado fechado) -- a DLL recusou
+    com NL_INVALID_ARGS e a posicao veio implausivel. Isso NAO e' conclusao:
+    e' 'ainda nao deu certo', e quem chama tenta de novo."""
+    ex = ExecutorFakeReconc(posicao=0)
+    ex.retorno_cancelar_todas = -2147483645          # NL_INVALID_ARGS
+    c = _ciclo(ex)
+    rel = c.limpeza_na_subida()
+    assert rel["acao"] == "incompleta_tentar_de_novo" and rel["cancel_todas_ok"] is False
+
+    ex2 = ExecutorFakeReconc(posicao=0, plausivel=False)
+    rel2 = _ciclo(ex2).limpeza_na_subida()
+    assert rel2["acao"] == "incompleta_tentar_de_novo" and rel2["posicao_implausivel"] is True
 
 
 def test_limpeza_na_subida_cancela_tudo_e_zera_orfa() -> None:
