@@ -35,6 +35,7 @@ from .config import EAConfig
 from .config_123 import EA123Config
 from .despachante import DespachanteDeEAs
 from .livro import LivroDePosicoes
+from .livro_ao_vivo import EstadoDoLivro
 from .service import EAService
 from .supervisor import ExigenciaDeEA, SupervisorDeRisco, capital_recomendado_para
 from .vagas import VagasPorTicker
@@ -69,7 +70,8 @@ class RegistroDeEAs:
                  supervisor: SupervisorDeRisco | None = None,
                  livro: LivroDePosicoes | None = None,
                  modo_ticker: str = "unico",
-                 client: object | None = None) -> None:
+                 client: object | None = None,
+                 livro_ao_vivo: EstadoDoLivro | None = None) -> None:
         """
         `modo_ticker` (E5.4c, decisao do operador 2026-09-13):
 
@@ -89,6 +91,9 @@ class RegistroDeEAs:
         self._supervisor = supervisor
         self._livro = livro
         self.modo_ticker = modo_ticker
+        # Topo do livro compartilhado por TODOS os EAs -- estado unico,
+        # alimentado pelo callback da DLL (ver ea/livro_ao_vivo.py).
+        self.livro_ao_vivo = livro_ao_vivo
         self.vagas = VagasPorTicker() if modo_ticker == "exclusivo" else None
         self._registrados: dict[str, EARegistrado] = {}
 
@@ -152,7 +157,8 @@ class RegistroDeEAs:
                                    nome=nome_final, client=self._client)
         else:
             servico = EAService(cfg, executor=executor,  # type: ignore[arg-type]
-                               vagas=self.vagas, nome=nome_final)
+                               vagas=self.vagas, nome=nome_final,
+                               livro=self.livro_ao_vivo)
         bridge = EABridge(servico)  # type: ignore[arg-type]
         registrado = EARegistrado(nome=nome_final, symbol=cfg.symbol,
                                  origem=origem.resolve() if origem else None,

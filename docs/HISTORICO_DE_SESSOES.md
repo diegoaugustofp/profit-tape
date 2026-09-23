@@ -3344,3 +3344,44 @@ Registrado por que ligar mesmo assim: mede o preenchimento REAL da stop
 (o replay só assume), estreia o tiny_book como feature (~1M
 eventos/pregão nunca usados), e não compete com os EAs vivos (em
 dry_run `simulado=True` desliga a disputa de vaga).
+
+### 2026-09-23 — tiny_book AO VIVO: infraestrutura para todas as estrategias (v3.50)
+
+Operador escolheu a opcao 3: implementar so' a parte que serve a todos
+-- levar o topo do livro ao EAService -- SEM ligar o forward do
+Bollinger. O livro ao vivo e' capacidade que falta ao projeto inteiro,
+inclusive ao 123 (que ja' esta' em F5 e opera rompimento).
+
+**O que entrou:**
+- `ProfitClient(on_tiny_extra=...)`: mesma porta do `on_trade_extra`,
+  mesma contencao (excecao engolida -- propagar atravessaria a fronteira
+  ctypes e derrubaria o processo por causa do EA).
+- `ea/livro_ao_vivo.py`: `EstadoDoLivro`, tupla IMUTAVEL trocada inteira
+  (copy-on-write). `atualizar` roda no hot path do callback e `ler` na
+  thread do EA -- sem lock no caminho de leitura, e a leitura nunca ve
+  bid novo com ask velho. Mesmo padrao do DespachanteDeEAs.
+- `EAConfig.filtro_book` (default False) e o filtro no EAService, com a
+  assimetria da ficha: compra exige desequilibrio > 0 (o obstaculo e' o
+  ASK), venda < 0 (e' o BID).
+- Contador `sinais_sem_book` no heartbeat: inclui os descartados por
+  FALTA de livro, nao so' por regime -- quem ler o resultado precisa
+  distinguir os dois.
+
+**Decisao de desenho registrada**: sem livro completo, o sinal e'
+DESCARTADO. Sem a informacao nao da' para afirmar o regime, e deixar
+passar mediria outra coisa.
+
+**Sobre as datas do tiny_book** (pergunta do operador): nao usar as
+outras datas no funil foi conveniencia operacional (a falha de gravacao
+anterior a 10/09 deixa a leitura lenta sem compact), NAO limitacao
+estatistica -- o funil mede taxa, que estabiliza rapido.
+
+E o cruzamento revelou algo util: o tiny_book vai de 24/08 a 22/09, e os
+42 pregoes do replay terminam em 08/09. Ou seja, de **09/09 em diante
+sao 10 pregoes com livro que o Bollinger nunca tocou** -- amostra limpa
+para o eixo book. Hoje sao ~32 operacoes (abaixo do n>=60 da ficha), mas
+cresce 1 pregao por dia e chega ao minimo em ~10 pregoes. E' um
+meio-termo entre o retrospectivo impossivel e os 6 meses de forward.
+
+12 testes novos (9 do estado + 3 do filtro), incluindo leitura
+concorrente com 3000 atualizacoes. Suite verde, ruff e mypy limpos.

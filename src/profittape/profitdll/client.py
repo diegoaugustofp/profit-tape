@@ -114,6 +114,7 @@ class ProfitClient:
         tz_offset_horas: int = -3,
         on_state: Callable[[int, int], None] | None = None,
         on_trade_extra: Callable[[Trade], None] | None = None,
+        on_tiny_extra: Callable[[TinyBook], None] | None = None,
         dll: Any | None = None,
         login_completo: bool = False,
         ignorar_tempo_real: bool = False,
@@ -149,6 +150,12 @@ class ProfitClient:
         # captura. Exception aqui e' sempre engolida e logada, nunca
         # propaga de volta pra fronteira ctypes.
         self._on_trade_extra = on_trade_extra
+        # E5/regime (2026-09-23): mesma porta do on_trade_extra, para o
+        # TOPO DO LIVRO. Existe porque o desequilibrio bid/ask no instante
+        # do sinal e' resistencia ao movimento -- informacao que o EA nao
+        # tem como derivar dos trades. ~1M eventos/pregao, capturados
+        # desde sempre e nunca usados ao vivo.
+        self._on_tiny_extra = on_tiny_extra
         self._dll = dll  # injetavel: permite FakeProfitDLL em teste
 
         self.conectado_market = False
@@ -561,6 +568,7 @@ class ProfitClient:
                 self._on_state(tipo, valor)
 
         on_trade_extra = self._on_trade_extra
+        on_tiny_extra = self._on_tiny_extra
         ignorar_tempo_real = self.ignorar_tempo_real
 
         @b.TNewTradeCallback
@@ -707,6 +715,24 @@ class ProfitClient:
                     quantidade=int(qtd),
                 ),
             )
+            if on_tiny_extra is not None:
+                # Mesma regra do on_trade_extra: a captura (publish acima)
+                # vem primeiro e nunca espera; excecao aqui e' engolida,
+                # porque propagar atravessaria a fronteira ctypes e
+                # derrubaria o processo inteiro por causa do EA.
+                try:
+                    on_tiny_extra(
+                        TinyBook(
+                            ts_recv_ns=time.time_ns(),
+                            symbol=ativo.ticker or "",
+                            exchange=ativo.bolsa or "",
+                            side=int(side),
+                            price=float(preco),
+                            quantidade=int(qtd),
+                        )
+                    )
+                except Exception:
+                    log.exception("profitdll.on_tiny_extra_falhou")
 
         @b.THistoryTradeCallback
         def _history(ativo, data, numero, preco, vol, qtd, comp, vend, tipo) -> None:

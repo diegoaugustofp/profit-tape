@@ -184,6 +184,11 @@ class EAConfig(BaseModel):
     sinais: list[SinalConfig]
     tamanho_posicao: int = 1        # contratos. Fixo ate' ter gestao de risco.
     custo_pontos_estimado: float = 11.0
+    # Filtro de regime pelo topo do livro (ficha 10.1, 2026-09-23):
+    # so' entra se a resistencia A FRENTE estiver fina. Exige que o
+    # RecorderService passe o EstadoDoLivro -- sem ele, TODO sinal e'
+    # descartado (e isso aparece em `sinais_sem_book`).
+    filtro_book: bool = False
     dry_run: bool = True            # NUNCA False sem decisao explicita
     usar_conta_real: bool = False   # NUNCA True sem decisao explicita e
                                     # documentada -- default e' SEMPRE demo

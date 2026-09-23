@@ -42,6 +42,7 @@ from ..domain.enums import AtivacaoResult, ConnState, MarketDataResult
 from .config import EAConfig, RoteamentoConfig
 from .decisao import Acao, Decisao, decidir
 from .execucao import ExecutorDeOrdens, executar
+from .livro_ao_vivo import EstadoDoLivro
 from .risco import GestorDeRisco
 from .sinal import BarraFechada, ConstrutorDeSinalAoVivo
 from .vagas import VagasPorTicker
@@ -70,6 +71,10 @@ class EstatisticasEA:
     # resultado: um EA que perdeu metade dos sinais nao teve o desempenho
     # da estrategia, teve o da estrategia CONDICIONADA a' outra.
     sinais_descartados_sem_vaga: int = 0
+    # Sinais barrados pelo filtro de book (ficha 10.1). Inclui os que
+    # nao tinham livro completo -- quem ler o resultado precisa saber
+    # quantos cairam por falta de dado, nao so' por regime.
+    sinais_descartados_book: int = 0
 
 
 def carregar_trades_do_dia(raiz_raw: Path) -> list[_TradeBruto]:
@@ -155,7 +160,8 @@ class EAService:
                 executor: ExecutorDeOrdens | None = None,
                 ignorar_circuit_breaker: bool = False,
                 vagas: VagasPorTicker | None = None,
-                nome: str | None = None) -> None:
+                nome: str | None = None,
+                livro: EstadoDoLivro | None = None) -> None:
         if not config.dry_run and executor is None:
             raise RuntimeError(
                 "dry_run=False exige um ExecutorDeOrdens construido "
@@ -168,6 +174,10 @@ class EAService:
         # garantido pelo RegistroDeEAs na inclusao).
         self.vagas = vagas
         self.nome = nome or config.nome or config.symbol
+        # Topo do livro ao vivo. `None` = EA nao usa o eixo de book (o
+        # caso de todos os EAs de hoje); o filtro so' age se a config
+        # pedir E o livro existir.
+        self.livro = livro
         agentes = [s.agent_id for s in config.sinais]
         self.construtor = ConstrutorDeSinalAoVivo(
             config.volume_barra, config.janela_z, agentes)
@@ -221,6 +231,19 @@ class EAService:
                         posicao_atual=self.stats.posicao_simulada)
             if d.acao not in (Acao.COMPRAR, Acao.VENDER):
                 continue
+            # Filtro de REGIME pelo topo do livro (ficha 10.1): so' entra
+            # se a resistencia A FRENTE estiver fina -- compra exige
+            # desequilibrio > 0 (o obstaculo e' o ask), venda < 0 (e' o
+            # bid). Assimetrico de proposito. Sem livro ou sem os dois
+            # lados, o sinal e' DESCARTADO: sem a informacao nao da' para
+            # afirmar o regime, e deixar passar mediria outra coisa.
+            if self.config.filtro_book:
+                lado_d = +1 if d.acao == Acao.COMPRAR else -1
+                topo = self.livro.ler(self.config.symbol) if self.livro else None
+                ok = topo.resistencia_a_favor(lado_d) if topo else None
+                if ok is not True:
+                    self.stats.sinais_descartados_book += 1
+                    continue
             # Modo exclusivo (E5.4c): a vaga do ticker e' de quem sinaliza
             # primeiro. Perdeu -> DESCARTA o sinal (nao fica em espera: ao
             # abrir a vaga, o sinal ja' estaria velho). A checagem vem
@@ -483,7 +506,8 @@ class EAService:
                 "pnl_dia_pontos": round(self.gestor.pnl_dia_pontos, 1),
                 "perdas_seguidas": self.gestor.perdas_consecutivas,
                 "bloqueado": self.gestor.bloqueado,
-                "sinais_sem_vaga": self.stats.sinais_descartados_sem_vaga}
+                "sinais_sem_vaga": self.stats.sinais_descartados_sem_vaga,
+                "sinais_sem_book": self.stats.sinais_descartados_book}
 
     @staticmethod
     def _hora_de_encerrar(alvo_hhmm: str, tz_offset_horas: int) -> bool:

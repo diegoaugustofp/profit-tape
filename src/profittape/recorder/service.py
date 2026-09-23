@@ -28,6 +28,7 @@ from ..alertas import ConfigAlertas, enviar
 from ..config import Credenciais, RecorderConfig
 from ..ea.despachante import DespachanteDeEAs
 from ..ea.livro import LivroDePosicoes
+from ..ea.livro_ao_vivo import EstadoDoLivro
 from ..ea.registro import RegistroDeEAs
 from ..ea.supervisor import SupervisorDeRisco
 from ..health.metrics import Metrics
@@ -146,11 +147,17 @@ class RecorderService:
         # execucao NUNCA (derrubaria a captura). Definido ANTES de
         # qualquer inclusao de EA, que ja' o consulta.
         self._em_execucao = False
+        # Topo do livro AO VIVO (2026-09-23): ~1M eventos/pregao que eram
+        # capturados e nunca usados. Alimentado pelo callback da DLL, lido
+        # pelos EAs em O(1). Existe sempre -- custa uma tupla -- para que
+        # qualquer EA possa consultar sem precisar de montagem propria.
+        self.livro_ao_vivo = EstadoDoLivro()
         self.despachante = DespachanteDeEAs()
         self.supervisor = SupervisorDeRisco(capital_em_conta=capital_em_conta)
         self.livro = LivroDePosicoes()
         self.registro = RegistroDeEAs(self.despachante, supervisor=self.supervisor,
-                                      livro=self.livro, modo_ticker=ea_modo_ticker)
+                                      livro=self.livro, modo_ticker=ea_modo_ticker,
+                                      livro_ao_vivo=self.livro_ao_vivo)
         if ea_modo_ticker == "exclusivo":
             log.warning("recorder.ea_modo_exclusivo",
                        nota="varios EAs podem dividir um ticker; so' UM fica "
@@ -179,6 +186,7 @@ class RecorderService:
             tz_offset_horas=cfg.runtime.tz_offset_horas,
             on_state=self._on_state,
             on_trade_extra=self.despachante.publicar,
+            on_tiny_extra=self.livro_ao_vivo.atualizar,
             dll=dll_injetada,
             login_completo=cfg.runtime.login_completo,
         )
