@@ -59,6 +59,29 @@ EST_PERIODO_CONTEXTO = 8         # mesmos parametros do estocastico lento da v1
 EST_MEDIA_CONTEXTO = 3
 
 
+def _ts_em_segundos(ts: pd.Series) -> pd.Series:
+    """
+    `ts` chega como datetime64 vindo do replay (`barras_15s_do_tape` faz
+    `pd.to_datetime(..., unit="s")`, ja' com o offset de fuso somado) --
+    mas testes e outros caminhos podem passar epoch inteiro. Normalizar
+    aqui e' o que impede o `MergeError: incompatible merge keys` que o
+    dado REAL provocou em 2026-10-01 (os testes usavam int64 e por isso
+    nunca exercitaram o tipo de verdade).
+
+    Segundos bastam: o balde de 15s ja' e' a menor granularidade aqui.
+    """
+    if pd.api.types.is_datetime64_any_dtype(ts):
+        # NAO dividir por 1e9 as cegas: o replay produz datetime64[s]
+        # (`pd.to_datetime(..., unit="s")`), nao o datetime64[ns] padrao
+        # do pandas. Dividir um dtype ja' em segundos achata TODOS os
+        # valores para o mesmo numero -- 12 baldes viravam 1, o funil
+        # devolvia zero e pareceria "a clausula nao dispara" de novo.
+        # `.dt.as_unit("s")` normaliza qualquer resolucao para segundos.
+        segundos: pd.Series = ts.dt.as_unit("s").astype("int64")
+        return segundos
+    return ts.astype("int64")
+
+
 def barras_de_contexto(barras15: pd.DataFrame,
                       segundos: int = SEGUNDOS_CONTEXTO) -> pd.DataFrame:
     """
@@ -74,8 +97,9 @@ def barras_de_contexto(barras15: pd.DataFrame,
     if barras15.empty:
         return pd.DataFrame()
     x = barras15.copy()
-    passo = int(segundos) * 1_000_000_000
-    x["balde_ctx"] = (x["ts"].astype("int64") // passo) * passo
+    passo = int(segundos)
+    x["_ts_s"] = _ts_em_segundos(x["ts"])
+    x["balde_ctx"] = (x["_ts_s"] // passo) * passo
     g = x.groupby(["dia", "balde_ctx"], sort=True)
     ctx = pd.DataFrame({
         "open": g["open"].first(),
@@ -86,7 +110,7 @@ def barras_de_contexto(barras15: pd.DataFrame,
     }).reset_index()
     # A barra de contexto FECHA no fim do seu balde. So' a partir dai' o
     # valor dela existe para quem esta' olhando o mercado ao vivo.
-    ctx["ts_fim"] = ctx["balde_ctx"] + passo
+    ctx["ts_fim"] = ctx["balde_ctx"] + passo   # segundos
     ctx["bloco"] = ctx["dia"]
     return ctx
 
@@ -120,20 +144,21 @@ def alinhar_contexto(barras15: pd.DataFrame, ctx: pd.DataFrame,
     """
     if barras15.empty or ctx.empty:
         return pd.Series(dtype=float, index=barras15.index)
+    ts_s = _ts_em_segundos(barras15["ts"])
     if permitir_look_ahead:
-        chave = (barras15["ts"].astype("int64")
-                // (SEGUNDOS_CONTEXTO * 10**9)) * (SEGUNDOS_CONTEXTO * 10**9)
+        passo = int(ctx["ts_fim"].iloc[0] - ctx["balde_ctx"].iloc[0])
+        chave = (ts_s // passo) * passo
         mapa = ctx.set_index("balde_ctx")["est_ctx"]
-        return chave.map(mapa)
+        return chave.map(mapa).to_numpy()
     # Sem look-ahead: merge_asof pega a ultima barra de contexto cujo
     # ts_fim <= ts da barra de 15s. `allow_exact_matches=True` esta'
     # certo: se a barra de contexto fecha exatamente no ts de abertura da
     # barra de 15s, ela ja' fechou -- o valor existe.
-    esq = barras15[["ts"]].copy()
+    esq = pd.DataFrame({"ts_s": ts_s.to_numpy()})
     esq["_ordem"] = np.arange(len(esq))
-    esq = esq.sort_values("ts", kind="stable")
+    esq = esq.sort_values("ts_s", kind="stable")
     dir_ = ctx[["ts_fim", "est_ctx"]].dropna(subset=["est_ctx"]).sort_values("ts_fim")
-    junto = pd.merge_asof(esq, dir_, left_on="ts", right_on="ts_fim",
+    junto = pd.merge_asof(esq, dir_, left_on="ts_s", right_on="ts_fim",
                          direction="backward", allow_exact_matches=True)
     return junto.sort_values("_ordem")["est_ctx"].to_numpy()
 

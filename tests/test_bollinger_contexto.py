@@ -13,18 +13,20 @@ import numpy as np
 import pandas as pd
 
 from profittape.research.bollinger_contexto import (
-    SEGUNDOS_CONTEXTO,
     alinhar_contexto,
     barras_de_contexto,
     estocastico_de_contexto,
     medir_funil,
 )
 
-_BASE = (1_700_000_000 // SEGUNDOS_CONTEXTO) * SEGUNDOS_CONTEXTO * 10**9
-
 
 def _barras15(n: int = 48, dia: str = "2026-09-01") -> pd.DataFrame:
-    ts = _BASE + np.arange(n) * 15 * 10**9
+    """`ts` como datetime64[s] -- EXATAMENTE o que `barras_15s_do_tape`
+    produz (`pd.to_datetime(..., unit="s")`). Ate' 2026-10-01 este
+    fixture usava epoch int64 e por isso NAO pegou o MergeError que o
+    dado real deu na primeira execucao."""
+    base = int(pd.Timestamp(f"{dia} 09:00:00").timestamp())
+    ts = pd.to_datetime(base + np.arange(n) * 15, unit="s")
     v = np.arange(n, dtype=float)
     return pd.DataFrame({"ts": ts, "dia": dia, "open": v, "high": v + 2,
                          "low": v - 1, "close": v + 1})
@@ -62,10 +64,10 @@ def test_look_ahead_VAZA_o_futuro_e_e_por_isso_que_existe_a_trava() -> None:
     ctx = barras_de_contexto(x)
     ctx["est_ctx"] = [11.0, 77.0]
     v = alinhar_contexto(x, ctx, permitir_look_ahead=True)
-    assert v.iloc[0] == 11.0, "com look-ahead a barra 0 ve o futuro"
-    assert v.iloc[24] == 77.0
+    assert v[0] == 11.0, "com look-ahead a barra 0 ve o futuro"
+    assert v[24] == 77.0
     sem = alinhar_contexto(x, ctx, permitir_look_ahead=False)
-    assert np.isnan(sem[0]) and v.iloc[0] == 11.0, (
+    assert np.isnan(sem[0]) and v[0] == 11.0, (
         "os dois modos PRECISAM divergir -- se nao divergissem, a trava "
         "nao estaria travando nada")
 
@@ -83,7 +85,6 @@ def test_estocastico_de_contexto_usa_a_janela_das_barras_MAIORES() -> None:
 
 def test_estocastico_reinicia_por_pregao() -> None:
     a, b = _barras15(24 * 10, "2026-09-01"), _barras15(24 * 10, "2026-09-02")
-    b["ts"] = b["ts"] + 86_400 * 10**9
     ctx = estocastico_de_contexto(barras_de_contexto(pd.concat([a, b])))
     for dia in ("2026-09-01", "2026-09-02"):
         d = ctx[ctx["dia"] == dia]
@@ -108,3 +109,27 @@ def test_sem_barras_nao_quebra() -> None:
     vazio = pd.DataFrame(columns=["ts", "dia", "open", "high", "low", "close"])
     assert barras_de_contexto(vazio).empty
     assert estocastico_de_contexto(pd.DataFrame()).empty
+
+
+def test_aceita_qualquer_resolucao_de_datetime_e_int() -> None:
+    """O bug de 2026-10-01: o replay produz datetime64[s] (nao o [ns]
+    padrao do pandas), e dividir por 1e9 as cegas achatava TODOS os
+    timestamps para o mesmo valor -- 12 baldes viravam 1 e o funil
+    devolvia zero, imitando "a clausula nao dispara"."""
+    from profittape.research.bollinger_contexto import _ts_em_segundos
+
+    base = int(pd.Timestamp("2026-09-01 09:00:00").timestamp())
+    esperado = [base, base + 15, base + 30]
+    for unidade in ("s", "ms", "us", "ns"):
+        ts = pd.Series(pd.to_datetime(base + np.arange(3) * 15, unit="s")).dt.as_unit(unidade)
+        assert _ts_em_segundos(ts).tolist() == esperado, f"falhou em datetime64[{unidade}]"
+    assert _ts_em_segundos(pd.Series(esperado)).tolist() == esperado
+
+
+def test_dado_no_formato_REAL_do_replay_produz_baldes_corretos() -> None:
+    """Caso que quebrou em producao. 12 barras de 6 min, 24 barras de 15s
+    em cada -- se a conversao estiver errada, vira 1 balde de 288."""
+    x = _barras15(24 * 12)
+    ctx = barras_de_contexto(x)
+    assert len(ctx) == 12, f"esperado 12 baldes, veio {len(ctx)}"
+    assert list(ctx["barras15"]) == [24] * 12

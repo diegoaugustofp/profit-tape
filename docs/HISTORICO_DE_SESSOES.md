@@ -3021,3 +3021,32 @@ dois limiares.
   entreguei tres versoes seguidas sem conferir o `git log` do operador --
   a skill de engenharia manda conferir as tags no inicio de cada sessao, e
   eu so' olhei quando o bundle falhou.
+
+### 2026-10-01 — bollinger-contexto: dois bugs de tipo de timestamp (v3.41)
+
+A primeira execucao no dado REAL falhou com
+`MergeError: incompatible merge keys dtype('<M8[s]') and dtype('int64')`.
+Dois defeitos, o segundo bem pior que o primeiro:
+
+1. **MergeError**: `ts` chega como datetime64, nao epoch int. Os testes
+   da v3.38 usavam int64 e por isso nunca exercitaram o tipo real --
+   teste que nao reprova o caso real nao verifica nada (disciplina 7.3).
+2. **Achatamento silencioso** (o grave): ao normalizar, dividi por 1e9
+   assumindo nanossegundos. Mas o replay produz `datetime64[s]` --
+   `pd.to_datetime(..., unit="s")` -- que JA' esta' em segundos.
+   Dividir de novo achatava TODOS os timestamps para o mesmo valor: 12
+   baldes de 6 min viravam 1 balde de 288 barras, o alinhamento dava
+   zero e o funil devolveria `0 candidatos com contexto` -- ou seja,
+   **imitaria exatamente o resultado "a clausula nao dispara" que
+   estamos investigando**. Se eu tivesse aceitado "nao deu erro" como
+   sucesso, teria entregue um funil que sempre devolve zero e confirmado
+   uma conclusao falsa pela segunda vez.
+
+Corrigido com `.dt.as_unit("s")`, que normaliza qualquer resolucao.
+Conferido a mao nas quatro resolucoes (s/ms/us/ns) e em int puro.
+Fixture dos testes passou a usar o formato REAL do replay; 2 testes
+novos (todas as resolucoes; 12 baldes de 24 barras no formato real).
+
+**Licao**: "o comando rodou sem erro" nao e' verificacao. O segundo bug
+so' apareceu porque conferi o NUMERO de baldes contra o esperado no
+papel, nao porque o codigo executou.
