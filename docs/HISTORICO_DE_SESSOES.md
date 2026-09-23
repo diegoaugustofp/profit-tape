@@ -3385,3 +3385,43 @@ meio-termo entre o retrospectivo impossivel e os 6 meses de forward.
 
 12 testes novos (9 do estado + 3 do filtro), incluindo leitura
 concorrente com 3000 atualizacoes. Suite verde, ruff e mypy limpos.
+
+### 2026-09-23 — Armadilhas de 2 timeframes: clustering pode virar um veredito (v3.51)
+
+Operador levantou: *"no timeframe de 15s so' da' 3 trades por pregao nao
+e' muito pouco? Ate' a barra de 6 min mudar dariam 24 barras de 15s,
+certo?"*.
+
+Duas coisas na pergunta:
+
+1. **Confusao de unidades, culpa minha**: "3,2" sao OPERACOES da
+   estrategia, nao negocios do tape (que sao ~4 MILHOES por pregao). O
+   funil completo: 928 barras -> 130 candidatos de banda -> 14,5 com
+   contexto -> 6,5 executadas -> 3,2 com filtro de book. O maior corte
+   e' o contexto (89%).
+
+2. **O ponto SERIO, que ele acertou**: durante 24 barras de 15s o
+   contexto fica CONGELADO, entao os sinais vem em RAJADAS. As
+   operacoes NAO sao independentes -- e todos os IC desta familia
+   assumiram independencia.
+
+   Com `deff = tamanho medio do cluster` (pior caso), o IC95 da variante
+   limitada (-26,0) vira: deff 2,0 -> (-51,2; -0,8) ainda CONTRA;
+   **deff 3,0 -> (-56,8; +4,8), INCONCLUSIVO**. Ou seja, se o cluster
+   medio passar de ~2,1, o veredito CONTRA que dei hoje NAO se sustenta.
+
+Mais duas armadilhas achadas ao investigar:
+- **aquecimento assimetrico**: o contexto so' existe apos 60 min, entao
+  nenhum sinal e' possivel antes de ~10:06 -- 26% do pregao. A versao
+  COM contexto opera em janela horaria DIFERENTE da sem, e as
+  comparacoes de 5.8 e 8.7 ignoraram isso.
+- **barras de contexto incompletas**: balde sem negocio nao existe no
+  dado, entao uma "barra de 6 min" pode ter 5 barras de 15s e o
+  estocastico mistura liquidez sem nada acusar.
+
+E uma LACUNA que nao da' para medir sem dump: os indicadores de 15s
+foram validados contra o Profit (dif_max=0,0), mas **o estocastico de
+6 MIN nunca foi**. E' onde mora a proxima surpresa, se houver.
+
+`research/diagnostico_multitf.py` + `profit-tape diagnostico-multitf`.
+6 testes. Suite verde, ruff e mypy limpos.

@@ -2928,6 +2928,87 @@ def fase2_score(
 
 
 @app.command()
+def diagnostico_multitf(
+    symbol: str = typer.Argument("WINFUT"),
+    curated: Path = typer.Option(Path("data/curated"), "--curated"),
+    dias: str | None = typer.Option(None, "--dias"),
+    de: str | None = typer.Option(None, "--de"),
+    ate: str | None = typer.Option(None, "--ate"),
+    filtro_contexto: bool = typer.Option(True, "--filtro-contexto/--sem-filtro"),
+    log_level: str = typer.Option("WARNING", "--log-level"),
+) -> None:
+    """
+    Armadilhas do modelo de DOIS TIMEFRAMES (features, zero trial).
+
+    Mede CLUSTERING (sinais em rajada dentro da mesma janela de 6 min),
+    aquecimento do contexto e barras de contexto incompletas.
+
+    O clustering e' o que importa: se as operacoes vem em rajadas, elas
+    NAO sao independentes, e todos os IC desta familia -- que assumiram
+    independencia -- estao ESTREITOS DEMAIS.
+    """
+    configurar(log_level)
+    import pandas as pd
+
+    from .features.pipeline import _carregar_dia, _dias_do_symbol
+    from .research import bollinger_contexto as bc
+    from .research import bollinger_replay as br
+    from .research import diagnostico_multitf as dm
+
+    sym = symbol.strip().upper()
+    pastas = _dias_do_symbol(curated / "trade", sym)
+    if dias:
+        alvo = {d.strip() for d in dias.split(",")}
+        pastas = [p for p in pastas if p.name.split("=", 1)[1] in alvo]
+    if de:
+        pastas = [p for p in pastas if p.name.split("=", 1)[1] >= de]
+    if ate:
+        pastas = [p for p in pastas if p.name.split("=", 1)[1] <= ate]
+    if not pastas:
+        raise typer.BadParameter(f"nenhum pregao de {sym} em {curated / 'trade'}")
+
+    partes = []
+    for pasta in pastas:
+        dia = pasta.name.split("=", 1)[1]
+        barras = br.barras_15s_do_tape(_carregar_dia(pasta, sym), dia)
+        if barras.empty:
+            continue
+        sinais = br.indicadores_e_sinais_do_tape(barras, "rompimento")
+        if filtro_contexto:
+            sinais = bc.aplicar_filtro_contexto(sinais)
+        partes.append(sinais)
+    if not partes:
+        raise typer.BadParameter("nenhuma barra montada")
+
+    d = dm.medir(pd.concat(partes, ignore_index=True))
+    r = d.resumo()
+    typer.echo("=" * 72)
+    typer.echo(f"ARMADILHAS DE 2 TIMEFRAMES — {len(partes)} pregoes"
+               + (" (com filtro de contexto)" if filtro_contexto else " (SEM filtro)"))
+    typer.echo("=" * 72)
+    typer.echo(f"  operacoes (sinais)            {r['operacoes']}")
+    typer.echo(f"  janelas de 6 min com sinal    {r['janelas_de_6min_com_sinal']}")
+    typer.echo(f"  tamanho medio do cluster      {r['tamanho_medio_do_cluster']}")
+    typer.echo(f"  maior cluster                 {r['maior_cluster']}")
+    typer.echo(f"  deff (pior caso, rho=1)       {r['deff_conservador']}")
+    typer.echo(f"  n EFETIVO                     {r['n_efetivo']}  <- e' este que vale")
+    typer.echo("")
+    typer.echo(f"  1o sinal possivel no dia      {r['primeiro_sinal_possivel']} "
+               "(aquecimento do contexto)")
+    typer.echo(f"  barras de contexto            {r['barras_de_contexto']}")
+    typer.echo(f"  ... INCOMPLETAS (<24 de 15s)  {r['incompletas']}")
+    typer.echo(f"  ... barras15 por contexto     mediana {r['barras15_por_contexto_mediana']}")
+    typer.echo("")
+    deff = float(r["deff_conservador"])  # type: ignore[arg-type]
+    typer.echo("EFEITO NOS VEREDITOS JA' DADOS (IC95 reaberto com este deff):")
+    for nome, media, lo, hi in (("limitada (era CONTRA)", -26.0, -43.8, -8.2),
+                                ("stop (era INCONCLUSIVO)", -18.1, -35.9, -0.2)):
+        novo_lo, novo_hi = dm.ic_corrigido(media, lo, hi, 0, deff)
+        vered = "CONTRA" if novo_hi < 0 else "INCONCLUSIVO"
+        typer.echo(f"  {nome:26} ({novo_lo:6.1f}; {novo_hi:5.1f}) -> {vered}")
+
+
+@app.command()
 def regime_funil(
     symbol: str = typer.Argument("WINFUT"),
     curated: Path = typer.Option(Path("data/curated"), "--curated"),

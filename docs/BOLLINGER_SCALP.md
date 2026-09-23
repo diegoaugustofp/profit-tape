@@ -850,3 +850,69 @@ Três razões que não dependem do resultado:
   (as 4 combinações deram ~25% cada, confirmando que os eixos medem
   coisas diferentes). Entra como ficha própria, depois, se entrar.
 - Não olhar o placar antes de n=150.
+
+## 11. ARMADILHAS DO MODELO DE DOIS TIMEFRAMES (2026-09-23)
+
+> Levantadas pelo operador: *"essa estratégia diferente das outras usa 2
+> timeframes. Quais armadilhas tem nesse modelo que podemos ter caído
+> nelas?"*. Quatro identificadas; três mensuráveis.
+
+### 11.1 CLUSTERING — a mais séria, e afeta TUDO que já reportamos
+
+Durante 24 barras de 15s o estocástico de contexto fica **congelado**.
+Se estiver em zona de extremo, todas as barras daquela janela passam no
+filtro — os sinais vêm em **rajadas**, não espalhados. Duas operações da
+mesma janela compartilham contexto, regime e provavelmente o mesmo
+movimento de preço.
+
+**Consequência**: as operações NÃO são independentes, e todos os IC
+desta família assumiram independência. A variância real é maior; o IC
+verdadeiro é **mais largo** que o reportado.
+
+O efeito nos vereditos já dados, com `deff = tamanho médio do cluster`
+(pior caso, rho=1):
+
+| deff | IC95 da limitada (era −26,0) | veredito |
+|---|---|---|
+| 1,0 | (−43,8; −8,2) | CONTRA |
+| 2,0 | (−51,2; −0,8) | CONTRA |
+| **3,0** | **(−56,8; +4,8)** | **INCONCLUSIVO** |
+
+Ou seja: **se o cluster médio passar de ~2,1, o CONTRA da variante
+limitada vira inconclusivo.** O INCONCLUSIVO da stop não muda (já
+cruzava zero); o horizonte do forward calculado em 10.2 está
+**otimista**.
+
+Medir: `profit-tape diagnostico-multitf`.
+
+### 11.2 AQUECIMENTO ASSIMÉTRICO
+
+O contexto precisa de 10 barras de 6 min (60 min) para existir. A janela
+começa às 09:08, então **nenhum sinal é possível antes de ~10:06** — 26%
+do pregão útil.
+
+Não é defeito, mas significa que a versão COM contexto opera numa janela
+horária diferente da versão SEM. As comparações de 5.8 e 8.7 entre
+variantes ignoraram isso: parte da diferença pode ser horário, não
+mecanismo.
+
+### 11.3 BARRAS DE CONTEXTO INCOMPLETAS
+
+A barra de 6 min é montada das barras de 15s que EXISTEM. Balde sem
+negócio não aparece no dado, então uma "barra de 6 min" pode ter 5
+barras de 15s em vez de 24 — e o estocástico sobre ela mistura períodos
+de liquidez muito diferentes, sem nada acusar. O diagnóstico conta
+quantas são incompletas.
+
+### 11.4 EQUIVALÊNCIA NUNCA VALIDADA NO TIMEFRAME MAIOR — lacuna aberta
+
+Os indicadores de 15s foram validados contra o gráfico do Profit
+(dif_max = 0,0, seção 2). **O estocástico de 6 MIN nunca foi.**
+
+Se o Profit montar a barra de 6 min de forma diferente — outros tipos de
+negócio incluídos, tratamento de leilão, alinhamento do balde — o número
+que o operador vê na tela não é o que o código calcula. E foi
+exatamente esse tipo de divergência que gerou o erro de setembro.
+
+**Não é mensurável sem um dump do gráfico de 6 min.** Fica registrado
+como a lacuna mais provável de conter a próxima surpresa.
