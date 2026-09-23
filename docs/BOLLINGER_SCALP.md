@@ -1,6 +1,10 @@
 # Scalp de Bollinger modificada (15s) — hipótese em formalização
 
-Estado (2026-09-23, revisto): **REABERTO por defeito de especificação** —
+Estado (2026-09-23, final): **SUSPENSA.** O mecanismo correto (rompimento
+com ordem STOP + estocástico de contexto) foi medido e deu INCONCLUSIVO
+(9.5) — IC98,3% (−39,9; +3,7). Ponto estimado negativo; reabrir exige
+dado NOVO, não argumento novo. Histórico: **REABERTO por defeito de
+especificação** —
 o "rompimento" usava ordem limitada e nunca esperava romper (seção 9).
 As medições anteriores valem para o que de fato testaram. As variantes
 testadas foram CONTRA — retorno (null), rompimento (negativo) e rompimento +
@@ -655,6 +659,68 @@ a da limitada (entra no gatilho ou além, nunca antes). Se a limitada —
 que entrava em preço melhor — deu −26 pts/operação, há razão mecânica
 para esperar que a stop dê **pior**, não melhor. O que muda é que
 estaremos medindo o mecanismo certo.
+
+### 9.5 RESULTADO da remediação: INCONCLUSIVO (2026-09-23)
+
+Rodado uma vez, com `--tipo-ordem stop`. Confirmado que a stop de fato
+rodou: tipos `rompimento 234` e `gap 37` (a limitada produzia
+`abertura`/`recuo`), e surgiu `nao_atravessou = 149` — sinais que nunca
+alcançaram o gatilho, categoria que a limitada não podia gerar.
+
+    n                   271 operacoes (6,5/pregao)
+    p1                  0,432  IC95 (0,374; 0,491)
+    borda bruta        -18,1 pts/op   IC95 (-35,9; -0,2)
+    borda bruta        IC98,3% (-39,9; +3,7)   <- criterio da ficha
+    custo max suportado -6,0 pts/contrato   (custo real 11,0)
+
+**Poder**: n = 271 ≥ 60. Passa.
+
+**Critério**: o IC98,3% **cruza zero** → **INCONCLUSIVO**. Não é CONTRA
+(o limite superior é positivo) nem FAVORÁVEL (o inferior é negativo).
+
+**Em pontos**: mesmo no melhor cenário que o intervalo admite, a borda
+bruta é +1,2 pt por contrato — contra custo real de 11. Inconclusivo
+estatisticamente, e insuficiente economicamente mesmo no topo do IC.
+
+### 9.6 A previsão registrada estava ERRADA, e o motivo importa
+
+Em 9.4, antes de rodar, ficou escrito: *"há razão mecânica para esperar
+que a stop dê pior, não melhor"*. Deu **melhor**: −18,1 contra −26,0.
+
+O que eu não previ está no próprio log: **`nao_atravessou = 149`**. A
+stop não só entra pior — ela **filtra**. Dos 611 sinais, 149 nunca
+alcançaram o gatilho, e esses eram os padrões sem força para romper. A
+limitada comprava todos na abertura, indiscriminadamente. O ganho de
+filtrar superou o custo de entrar pior.
+
+Isso é mecanismo, não ruído: a ordem stop carrega uma **condição de
+confirmação** que a limitada não tem. Vale registrar como aprendizado
+transferível para qualquer estratégia de rompimento — o gatilho não é só
+preço de entrada, é filtro.
+
+| | entrada | filtra? | borda bruta |
+|---|---|---|---|
+| limitada (defeito) | abertura, preço melhor | não | −26,0 |
+| stop (correto) | gatilho ou pior | **sim, 149 sinais** | −18,1 |
+
+### 9.7 PARADA
+
+A cláusula de 9.4 é explícita: **um tiro; inconclusivo não autoriza
+mexer em mais nada**. Não se testa outro limiar, timeframe ou gatilho
+sobre esta amostra.
+
+**O único caminho legítimo**: acumular pregões novos e repetir a MESMA
+regra. Com ~6,5 operações por pregão, dobrar a amostra (para ~540
+operações) estreitaria o IC em cerca de 30% — o que decidiria entre
+CONTRA e FAVORÁVEL apenas se a borda verdadeira estiver longe de zero.
+Como o ponto estimado é −18,1, o desfecho mais provável de uma amostra
+maior é **CONTRA**, não aprovação.
+
+**Recomendação honesta**: não vale esperar meses de captura para
+confirmar o que o ponto estimado já sugere. A família fica **suspensa,
+não fechada** — a distinção importa: fechada significa refutada;
+suspensa significa que o teste correto foi feito e não decidiu, e que
+reabrir exigiria dado novo, não argumento novo.
 
 ## 6. Dúvidas — fechadas em 2026-09-05, exceto as que o dump responde
 

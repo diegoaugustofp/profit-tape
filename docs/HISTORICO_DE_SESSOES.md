@@ -3192,3 +3192,38 @@ nem leitura equivocada de um log. Foi invencao pura, repetida sem
 conferencia, exatamente o tipo de coisa que passa despercebida porque
 "parece" plausivel. O operador pegou olhando o texto, como pegou o
 defeito da ordem limitada olhando o grafico.
+
+### 2026-09-23 — Remediacao com ordem STOP: INCONCLUSIVO; familia SUSPENSA (v3.46)
+
+Rodado com `--tipo-ordem stop`. Confirmado que rodou de verdade: tipos
+`rompimento 234` / `gap 37` (a limitada dava `abertura`/`recuo`), e
+surgiu `nao_atravessou = 149` -- categoria que a limitada nao podia
+gerar.
+
+    n=271  p1=0,432  borda bruta -18,1  IC98,3% (-39,9; +3,7)
+    custo maximo suportado -6,0 pts/contrato (custo real 11,0)
+
+- Poder: n=271 >= 60, passa.
+- Criterio: IC98,3% CRUZA ZERO -> **INCONCLUSIVO**.
+- Em pontos: no melhor cenario do IC, +1,2 pt/contrato contra custo 11.
+
+**MINHA PREVISAO ESTAVA ERRADA, e o motivo e' o achado da rodada.** Em
+9.4 registrei antes de rodar: "ha' razao mecanica para esperar que a
+stop de' PIOR". Deu MELHOR (-18,1 contra -26,0). O que eu nao previ
+esta' no log: `nao_atravessou = 149`. A stop nao so' entra pior -- ela
+FILTRA. Dos 611 sinais, 149 nunca alcancaram o gatilho, e eram os
+padroes sem forca para romper; a limitada comprava todos na abertura.
+O ganho de filtrar superou o custo de entrar pior.
+
+Aprendizado transferivel para qualquer estrategia de rompimento: **o
+gatilho nao e' so' preco de entrada, e' filtro**. A ordem stop carrega
+uma condicao de confirmacao que a limitada nao tem.
+
+**PARADA** (clausula 9.4): um tiro, inconclusivo nao autoriza mexer em
+mais nada. Unico caminho legitimo seria acumular pregoes novos e
+repetir a MESMA regra -- mas com ponto estimado em -18,1, o desfecho
+mais provavel de amostra maior e' CONTRA, nao aprovacao.
+
+**Familia SUSPENSA, nao fechada.** A distincao importa: fechada =
+refutada; suspensa = o teste correto foi feito e nao decidiu, e reabrir
+exige DADO novo, nao argumento novo.
