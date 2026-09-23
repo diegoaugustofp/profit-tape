@@ -51,6 +51,28 @@ TRADE_TYPE_RLP = 13
 LADO_BID, LADO_ASK = 0, 1      # `side` do tiny_book: 0=compra(bid), 1=venda(ask)
 
 
+def _balde_das_barras(barras: pd.DataFrame) -> pd.Series:
+    """
+    Balde de 15s das barras, no MESMO relogio dos trades e do livro.
+
+    ARMADILHA REAL (2026-09-23): a coluna `ts` das barras tem o OFFSET DE
+    FUSO somado (`barras_15s_do_tape` faz
+    `to_datetime(balde*15 + TZ_OFFSET_H*3600)`), enquanto `ts_ns` dos
+    trades e do tiny_book e' epoch UTC puro. Converter `ts` de volta para
+    epoch dava 3 HORAS de diferenca, e o join nao casava NENHUMA linha --
+    o funil dizia "0 candidatos com dado" sem erro nenhum.
+
+    `ts_ini_ns` ja' e' epoch puro. Usar ele elimina a conversao e a
+    chance de errar o relogio.
+    """
+    if "ts_ini_ns" in barras.columns:
+        passo = 15 * 10**9
+        return (barras["ts_ini_ns"].astype("int64") // passo) * passo
+    raise KeyError(
+        "barras sem `ts_ini_ns`: nao da' para alinhar com trades/livro sem "
+        "arriscar o offset de fuso (ver docstring)")
+
+
 def rlp_por_barra(trades: pd.DataFrame, barras: pd.DataFrame) -> pd.Series:
     """
     Fração de RLP no volume de cada barra de 15s, alinhada por `bar_id`.
@@ -85,7 +107,14 @@ def topo_do_livro_por_barra(tiny: pd.DataFrame) -> pd.DataFrame:
     """
     if tiny.empty:
         return pd.DataFrame(columns=["balde", "qtd_bid", "qtd_ask", "desequilibrio"])
-    t = tiny.sort_values("ts_ns", kind="stable").copy()
+    # O tiny_book persistido tem `ts_recv_ns` (instante em que NOS
+    # recebemos), nao `ts_ns` (carimbo da B3, que so' o trade tem).
+    # Aceitar os dois nomes evita depender de quem renomeou antes --
+    # erro real de 2026-09-23: pedi `ts_ns` ao parquet e quebrou.
+    col_ts = "ts_ns" if "ts_ns" in tiny.columns else "ts_recv_ns"
+    if col_ts not in tiny.columns:
+        raise KeyError("tiny_book sem ts_ns nem ts_recv_ns")
+    t = tiny.rename(columns={col_ts: "ts_ns"}).sort_values("ts_ns", kind="stable").copy()
     passo = 15 * 10**9
     t["balde"] = (t["ts_ns"] // passo) * passo
     ultimo = t.groupby(["balde", "side"]).last().reset_index()
@@ -124,9 +153,7 @@ def medir(barras: pd.DataFrame, trades: pd.DataFrame, tiny: pd.DataFrame,
     disciplina 0 nomeia.
     """
     x = barras.copy()
-    passo = 15 * 10**9
-    x["balde"] = (x["ts"].astype("int64") // passo) * passo if pd.api.types.is_datetime64_any_dtype(
-        x["ts"]) is False else (x["ts"].dt.as_unit("s").astype("int64") * 10**9 // passo) * passo
+    x["balde"] = _balde_das_barras(x)
 
     rlp = rlp_por_barra(trades, x)
     livro = topo_do_livro_por_barra(tiny).set_index("balde")
@@ -162,10 +189,7 @@ def combinado(barras: pd.DataFrame, trades: pd.DataFrame, tiny: pd.DataFrame,
     eventos viraram 62 com uma linha de contexto -- 5x no calendário).
     """
     x = barras.copy()
-    passo = 15 * 10**9
-    x["balde"] = (x["ts"].dt.as_unit("s").astype("int64") * 10**9 // passo) * passo \
-        if pd.api.types.is_datetime64_any_dtype(x["ts"]) \
-        else (x["ts"].astype("int64") // passo) * passo
+    x["balde"] = _balde_das_barras(x)
     x = (x.join(rlp_por_barra(trades, x), on="balde")
           .join(topo_do_livro_por_barra(tiny).set_index("balde")[["desequilibrio"]], on="balde"))
     cand = (x["sinal_compra"].fillna(False) | x["sinal_venda"].fillna(False)).astype(bool)

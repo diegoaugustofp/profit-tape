@@ -3260,3 +3260,47 @@ nao a media.
 nunca qual lado esta' CERTO. A direcao vem de mecanismo declarado.
 
 8 testes novos. Suite verde, ruff e mypy limpos.
+
+### 2026-09-23 — regime-funil: tres defeitos achados rodando (v3.48)
+
+Os tres so' apareceram porque o operador RODOU. Nenhum teria sido pego
+pelos testes como estavam.
+
+1. **O livro nao esta' no curated.** O `curate` e' `curar_trades` --
+   trata SO' trades. O tiny_book fica no raw e nunca e' curado. O
+   comando exigia `curated/tiny_book` e abortava. Corrigido: le do
+   `raw`, com `--raw` configuravel, e faz dedup/ordem na leitura (o que
+   o curated daria).
+
+2. **Relogios diferentes, 3 HORAS de diferenca.** A coluna `ts` das
+   barras tem o offset de fuso somado (`barras_15s_do_tape` faz
+   `to_datetime(balde*15 + TZ_OFFSET_H*3600)`); `ts_ns` dos trades e do
+   livro e' epoch UTC puro. Converter `ts` de volta para epoch dava um
+   join que NAO CASAVA NENHUMA LINHA -- e o funil imprimia "0 com dado"
+   sem erro nenhum. Corrigido com `_balde_das_barras`, que usa
+   `ts_ini_ns` (epoch puro, ja' presente nas barras) e FALHA ALTO se ele
+   nao existir.
+
+3. **Nome de coluna errado no tiny_book.** O codigo pedia `ts_ns`; o
+   TINY_BOOK_SCHEMA so' grava `ts_recv_ns` -- e sao relogios diferentes
+   (trade = carimbo da B3; livro = instante em que NOS recebemos; para
+   balde de 15s a latencia em ms nao muda o balde, mas nao e' o mesmo
+   carimbo). ArrowInvalid na maquina do operador. Eu tinha VISTO o
+   NamedTuple com `ts_recv_ns` no inicio da sessao e escrevi `ts_ns`
+   assim mesmo.
+
+**A licao comum aos tres**: os testes usavam fixtures INVENTADOS por
+mim, nao o schema do projeto. Fixture que nao segue o schema real nao
+testa integracao nenhuma -- e' a regra 7.3 (um verificador que nao
+reprova o caso errado nao verifica nada) aplicada a dado, nao a codigo.
+O teste novo importa `TINY_BOOK_SCHEMA` e falha se o schema mudar.
+
+Tambem: `--de/--ate` no comando. O operador apontou que o periodo
+anterior a 2026-09-10 tem falha de gravacao que deixa a leitura
+lentissima sem `compact`. Para o FUNIL isso nao e' problema -- ele mede
+TAXA, e ~9 pregoes ja' dao erro padrao de ~4 p.p. numa proporcao perto
+de 50%. Todo o historico so' seria necessario se o numero DECIDISSE
+algo, e ele nao decide (os 42 pregoes estao queimados; o teste e'
+forward).
+
+4 testes novos. Suite verde, ruff e mypy limpos.

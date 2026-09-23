@@ -2931,7 +2931,18 @@ def fase2_score(
 def regime_funil(
     symbol: str = typer.Argument("WINFUT"),
     curated: Path = typer.Option(Path("data/curated"), "--curated"),
+    raw: Path = typer.Option(Path("data/raw"), "--raw",
+                            help="O tiny_book vive aqui: o `curate` so' trata "
+                                 "TRADES (curar_trades), o livro nunca e' "
+                                 "curado. Dedup/ordem sao feitos aqui na "
+                                 "leitura."),
     dias: str | None = typer.Option(None, "--dias"),
+    de: str | None = typer.Option(None, "--de",
+                                 help="Inicio do intervalo (YYYY-MM-DD). Util para "
+                                      "pular o periodo anterior a 2026-09-10, cuja "
+                                      "falha de gravacao deixa a leitura lentissima "
+                                      "sem compact."),
+    ate: str | None = typer.Option(None, "--ate", help="Fim do intervalo (YYYY-MM-DD)."),
     quantil: float = typer.Option(0.5, "--quantil",
                                  help="Corte. 0,5 = mediana (nao calibra nada)."),
     log_level: str = typer.Option("WARNING", "--log-level"),
@@ -2959,6 +2970,10 @@ def regime_funil(
     if dias:
         alvo = {d.strip() for d in dias.split(",")}
         pastas = [p for p in pastas if p.name.split("=", 1)[1] in alvo]
+    if de:
+        pastas = [p for p in pastas if p.name.split("=", 1)[1] >= de]
+    if ate:
+        pastas = [p for p in pastas if p.name.split("=", 1)[1] <= ate]
     if not pastas:
         raise typer.BadParameter(f"nenhum pregao de {sym} em {curated / 'trade'}")
 
@@ -2970,20 +2985,33 @@ def regime_funil(
         barras = br.barras_15s_do_tape(trades, dia)
         if barras.empty:
             continue
-        pasta_tb = curated / "tiny_book" / f"dt={dia}" / f"sym={sym}"
+        # O livro vem do RAW: `curate` = `curar_trades`, so' trades. O
+        # tiny_book nunca e' curado, entao a deduplicacao e a ordenacao
+        # que o curated daria acontecem aqui, na leitura.
+        pasta_tb = raw / "tiny_book" / f"dt={dia}" / f"sym={sym}"
         if not pasta_tb.exists():
             sem_livro.append(dia)
             continue
         import pyarrow.dataset as ds
-        tb = ds.dataset(pasta_tb, format="parquet").to_table(
-            columns=["ts_ns", "side", "price", "quantidade"]).to_pandas()
+        # O tiny_book NAO tem `ts_ns`: o schema so' grava `ts_recv_ns`
+        # (TINY_BOOK_SCHEMA). Sao relogios DIFERENTES -- o trade traz o
+        # timestamp da B3, o livro traz o instante em que NOS recebemos.
+        # Para baldes de 15s a latencia (ms) nao muda o balde, mas quem
+        # ler isto precisa saber que nao e' o mesmo carimbo.
+        tb = ds.dataset(pasta_tb, format="parquet",
+                        exclude_invalid_files=True).to_table(
+            columns=["ts_recv_ns", "side", "price", "quantidade"]).to_pandas()
+        tb = (tb.rename(columns={"ts_recv_ns": "ts_ns"})
+                .sort_values("ts_ns", kind="stable")
+                .drop_duplicates(subset=["ts_ns", "side", "price", "quantidade"]))
         b_all.append(br.indicadores_e_sinais_do_tape(barras, "rompimento"))
         t_all.append(trades)
         tb_all.append(tb)
     if not b_all:
         raise typer.BadParameter(
-            "nenhum pregao com tiny_book curado. O funil do livro precisa de "
-            f"{curated / 'tiny_book'} -- rode o curate para esse stream.")
+            f"nenhum pregao com tiny_book em {raw / 'tiny_book'}. O livro NAO "
+            "passa pelo curate (que so' trata trades) -- ele fica no raw. Se "
+            "sua raiz de captura for outra, passe --raw.")
     barras, trades, tiny = (pd.concat(b_all, ignore_index=True),
                             pd.concat(t_all, ignore_index=True),
                             pd.concat(tb_all, ignore_index=True))
@@ -2991,7 +3019,7 @@ def regime_funil(
     typer.echo("=" * 76)
     typer.echo(f"REGIME — funil de RLP e topo do livro — {len(b_all)} pregoes")
     if sem_livro:
-        typer.echo(f"  ({len(sem_livro)} pregoes SEM tiny_book curado, fora da conta)")
+        typer.echo(f"  ({len(sem_livro)} pregoes SEM tiny_book no raw, fora da conta)")
     typer.echo("=" * 76)
     typer.echo(f"{'eixo':6} {'lado':7} {'corte':24} {'passa':>7} {'de':>7} {'%':>7}")
     for x in rr.medir(barras, trades, tiny, quantil):
