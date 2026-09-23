@@ -3050,3 +3050,41 @@ novos (todas as resolucoes; 12 baldes de 24 barras no formato real).
 **Licao**: "o comando rodou sem erro" nao e' verificacao. O segundo bug
 so' apareceu porque conferi o NUMERO de baldes contra o esperado no
 papel, nao porque o codigo executou.
+
+### 2026-10-01 — Funil PASSOU; pre-registro escrito (v3.42)
+
+**Funil (42 pregoes, categoria features, zero trial):**
+
+    compra   366 de 2.607 candidatos com contexto  (14,0%)
+    venda    537 de 2.692                          (19,9%)
+
+Contra a medicao ERRADA de setembro (estocastico nos mesmos 15s): compra
+1/164, venda ZERO. A venda saiu de zero absoluto para 537 eventos --
+confirma que o zero era o acoplamento geometrico, nao a hipotese.
+
+Tres leituras do funil:
+- os DOIS lados sobreviveram, com taxas parecidas (14,0% e 19,9%). A
+  spec descreve compra e venda como espelhos, e o funil nao contradiz.
+- o extremo e' bem mais seletivo que a direcao (14-20% vs ~46%) -- se
+  fossem parecidos, o limiar 20/80 nao estaria filtrando nada.
+- o contexto quase nunca falta: 2.607 de 2.613. A defasagem de ate' 6
+  min custou ~0,2% dos candidatos.
+
+**Escolhas do operador para o pre-registro**: limiar EXTREMO (20/80, a
+spec original) e variante ROMPIMENTO -- coerente, porque o gatilho que a
+spec descreve ("perda da minima do candle vermelho", "ruptura da maxima
+do candle branco") E' o rompimento.
+
+**Ficha escrita ANTES de rodar** (BOLLINGER_SCALP.md secao 8): mecanismo
+em uma frase, evento congelado, amostra esperada (~90-200 operacoes),
+criterio com correcao de Bonferroni para 3 testes (IC 98,3%, nao 95% --
+esta e' a 3a tentativa da familia), condicao de poder (n>=60) e parada
+declarada (um tiro; inconclusivo NAO autoriza testar outro limiar sobre
+a mesma amostra).
+
+`--filtro-contexto` no `bollinger-replay`. Filtro conferido A MAO antes
+dos testes: 86 candidatos -> 48, batendo com a contagem manual de
+`est_ctx < 20`; sinal sem contexto reprovado; barras e indicadores
+intactos. 3 testes novos (12 no modulo). Suite verde.
+
+**PENDENTE**: rodar. Consome trial.

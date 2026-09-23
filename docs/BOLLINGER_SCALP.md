@@ -427,6 +427,96 @@ concretas reprovadas. Se um dia surgir uma terceira ideia de entrada
 sobre esta mesma banda/estocástico, essa ferramenta já existe e pode
 rodar antes de qualquer código novo de execução.
 
+## 8. PRÉ-REGISTRO: rompimento + estocástico de contexto (6 min)
+
+> **Escrito em 2026-10-01, ANTES de rodar qualquer replay desta
+> variante.** Regra 1 da disciplina: o critério é escolhido antes de ver
+> o resultado, senão não é critério.
+
+### 8.1 Motivação (o mecanismo, em uma frase)
+
+A banda de Bollinger nos 15s define a tendência imediata; o estocástico
+lento no gráfico de 6 minutos diz se a correção **contra** essa
+tendência já se exauriu. Entra-se a favor da tendência imediata no
+momento em que o recuo perdeu força no horizonte maior.
+
+É uma hipótese de **dois horizontes**, e é isso que a torna
+não-redundante com a própria banda. Foi também o que a medição de
+setembro destruiu sem perceber, ao calcular o estocástico nos mesmos
+15s das bandas (ver a correção na seção 7.6).
+
+### 8.2 O que muda frente ao que já foi testado
+
+| | v1 retorno | v1 rompimento | **esta** |
+|---|---|---|---|
+| gatilho | limitada em `high/low(t-2)` | limitada em `high/low(t-1)` | **igual ao rompimento** |
+| filtro de contexto | nenhum | nenhum | **est. 6 min: compra <20, venda >80** |
+| resultado | p1 0,480 IC(0,432–0,528) — null | p1 0,415 IC(0,360–0,473) — negativo | a medir |
+
+Tudo o mais é **idêntico** à v1 (janela, aquecimento, stop 0,7×ATR21,
+alvos 1/1,625/2,5, trailing, circuit breaker de 3 perdas). Só a cláusula
+de contexto entra.
+
+### 8.3 Evento (regra congelada)
+
+Sinal de **compra** na barra t quando, no mesmo pregão e bloco contíguo:
+- t−2 vermelha (close<open) e close **>** banda superior;
+- t−1 branca (close>open) e close **>** banda superior;
+- **estocástico de contexto < 20** — %K lento (8/3) sobre barras de
+  6 min, tomado da **última barra de 6 min já fechada** antes de t;
+- ordem limitada em `high(t−1)`, válida só em t.
+
+**Venda** é o espelho exato (banda inferior, contexto **> 80**, limitada
+em `low(t−1)`).
+
+Janela 22ª barra até 12:59:45; entradas até 13h; zeragem 17:30.
+
+### 8.4 Amostra esperada (medida, não estimada)
+
+Funil rodado em 42 pregões (`bollinger-contexto`, categoria features,
+zero trial):
+
+    compra   366 de 2.607 candidatos com contexto  (14,0%)
+    venda    537 de 2.692                          (19,9%)
+
+903 candidatos com filtro, ~21 por pregão. A v1 converteu 4.037 sinais
+em 417 operações executadas (circuit breaker consumiu a maior parte).
+Se a taxa de conversão se mantiver, esperam-se **~90 a 200 operações**.
+
+**Em pontos**: stop mediano da v1-rompimento foi 65 pts; custo 11
+pts/contrato. Uma borda que não pague 11 pts por contrato não é
+negócio, qualquer que seja o p1.
+
+### 8.5 Critério de decisão (congelado)
+
+A medida é a **borda bruta** (antes de custo), como na v1 — custo é
+condição comercial, não propriedade da estratégia.
+
+Esta é a **3ª tentativa da família** (retorno sem filtro; rompimento sem
+filtro; rompimento com filtro). Testar variantes até uma passar é como
+nasce falso positivo, então o limiar é corrigido por Bonferroni para
+3 testes: **α = 0,05/3 ≈ 0,017**, ou seja **IC de 98,3%** em vez de 95%.
+
+| veredito | condição (IC98,3 da borda bruta) |
+|---|---|
+| **FAVORÁVEL** | limite inferior **> 0** — borda positiva mesmo com a correção |
+| **CONTRA** | limite superior **< 0** — borda negativa |
+| **INCONCLUSIVO** | IC cruza zero |
+
+Condição de poder, checada ANTES de interpretar: **n ≥ 60 operações**.
+Abaixo disso o resultado é declarado sem poder e não vale como veredito
+(disciplina 3: amostra pequena não decide, nos dois sentidos).
+
+### 8.6 Parada
+
+Um tiro. Se der INCONCLUSIVO, **não** se testa outro limiar, outro
+timeframe ou outro gatilho sobre a mesma amostra — isso seria a 4ª
+tentativa disfarçada. O caminho legítimo seria acumular pregões novos e
+repetir a MESMA regra.
+
+Se der CONTRA, a família fecha definitivamente: terá sido refutada na
+forma completa que a especificação descreve, não num recorte.
+
 ## 6. Dúvidas — fechadas em 2026-09-05, exceto as que o dump responde
 
 Fechadas: TR fora do v1; trailing atrás da máxima favorável, RP1

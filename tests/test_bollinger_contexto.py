@@ -133,3 +133,48 @@ def test_dado_no_formato_REAL_do_replay_produz_baldes_corretos() -> None:
     ctx = barras_de_contexto(x)
     assert len(ctx) == 12, f"esperado 12 baldes, veio {len(ctx)}"
     assert list(ctx["barras15"]) == [24] * 12
+
+
+def test_filtro_derruba_sinal_fora_do_extremo() -> None:
+    """Pre-registro 8.3: so' passa compra com contexto <20 e venda com
+    contexto >80. Conferido a mao antes deste teste."""
+    from profittape.research.bollinger_contexto import aplicar_filtro_contexto
+
+    x = _barras15(24 * 14)
+    x["sinal_compra"] = False
+    x["sinal_venda"] = False
+    x.loc[250:, "sinal_compra"] = True
+    ctx = estocastico_de_contexto(barras_de_contexto(x))
+    est = alinhar_contexto(x, ctx)
+    esperado = int((x["sinal_compra"] & (pd.Series(est) < 20)).sum())
+    y = aplicar_filtro_contexto(x)
+    assert int(y["sinal_compra"].sum()) == esperado
+    sobreviventes = pd.Series(est)[y["sinal_compra"]]
+    assert sobreviventes.empty or sobreviventes.max() < 20
+
+
+def test_sinal_SEM_contexto_e_reprovado() -> None:
+    """Inicio do pregao: sem 10 barras de 6 min nao ha' estocastico de
+    contexto. Sem contexto nao da' para afirmar exaustao -- deixar passar
+    seria medir outra coisa."""
+    from profittape.research.bollinger_contexto import aplicar_filtro_contexto
+
+    x = _barras15(24 * 12)
+    x["sinal_compra"] = True          # inclusive nas barras iniciais
+    x["sinal_venda"] = False
+    y = aplicar_filtro_contexto(x)
+    # as 240 primeiras barras (10 barras de contexto) nao tem est_ctx
+    assert not y["sinal_compra"].iloc[:240].any()
+
+
+def test_filtro_NAO_altera_barras_nem_indicadores() -> None:
+    """O filtro desmarca a entrada; nao mexe em OHLC nem em banda. Se
+    mexesse, o replay estaria medindo outra serie."""
+    from profittape.research.bollinger_contexto import aplicar_filtro_contexto
+
+    x = _barras15(24 * 12)
+    x["sinal_compra"] = True
+    x["sinal_venda"] = False
+    y = aplicar_filtro_contexto(x)
+    for col in ("open", "high", "low", "close", "ts"):
+        assert (y[col].to_numpy() == x[col].to_numpy()).all(), f"{col} foi alterada"

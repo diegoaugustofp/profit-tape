@@ -215,3 +215,33 @@ def medir_funil(barras15: pd.DataFrame, permitir_look_ahead: bool = False,
             passa_direcao=int((com_ctx & direcao).sum()),
         ))
     return linhas, x
+
+
+def aplicar_filtro_contexto(barras15: pd.DataFrame,
+                           segundos: int = SEGUNDOS_CONTEXTO,
+                           permitir_look_ahead: bool = False) -> pd.DataFrame:
+    """
+    Zera `sinal_compra`/`sinal_venda` onde o estocastico de contexto NAO
+    esta' no extremo (pre-registro 8.3: compra <20, venda >80).
+
+    Contexto indefinido (inicio do pregao, antes de 10 barras de 6 min)
+    REPROVA o sinal -- sem contexto nao da' para afirmar exaustao, e
+    deixar passar seria medir outra coisa. Custa ~0,2% dos candidatos
+    (medido: 2.607 de 2.613 tinham contexto).
+
+    Nao mexe nas barras nem nos indicadores: so' desmarca a entrada.
+    """
+    x = barras15.copy()
+    ctx = estocastico_de_contexto(barras_de_contexto(x, segundos))
+    x["est_ctx"] = alinhar_contexto(x, ctx, permitir_look_ahead)
+    passa_compra = x["est_ctx"] < bs.EST_SOBREVENDIDO
+    passa_venda = x["est_ctx"] > bs.EST_SOBRECOMPRADO
+    if "sinal_compra" in x.columns:
+        x["sinal_compra"] = x["sinal_compra"].fillna(False) & passa_compra.fillna(False)
+    if "sinal_venda" in x.columns:
+        x["sinal_venda"] = x["sinal_venda"].fillna(False) & passa_venda.fillna(False)
+    # `preco_limite` sem sinal vira ruido para quem ler o parquet depois
+    if "preco_limite" in x.columns:
+        sem_sinal = ~(x.get("sinal_compra", False) | x.get("sinal_venda", False))
+        x.loc[sem_sinal, "preco_limite"] = np.nan
+    return x

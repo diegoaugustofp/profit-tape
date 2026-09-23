@@ -3070,6 +3070,15 @@ def bollinger_replay(
         "--ignorar-circuit-breaker",
         help="Mede a regra INTEIRA (o circuit breaker fecha o pregao na 3a perda seguida)",
     ),
+    filtro_contexto: bool = typer.Option(
+        False,
+        "--filtro-contexto",
+        help="PRE-REGISTRO 8.3 (2026-10-01): exige o estocastico de contexto "
+        "(6 min, ultima barra JA' FECHADA) no extremo -- compra <20, venda "
+        ">80. Funil medido: 366 compras e 537 vendas em 42 pregoes. CONSOME "
+        "TRIAL: 3a tentativa da familia, criterio corrigido para 3 testes "
+        "(IC 98,3%). Um tiro so' -- ver docs/BOLLINGER_SCALP.md secao 8.",
+    ),
     variante: str = typer.Option(
         "retorno",
         "--variante",
@@ -3114,6 +3123,7 @@ def bollinger_replay(
             lista,
             ignorar_circuit_breaker=ignorar_circuit_breaker,
             variante_entrada=v,
+            filtro_contexto=filtro_contexto,
         )
         resultados[v] = r["resumo"]
         _imprimir_resumo_bollinger_replay(r["resumo"], v, ignorar_circuit_breaker, saida)

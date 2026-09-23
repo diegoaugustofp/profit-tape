@@ -45,6 +45,7 @@ import pandas as pd
 import structlog
 
 from ..features.pipeline import _carregar_dia, _dias_do_symbol
+from . import bollinger_contexto as bc
 from . import bollinger_scalp as bs
 
 log = structlog.get_logger(__name__)
@@ -513,6 +514,7 @@ def rodar(
     ignorar_circuit_breaker: bool = False,
     tipos_ohlc: tuple[int, ...] = TIPOS_OHLC_GRAFICO,
     variante_entrada: str = "retorno",
+    filtro_contexto: bool = False,
 ) -> dict[str, Any]:
     origem = curated / "trade"
     pastas = _dias_do_symbol(origem, symbol)
@@ -531,6 +533,13 @@ def rodar(
             log.warning("bollinger_replay.sem_barras", dia=dia)
             continue
         sinais = indicadores_e_sinais_do_tape(barras, variante_entrada)
+        if filtro_contexto:
+            # Pre-registro 8.3 (2026-10-01): so' passa o sinal cujo
+            # estocastico de CONTEXTO (6 min, ultima barra JA' FECHADA)
+            # esta' no extremo -- compra <20, venda >80. O filtro derruba
+            # o sinal, nao a barra: as barras seguem inteiras para o
+            # replay, so' sem a marca de entrada.
+            sinais = bc.aplicar_filtro_contexto(sinais)
         barras_por_dia.append(sinais)
         if dumps and dia in dumps:
             dump, _ = bs.carregar_log(dumps[dia])
