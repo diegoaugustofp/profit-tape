@@ -3593,3 +3593,36 @@ onde nao ha', ou silencio onde ha').
 7 testes novos. Suite verde, ruff e mypy limpos.
 
 **PENDENTE**: rodar `profit-tape valida-ohlc-6min <dump>`.
+
+### 2026-09-24 — OHLC de 6 min DIVERGE; o padrao refuta minha hipotese (v3.56)
+
+`valida-ohlc-6min` rodado: 1.508 barras casadas, e o padrao e' o
+contrario do que eu previ.
+
+    open   428 divergentes (28%)   dif_max 425
+    high    22 divergentes (1,5%)  dif_max 170
+    low     12 divergentes (0,8%)  dif_max 115
+    close  527 divergentes (35%)   dif_max 225
+
+Eu tinha escrito em 11.3 que high/low seriam os MAIS sensiveis, por
+causa do filtro TIPOS_OHLC_GRAFICO. Deu o oposto: os extremos quase
+sempre batem, e sao as PONTAS que divergem.
+
+**Se high e low batem, os negocios dentro da barra sao praticamente os
+mesmos** -- o que EXCLUI filtro de tipos (um tipo a mais mudaria os
+extremos primeiro). O que muda open/close sem mexer nos extremos e'
+FRONTEIRA DE BALDE: negocio no instante da virada caindo de um lado em
+nos e do outro no Profit.
+
+Corroboracao medida no proprio dump: |open(t) - close(t-1)| e' zero em
+49% das barras, mediana 5 pts, maximo 10 -- um ou dois ticks. Negocios
+distintos e adjacentes, como se espera na fronteira.
+
+**O que falta medir, e e' o que decide**: divergencia de OHLC so'
+importa se mudar o INDICADOR, e o indicador so' importa se mudar o LADO
+DO LIMIAR (a regra so' pergunta "<20?" e ">80?"). Implementado
+`impacto_no_estocastico`, que reporta em quantas barras o Profit e nos
+ficamos em lados opostos. Pendente de rodar.
+
+Isso vale alem do Bollinger: a agregacao de barras maiores e'
+infraestrutura para qualquer estrategia multi-timeframe, inclusive o 123.

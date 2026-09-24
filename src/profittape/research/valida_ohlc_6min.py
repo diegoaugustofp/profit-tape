@@ -125,3 +125,54 @@ def comparar(dump6: pd.DataFrame, nossas6: pd.DataFrame) -> ComparacaoOHLC:
         so_nossas=int((j["_merge"] == "right_only").sum()),
         dif_max=dif_max, dif_qtd=dif_qtd,
     )
+
+
+def impacto_no_estocastico(dump6: pd.DataFrame, nossas6: pd.DataFrame,
+                          periodo: int = 8, media: int = 3) -> dict[str, object]:
+    """
+    O que DECIDE: o estocástico calculado sobre o NOSSO OHLC bate com o
+    que o Profit reporta?
+
+    Divergência de OHLC só importa na medida em que muda o INDICADOR. O
+    %K usa o close (numerador) e high/low (faixa das 8 barras). Com a
+    faixa quase certa e o close divergindo, o efeito final pode ser
+    pequeno ou grande -- não dá para deduzir, tem que medir.
+
+    Devolve a diferença entre `est_ntsl` (o do Profit, do dump) e o %K
+    lento recalculado sobre o nosso OHLC agregado.
+    """
+    import numpy as np
+
+    p = dump6[["dia", "hora_int", "est_ntsl"]].copy()
+    p["dia"] = p["dia"].astype(str)
+    n = nossas6.copy()
+    n["dia"] = n["dia"].astype(str)
+    n = n.sort_values(["dia", "hora_int"]).reset_index(drop=True)
+
+    # %K lento sobre o NOSSO OHLC, mesma formula de bollinger_scalp
+    hh = n.groupby("dia")["high"].transform(lambda x: x.rolling(periodo).max())
+    ll = n.groupby("dia")["low"].transform(lambda x: x.rolling(periodo).min())
+    faixa = hh - ll
+    k_rap = np.where(faixa > 0, 100.0 * (n["close"] - ll) / faixa, np.nan)
+    n["k_lento_nosso"] = (pd.Series(k_rap, index=n.index)
+                          .groupby(n["dia"]).transform(lambda x: x.rolling(media).mean()))
+
+    j = p.merge(n[["dia", "hora_int", "k_lento_nosso"]], on=["dia", "hora_int"])
+    m = j["est_ntsl"].notna() & j["k_lento_nosso"].notna()
+    dif = (j.loc[m, "est_ntsl"] - j.loc[m, "k_lento_nosso"]).abs()
+
+    # O que importa para a REGRA nao e' o valor, e' o LADO do limiar:
+    # a clausula so' pergunta "esta' abaixo de 20?" e "acima de 80?".
+    prof, noss = j.loc[m, "est_ntsl"], j.loc[m, "k_lento_nosso"]
+    discorda_20 = int(((prof < 20) != (noss < 20)).sum())
+    discorda_80 = int(((prof > 80) != (noss > 80)).sum())
+    return {
+        "barras": int(m.sum()),
+        "dif_max": float(dif.max()) if len(dif) else 0.0,
+        "dif_mediana": float(dif.median()) if len(dif) else 0.0,
+        "dif_p95": float(dif.quantile(0.95)) if len(dif) else 0.0,
+        "discorda_limiar_20": discorda_20,
+        "discorda_limiar_80": discorda_80,
+        "discorda_algum_limiar_pct": round(
+            100.0 * (discorda_20 + discorda_80) / max(int(m.sum()), 1), 2),
+    }

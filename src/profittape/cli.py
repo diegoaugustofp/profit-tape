@@ -3009,13 +3009,35 @@ def valida_ohlc_6min(
         typer.echo(f"  {campo:6} dif_max={dm:<12} barras divergentes={qt}")
     typer.echo("")
     if c.bateu:
-        typer.echo("RESULTADO: BATEU. A nossa agregacao reproduz o grafico do")
-        typer.echo("Profit exatamente -- a lacuna 11.4 fecha.")
+        typer.echo("OHLC: BATEU exatamente.")
     else:
-        typer.echo("RESULTADO: DIVERGE. O estocastico de contexto que o codigo")
-        typer.echo("calcula NAO e' o que o operador ve no grafico. High/low sao")
-        typer.echo("os mais sensiveis: divergem se qualquer negocio a mais ou a")
-        typer.echo("menos entrar (filtro de TIPOS_OHLC_GRAFICO?).")
+        typer.echo("OHLC: DIVERGE.")
+        so_extremos = c.dif_qtd["high"] + c.dif_qtd["low"]
+        so_pontas = c.dif_qtd["open"] + c.dif_qtd["close"]
+        if so_pontas > 3 * max(so_extremos, 1):
+            typer.echo("  PADRAO: open/close divergem MUITO mais que high/low.")
+            typer.echo("  Isso EXCLUI filtro de tipos (que mexeria nos extremos)")
+            typer.echo("  e aponta para FRONTEIRA DE BALDE: negocio no instante")
+            typer.echo("  da virada caindo em baldes diferentes -- vira o ultimo")
+            typer.echo("  de uma barra e o primeiro da outra, sem sair da faixa.")
+
+    # O que DECIDE: a divergencia muda o INDICADOR? E, mais ainda, muda o
+    # LADO DO LIMIAR -- que e' a unica coisa que a regra pergunta.
+    imp = vo.impacto_no_estocastico(d6c, nsc)
+    typer.echo("")
+    typer.echo("IMPACTO NO ESTOCASTICO (o que de fato decide):")
+    typer.echo(f"  barras comparadas        {imp['barras']}")
+    typer.echo(f"  diferenca mediana        {imp['dif_mediana']:.2f}")
+    typer.echo(f"  diferenca p95            {imp['dif_p95']:.2f}")
+    typer.echo(f"  diferenca maxima         {imp['dif_max']:.2f}")
+    typer.echo(f"  discorda do limiar <20   {imp['discorda_limiar_20']} barras")
+    typer.echo(f"  discorda do limiar >80   {imp['discorda_limiar_80']} barras")
+    typer.echo(f"  DISCORDANCIA TOTAL       {imp['discorda_algum_limiar_pct']}%")
+    typer.echo("")
+    typer.echo("A regra so' pergunta 'esta' abaixo de 20?' e 'acima de 80?'.")
+    typer.echo("Diferenca no VALOR do estocastico so' importa quando muda o")
+    typer.echo("LADO do limiar -- e' a linha DISCORDANCIA TOTAL que decide se")
+    typer.echo("a divergencia de OHLC afeta a estrategia ou e' cosmetica.")
 
 
 @app.command()

@@ -1026,3 +1026,54 @@ O poder continua assimétrico (10.2): detecta bem que a estratégia é
 ruim, mal que é boa. O desfecho mais provável continua sendo
 INCONCLUSIVO. Isso foi declarado antes e não é motivo para reabrir a
 regra depois.
+
+## 14. OHLC de 6 min DIVERGE — e o padrão diz onde (2026-09-24)
+
+`profit-tape valida-ohlc-6min`, 16 pregões, 1.508 barras casadas:
+
+| campo | barras divergentes | % | dif_max |
+|---|---|---|---|
+| open | 428 | 28% | 425 |
+| **high** | **22** | **1,5%** | 170 |
+| **low** | **12** | **0,8%** | 115 |
+| close | 527 | 35% | 225 |
+
+Mais 10 barras que o Profit tem e nós não, e 2 que só nós temos.
+
+### 14.1 O padrão refuta a hipótese que eu tinha levantado
+
+Eu previ em 11.3 que `high`/`low` seriam os mais sensíveis, por causa do
+filtro `TIPOS_OHLC_GRAFICO`. **Deu o oposto**: os extremos quase sempre
+batem (1,5% e 0,8%), e são as pontas que divergem (28% e 35%).
+
+Se `high` e `low` batem, **os negócios dentro da barra são praticamente
+os mesmos** — o que exclui filtro de tipos. Um tipo a mais ou a menos
+mudaria os extremos antes de qualquer coisa.
+
+O que muda `open` e `close` sem mexer nos extremos é **fronteira de
+balde**: um negócio no instante da virada caindo de um lado em nós e do
+outro no Profit. Ele vira o último de uma barra e o primeiro da
+seguinte, mas o preço continua dentro da faixa — os extremos não
+percebem.
+
+Corroboração, medida no próprio dump: `|open(t) − close(t−1)|` é zero em
+49% das barras e tem **mediana de 5 pontos, máximo de 10** — ou seja, um
+ou dois ticks. São negócios distintos e adjacentes no tempo, exatamente
+o que se espera na fronteira.
+
+### 14.2 O que ainda precisa ser medido
+
+Divergência de OHLC só importa **na medida em que muda o indicador**, e
+o indicador só importa **na medida em que muda o lado do limiar** — a
+cláusula pergunta apenas "está abaixo de 20?" e "acima de 80?".
+
+O comando agora reporta `DISCORDANCIA TOTAL`: em quantas barras o Profit
+e nós ficamos em lados opostos do limiar. **É esse número que decide**
+se a divergência afeta a estratégia ou é cosmética. Pendente de rodar.
+
+### 14.3 Por que isso importa mesmo com o Bollinger suspenso
+
+O `tiny_book` e o estocástico de contexto são infraestrutura para
+qualquer estratégia multi-timeframe do projeto. Se a agregação de barras
+maiores diverge do gráfico, isso vale para o 123 e para o que vier
+depois — não só para o Bollinger.
