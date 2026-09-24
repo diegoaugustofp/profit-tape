@@ -78,7 +78,14 @@ class WriterThread(threading.Thread):
 
     # ------------------------------------------------------------------
     def run(self) -> None:
-        log.info("writer.iniciado", batch_max=self.batch_max)
+        # A raiz no log de partida: sem isto, nao ha' como saber DEPOIS em
+        # que disco o pregao foi gravado -- e a nota de `lote_lento`
+        # afirmava "disco USB" sem checar nada, o que enganou o
+        # diagnostico de 24/09 (o storage estava em C:).
+        raiz = getattr(self.sink, "raiz", None)
+        log.info("writer.iniciado", batch_max=self.batch_max,
+                 raiz=str(raiz) if raiz else None,
+                 drive=(str(raiz)[:2] if raiz and len(str(raiz)) > 1 else None))
         try:
             while not self._parar.is_set():
                 try:
@@ -174,8 +181,12 @@ class WriterThread(threading.Thread):
                 # (observacao do operador, 2026-08-21).
                 log.info("writer.lote_lento_criacao_de_arquivo",
                          linhas=linhas, segundos=round(dt, 3),
-                         nota="abertura de arquivo novo (spin-up?) — esperado "
-                              "em disco USB; nao indica vazao insuficiente")
+                         nota="lote lento COM criacao de arquivo. Em disco "
+                              "externo/USB isto e' spin-up esperado; em disco "
+                              "INTERNO nao e' -- ai' investigue I/O. O codigo "
+                              "NAO sabe em que disco esta' gravando (a nota "
+                              "anterior afirmava USB e enganava: 24/09 o "
+                              "storage estava em C:)")
             else:
                 # Sinal de alerta de verdade: lento SEM arquivo novo e' vazao,
                 # e vazao insuficiente empurra a fila para cima.

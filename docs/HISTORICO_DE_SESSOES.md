@@ -3528,3 +3528,31 @@ simbolos) -- agora e' dict, 1,7 us e nao cresce com o numero de
 simbolos.
 
 8 testes novos. Suite verde, ruff e mypy limpos.
+
+### 2026-09-24 — a nota de "disco USB" era generica e enganou o diagnostico (v3.54)
+
+Operador: *"no disco C nao no USB. Acho q essa msg e' generica, sem
+validacao nenhuma de qual disco esta' sendo gravado."*
+
+**Certo.** A nota de `writer.lote_lento_criacao_de_arquivo` afirmava
+"esperado em disco USB" sem checar disco NENHUM -- texto fixo de quando
+o storage estava em disco externo. E ela me enganou junto: usei essa
+nota como argumento para descartar I/O no diagnostico de hoje. Em disco
+INTERNO, lote de 10-74 linhas levando ~2 s nao e' normal.
+
+Corrigido em dois niveis:
+- a nota passa a dizer que o codigo NAO sabe em que disco esta', e que
+  em disco interno o sintoma merece investigacao;
+- `writer.iniciado` agora loga `raiz` e `drive`. Sem isso nao havia como
+  saber DEPOIS onde um pregao foi gravado.
+
+**Respondendo a segunda pergunta do operador**: o erro NAO fica o log
+inteiro. A v3.40 limitou a limpeza a 30 tentativas de 60 em 60 s --
+~30 min e sai `limpeza_na_subida_desistiu`. Bate com o log de hoje (111
+linhas, ~35 min).
+
+**E nao ha' prejuizo a gravacao**, por tres evidencias independentes:
+`descartados=0` em 4,1M linhas, fila zerada nos heartbeats, e o EA roda
+em thread propria com fila propria (nao bloqueia a captura por
+desenho). O que a falha afeta e' o EA 123 -- que nao conseguiu limpar
+ordens residuais na subida. Em dry_run, sem consequencia pratica.
