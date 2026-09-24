@@ -125,3 +125,27 @@ com muito menos row groups, leitura ordens de grandeza mais rapida.
 Dados JA' gravados (todo dia ate' 2026-09-10) continuam com o padrao
 antigo -- esta correcao muda a escrita dai pra frente, nao reescreve o
 que ja existe.
+
+## Dias com tape substituido entre 2026-09-08 e 2026-09-24 (registro, 2026-09-24)
+
+Lista fechada, obtida por diff de `inventario-deepscalper` (08/09 x
+24/09) mais comparacao dos scores da Fase 2: **27/08, 04/09, 08/09,
+09/09, 10/09, 15/09**. Em 27/08: +1,7% de negocios de agressao, +216k
+contratos, 98 -> 100 barras -- e' substituicao, nao reagregacao. Os
+outros 27 dias de 24/07 a 27/08 estao byte-a-byte iguais em barras e
+negocios. Causa provavel: backfill de historico em dias especificos; o
+operador nao tem o registro de quando rodou. Efeito: o features.parquet
+de treino da Fase 2 nao e' mais reproduzivel; pkl e' copia unica.
+
+Regra a partir daqui: qualquer comando que reescreva raw/curated de um
+dia (backfill, compact, curate por cima) e' anotado no
+HISTORICO_DE_SESSOES.md com a lista de dias, no mesmo dia.
+
+## `inventario-deepscalper` com book no backup: stack overflow (2026-09-24)
+
+`$LASTEXITCODE = -1073741571` (0xC00000FD), sem traceback, ao ler
+`book_offer`/`tiny_book` de `D:\backup_raw\data\raw`. Mesmo comando
+rodou limpo no mesmo backup em 08/09. Hipotese: crescimento do numero
+de arquivos por pasta de dia (record sem compact no backup) estourando
+a pilha na descoberta do dataset do pyarrow. Contorno: `--raw` para
+caminho inexistente quando o book nao e' necessario. Nao investigado.

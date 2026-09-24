@@ -3707,3 +3707,43 @@ retrospectivo roda quando n >= 60 (13.2).
   a incluir a versão do sklearn. Se não bater, fixar `scikit-learn==
   1.9.0` no venv e reconstruir o livro (o modelo não muda; só a
   inferência volta à versão de origem).
+
+### Continuação (2026-09-24, tarde) — quais dias mudaram, e por quê o inventário morreu (v3.59)
+
+- **sklearn 1.9.0 → 1.9.1: inofensivo.** 27/08 em `--permitir-queimado`
+  reproduziu ao milésimo os `conf` de 08/09 nos eventos cujas barras
+  não mudaram (0,726 / 0,721 / 0,651). Mesmas entradas, mesmas saídas.
+- **Diff dos inventários (08/09 × 24/09), 28 dias antigos comparados:
+  só 27/08 mudou** — negócios de agressão 3.531.434 → 3.592.676
+  (+1,7%), contratos 11,80 M → 12,02 M, barras 98 → 100. Tape
+  SUBSTITUÍDO por versão mais completa, não reagregado. Com os dias do
+  forward já identificados, a lista fechada de dias reprocessados entre
+  08/09 e 24/09 é: **27/08, 04/09, 08/09, 09/09, 10/09, 15/09**. Não é
+  intervalo contínuo → backfill de histórico em dias específicos
+  (candidato: os apontados como incompletos pelo doctor/quarentena). O
+  operador não lembra o que rodou; parquets de 15–16/09 datam de 17/09.
+- Consequências:
+  1. 27/08 é o último dia de VALIDAÇÃO do modelo. O `features.parquet`
+     atual não é mais o arquivo do treino; `fase2-preparar` **nunca
+     mais reproduz o pkl 5c5b0d7c…** mesmo com seed fixa. O pkl gravado
+     é a única cópia do instrumento → **fazer backup dele fora de
+     `data/`** (operador).
+  2. Forward: 5 de 18 pregões sobre tape de histórico, 13 sobre tape ao
+     vivo. Se as fontes geram barras sistematicamente diferentes
+     (v2.24 sugere), é um confundidor que não dá para medir agora.
+     Fica como LIMITAÇÃO DECLARADA do veredito, não motivo de parar.
+  3. Regra: reprocessar raw de qualquer dia (backfill/compact/curate)
+     exige anotar aqui QUAIS dias e re-escorar (a v3.58 substitui e
+     loga sozinha). Antes de reprocessar dia ≤ 27/08, lembrar que isso
+     muda o dado queimado.
+- **`inventario-deepscalper` morre com `$LASTEXITCODE = -1073741571`
+  (0xC00000FD, STACK OVERFLOW)** ao ler o book no backup
+  (`--raw D:\backup_raw\data\raw`); com `--raw` inexistente termina.
+  Em 08/09 o mesmo comando rodou no mesmo backup. Suspeito: pasta de
+  dia com milhares de parquets pequenos estourando a descoberta do
+  dataset do pyarrow no Windows. Não investigado; o book não era
+  necessário para o diff. Pendência para `INTEGRIDADE_DOS_DADOS.md`.
+- Curiosidade não explicada: o `bar_id` do evento 13:28:41 de 27/08
+  foi de 2268 (08/09) para 2350 (24/09), +82, enquanto o dia ganhou só
+  2 barras e 28/08 deslocou +2. Irrelevante desde que a chave do livro
+  é (dia, ts_open); anotado por honestidade.
