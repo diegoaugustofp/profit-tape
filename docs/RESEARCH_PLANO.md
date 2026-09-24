@@ -5763,7 +5763,15 @@ uma linha por evento em `data/research/fase2/forward_eventos.csv`
 com carimbo (tag + sha256 do modelo + timestamp), sem duplicar
 (dia, ts_open) se re-escorar — NAO bar_id, que se desloca quando um dia
 e' inserido no meio (v2.38; a chave por bar_id duplicou 11 eventos em
-2026-09-11). `--reconstruir-livro --desde <dia>` regrava do zero. Recusa dias <= 2026-08-27 (queimados);
+2026-09-11). `--reconstruir-livro --desde <dia>` regrava do zero.
+Dia re-escorado cujo dado MUDOU (v3.58; 15/09 regerado apos escorado):
+a versao nova substitui a antiga, com aviso e `forward_integridade.log`
+— falha de integridade nao reinicia a contagem.
+
+**Checkpoint de sanidade n=50 (2026-09-24, n=69 bruto / 67 real):**
+acerto 0,319 (nula 0,337), pts/op −37,8, TAXA 3,9. Sanidade OK: sem
+vazamento, sem sinal invertido evidente, taxa na ordem da medida. NAO
+e' veredito; veredito em n=150. Recusa dias <= 2026-08-27 (queimados);
 `--permitir-queimado` so' para olhar barras e NAO grava. O placar fica
 FECHADO ate' n = 50 (sanidade) e n = 150 (veredito) — o comando nao
 imprime acerto antes disso.
@@ -5784,6 +5792,14 @@ v2.37+ nos seguintes; modelo 5c5b0d7c... Livro:
 `data/research/fase2/forward_eventos.csv`. O placar so' abre em n=50 e
 n=150 — e a partir da v2.37 o comando nao mostra desfecho por evento no
 modo forward.
+
+**Checkpoint de sanidade (2026-09-24, livro reconstruido, v3.58):** n=75
+em 18 pregoes, acerto 0,293 (nula 0,337), pts/op −52,5, 4,17/pregao.
+Sanidade OK (sem vazamento, sem inversao, taxa dentro do teto). NAO e'
+veredito. Integridade: 04, 08, 09, 10 e 15/09 tiveram barras regeradas
+depois de escorados (fonte provavel: backfill de historico); livro
+reconstruido sobre o dado atual; regra nova no HISTORICO. Veredito em
+n=150.
 - [x] Verificador de look-ahead com a politica do modelo (teste).
 - [x] Carimbo em cada observacao (score).
 - [x] Sei o que reinicia a contagem: retreinar, mudar p*, k, h,

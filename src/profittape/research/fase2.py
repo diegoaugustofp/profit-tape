@@ -399,26 +399,62 @@ def escorar(b: pd.DataFrame, m: dict[str, Any], dias: list[str],
 CHAVE_LIVRO = ("dia", "ts_open")
 
 
-def registrar_forward(ev: pd.DataFrame, arquivo: Path) -> pd.DataFrame:
-    """Anexa ao livro do forward, sem duplicar (dia, ts_open). Re-escorar um
-    dia nao conta duas vezes. Livro antigo sem ts_open (v2.04-v2.37,
-    chave bar_id, instavel) e' recusado: reconstrua com --reconstruir-livro."""
+def registrar_forward(ev: pd.DataFrame, arquivo: Path,
+                      dias_escorados: list[str] | None = None) -> pd.DataFrame:
+    """Anexa ao livro do forward. Regras:
+    - chave (dia, ts_open); re-escorar o mesmo dado nao duplica;
+    - um dia RE-ESCORADO cujos eventos nao batem com os gravados e' um
+      dia cujo DADO mudou por baixo (backfill/compact/re-curate). A
+      versao nova SUBSTITUI a antiga e o fato vai para
+      forward_integridade.log ao lado do livro. Nunca as duas juntas
+      (2026-09-23: 15/09 ficou com 3 linhas, 2 de dado que nao existia
+      mais). Falha de integridade nao reinicia a contagem (ficha, PARADA).
+    Livro antigo sem ts_open (chave bar_id, instavel) e' recusado."""
+    if dias_escorados is None:
+        dias_escorados = sorted(set(ev["dia"])) if len(ev) else []
     if arquivo.exists():
         antigo = pd.read_csv(arquivo, dtype={"dia": str})
         if "ts_open" not in antigo.columns:
             raise SystemExit(f"{arquivo} e' de versao anterior (sem ts_open; chave por bar_id, "
                              "que se desloca ao inserir dias). Reconstrua: "
                              "fase2-score --desde <primeiro dia forward> --reconstruir-livro")
+        substituidos: list[str] = []
+        for d in dias_escorados:
+            velho = antigo[antigo["dia"] == d]
+            novo = ev[ev["dia"] == d] if len(ev) else ev
+            ts_velho = set(velho["ts_open"].astype("int64"))
+            ts_novo = set(novo["ts_open"].astype("int64")) if len(novo) else set()
+            if len(velho) and ts_velho != ts_novo:
+                substituidos.append(d)
+                _log_integridade(arquivo, d, len(velho), len(novo))
+                antigo = antigo[antigo["dia"] != d]
+        if substituidos:
+            log.warning("fase2.livro.dado_mudou", dias=substituidos,
+                        msg="dia re-escorado nao bate com o gravado: versao nova substitui; "
+                            "ver forward_integridade.log")
         chaves = set(zip(antigo["dia"], antigo["ts_open"].astype("int64"), strict=True))
-        novo = ev[[(d, int(t)) not in chaves
-                   for d, t in zip(ev["dia"], ev["ts_open"], strict=True)]]
-        tudo = pd.concat([antigo, novo], ignore_index=True)
+        if len(ev):
+            novos = ev[[(d, int(t)) not in chaves
+                        for d, t in zip(ev["dia"], ev["ts_open"], strict=True)]]
+            tudo = pd.concat([antigo, novos], ignore_index=True)
+        else:
+            tudo = antigo
     else:
         arquivo.parent.mkdir(parents=True, exist_ok=True)
         tudo = ev.copy()
     tudo = tudo.drop_duplicates(subset=list(CHAVE_LIVRO), keep="first")
+    if len(tudo):
+        tudo = tudo.sort_values(["dia", "ts_open"], kind="stable").reset_index(drop=True)
     tudo.to_csv(arquivo, index=False)
     return tudo
+
+
+def _log_integridade(arquivo_livro: Path, dia: str, n_antes: int, n_depois: int) -> None:
+    log_path = arquivo_livro.with_name("forward_integridade.log")
+    with open(log_path, "a", encoding="utf-8") as f:
+        f.write(f"{pd.Timestamp.now(tz='UTC').isoformat()}  dia={dia}  eventos_antes={n_antes}  "
+                f"eventos_depois={n_depois}  carimbo={_carimbo()}  "
+                "motivo=dado do dia mudou apos escorado (backfill/compact/re-curate?)\n")
 
 
 def placar(tudo: pd.DataFrame, ficha: dict[str, Any]) -> dict[str, Any]:

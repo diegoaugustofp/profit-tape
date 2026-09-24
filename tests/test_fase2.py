@@ -276,3 +276,35 @@ def test_livro_antigo_sem_ts_open_e_recusado(tmp_path) -> None:  # type: ignore[
     ev = pd.DataFrame({"dia": ["2026-09-04"], "bar_id": [1], "ts_open": [_T0], "acerto": [1]})
     with pytest.raises(SystemExit, match="reconstruir-livro"):
         registrar_forward(ev, livro)
+
+
+def test_dia_re_escorado_com_dado_diferente_substitui_e_loga(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """Bug real de 2026-09-23: 15/09 foi regerado depois de escorado; o livro
+    ficou com as duas versoes. A nova substitui, e vai para o log."""
+    from profittape.research.fase2 import registrar_forward
+
+    livro = tmp_path / "livro.csv"
+    v1 = pd.DataFrame({"dia": ["2026-09-15", "2026-09-15", "2026-09-14"],
+                       "ts_open": [_T0, _T0 + 60 * _NS, _T0 - 86400 * _NS],
+                       "acerto": [1, 0, 1], "pnl_liquido_proxy": [1., -1., 1.]})
+    registrar_forward(v1, livro)
+    v2 = pd.DataFrame({"dia": ["2026-09-15"], "ts_open": [_T0 + 120 * _NS],
+                       "acerto": [0], "pnl_liquido_proxy": [-1.]})
+    tudo = registrar_forward(v2, livro, dias_escorados=["2026-09-15"])
+    assert list(tudo["dia"]) == ["2026-09-14", "2026-09-15"]         # 14/09 intacto
+    assert int(tudo.loc[tudo["dia"] == "2026-09-15", "ts_open"].iloc[0]) == _T0 + 120 * _NS
+    logf = tmp_path / "forward_integridade.log"
+    assert logf.exists() and "dia=2026-09-15" in logf.read_text(encoding="utf-8")
+    antes = logf.read_text(encoding="utf-8")
+    registrar_forward(v2, livro, dias_escorados=["2026-09-15"])   # mesmo dado: nada
+    assert logf.read_text(encoding="utf-8") == antes
+
+
+def test_dia_escorado_sem_evento_apaga_eventos_antigos_desse_dia(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    from profittape.research.fase2 import registrar_forward
+
+    livro = tmp_path / "livro.csv"
+    v1 = pd.DataFrame({"dia": ["2026-09-15"], "ts_open": [_T0], "acerto": [1]})
+    registrar_forward(v1, livro)
+    tudo = registrar_forward(v1.iloc[0:0], livro, dias_escorados=["2026-09-15"])
+    assert len(tudo) == 0

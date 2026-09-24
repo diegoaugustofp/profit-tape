@@ -3656,3 +3656,54 @@ corrigido).
 
 O capitulo fecha. A ficha 10.1 continua congelada e o teste
 retrospectivo roda quando n >= 60 (13.2).
+
+## Sessão 2026-09-24 — Fase 2: checkpoint de sanidade (n=50) abriu e pegou integridade (v3.58)
+
+- Score `--desde 2026-09-11` até 23/09: livro em 69 eventos, placar
+  aberto: acerto 0,319 (nula 0,337), pts/op −37,8. **Sanidade, não
+  veredito**: sem vazamento (nada perto de 1,0), sem sinal absurdo,
+  TAXA 3,9/pregão contra 4,6. Veredito só em n=150.
+- **Integridade**: 15/09 tinha 2 eventos no score de 16/09 (13:49:00 e
+  15:55:54) e apareceu com 1 (15:57:49) no de 24/09 — as barras do dia
+  foram regeradas depois de escoradas. O livro, chaveado por
+  (dia, ts_open), guardou as duas versões: 3 linhas em 15/09, n real 67.
+- v3.58: dia re-escorado cujos eventos não batem com os gravados →
+  versão nova SUBSTITUI a antiga, aviso alto e linha em
+  `forward_integridade.log` (dia, antes/depois, carimbo). Dia
+  re-escorado sem evento apaga os antigos daquele dia. Mesmo dado →
+  nada muda. Falha de integridade não reinicia a contagem (PARADA).
+- **Livro reconstruído** (`--desde 2026-08-28 --reconstruir-livro`,
+  24/09): **75 eventos em 18 pregões, acerto 0,293 (nula 0,337), pts/op
+  −52,5, 4,17/pregão.** Continua sanidade: 0,8 erro-padrão abaixo da
+  nula em n=75, sem assinatura de bug. Veredito em n=150 (~fim de
+  outubro a 4/pregão).
+- **A reconstrução mostrou que não foi só 15/09.** Comparando com os
+  scores de 11/09 e 16/09, mudaram as barras de **04/09** (2 eventos →
+  5, horários todos diferentes), **08/09** (sem evento → 5), **09/09**
+  (5 → 4, a tarde mudou), **10/09** (4 → 5, todos diferentes) e 15/09
+  (2 → 1). 28/08–03/09, 11/09 e 14/09 ficaram idênticos. E o `bar_id`
+  de 28/08 deslocou +2 (2461 → 2463): algum dia **antes de 28/08** —
+  dentro do período de treino — também ganhou 2 barras. O operador
+  não lembra o que rodou; os parquets de 15 e 16/09 têm data de
+  17/09 ~19:25, o que aponta re-curadoria nesse dia (backfill de
+  histórico pelo priming v2.31–v2.33 é o candidato: tape de histórico
+  ≠ tape ao vivo, ver v2.24/v2.25).
+- Consequência registrada, não resolvida: cinco dos dezoito pregões
+  do forward foram escorados sobre barras de uma **fonte diferente**
+  da que treinou o modelo (histórico vs ao vivo). O livro atual é
+  consistente com o dado atual — é o que a ficha exige — mas a
+  pergunta "backfill muda barra de dia já curado?" precisa de
+  resposta em `INTEGRIDADE_DOS_DADOS.md`. Regra até lá: **qualquer
+  reprocessamento de raw de dia já escorado exige `--reconstruir-livro`
+  e uma linha aqui.** A v3.58 passa a detectar e substituir sozinha,
+  com `forward_integridade.log`.
+- **Aviso do scikit-learn**: o pkl foi gravado com 1.9.0 e o score
+  rodou com 1.9.1 (`InconsistentVersionWarning`). O sha256 do pkl bate
+  (bytes iguais); o risco é a *inferência* mudar entre versões. Checagem
+  grátis, dado queimado: `fase2-score WINFUT --dia 2026-08-27
+  --permitir-queimado` e comparar `conf` com a saída de 08/09 (0,726 /
+  0,721 / 0,651 / 0,684 / 0,736 / 0,754 / 0,639, mesmos horários). Se
+  bater ao milésimo, 1.9.1 reproduz 1.9.0 e o carimbo do forward passa
+  a incluir a versão do sklearn. Se não bater, fixar `scikit-learn==
+  1.9.0` no venv e reconstruir o livro (o modelo não muda; só a
+  inferência volta à versão de origem).

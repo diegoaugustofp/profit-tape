@@ -2909,13 +2909,13 @@ def fase2_score(
             backup = livro.with_name(f"forward_eventos.antes_{quando}.csv")
             livro.rename(backup)
             typer.echo(f"  livro anterior guardado em {backup.name}")
-    tudo = (
-        registrar_forward(ev, livro)
-        if not ev.empty
-        else (pd.read_csv(livro, dtype={"dia": str}) if livro.exists() else ev)
-    )
+    tudo = registrar_forward(ev, livro, dias_escorados=dias)
     p = placar(tudo, ficha)
     typer.echo("")
+    integ = livro.with_name("forward_integridade.log")
+    if integ.exists():
+        typer.echo(f"  INTEGRIDADE: ha' registros em {integ.name} (dias cujo dado mudou "
+                   "depois de escorados; a versao nova substituiu a antiga)")
     typer.echo(
         f"  livro: {livro}   eventos acumulados: {p['n']} em {p['pregoes']} pregoes com evento"
     )
