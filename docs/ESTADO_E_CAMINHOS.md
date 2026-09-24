@@ -1,6 +1,6 @@
 # Onde estamos e para onde dá para ir — 2026-09-21
 
-> **Status:** vivo — **Revisado:** 2026-09-21 — **Assunto:** onde o projeto está em uma tela, o que falta em ordem e a taxonomia de fechamento das hipóteses.
+> **Status:** vivo — **Revisado:** 2026-09-24 — **Assunto:** onde o projeto está em uma tela, o que falta em ordem e a taxonomia de fechamento das hipóteses.
 
 > Substitui a versão de 2026-09-16. Sessão de 16 a 21/09: v2.98 → v3.27,
 > 902 → 957 testes. O EA 123 rodou ao vivo pela primeira vez, o dry_run
@@ -83,6 +83,9 @@
 - **Agente** (saldo acumulado e a sua virada) — depois do book.
 
 ## 4. Onde cada hipótese está (a taxonomia de fechamento)
+
+> Desde 2026-09-24 o estado de cada estratégia vive na ficha dela em
+> `docs/eas/` (índice em `docs/eas/README.md`); esta tabela é resumo.
 
 | hipótese | estado |
 |---|---|

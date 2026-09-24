@@ -3778,3 +3778,36 @@ limpos).
   - `README.md` da raiz: seção "Documentacao" aponta para o índice.
 - Flagrado, não tratado: 15 arquivos `diagnostico_historico_*.log`
   versionados na raiz do repositório.
+
+## Sessão 2026-09-24 (noite, 2) — revisão de documentação, etapa 2: fichas de estratégia em `docs/eas/` (v3.61)
+
+Só documentação; nenhum código tocado (suíte verde; ruff e mypy limpos).
+
+- **`docs/eas/`** novo: uma ficha por estratégia, dez ao todo —
+  `z_agf_3`, `deepscalper_fase2`, `bollinger_scalp`, `ifr2_m15`,
+  `orb_m15`, `123_m15`, `123_gate_volume_alto`, `123_volume_baixo`,
+  `gap_abertura`, `vespera` — mais `README.md` (índice com fase, veredito,
+  trials consumidos, e as convenções comuns às fichas de preço). Formato
+  fixo: identidade; fase e estado; mecanismo em uma frase; regras;
+  pré-registro congelado (com tag); resultados por trial; veredito;
+  próximo passo; onde está a discussão longa. Todo conteúdo extraído
+  dos documentos de origem (`EAS_DE_PRECO.md`, `BOLLINGER_SCALP.md`,
+  `RESEARCH_PLANO.md`), sem número novo.
+- **Regra de dono**: a ficha é o documento de origem do ESTADO de uma
+  estratégia. `EA_ARQUITETURA.md` §1 reescrita como tabela de links para
+  as fichas (e corrigida: Bollinger INCONCLUSIVO, 7a do 123 fechado, E4
+  iniciado 22/09); `ESTADO_E_CAMINHOS.md` §4 e o índice de documentação
+  apontam para `docs/eas/`; `EAS_DE_PRECO.md` e `BOLLINGER_SCALP.md`
+  passam a ser o histórico/discussão.
+- **Duas lacunas achadas ao extrair, registradas na ficha e no índice,
+  sem decisão minha**:
+  1. `config/ea_venda_rota_b.yaml` (o z_agf_3 em dry_run) ainda carrega
+     `alvo 120 / stop 100`, enquanto a pesquisa fechou em 29-31/08 que o
+     alvo foi descartado como conceito, o stop não detecta reversão e o
+     drawdown não era problema. Sem registro de revisão do YAML depois.
+  2. O catálogo de hipóteses mortas diz que o GAP deu "inconclusivo,
+     por-ano sem padrão", mas nenhuma tabela de resultado (n/p1/IC/hash)
+     existe no repositório.
+- Correção de leitura no caminho: o E4 iniciado em 22/09 roda a variante
+  `ea_123_vb_e4` (gate de volume baixo, ordens reais) ao lado da mesma
+  variante simulada — não o 123 puro.

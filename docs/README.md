@@ -64,14 +64,18 @@ veredito da época. Regras de leitura:
 
 ### Estratégias e EAs
 
-Cada estratégia terá uma ficha própria em `docs/eas/` (em construção, revisão
-de documentação de 2026-09-24). Até lá, o documento de origem de cada uma é:
+**O estado de cada estratégia vive na ficha dela em [`eas/`](eas/README.md)**
+— uma por estratégia, vivas e mortas, com o pré-registro congelado, os
+resultados por trial e o veredito. Os documentos abaixo guardam o
+histórico e a discussão completa:
 
 | arquivo | assunto | status | revisado |
 |---|---|---|---|
-| [`EA_ARQUITETURA.md`](EA_ARQUITETURA.md) | pipeline F0–F6, escada de infraestrutura E0–E5, tabela "onde cada EA está", decisões de arquitetura do EA | vivo | 2026-09-23 |
-| [`EAS_DE_PRECO.md`](EAS_DE_PRECO.md) | linha de EAs de preço em M15: fichas IFR2, ORB, 123, 123+gate de volume, gap, véspera | vivo | 2026-09-16 |
-| [`BOLLINGER_SCALP.md`](BOLLINGER_SCALP.md) | scalp de Bollinger 15 s: ficha, replay, três variantes; veredito INCONCLUSIVO após revogação do CONTRA (§12) | fechado (suspensa) | 2026-09-24 |
+| [`EA_ARQUITETURA.md`](EA_ARQUITETURA.md) | pipeline F0–F6, escada de infraestrutura E0–E5, decisões de arquitetura do EA; a tabela §1 aponta para as fichas | vivo | 2026-09-24 |
+| [`eas/README.md`](eas/README.md) | índice das fichas: fase, veredito, trials consumidos, e as convenções comuns às fichas de preço | vivo | 2026-09-24 |
+| [`eas/*.md`](eas/) | z_agf_3, deepscalper_fase2, bollinger_scalp, ifr2_m15, orb_m15, 123_m15, 123_gate_volume_alto, 123_volume_baixo, gap_abertura, vespera | vivo / fechado por ficha | 2026-09-24 |
+| [`EAS_DE_PRECO.md`](EAS_DE_PRECO.md) | linha de EAs de preço em M15: histórico completo das fichas IFR2, ORB, 123, 123+gate de volume, gap, véspera | vivo (histórico) | 2026-09-24 |
+| [`BOLLINGER_SCALP.md`](BOLLINGER_SCALP.md) | scalp de Bollinger 15 s: histórico completo (ficha, replay, três variantes, clustering) | fechado (suspensa) | 2026-09-24 |
 | [`RUNBOOK_E4.md`](RUNBOOK_E4.md) | roteiro de um dia de E4: ordens reais na conta demo, o que conferir antes, durante e depois | vivo | 2026-09-23 |
 
 ### Operação e infraestrutura
@@ -101,8 +105,10 @@ de documentação de 2026-09-24). Até lá, o documento de origem de cada uma é
 
 | aconteceu | registre em |
 |---|---|
-| decisão de sinal/estratégia, pré-registro, resultado de trial | `RESEARCH_PLANO.md` (ou, para uma estratégia com ficha própria, na ficha em `docs/eas/`) |
-| decisão de arquitetura/infra do EA, mudança na escada E0–E5, mudança de fase F0–F6 | `EA_ARQUITETURA.md` — e a linha da tabela §1 |
+| pré-registro, resultado de trial, mudança de fase ou veredito de uma estratégia | a ficha em `docs/eas/` (estado) + o documento de origem (discussão longa: `EAS_DE_PRECO.md`, `BOLLINGER_SCALP.md`, `RESEARCH_PLANO.md`) |
+| decisão de sinal/estratégia sem ficha ainda, método de pesquisa, triagem | `RESEARCH_PLANO.md` |
+| decisão de arquitetura/infra do EA, mudança na escada E0–E5 | `EA_ARQUITETURA.md` |
+| estratégia nova | ficha nova em `docs/eas/` + linha em `docs/eas/README.md` + linha na tabela §1 de `EA_ARQUITETURA.md` |
 | incidente operacional, achado sobre a DLL, mudança na rotina | `OPERACAO.md` |
 | dado capturado com defeito em algum período/stream | `INTEGRIDADE_DOS_DADOS.md` |
 | período de trial escolhido | `PERIODOS_DECLARADOS.json` — ANTES de olhar resultado |
@@ -122,15 +128,21 @@ uma a três linhas:
 `Revisado` é a data da última revisão de *conteúdo*, não de qualquer
 edição. Ao marcar um documento como `superado`, diga por qual.
 
-## Divergências conhecidas (a corrigir na etapa de fichas)
+## Divergências e lacunas conhecidas
 
-- `EA_ARQUITETURA.md` §1 lista o scalp de Bollinger (retorno e rompimento)
-  como **F4 — REPROVADO**; `BOLLINGER_SCALP.md` §12 (2026-09-23) revogou o
-  CONTRA para **INCONCLUSIVO** (clustering de 2,56 sinais por janela alarga
-  os IC). Vale o documento de origem.
-- `EA_ARQUITETURA.md` §1 (tabela "revisado 2026-09-13") ainda lista o 7a como
-  próximo passo do 123; a tabela da escada no mesmo documento (§2) e
-  `ESTADO_E_CAMINHOS.md` §1 registram o 7a FECHADO em 2026-09-21. Vale o
-  registro mais recente.
+Resolvidas em 2026-09-24 pelas fichas: Bollinger REPROVADO vs INCONCLUSIVO
+e o 7a do 123 na tabela §1 de `EA_ARQUITETURA.md` (a tabela agora aponta
+para as fichas).
+
+Abertas, registradas na ficha correspondente e aguardando o operador:
+
+- **z_agf_3**: `config/ea_venda_rota_b.yaml` ainda carrega `alvo_pontos:
+  120` e `stop_rota_b_pontos: 100`, enquanto a pesquisa fechou (29-31/08)
+  que o alvo foi descartado como conceito, o stop não detecta reversão e
+  drawdown não é problema. Sem registro de revisão do YAML depois. Ver
+  `eas/z_agf_3.md`.
+- **GAP de abertura**: o catálogo de hipóteses mortas registra
+  "inconclusivo, por-ano sem padrão", mas não há tabela de resultado
+  (n/p1/IC/hash) em nenhum documento. Ver `eas/gap_abertura.md`.
 - `README.md` da raiz descreve só o recorder (2026-08-21). Reescrita
-  prevista na mesma revisão de documentação.
+  prevista na etapa 3 da revisão de documentação.

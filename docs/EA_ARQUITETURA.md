@@ -1,6 +1,6 @@
 # EA — arquitetura, estado atual e pipeline de desenvolvimento
 
-> **Status:** vivo — **Revisado:** 2026-09-23 — **Assunto:** pipeline F0–F6, escada E0–E5, tabela "onde cada EA está" e decisões de arquitetura do EA.
+> **Status:** vivo — **Revisado:** 2026-09-24 — **Assunto:** pipeline F0–F6, escada E0–E5, tabela "onde cada EA está" e decisões de arquitetura do EA.
 
 > **Como ler este arquivo.** As secoes 0 a 3 abaixo sao o ESTADO ATUAL,
 > reescritas a cada mudanca -- e' o que responde "onde cada coisa esta'
@@ -40,22 +40,27 @@ E0-E4 esta' pronta e serve a QUALQUER estrategia que chegue em F5.
 
 ---
 
-## 1. Onde cada EA esta' HOJE (revisado 2026-09-13)
+## 1. Onde cada EA esta' HOJE (revisado 2026-09-24)
 
-> **Nada mudou nos EAs desde 2026-09-11** -- o trabalho dos ultimos dias
-> foi todo em INFRAESTRUTURA (escada E0-E5), que e' ortogonal a`s
-> estrategias. Os dois EAs vivos continuam parados no mesmo ponto,
-> esperando pregao.
+> **O estado de cada estrategia vive na FICHA dela, em `docs/eas/`**
+> (indice: `docs/eas/README.md`). Esta tabela e' um resumo apontando
+> para as fichas; se divergir de uma ficha, a ficha vence e esta linha
+> e' corrigida. As secoes 2 e 3 abaixo (escada E0-E5, decisoes de
+> arquitetura) continuam aqui — sao infraestrutura, ortogonal a`s
+> estrategias.
 
-| EA | Fase | Estado | Proximo passo concreto |
+| EA | Fase | Estado (resumo) | Ficha |
 |---|---|---|---|
-| **z_agf_3** (venda + Rota B) | **F5** | forward demo MONTADO (v2.47), nunca disparou ordem real | ver 1 sinal virar ordem no pregao; conferir fill/slippage no Profit |
-| **DeepScalper Fase 2** (classificador) | **F3->F4** | forward LIGADO em 2026-09-09; placar fechado ate' n=50 | rodar `fase2-score` nos dias pendentes (offline) e esperar n |
-| **Scalp de Bollinger** (retorno) | **F4 — REPROVADO** | p1=0,480 IC(0,432-0,528), bruto -4,7 pts/op: null | nenhum. Capitulo fechado (2026-09-11) |
-| **Scalp de Bollinger** (rompimento) | **F4 — REPROVADO** | p1=0,415 IC(0,360-0,473), bruto -22,0: borda NEGATIVA | nenhum. Capitulo fechado (2026-09-11) |
-| **IFR2 M15** (preco) | **F4 — REPROVADO (familia)** | trial 1 K=0,5: 0,492; trial 2 K=1: 0,486 IC97,5%(0,464-0,509) n=2.478. Nulo | nenhum. Familia fechada sobre 2023-26 (`EAS_DE_PRECO.md` 3.5) |
-| **ORB M15** (preco, rompimento da abertura) | **F4 — REPROVADO** | combinado 2015-2026: p1=0,491 IC(0,471-0,511) n=2.382; nenhum ano com IC fora de 0,50 | nenhum. Capitulo fechado (`EAS_DE_PRECO.md` 4.5) |
-| **123 M15** (preco, continuacao) | **F4 real-pequeno; F5 COM GATE, codigo pronto** | WIN 0,5285 IC(0,515-0,542) n=5.444; com gate de volume BAIXO (ficha 12) 0,552 no WIN e **0,534 IC(0,516-0,552) no WDO** (replicado) | 7a: pregao em dry_run com `config/ea_123_volume_baixo.yaml`; depois E4 (7b). Infra: cabo + nobreak antes do E4 |
+| **z_agf_3** (venda + Rota B) | **F5** | forward demo MONTADO (v2.47), sem ordem real; divergencia YAML x pesquisa registrada na ficha | [`z_agf_3.md`](eas/z_agf_3.md) |
+| **DeepScalper Fase 2** (classificador) | **F3->F4** | forward LIGADO em 2026-09-11; sanidade n=50 OK em 24/09 (v3.58); veredito em n=150 | [`deepscalper_fase2.md`](eas/deepscalper_fase2.md) |
+| **Scalp de Bollinger** (3 variantes + book) | **F4 — SUSPENSA** | INCONCLUSIVO nas tres (CONTRA revogado em 23/09 por clustering deff 2,56); teste retrospectivo em amostra limpa quando n >= 60 | [`bollinger_scalp.md`](eas/bollinger_scalp.md) |
+| **IFR2 M15** (preco) | **F4 — FECHADA** | CONTRA em 2 trials no WIN (IC97,5% no 2o) e no WDO | [`ifr2_m15.md`](eas/ifr2_m15.md) |
+| **ORB M15** (preco) | **F4 — FECHADA** | CONTRA no combinado 2015-26 (WIN); INCONCLUSIVO no WDO | [`orb_m15.md`](eas/orb_m15.md) |
+| **123 M15 puro** (preco, continuacao) | **F4 INCONCLUSIVO; F5 como PORTADOR** | 0,5285 IC(0,515-0,542) n=5.444, real e pequeno; nao replica no WDO. 7a FECHADO 21/09; **E4 iniciado 22/09** (com o gate) | [`123_m15.md`](eas/123_m15.md) |
+| **123 + gate volume ALTO** (ficha 9) | **F4 — FECHADA** | hipotese FALSA no sentido declarado; o complemento gerou a ficha 12 | [`123_gate_volume_alto.md`](eas/123_gate_volume_alto.md) |
+| **123 em volume BAIXO** (ficha 12) | **F4 INCONCLUSIVO no WDO; gate do 123 no E4** | WDO 0,534 IC(0,516-0,552); atravessa a quebra de 2020 nos dois instrumentos | [`123_volume_baixo.md`](eas/123_volume_baixo.md) |
+| **GAP de abertura** (ficha 10) | **F4 — congelada; resultado so' no catalogo** | "inconclusivo, por-ano sem padrao" — tabela n/p1/IC nao esta' no repositorio (lacuna) | [`gap_abertura.md`](eas/gap_abertura.md) |
+| **Vespera** (ficha 11) | **F3 — FECHADA sem p1** | estimador nao serve em M15 (78% por tempo; depois 54-74% ambigua) | [`vespera.md`](eas/vespera.md) |
 
 ### z_agf_3 — o unico vivo em execucao
 

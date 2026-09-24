@@ -1,6 +1,6 @@
 # Scalp de Bollinger modificada (15s) — hipótese em formalização
 
-> **Status:** fechado (suspensa) — **Revisado:** 2026-09-24 — **Assunto:** scalp de Bollinger 15 s — ficha, replay e três variantes; veredito INCONCLUSIVO após revogação do CONTRA (§12). Reabrir exige dado novo.
+> **Status:** fechado (suspensa) — **Revisado:** 2026-09-24 — **Assunto:** scalp de Bollinger 15 s — ficha, replay e três variantes; veredito INCONCLUSIVO após revogação do CONTRA (§12). Reabrir exige dado novo. Estado consolidado em `docs/eas/bollinger_scalp.md`.
 
 Estado (2026-09-23, FINAL): **SUSPENSA, e as três variantes são
 INCONCLUSIVAS — não CONTRA.** O veredito CONTRA que eu havia declarado
