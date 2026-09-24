@@ -1,0 +1,67 @@
+{
+  "symbol": "WINFUT",
+  "h": 3,
+  "k": 1.5,
+  "k_motivo": "maior k com >= 60% resolvidas e barreira >= 2x custo",
+  "custo_pontos": 11.0,
+  "janela_z": 50,
+  "features": [
+    "z_imbalance",
+    "z_absorcao",
+    "z_rlp_frac",
+    "z_agf_114",
+    "z_agf_120",
+    "z_agf_1618",
+    "z_agf_3",
+    "z_agf_39",
+    "z_agf_4090",
+    "z_agf_8",
+    "z_agf_85",
+    "z_agf_88",
+    "z_agf_92",
+    "z_fluxo_nacional"
+  ],
+  "features_removidas_redundancia": [
+    [
+      "z_tick_imbalance",
+      "z_imbalance",
+      0.9819477839724843
+    ]
+  ],
+  "HP": {
+    "max_depth": 4,
+    "max_iter": 200,
+    "learning_rate": 0.05,
+    "min_samples_leaf": 50,
+    "l2_regularization": 1.0,
+    "early_stopping": false,
+    "random_state": 0
+  },
+  "dias_treino": [
+    "2026-07-24",
+    "2026-08-20"
+  ],
+  "dias_validacao": [
+    "2026-08-21",
+    "2026-08-27"
+  ],
+  "n_treino": 1307,
+  "n_validacao": 306,
+  "MEDIDO_p_star": 0.6326970549236761,
+  "MEDIDO_nula": 0.3366013071895425,
+  "MEDIDO_frac_resolvidas": 0.673202614379085,
+  "MEDIDO_taxa_eventos_por_pregao": 4.6,
+  "DEPURACAO_acerto_validacao": 0.30434782608695654,
+  "DEPURACAO_pnl_proxy_por_op": 3.950354761284594,
+  "DEPURACAO_n_eventos_validacao": 23,
+  "horizonte_pregoes_para_150": 32.608695652173914,
+  "modelo_sha256": "5c5b0d7c74abad52b53ce5f2a20f78c9e1c883136cc0d3d283a62b6fbdfa042a",
+  "modelo_arquivo": "data\\research\\fase2\\modelo_fase2.pkl",
+  "desempate_pelo_tape": true,
+  "classes_treino": {
+    "-1": 581,
+    "0": 561,
+    "1": 471
+  },
+  "ficha_sha256": "63c392751f8de08d39aa61b0a4641e1aec6ed7a7890ba8fb1d5bdfbedab050c1"
+}
