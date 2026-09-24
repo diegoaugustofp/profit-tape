@@ -1,4 +1,4 @@
-.PHONY: install dev lint fmt type test cov clean
+.PHONY: install dev lint fmt type test cov docs clean
 
 install:
 	pip install -e .
@@ -20,6 +20,10 @@ test:
 
 cov:
 	pytest --cov=profittape --cov-report=term-missing
+
+docs:
+	python tools/gera_referencia_cli.py
+	python tools/valida_ancoras.py docs/RESEARCH_PLANO.md docs/EA_ARQUITETURA.md docs/OPERACAO.md
 
 clean:
 	rm -rf .pytest_cache .mypy_cache .ruff_cache htmlcov .coverage

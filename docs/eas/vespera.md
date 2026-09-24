@@ -35,7 +35,7 @@ Convenções de `docs/eas/README.md`, mais:
   aquele lado sai; sem isso viraria a ficha 10 disfarçada).
 - v0: D = A_v (amplitude inteira da véspera). **v1: D = ATR14 da última
   barra fechada antes do gatilho** (nível da véspera, escala do dia).
-- Regime = estrato, nunca cláusula (lição do ORB 7.4).
+- Regime = estrato, nunca cláusula (lição do ORB; skill `profit-tape-disciplina` §7.4, "validar a HIPÓTESE").
 - Risco declarado antes: se "por tempo" passasse de 40%, a ficha voltava
   ao desenho ANTES de congelar.
 

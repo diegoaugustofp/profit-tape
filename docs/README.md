@@ -48,6 +48,8 @@ veredito da época. Regras de leitura:
 |---|---|---|---|
 | [`INSTRUCOES_DO_PROJETO_CLAUDE.md`](INSTRUCOES_DO_PROJETO_CLAUDE.md) | cópia versionada das instruções do Project no Claude.ai (bootstrap de sessão, skills, mínimo indispensável) | vivo | 2026-09-10 |
 | [`BOAS_PRATICAS_PROGRESSO.md`](BOAS_PRATICAS_PROGRESSO.md) | regra de progresso visível `[i/N]` e `--log-file` em processos longos | vivo | 2026-08-27 |
+| [`GLOSSARIO.md`](GLOSSARIO.md) | os termos com sentido próprio no projeto, uma linha cada, com ponteiro; marca as colisões (Fase, regime, IC, perfil) | vivo | 2026-09-24 |
+| [`REFERENCIA_CLI.md`](REFERENCIA_CLI.md) | todos os comandos da CLI por categoria, com nota de trial e documento de referência — GERADO por `tools/gera_referencia_cli.py`, não editar à mão | vivo (gerado) | a cada `make docs` |
 | skills `profit-tape-disciplina` e `profit-tape-engenharia` | pré-registro, mecanismo antes de número, tag + bundle, ordem de verificação — vivem fora do repositório, no Project | vivo | — |
 
 ### Pesquisa
@@ -115,6 +117,8 @@ histórico e a discussão completa:
 | mudança em definição de feature | `FEATURES.md`, versionando a coluna (`v2`), nunca sobrescrevendo |
 | fim de qualquer sessão que tocou código | entrada nova no fim de `HISTORICO_DE_SESSOES.md` |
 | documento novo em `docs/` | linha nova neste índice, com cabeçalho padrão no documento |
+| comando novo na CLI | classificar em `tools/gera_referencia_cli.py` e rodar `make docs` (o teste `test_referencia_gerada_esta_em_dia` acusa se esquecer) |
+| termo novo com sentido próprio | entrada em `GLOSSARIO.md` |
 
 ## Cabeçalho padrão
 
@@ -144,5 +148,4 @@ Abertas, registradas na ficha correspondente e aguardando o operador:
 - **GAP de abertura**: o catálogo de hipóteses mortas registra
   "inconclusivo, por-ano sem padrão", mas não há tabela de resultado
   (n/p1/IC/hash) em nenhum documento. Ver `eas/gap_abertura.md`.
-- `README.md` da raiz descreve só o recorder (2026-08-21). Reescrita
-  prevista na etapa 3 da revisão de documentação.
+- (resolvida 2026-09-24) `README.md` da raiz reescrito.

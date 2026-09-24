@@ -3811,3 +3811,35 @@ Só documentação; nenhum código tocado (suíte verde; ruff e mypy limpos).
 - Correção de leitura no caminho: o E4 iniciado em 22/09 roda a variante
   `ea_123_vb_e4` (gate de volume baixo, ordens reais) ao lado da mesma
   variante simulada — não o 123 puro.
+
+## Sessão 2026-09-24 (noite, 3) — revisão de documentação, etapas 3-5: README, glossário, referência de CLI (v3.62)
+
+- **`README.md` da raiz reescrito** (etapa 3): o projeto em três camadas,
+  estado em uma linha com data, instalação (Python 3.12+, não 3.11),
+  os três fluxos com os comandos que os estruturam, mapa real dos doze
+  subpacotes + `ntsl/`, `config/`, `tools/`, parágrafo de disciplina
+  (F0–F6, E0–E5), o aviso da DLL (com a correção da tabela de erros de
+  23/09), testes, documentação apontando para o índice, e como o código
+  chega (bundle + tag).
+- **`docs/GLOSSARIO.md`** (etapa 4): 103 termos, uma linha cada, com
+  ponteiro para onde o termo é definido. As colisões marcadas com ⚠:
+  Fase (F0–F6 do pipeline vs Fase 0/1/2 do DeepScalper), regime (MME80
+  vs quebra de 2020), IC (walk-forward vs Wilson), perfil (de corretora
+  vs de volume).
+- **`docs/REFERENCIA_CLI.md` GERADO** (etapa 5) por
+  `tools/gera_referencia_cli.py`: lê o `cli.py` com `ast` (sem importar,
+  sem DLL), tira nome e primeira frase do docstring de cada comando, e
+  agrupa em 11 categorias pelo dicionário do script, com a nota de
+  trial (consome / não consome) e o documento de referência. Comando
+  novo sem classificação cai numa seção "Sem categoria" visível, não
+  some. `--check` para CI; `make docs` regenera e valida âncoras.
+  `tests/test_referencia_cli.py` (5 testes): extração, resumo, comando
+  desconhecido aparece, dicionário sem órfão, e **o .md está em dia com
+  o cli.py** — adicionar comando sem rodar o script quebra a suíte.
+- Índice de documentação: linhas do glossário e da referência; "onde
+  registrar" ganhou comando novo e termo novo.
+- Flagrado, não tratado: `src/profittape/ea/__init__.py` ainda diz
+  "fase de ESBOCO — nao operacional ainda" no docstring; e o
+  `.env.example` idem para o bloco de EA. Ambos são texto em código,
+  fora do escopo desta revisão.
+- Suíte: 1.076 testes; ruff e mypy limpos.
