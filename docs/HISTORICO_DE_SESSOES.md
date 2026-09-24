@@ -3626,3 +3626,33 @@ ficamos em lados opostos. Pendente de rodar.
 
 Isso vale alem do Bollinger: a agregacao de barras maiores e'
 infraestrutura para qualquer estrategia multi-timeframe, inclusive o 123.
+
+### 2026-09-24 — BOLLINGER CONCLUIDO: divergencia de OHLC e' cosmetica (v3.57)
+
+    discordancia do limiar: 0,81% (11 barras em 1364)
+    diferenca mediana no estocastico: 0,14 | p95: 0,62 | max: 17,95
+
+O OHLC diverge em 28-35% das barras nas PONTAS, mas isso quase nao
+atravessa para o indicador e quase nunca para a DECISAO. Motivo
+geometrico, coerente com a fronteira de balde: o %K usa o close sobre a
+faixa de 8 barras de 6 min (~48 min de amplitude) -- um ou dois ticks
+no numerador se diluem numa faixa de centenas de pontos.
+
+Em sinais: 0,81% de 611 sao ~5 sinais. Irrelevante frente a IC de
+dezenas de pontos.
+
+Ressalva registrada: o maximo de 17,95 mostra que em casos isolados a
+divergencia e' grande (provavelmente barras de faixa estreita, onde o
+denominador pequeno amplifica). Nao muda a conclusao, mas quem usar
+contexto de timeframe maior em estrategia mais sensivel a limiar
+precisa saber.
+
+**ESTADO FINAL**: as tres variantes sao INCONCLUSIVAS. Nenhuma mostrou
+borda, nenhuma foi refutada. Tudo o que podia ser validado foi:
+indicadores de 15s (dif_max 0,0), estocastico de 6 min (dif_max
+0,00000000), OHLC de 6 min (diverge, 0,81% de impacto), clustering
+(deff 2,56, incorporado aos IC) e a ordem stop (defeito da limitada
+corrigido).
+
+O capitulo fecha. A ficha 10.1 continua congelada e o teste
+retrospectivo roda quando n >= 60 (13.2).

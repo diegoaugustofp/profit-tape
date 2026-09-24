@@ -1077,3 +1077,53 @@ O `tiny_book` e o estocástico de contexto são infraestrutura para
 qualquer estratégia multi-timeframe do projeto. Se a agregação de barras
 maiores diverge do gráfico, isso vale para o 123 e para o que vier
 depois — não só para o Bollinger.
+
+## 15. CONCLUÍDO: a divergência de OHLC é COSMÉTICA (2026-09-24)
+
+    barras comparadas        1364
+    diferenca mediana        0,14
+    diferenca p95            0,62
+    diferenca maxima        17,95
+    discorda do limiar <20      5 barras
+    discorda do limiar >80      6 barras
+    DISCORDANCIA TOTAL       0,81%
+
+**O OHLC diverge, o indicador quase não, e a decisão quase nunca.**
+
+O motivo é geométrico e bate com o diagnóstico da fronteira de balde
+(14.1): o `%K` usa o close como numerador sobre a faixa de 8 barras de
+6 min — cerca de 48 minutos de amplitude. Um ou dois ticks de diferença
+no close são diluídos por uma faixa que costuma ter centenas de pontos.
+
+Em sinais: com 611 sinais, 0,81% são **~5 sinais** afetados. Irrelevante
+frente a IC que abrangem dezenas de pontos.
+
+**Ressalva registrada**: o máximo de 17,95 mostra que em casos isolados
+a divergência é grande — provavelmente barras de faixa estreita, onde o
+denominador pequeno amplifica qualquer diferença no numerador. Não muda
+a conclusão aqui, mas quem usar contexto de timeframe maior numa
+estratégia mais sensível a limiar precisa saber que isso existe.
+
+### 15.1 Estado FINAL da família
+
+| variante | borda bruta | veredito |
+|---|---|---|
+| retorno, sem filtro | −4,7 | INCONCLUSIVO |
+| rompimento (era limitada) | −26,0 | INCONCLUSIVO (revogado de CONTRA, seção 12) |
+| rompimento + contexto, ordem stop | −18,1 | INCONCLUSIVO |
+
+**Nenhuma mostrou borda. Nenhuma foi refutada.** A distinção importa:
+*"não achamos borda"* não é *"provamos que não há"*.
+
+Tudo o que podia ser validado foi:
+
+- indicadores de 15s contra o Profit: `dif_max = 0,0`
+- estocástico de 6 min contra o Profit: `dif_max = 0,00000000`
+- OHLC de 6 min (nossa agregação x Profit): diverge, mas com **0,81%**
+  de impacto na decisão — cosmético
+- clustering medido e incorporado aos IC (`deff` 2,56)
+- ordem stop implementada e o defeito da limitada corrigido
+
+O capítulo fecha aqui. A regra da ficha 10.1 continua congelada, e o
+teste retrospectivo em amostra limpa roda quando n ≥ 60 (13.2) — sem
+nada mais a decidir até lá.
