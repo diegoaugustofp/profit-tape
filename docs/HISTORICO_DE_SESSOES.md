@@ -3470,3 +3470,9 @@ validado), mas 2,2% das barras de contexto tem menos de 24 barras de
 operador -- o "rompimento" que nao era rompimento (ordem limitada) e o
 CONTRA que assumia independencia. Nenhum foi achado por estatistica;
 foram achados olhando o grafico e perguntando de onde vinha um numero.
+
+**Nota de teste instavel (2026-09-23)**: `test_ea_ordem_teste_b.py::
+test_ciclo_completo_stop_cancel_oco` falhou uma vez na suite completa e
+passou isolado e na re-execucao. E' teste com threads e espera de fill
+-- sensivel a timing sob carga. Nao e' regressao das mudancas desta
+sessao. Se voltar a falhar de forma reprodutivel, ai' sim investigar.
