@@ -1,6 +1,13 @@
 # Scalp de Bollinger modificada (15s) — hipótese em formalização
 
-Estado (2026-09-23, final): **SUSPENSA.** O mecanismo correto (rompimento
+Estado (2026-09-23, FINAL): **SUSPENSA, e as três variantes são
+INCONCLUSIVAS — não CONTRA.** O veredito CONTRA que eu havia declarado
+foi REVOGADO na seção 12: ele assumia independência entre operações, e o
+clustering medido (2,56 sinais por janela de contexto) alarga os IC até
+cruzarem zero. A equivalência do estocástico de 6 min foi medida e
+fechou com dif_max = 0,0 (11.4). Histórico abaixo:
+
+**SUSPENSA.** O mecanismo correto (rompimento
 com ordem STOP + estocástico de contexto) foi medido e deu INCONCLUSIVO
 (9.5) — IC98,3% (−39,9; +3,7). Ponto estimado negativo; reabrir exige
 dado NOVO, não argumento novo. Histórico: **REABERTO por defeito de
@@ -904,7 +911,36 @@ barras de 15s em vez de 24 — e o estocástico sobre ela mistura períodos
 de liquidez muito diferentes, sem nada acusar. O diagnóstico conta
 quantas são incompletas.
 
-### 11.4 EQUIVALÊNCIA NUNCA VALIDADA NO TIMEFRAME MAIOR — lacuna aberta
+### 11.4 EQUIVALÊNCIA NO TIMEFRAME MAIOR — MEDIDA E FECHADA (2026-09-23)
+
+Dump do gráfico de 6 min do Profit (1.518 barras, 16 pregões,
+01/09–22/09), mesmo `bollinger_scalp.ntsl` aplicado no gráfico maior:
+
+    estocastico lento %K      n=1509   dif_max = 0,00000000
+    estocastico %D (media)    n=1507   dif_max = 27,26
+    estocastico %K rapido     n=1511   dif_max = 50,87
+    Bollinger sup (ddof=0)    n=1498   dif_max = 0,00005
+    Bollinger inf (ddof=0)    n=1498   dif_max = 0,00005
+    ATR = SMA do TrueRange    n=1497   dif_max = 0,00000005
+
+**Zero absoluto no %K lento.** A fórmula do contexto bate com o Profit
+no timeframe maior, e as divergências do %D e do %K rápido confirmam
+(pela negativa) que `SlowStochastic()` devolve o %K lento — mesma
+conclusão do gráfico de 15s. Bollinger e ATR na casa do arredondamento
+do log, não de fórmula.
+
+O Profit produz 95 barras de 6 min por pregão, começando às 09:00 —
+alinhamento igual ao nosso.
+
+**O que isto NÃO prova, e continua aberto**: o dump valida a FÓRMULA
+sobre o OHLC do Profit. O código usa o OHLC agregado do NOSSO tape
+(barras de 15s somadas). Se os dois OHLC divergirem, o estocástico
+diverge junto. Medir isso exige comparar as barras de 6 min lado a lado
+— dump contra agregação — e não foi feito. O risco é menor que o
+anterior (o OHLC de 15s já foi validado com dif_max = 0,0), mas não é
+zero: 2,2% das barras de contexto têm menos de 24 barras de 15s.
+
+### 11.4b (histórico) A lacuna, como estava antes da medição
 
 Os indicadores de 15s foram validados contra o gráfico do Profit
 (dif_max = 0,0, seção 2). **O estocástico de 6 MIN nunca foi.**
@@ -916,3 +952,37 @@ exatamente esse tipo de divergência que gerou o erro de setembro.
 
 **Não é mensurável sem um dump do gráfico de 6 min.** Fica registrado
 como a lacuna mais provável de conter a próxima surpresa.
+
+## 12. CLUSTERING MEDIDO: o veredito CONTRA NÃO se sustenta (2026-09-23)
+
+`profit-tape diagnostico-multitf`, 42 pregões, com filtro de contexto:
+
+    operacoes (sinais)          616
+    janelas de 6 min com sinal  241
+    tamanho medio do cluster    2,56
+    maior cluster                  7
+    n EFETIVO                   241   <- contra 616 nominais
+
+Os IC reabertos com `deff = 2,56`:
+
+| | IC95 original | IC95 corrigido | veredito |
+|---|---|---|---|
+| limitada | (−43,8; −8,2) CONTRA | **(−54,5; +2,5)** | **INCONCLUSIVO** |
+| stop | (−35,9; −0,2) INCONCLUSIVO | (−46,7; +10,5) | INCONCLUSIVO |
+
+**O veredito CONTRA de 8.7 e 5.8 está REVOGADO.** Ele dependia de uma
+suposição de independência que o dado não sustenta: os sinais vêm em
+rajadas de 2,56 em média (até 7) dentro da mesma janela de contexto,
+compartilhando regime e movimento.
+
+Ressalva técnica, para quem reabrir isto: o `deff` foi medido sobre os
+616 SINAIS, enquanto os IC vêm das 320 operações EXECUTADAS. O circuit
+breaker e o "não atravessou" cortam sinais e podem quebrar clusters, de
+modo que o `deff` das operações pode ser menor. Mas mesmo com `deff`
+2,0 o IC ia a (−51,2; −0,8) — no fio. Não sustenta o CONTRA.
+
+**Estado final da família**: as três variantes são **INCONCLUSIVAS**,
+não CONTRA. Nenhuma mostrou borda; nenhuma foi refutada com o rigor que
+eu havia declarado. A diferença prática é pequena (nada vai a produção
+de qualquer forma), mas a diferença epistêmica não é: *"não achamos
+borda"* é diferente de *"provamos que não há"*.

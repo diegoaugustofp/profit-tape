@@ -3425,3 +3425,48 @@ foram validados contra o Profit (dif_max=0,0), mas **o estocastico de
 
 `research/diagnostico_multitf.py` + `profit-tape diagnostico-multitf`.
 6 testes. Suite verde, ruff e mypy limpos.
+
+### 2026-09-23 — Clustering medido REVOGA o CONTRA; equivalencia de 6 min fechada (v3.52)
+
+**1. O veredito CONTRA nao se sustenta.** `diagnostico-multitf` em 42
+pregoes: 616 sinais em 241 janelas de contexto, **cluster medio 2,56**
+(maior 7), n EFETIVO 241. Acima do limiar de ~2,1 que eu tinha
+calculado.
+
+    limitada  IC95 (-43,8; -8,2) CONTRA  ->  (-54,5; +2,5) INCONCLUSIVO
+    stop      IC95 (-35,9; -0,2) INCONC. ->  (-46,7; +10,5) INCONCLUSIVO
+
+Eu declarei "CONTRA, sem ambiguidade" em 8.7. Estava errado: a
+conclusao dependia de independencia entre operacoes, e os sinais vem em
+rajadas dentro da mesma janela de 6 min, compartilhando contexto,
+regime e movimento. **As tres variantes sao INCONCLUSIVAS, nao CONTRA.**
+
+Ressalva registrada: o deff foi medido sobre os 616 SINAIS e os IC vem
+das 320 operacoes EXECUTADAS -- o circuit breaker pode quebrar clusters
+e reduzir o deff real. Mas com deff 2,0 o IC ja' ia a (-51,2; -0,8), no
+fio; nao sustenta o CONTRA de qualquer forma.
+
+**2. Equivalencia do estocastico de 6 MIN: FECHADA.** Dump do operador
+(1.518 barras, 16 pregoes, mesmo `bollinger_scalp.ntsl` no grafico de 6
+min):
+
+    %K lento   n=1509  dif_max = 0,00000000
+    %D         n=1507  dif_max = 27,26      <- confirma pela negativa
+    %K rapido  n=1511  dif_max = 50,87      <- idem
+    Bollinger  n=1498  dif_max = 0,00005    (arredondamento do log)
+    ATR        n=1497  dif_max = 0,00000005
+
+Zero absoluto no %K lento. A lacuna 11.4 fecha. O Profit produz 95
+barras de 6 min por pregao, comecando 09:00 -- alinhamento igual ao
+nosso.
+
+**O que continua aberto**: o dump valida a FORMULA sobre o OHLC do
+Profit; o codigo usa o OHLC agregado do NOSSO tape. Comparar os dois
+OHLC lado a lado nao foi feito. Risco menor (o OHLC de 15s ja' foi
+validado), mas 2,2% das barras de contexto tem menos de 24 barras de
+15s.
+
+**A licao da sessao**: dois vereditos meus cairam hoje por perguntas do
+operador -- o "rompimento" que nao era rompimento (ordem limitada) e o
+CONTRA que assumia independencia. Nenhum foi achado por estatistica;
+foram achados olhando o grafico e perguntando de onde vinha um numero.
