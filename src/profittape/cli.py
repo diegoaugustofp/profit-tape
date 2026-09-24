@@ -2936,6 +2936,89 @@ def fase2_score(
 
 
 @app.command()
+def valida_ohlc_6min(
+    dump: Path = typer.Argument(..., help="Dump do grafico de 6 min (NTSL)."),
+    symbol: str = typer.Option("WINFUT", "--symbol"),
+    curated: Path = typer.Option(Path("data/curated"), "--curated"),
+    log_level: str = typer.Option("WARNING", "--log-level"),
+) -> None:
+    """
+    Fecha a lacuna 11.4: o OHLC de 6 min do PROFIT contra a NOSSA
+    agregacao das barras de 15s.
+
+    O dump ja' provou que a FORMULA do estocastico bate (dif_max = 0).
+    Mas provou isso sobre o OHLC do Profit -- e o codigo usa o OHLC
+    agregado do nosso tape. Se os dois divergirem, o estocastico diverge
+    junto, com a formula certa e o resultado errado.
+
+    Tolerancia ZERO: OHLC e' preco de negocio, nao tem arredondamento.
+    """
+    configurar(log_level)
+    import pandas as pd
+
+    from .features.pipeline import _carregar_dia, _dias_do_symbol
+    from .research import bollinger_replay as br
+    from .research import bollinger_scalp as bs
+    from .research import valida_ohlc_6min as vo
+
+    sym = symbol.strip().upper()
+    d6, _meta = bs.carregar_log(dump)
+    dias_dump = {str(x) for x in d6["dia"].unique()}
+    typer.echo(f"dump: {len(d6)} barras de 6 min, {len(dias_dump)} pregoes")
+
+    pastas = [p for p in _dias_do_symbol(curated / "trade", sym)
+              if p.name.split("=", 1)[1] in dias_dump]
+    if not pastas:
+        raise typer.BadParameter(
+            f"nenhum pregao do dump encontrado em {curated / 'trade'}. "
+            f"Dias do dump: {sorted(dias_dump)[:3]}...")
+
+    partes = []
+    for pasta in pastas:
+        dia = pasta.name.split("=", 1)[1]
+        b = br.barras_15s_do_tape(_carregar_dia(pasta, sym), dia)
+        if not b.empty:
+            partes.append(vo.agregar_15s_para_6min(b))
+    if not partes:
+        raise typer.BadParameter("nenhuma barra de 15s montada")
+    nossas = pd.concat(partes, ignore_index=True)
+
+    # so' compara os dias que existem dos DOIS lados
+    dias_nossos = set(nossas["dia"].astype(str))
+    comuns = dias_dump & dias_nossos
+    d6c = d6[d6["dia"].astype(str).isin(comuns)]
+    nsc = nossas[nossas["dia"].astype(str).isin(comuns)]
+    typer.echo(f"pregoes comparaveis (nos dois lados): {len(comuns)}")
+    if not comuns:
+        raise typer.BadParameter("nenhum pregao em comum entre dump e curated")
+
+    c = vo.comparar(d6c, nsc)
+    r = c.resumo()
+    typer.echo("=" * 70)
+    typer.echo("OHLC de 6 min: PROFIT x NOSSA AGREGACAO")
+    typer.echo("=" * 70)
+    typer.echo(f"  barras do Profit   {r['barras_profit']}")
+    typer.echo(f"  barras nossas      {r['barras_nossas']}")
+    typer.echo(f"  casadas            {r['casadas']}")
+    typer.echo(f"  so' no Profit      {r['so_no_profit']}  <- barras que nao montamos")
+    typer.echo(f"  so' nossas         {r['so_nossas']}")
+    typer.echo("")
+    for campo in ("open", "high", "low", "close"):
+        dm = r["dif_max"][campo]      # type: ignore[index]
+        qt = r["barras_divergentes"][campo]   # type: ignore[index]
+        typer.echo(f"  {campo:6} dif_max={dm:<12} barras divergentes={qt}")
+    typer.echo("")
+    if c.bateu:
+        typer.echo("RESULTADO: BATEU. A nossa agregacao reproduz o grafico do")
+        typer.echo("Profit exatamente -- a lacuna 11.4 fecha.")
+    else:
+        typer.echo("RESULTADO: DIVERGE. O estocastico de contexto que o codigo")
+        typer.echo("calcula NAO e' o que o operador ve no grafico. High/low sao")
+        typer.echo("os mais sensiveis: divergem se qualquer negocio a mais ou a")
+        typer.echo("menos entrar (filtro de TIPOS_OHLC_GRAFICO?).")
+
+
+@app.command()
 def diagnostico_multitf(
     symbol: str = typer.Argument("WINFUT"),
     curated: Path = typer.Option(Path("data/curated"), "--curated"),

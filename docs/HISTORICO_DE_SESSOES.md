@@ -3556,3 +3556,40 @@ linhas, ~35 min).
 em thread propria com fila propria (nao bloqueia a captura por
 desenho). O que a falha afeta e' o EA 123 -- que nao conseguiu limpar
 ordens residuais na subida. Em dry_run, sem consequencia pratica.
+
+### 2026-09-24 — Validacao do OHLC de 6 min; decisao de NAO ligar o forward (v3.55)
+
+**1. Decisao do operador: sem forward.** O raciocinio esta' correto --
+como a ficha 10.1 esta' CONGELADA desde 23/09, rodar daqui a 2 semanas
+sobre pregoes que ainda nao existiam e' teste out-of-sample legitimo,
+estatisticamente identico ao forward. A unica coisa que o forward
+mediria a mais e' o preenchimento REAL da stop, e isso ja' vem dos
+outros EAs (no 123 pegaram um erro vendo as ordens abrirem ao vivo).
+
+**Criterio de parada FIXADO AGORA** (13.2), para nao virar busca:
+roda na PRIMEIRA vez que a amostra limpa (pregoes >= 2026-09-09)
+atingir n >= 60 operacoes. Nao antes, nao depois. A ~3,2 op/pregao,
+isso cai por volta do inicio de outubro.
+
+**2. `valida-ohlc-6min`**, para fechar a lacuna 11.4 de verdade. O dump
+provou que a FORMULA do estocastico bate -- mas sobre o OHLC do
+PROFIT. O codigo usa o OHLC agregado do NOSSO tape: se os dois
+divergirem, o estocastico diverge junto, com a formula certa e o
+resultado errado.
+
+Dois motivos concretos de desconfianca: as barras de 15s usam
+TIPOS_OHLC_GRAFICO (filtro de tipos de negocio) e 2,2% das barras de
+contexto tem menos de 24 barras de 15s.
+
+Tolerancia ZERO -- OHLC e' preco de negocio, nao tem arredondamento.
+High e low sao os mais sensiveis: divergem se QUALQUER negocio a mais
+ou a menos entrar.
+
+Conferido a mao antes dos testes: 48 barras de 15s -> 2 de 6 min com
+OHLC batendo no papel, e a hora saindo no RELOGIO DA BOLSA (se saisse
+em UTC, o merge casaria barras de horarios diferentes -- divergencia
+onde nao ha', ou silencio onde ha').
+
+7 testes novos. Suite verde, ruff e mypy limpos.
+
+**PENDENTE**: rodar `profit-tape valida-ohlc-6min <dump>`.

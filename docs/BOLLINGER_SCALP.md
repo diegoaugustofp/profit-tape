@@ -986,3 +986,43 @@ não CONTRA. Nenhuma mostrou borda; nenhuma foi refutada com o rigor que
 eu havia declarado. A diferença prática é pequena (nada vai a produção
 de qualquer forma), mas a diferença epistêmica não é: *"não achamos
 borda"* é diferente de *"provamos que não há"*.
+
+## 13. DECISÃO: sem forward; teste retrospectivo em amostra limpa (2026-09-24)
+
+### 13.1 O raciocínio do operador, que está correto
+
+*"Se continuar a captura, em 2 semanas podemos executar com a amostra
+que teremos e teríamos os mesmos resultados, certo? A única vantagem [do
+forward] é o que já aconteceu nos outros EAs."*
+
+Está certo, e por uma razão precisa: **a ficha 10.1 está congelada
+desde 23/09**. Rodar daqui a duas semanas sobre pregões que ainda não
+existiam quando a regra foi escrita é um teste **out-of-sample
+legítimo** — estatisticamente idêntico ao forward.
+
+A única coisa que o forward mediria a mais é o **preenchimento real da
+ordem stop** (o replay assume execução no gatilho). E isso vem de graça
+dos outros EAs: no 123 já se pegou um erro observando as ordens abrindo
+ao vivo. Ligar um EA a mais para medir de novo o que já está sendo
+medido é custo sem retorno.
+
+### 13.2 O critério de parada, fixado AGORA
+
+Se "quando rodar" ficar em aberto, existe a tentação de rodar, ver, e
+esperar mais um pouco — o que transformaria um teste honesto numa busca.
+
+**Roda na PRIMEIRA vez que a amostra limpa atingir n ≥ 60 operações.**
+Não antes, não depois.
+
+- Amostra limpa = pregões a partir de **2026-09-09** (os 42 do replay
+  terminam em 08/09, e o `tiny_book` começa em 24/08).
+- Em 23/09 eram ~10 pregões, ~32 operações estimadas.
+- A ~3,2 operações/pregão, n=60 chega por volta de **início de outubro**.
+- Regra e critério: os da ficha 10.1 e 10.2, sem alteração.
+
+### 13.3 O que NÃO muda com isso
+
+O poder continua assimétrico (10.2): detecta bem que a estratégia é
+ruim, mal que é boa. O desfecho mais provável continua sendo
+INCONCLUSIVO. Isso foi declarado antes e não é motivo para reabrir a
+regra depois.
