@@ -80,6 +80,10 @@ sobrevivem ate o Parquet, para poderem ser excluidos depois).
 
 ## Documentacao
 
+Ponto de entrada: [`docs/README.md`](docs/README.md) — indice de todos os
+documentos, com status (vivo / fechado / superado) e a regra de onde
+registrar cada coisa.
+
 - [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md) — decisoes de projeto e tabela de sintomas
 - [`docs/OPERACAO.md`](docs/OPERACAO.md) — rotina diaria e checklist pos-pregao
 - [`sql/001_raw_market_data.sql`](sql/001_raw_market_data.sql) — schema TimescaleDB opcional

@@ -1,5 +1,7 @@
 # Features Tier 1 — definicoes travadas
 
+> **Status:** referência — **Revisado:** 2026-08-21 — **Assunto:** definições travadas das features Tier 1; mudar = versionar a coluna, nunca sobrescrever.
+
 Mudanca em qualquer definicao abaixo invalida comparacao com resultados
 anteriores. Se mudar, versione (v2 no nome da coluna) em vez de sobrescrever.
 

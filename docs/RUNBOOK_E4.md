@@ -1,5 +1,7 @@
 # Roteiro do E4 — ordem real na conta DEMO
 
+> **Status:** vivo — **Revisado:** 2026-09-23 — **Assunto:** roteiro de um dia de E4 — ordens reais na conta demo; o que conferir antes, durante e depois.
+
 Uma página para o dia. Consolida o que estava espalhado entre o E2b, a
 reconciliação (EA_ARQUITETURA 4b) e os incidentes de setembro (OPERACAO).
 

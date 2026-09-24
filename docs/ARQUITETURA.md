@@ -1,5 +1,7 @@
 # Arquitetura
 
+> **Status:** vivo — **Revisado:** 2026-08-21 — **Assunto:** arquitetura do recorder (callback → fila → writer) e tabela de sintomas; cobre só a captura — research e EA em `EA_ARQUITETURA.md`.
+
 ```
    ProfitDLL (thread da DLL)                Thread do writer
   ┌──────────────────────────┐            ┌───────────────────────┐

@@ -1,5 +1,7 @@
 # EA — arquitetura, estado atual e pipeline de desenvolvimento
 
+> **Status:** vivo — **Revisado:** 2026-09-23 — **Assunto:** pipeline F0–F6, escada E0–E5, tabela "onde cada EA está" e decisões de arquitetura do EA.
+
 > **Como ler este arquivo.** As secoes 0 a 3 abaixo sao o ESTADO ATUAL,
 > reescritas a cada mudanca -- e' o que responde "onde cada coisa esta'
 > hoje". Da secao "Indice por assunto" em diante e' o HISTORICO

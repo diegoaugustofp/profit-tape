@@ -1,5 +1,7 @@
 # Revisao do modulo de storage (2026-08-22, pedido do operador)
 
+> **Status:** fechado — **Revisado:** 2026-08-22 — **Assunto:** revisão do storage após três incidentes de corrupção; invariantes INV1–INV6 desde a v0.34.
+
 ## Motivo
 
 Tres incidentes de corrupcao/perda em sequencia, todos com a mesma anatomia:

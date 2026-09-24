@@ -1,5 +1,7 @@
 # Indicador NTSL `absorcao_dir` — visualizacao exploratoria
 
+> **Status:** vivo — **Revisado:** 2026-09-02 — **Assunto:** indicador `absorcao_dir` no Profit — visualização exploratória; NÃO é sinal (hipótese CONTRA em 2026-08-30).
+
 Fonte: `ntsl/absorcao_dir.ntsl`. Comparador: `profit-tape ntsl-equivalencia`.
 
 ## O que este indicador NAO e'

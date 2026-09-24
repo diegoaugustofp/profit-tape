@@ -1,5 +1,7 @@
 # Boas praticas: visibilidade de progresso em processos longos
 
+> **Status:** vivo — **Revisado:** 2026-08-27 — **Assunto:** regra de progresso visível `[i/N]` e `--log-file` em qualquer processo longo.
+
 Principio registrado pelo operador (2026-08-27): trabalhamos com volumes de
 dado muito grandes (milhoes de trades por pregao, dezenas de dias
 acumulados) e processos que rodam minutos a horas. Sem visibilidade clara

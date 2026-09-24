@@ -1,5 +1,7 @@
 # Plano do modulo research/ (decidido 2026-08-22, pre-implementacao)
 
+> **Status:** vivo — **Revisado:** 2026-09-24 — **Assunto:** decisões de sinal/estratégia, pré-registros e resultados de trial — documento de origem da maioria das hipóteses. Use o índice por assunto.
+
 Regras de desenho, decisoes de sinal/estrategia, e resultados -- em ordem
 cronologica abaixo. Para navegar rapido por ASSUNTO em vez de ler tudo em
 ordem, use o indice agrupado abaixo (2026-08-28, adicionado porque o

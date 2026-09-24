@@ -1,5 +1,7 @@
 # Resumo da sessão, roteiro operacional e roadmap — 2026-08-27
 
+> **Status:** superado por `ESTADO_E_CAMINHOS.md` e `OPERACAO.md` — **Revisado:** 2026-08-28 — **Assunto:** fotografia do projeto ao fim de 2026-08-27 — resumo, roteiro operacional e roadmap da época.
+
 Documento de consolidação, escrito ao fim de um dia excepcionalmente longo
 de trabalho. Objetivo: dar uma visão de conjunto do que foi decidido e
 construído, sem precisar reler a sessão inteira; e registrar a disciplina

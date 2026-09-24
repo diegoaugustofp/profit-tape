@@ -1,5 +1,7 @@
 # Curadoria de referencias — DeepScalper e RL intradiario (fechada 2026-09-07)
 
+> **Status:** fechado — **Revisado:** 2026-09-08 — **Assunto:** o que foi lido e descartado sobre RL intradiário/DeepScalper, com motivo — para não reler.
+
 Registro do que foi lido, o que ficou e o que foi descartado, com o
 motivo. Existe para **nao voltar** em material ja' avaliado. Antes de
 propor uma fonte nova sobre RL/fluxo/scalping, confira aqui.

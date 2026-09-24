@@ -1,5 +1,7 @@
 # DESENHO 2 — absorção com gestão de risco
 
+> **Status:** fechado — **Revisado:** 2026-09-04 — **Assunto:** desenho 2 da absorção (com risco), abandonado antes do teste por EMD insuficiente.
+
 **RASCUNHO PARA VALIDAÇÃO. Não congelado.** Nenhum retorno foi
 consultado: tudo abaixo saiu de variância, amplitude e contagem, na
 amostra de depuração (parquet + maio).

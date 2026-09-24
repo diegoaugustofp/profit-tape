@@ -1,5 +1,7 @@
 # Integridade dos dados — registro de problemas conhecidos por periodo/stream
 
+> **Status:** vivo — **Revisado:** 2026-09-24 — **Assunto:** livro de bordo de problemas de QUALIDADE do dado por período/stream; consultar antes de concluir research sobre um período.
+
 Livro de bordo dos incidentes que afetaram QUALIDADE do dado (nao so'
 disponibilidade). Consulte isto antes de tirar conclusao de research sobre
 periodo ou stream aqui listado. Ordem cronologica reversa (mais recente

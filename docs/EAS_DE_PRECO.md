@@ -1,5 +1,7 @@
 # EAs de PRECO — linha paralela enquanto o tape acumula (2026-09-13)
 
+> **Status:** vivo — **Revisado:** 2026-09-16 — **Assunto:** linha de EAs de preço em M15 — fichas IFR2, ORB, 123, 123+gate de volume, gap e véspera. Fichas migrarão para `docs/eas/`.
+
 Estado (2026-09-14, noite): **IFR2 FECHADA (familia CONTRA). ORB FECHADO
 — CONTRA no combinado de 10 anos (4.5).** **123: borda PEQUENA e REAL (5.3)** — p1 = 0,5285 IC95 [0,515;
 0,542] em 5.444, onze de doze anos acima de 0,50; abaixo do 0,56

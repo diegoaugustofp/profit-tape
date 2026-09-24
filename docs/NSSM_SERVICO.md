@@ -1,5 +1,7 @@
 # Servico supervisionado (NSSM) — desenhado 2026-08-24
 
+> **Status:** fechado — **Revisado:** 2026-08-27 — **Assunto:** serviço supervisionado (NSSM) do record — desenho e validação em produção.
+
 Terceira peca da infra, depois do agendamento (schtasks) e dos alertas
 (Telegram). Sem mudanca de codigo Python — o contrato de exit code do
 `record` ja' estava certo (`run()` devolve 0 em qualquer parada LIMPA

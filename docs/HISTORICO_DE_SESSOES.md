@@ -1,5 +1,7 @@
 # Histórico de sessões — profit-tape
 
+> **Status:** vivo — **Revisado:** 2026-09-24 — **Assunto:** uma entrada por sessão de trabalho, com as tags entregues — o eixo "quando".
+
 Log cronológico, uma entrada por sessão de trabalho. Cada entrada resume
 o que foi feito, organizado por assunto, com ponteiro para as
 tags/versões entregues e os documentos de referência tocados.
@@ -3747,3 +3749,32 @@ retrospectivo roda quando n >= 60 (13.2).
   foi de 2268 (08/09) para 2350 (24/09), +82, enquanto o dia ganhou só
   2 barras e 28/08 deslocou +2. Irrelevante desde que a chave do livro
   é (dia, ts_open); anotado por honestidade.
+
+## Sessão 2026-09-24 (noite) — revisão de documentação, etapa 1: índice e cabeçalhos (v3.60)
+
+Só documentação; nenhum código tocado (suíte: 1.071 passaram; ruff e mypy
+limpos).
+
+- **Diagnóstico** que motivou a revisão: 22 documentos em `docs/`, 69
+  comandos de CLI, e um `README.md` de raiz que ainda descreve o projeto
+  como gravador de tape (estrutura lista 7 subpacotes; `src/` tem 12).
+  Fichas de EA existem mas espalhadas em três documentos longos; estado de
+  cada EA mantido em três lugares; nenhum glossário.
+- **Plano acordado, nesta ordem**: (1) índice de documentação + cabeçalho
+  padrão em todo doc; (2) ficha por EA em `docs/eas/`; (3) reescrita do
+  `README.md`; (4) glossário; (5) referência de CLI gerada por script.
+- **Entregue nesta etapa**:
+  - `docs/README.md` novo: tabela de todos os documentos com assunto,
+    status e data de revisão; regra "onde registrar o quê"; definição do
+    cabeçalho padrão; lista de divergências conhecidas entre
+    tabelas-resumo e documentos de origem (Bollinger REPROVADO vs
+    INCONCLUSIVO; 7a do 123 ainda listado como próximo passo em
+    `EA_ARQUITETURA.md` §1).
+  - Cabeçalho `> **Status** / **Revisado** / **Assunto**` inserido logo
+    abaixo do H1 dos 20 documentos existentes. `RESUMO_E_ROTEIRO_2026-08-27`
+    marcado como superado; `NSSM_SERVICO`, `REVISAO_STORAGE`,
+    `CURADORIA_DEEPSCALPER`, `DESENHO_2`, `DESENHO_3`, `BOLLINGER_SCALP`
+    marcados como fechados.
+  - `README.md` da raiz: seção "Documentacao" aponta para o índice.
+- Flagrado, não tratado: 15 arquivos `diagnostico_historico_*.log`
+  versionados na raiz do repositório.

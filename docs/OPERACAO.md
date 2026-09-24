@@ -1,5 +1,7 @@
 # Operacao
 
+> **Status:** vivo — **Revisado:** 2026-09-23 — **Assunto:** rotina diária, incidentes, achados de DLL e checklist pós-pregão.
+
 ## ACHADO 2026-09-23: a nossa TABELA DE ERROS da DLL estava errada
 
 O `SendCancelOrders` foi recusado com **-2147483645** e o nosso

@@ -1,5 +1,7 @@
 # Instrucoes do Project (Claude.ai) -- profit-tape
 
+> **Status:** vivo — **Revisado:** 2026-09-10 — **Assunto:** cópia versionada das instruções do Project no Claude.ai; manter os dois sincronizados.
+
 Este e' o texto colocado no campo de instrucoes personalizadas do
 Project do Claude.ai onde as sessoes deste projeto acontecem. Mantido
 aqui tambem, versionado, para nao depender so' da UI do Claude.ai.

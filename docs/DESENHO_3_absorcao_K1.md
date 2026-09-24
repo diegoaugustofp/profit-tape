@@ -1,5 +1,7 @@
 # DESENHO 3 — absorção com hipótese menos restritiva (K = 1)
 
+> **Status:** fechado — **Revisado:** 2026-09-04 — **Assunto:** desenho 3 da absorção (K=1), congelado; o trial 2025 fechou INVERTIDO (ver `RESEARCH_PLANO.md`, 2026-09-04).
+
 > **CONGELADO em 2026-09-04 pelo operador**, antes de qualquer contato
 > com 2025. Ficam fixados: `K = 1`, o evento, o estimador, o horizonte,
 > o critério, a regra de parada e a amostra de teste. Alteração de
