@@ -3476,3 +3476,55 @@ test_ciclo_completo_stop_cancel_oco` falhou uma vez na suite completa e
 passou isolado e na re-execucao. E' teste com threads e espera de fill
 -- sensivel a timing sob carga. Nao e' regressao das mudancas desta
 sessao. Se voltar a falhar de forma reprodutivel, ai' sim investigar.
+
+### 2026-09-24 (pregao) — codigo de erro chegando POSITIVO; enxurrada de warnings (v3.53)
+
+Operador estranhou o comportamento do record e apontou a quantidade de
+warnings:
+
+    ea.cancel_todas_enviado        retorno=2147483651 ticker=WINV26
+    ea.123.limpeza_na_subida       acao=incompleta_tentar_de_novo
+                                   cancel_todas_ok=True
+                                   cancel_todas_retorno=2147483651
+                                   posicao_implausivel=True posicao_real=None
+
+**A causa**: 2147483651 e' 0x80000003 -- o erro NL_INVALID_ARGS
+(-2147483645) lido como UNSIGNED. As funcoes de ordem tem
+`restype = c_int64` porque devolvem ID de ordem (que e' grande), mas os
+CODIGOS DE ERRO sao de 32 bits. Sem normalizar, o erro chega POSITIVO,
+`if r < 0` nao dispara, e o codigo registra `cancel_todas_enviado`
+(sucesso) para uma chamada que FALHOU -- e `cancel_todas_ok = r >= 0`
+vira True.
+
+**Validado a pedido do operador**: a v3.40 JA' tinha entregue o detector
+certo (`if r < 0` com `describe` e os argumentos no log). Ele nao estava
+errado -- estava CEGO pelo sinal. A prova no log de hoje: veio o ramo de
+sucesso (`cancel_todas_enviado`, warning), nao o de erro
+(`cancel_todas_recusado`, error). Entao isto NAO e' duplicacao da v3.40:
+e' a peca que faltava para o detector dela funcionar.
+
+`errors.normalizar_retorno`: valores em [0x80000000, 0xFFFFFFFF] viram
+negativos; IDs de ordem reais (26091112112953 do E2, 26091117574093 do
+E3) sao MAIORES e passam intactos. Aplicado nos 5 pontos que
+interpretam retorno (execucao.py x3, reconciliacao.py, ordem_teste_b.py).
+
+O `posicao_implausivel=True` e' a checagem de plausibilidade do E3
+fazendo o que deve: recusando agir sobre leitura suspeita. As duas
+coisas juntas puseram o EA em laco de "tentar de novo" -- dai' a
+enxurrada.
+
+**Sobre a lentidao do record**, investigada antes: `descartados=0` e
+fila zerada, entao a captura nao perdeu nada. O padrao real e' outro --
+240 mil linhas nos primeiros 22 min e 4,1 milhoes nos 8 seguintes, ou
+seja o inicio ficou quase sem dado e depois normalizou. Os 17
+`lote_lento` sao de lotes de 10-74 linhas levando ~2 s, o que aponta
+para DISCO (o proprio log sugere spin-up de USB), nao CPU.
+
+Ainda assim, duas otimizacoes no caminho novo do tiny_book: o callback
+construia DOIS TinyBook identicos (um para o publish, outro para o
+on_tiny_extra) -- agora reaproveita o mesmo objeto; e o EstadoDoLivro
+reconstruia a tupla inteira a cada evento (2,5 us; 3,5 us com 8
+simbolos) -- agora e' dict, 1,7 us e nao cresce com o numero de
+simbolos.
+
+8 testes novos. Suite verde, ruff e mypy limpos.

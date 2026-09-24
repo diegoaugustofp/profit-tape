@@ -67,6 +67,31 @@ _ERRORS: dict[int, str] = {
 _NL_BASE = -2147483648  # 0x80000000
 
 
+def normalizar_retorno(valor: int) -> int:
+    """
+    Converte um retorno lido como 64 bits de volta para int32 COM SINAL.
+
+    POR QUE ISTO EXISTE (bug real, 2026-09-24): as funcoes de ordem sao
+    declaradas com `restype = c_int64` porque devolvem ID de ordem, que e'
+    grande. Mas os CODIGOS DE ERRO sao de 32 bits: `NL_INVALID_ARGS` e'
+    `0x80000003`, que como int32 assinado e' -2147483645 e como int64
+    positivo e' +2147483651.
+
+    Consequencia no pregao de 24/09: `SendCancelOrders` devolveu erro, o
+    teste `if r < 0` NAO disparou (o valor chegou positivo), e o codigo
+    concluiu `cancel_todas_ok=True` para uma chamada que FALHOU. O EA
+    entrou em laco de "tentar de novo" e encheu o log de warnings.
+
+    Regra: valores no intervalo [0x80000000, 0xFFFFFFFF] sao codigos NL
+    de erro mal lidos e viram negativos. IDs de ordem reais (como
+    26091112112953, medido no E2) sao MAIORES que 0xFFFFFFFF e passam
+    intactos, assim como qualquer retorno pequeno e positivo.
+    """
+    if 0x80000000 <= valor <= 0xFFFFFFFF:
+        return valor - 0x100000000
+    return valor
+
+
 def describe(code: int) -> str:
     if code in _ERRORS:
         return _ERRORS[code]

@@ -704,33 +704,28 @@ class ProfitClient:
 
         @b.TTinyBookCallback
         def _tiny(ativo, preco, qtd, side) -> None:
-            publish(
-                Stream.TINY_BOOK,
-                TinyBook(
-                    ts_recv_ns=time.time_ns(),
-                    symbol=ativo.ticker or "",
-                    exchange=ativo.bolsa or "",
-                    side=int(side),
-                    price=float(preco),
-                    quantidade=int(qtd),
-                ),
+            # UM evento, reaproveitado. Ate' 2026-09-23 este callback
+            # construia DOIS TinyBook identicos (um para o publish, outro
+            # para o on_tiny_extra) e chamava time.time_ns() duas vezes --
+            # desperdicio puro a ~1 milhao de eventos por pregao, DENTRO
+            # do callback, com o feed parado esperando. TinyBook e'
+            # imutavel (NamedTuple), entao o mesmo objeto serve aos dois.
+            evento = TinyBook(
+                ts_recv_ns=time.time_ns(),
+                symbol=ativo.ticker or "",
+                exchange=ativo.bolsa or "",
+                side=int(side),
+                price=float(preco),
+                quantidade=int(qtd),
             )
+            publish(Stream.TINY_BOOK, evento)
             if on_tiny_extra is not None:
-                # Mesma regra do on_trade_extra: a captura (publish acima)
-                # vem primeiro e nunca espera; excecao aqui e' engolida,
-                # porque propagar atravessaria a fronteira ctypes e
-                # derrubaria o processo inteiro por causa do EA.
+                # A CAPTURA (linha acima) sempre vem primeiro e nunca
+                # espera por isto. Excecao aqui e' engolida: propagar
+                # atravessaria a fronteira ctypes e derrubaria o processo
+                # inteiro por causa do consumidor secundario.
                 try:
-                    on_tiny_extra(
-                        TinyBook(
-                            ts_recv_ns=time.time_ns(),
-                            symbol=ativo.ticker or "",
-                            exchange=ativo.bolsa or "",
-                            side=int(side),
-                            price=float(preco),
-                            quantidade=int(qtd),
-                        )
-                    )
+                    on_tiny_extra(evento)
                 except Exception:
                     log.exception("profitdll.on_tiny_extra_falhou")
 

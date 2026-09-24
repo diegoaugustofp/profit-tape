@@ -69,6 +69,7 @@ class RecorderService:
         ea_dir: Path | str | None = None,
         capital_em_conta: float = 0.0,
         ea_modo_ticker: str = "unico",
+        ea_livro_ao_vivo: bool = False,
     ) -> None:
         self.cfg = cfg
         self.cred = cred
@@ -152,6 +153,12 @@ class RecorderService:
         # pelos EAs em O(1). Existe sempre -- custa uma tupla -- para que
         # qualquer EA possa consultar sem precisar de montagem propria.
         self.livro_ao_vivo = EstadoDoLivro()
+        if ea_livro_ao_vivo:
+            log.warning("recorder.livro_ao_vivo_ligado",
+                       nota="topo do livro alimentado a cada tiny_book "
+                            "(~1M eventos/pregao, ~1,7 us cada DENTRO do "
+                            "callback). So' faz sentido com algum EA usando "
+                            "filtro_book.")
         self.despachante = DespachanteDeEAs()
         self.supervisor = SupervisorDeRisco(capital_em_conta=capital_em_conta)
         self.livro = LivroDePosicoes()
@@ -186,7 +193,14 @@ class RecorderService:
             tz_offset_horas=cfg.runtime.tz_offset_horas,
             on_state=self._on_state,
             on_trade_extra=self.despachante.publicar,
-            on_tiny_extra=self.livro_ao_vivo.atualizar,
+            # SO' liga o hook se algum EA for usar. Sem isto, todo record
+            # -- inclusive o de captura pura -- pagaria ~1,7 us por evento
+            # de tiny_book (~1 milhao por pregao) DENTRO do callback da
+            # DLL, sem ninguem consumir o resultado. A captura e' o ativo
+            # que nao se refaz; ela nao paga por funcionalidade que nao
+            # esta' em uso.
+            on_tiny_extra=(self.livro_ao_vivo.atualizar
+                          if ea_livro_ao_vivo else None),
             dll=dll_injetada,
             login_completo=cfg.runtime.login_completo,
         )

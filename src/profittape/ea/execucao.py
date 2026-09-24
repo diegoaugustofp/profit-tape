@@ -49,6 +49,7 @@ from typing import Any
 
 import structlog
 
+from ..profitdll.errors import normalizar_retorno
 from .config import RoteamentoConfig
 from .decisao import Acao, Decisao
 from .ordem_teste import exigir_conta_anunciada, exigir_simulador, exigir_ticker_especifico
@@ -251,8 +252,8 @@ class ExecutorDeOrdens:
         """SendCancelOrder(conta, corretora, ClOrdID, senha) -- senha em 4o.
         Devolve 0 no sucesso (medido)."""
         dll = self._trava()
-        r = int(dll.SendCancelOrder(self._conta, self._corretora, cl_ord_id,
-                                    self._rot.senha_roteamento))
+        r = normalizar_retorno(int(dll.SendCancelOrder(
+            self._conta, self._corretora, cl_ord_id, self._rot.senha_roteamento)))
         log.info("ea.cancel_enviado", cl_ord_id=cl_ord_id, retorno=r, ticker=self._ticker)
         return r
 
@@ -260,8 +261,13 @@ class ExecutorDeOrdens:
         """SendCancelOrders(conta, corretora, senha, ticker, bolsa): todas as
         ordens vivas deste ticker. Reconciliacao de ordens (4b)."""
         dll = self._trava()
-        r = int(dll.SendCancelOrders(self._conta, self._corretora, self._rot.senha_roteamento,
-                                     self._ticker, self._bolsa))
+        # normalizar_retorno: sem isto o codigo de erro (32 bits) lido pelo
+        # restype c_int64 chega POSITIVO e o `if r < 0` abaixo nao dispara --
+        # foi o que aconteceu no pregao de 24/09, com a falha registrada
+        # como `cancel_todas_enviado` (sucesso) em vez de `recusado`.
+        r = normalizar_retorno(int(dll.SendCancelOrders(
+            self._conta, self._corretora, self._rot.senha_roteamento,
+            self._ticker, self._bolsa)))
         if r < 0:
             # 23/09: veio NL_INVALID_ARGS as 08:22 (antes da abertura). A ordem
             # dos argumentos esta' conferida no manual, entao o problema e' de
@@ -281,9 +287,9 @@ class ExecutorDeOrdens:
 
     def zerar(self) -> int:
         dll = self._trava()
-        oid = int(dll.SendZeroPositionAtMarket(self._conta, self._corretora,
-                                                self._ticker, self._bolsa,
-                                                self._rot.senha_roteamento))
+        oid = normalizar_retorno(int(dll.SendZeroPositionAtMarket(
+            self._conta, self._corretora, self._ticker, self._bolsa,
+            self._rot.senha_roteamento)))
         log.warning("ea.zeragem_enviada", profit_id=oid, ticker=self._ticker,
                     recusada=(oid <= 0))
         return oid

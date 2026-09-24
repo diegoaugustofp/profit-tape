@@ -43,6 +43,7 @@ from typing import Any
 import structlog
 
 from ..profitdll.client import EventoOrdem
+from ..profitdll.errors import normalizar_retorno
 from .config import RoteamentoConfig
 from .ordem_teste import TravaSimulacao, exigir_simulador, exigir_ticker_especifico
 
@@ -175,9 +176,13 @@ class ReconciliadorPosicao:
         if self.estado == "zerando":
             exigir_simulador(self._client, self._corretora, self._conta)
             dll = self._client._dll
-            oid = int(dll.SendZeroPositionAtMarket(self._conta, self._corretora,
-                                                   self._ticker, self._bolsa,
-                                                   self._rot.senha_roteamento))
+            # normalizar_retorno: o restype e' c_int64 (por causa do ID de
+            # ordem, que e' grande), mas os codigos de ERRO sao de 32 bits --
+            # sem normalizar, um erro chega POSITIVO e o `oid <= 0` abaixo
+            # nao dispara. Bug visto em producao 24/09.
+            oid = normalizar_retorno(int(dll.SendZeroPositionAtMarket(
+                self._conta, self._corretora, self._ticker, self._bolsa,
+                self._rot.senha_roteamento)))
             self.rel.zeragem_ordem_id = oid
             if oid <= 0:
                 self._concluir("divergiu_zeragem_falhou",

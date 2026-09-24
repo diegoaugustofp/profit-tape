@@ -51,6 +51,7 @@ from typing import Any
 import structlog
 
 from ..profitdll.client import EventoOrdem
+from ..profitdll.errors import normalizar_retorno
 from .config import RoteamentoConfig
 from .ordem_teste import (
     TravaSimulacao,
@@ -212,8 +213,9 @@ class OrdemDeTesteB:
             raise RuntimeError(f"{perna.nome}: sem ClOrdID no callback -- nao da' para cancelar")
         perna.t_cancel_envio = time.monotonic()
         # (conta, corretora, ClOrdID, senha) -- senha em 4o. Ver bindings.py.
-        r = int(dll.SendCancelOrder(self._conta, self._corretora, perna.cl_ord_id,
-                                    self._rot.senha_roteamento))
+        r = normalizar_retorno(int(dll.SendCancelOrder(
+            self._conta, self._corretora, perna.cl_ord_id,
+            self._rot.senha_roteamento)))
         log.info("ea.ordem_teste_b.cancel_enviado", perna=perna.nome,
                  cl_ord_id=perna.cl_ord_id, retorno=r)
         return r

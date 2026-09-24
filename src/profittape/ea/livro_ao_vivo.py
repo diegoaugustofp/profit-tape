@@ -106,34 +106,38 @@ class EstadoDoLivro:
     """Um por processo. Alimentado por `on_tiny_extra`."""
 
     def __init__(self) -> None:
-        # Tupla de pares (symbol, TopoDoLivro): `ler` percorre sem lock.
-        # Um dict seria mais rápido, mas mutá-lo no lugar exporia leitura
-        # parcial ao EA. Com poucos símbolos a varredura é irrelevante.
-        self._estado: tuple[tuple[str, TopoDoLivro], ...] = ()
+        # Dict de symbol -> TopoDoLivro. O VALOR é imutável (dataclass
+        # frozen) e a troca de uma chave é atômica sob o GIL, então `ler`
+        # nunca vê um TopoDoLivro meio-montado -- ou pega o antigo
+        # inteiro, ou o novo inteiro. É essa imutabilidade do valor, não
+        # o container, que dá a garantia.
+        #
+        # Até 2026-09-23 isto era uma tupla RECONSTRUÍDA a cada evento,
+        # o que custava ~2,5 us por evento (3,5 us com 8 símbolos) --
+        # dentro do callback da DLL, a ~1 milhão de eventos por pregão,
+        # com o feed parado esperando. Em rajada isso vira fila.
+        self._estado: dict[str, TopoDoLivro] = {}
         self.atualizacoes = 0
 
     def atualizar(self, tb: TinyBook) -> None:
-        """HOT PATH. Sem lock, sem log, sem alocação além da tupla."""
-        atual = self.ler(tb.symbol) or TopoDoLivro(symbol=tb.symbol)
+        """HOT PATH. Sem lock, sem log, uma alocação (o TopoDoLivro)."""
+        atual = self._estado.get(tb.symbol)
         if tb.side == LADO_BID:
             novo = TopoDoLivro(tb.symbol, tb.price, tb.quantidade,
-                              atual.preco_ask, atual.qtd_ask, tb.ts_recv_ns)
+                              atual.preco_ask if atual else None,
+                              atual.qtd_ask if atual else None, tb.ts_recv_ns)
         elif tb.side == LADO_ASK:
-            novo = TopoDoLivro(tb.symbol, atual.preco_bid, atual.qtd_bid,
+            novo = TopoDoLivro(tb.symbol,
+                              atual.preco_bid if atual else None,
+                              atual.qtd_bid if atual else None,
                               tb.price, tb.quantidade, tb.ts_recv_ns)
         else:
             return          # lado desconhecido: ignora, não inventa
-        self._estado = tuple(
-            (s, novo if s == tb.symbol else v) for s, v in self._estado
-        ) if any(s == tb.symbol for s, _ in self._estado) else (
-            *self._estado, (tb.symbol, novo))
+        self._estado[tb.symbol] = novo
         self.atualizacoes += 1
 
     def ler(self, symbol: str) -> TopoDoLivro | None:
-        for s, v in self._estado:
-            if s == symbol:
-                return v
-        return None
+        return self._estado.get(symbol)
 
     def resumo(self) -> dict[str, object]:
         return {
@@ -143,6 +147,6 @@ class EstadoDoLivro:
                 s: {"bid": v.qtd_bid, "ask": v.qtd_ask,
                     "deseq": None if v.desequilibrio is None
                     else round(v.desequilibrio, 3)}
-                for s, v in self._estado
+                for s, v in self._estado.items()
             },
         }

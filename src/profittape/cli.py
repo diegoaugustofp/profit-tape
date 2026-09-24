@@ -61,6 +61,13 @@ def record(
              "dividem o ticker, mas so' UM fica posicionado por vez (quem "
              "sinaliza primeiro; quem perde DESCARTA o sinal). Sem netting, "
              "mas CONTAMINA a medicao -- ver ea/vagas.py."),
+    ea_livro_ao_vivo: bool = typer.Option(
+        False, "--ea-livro-ao-vivo",
+        help="Alimenta o topo do livro (tiny_book) para os EAs consultarem. "
+             "DESLIGADO por default: custa ~1,7 us por evento dentro do "
+             "callback da DLL, a ~1 milhao de eventos por pregao, e a "
+             "captura nao deve pagar por funcionalidade sem uso. So' ligue "
+             "se algum EA tiver `filtro_book: true`."),
     capital_em_conta: float = typer.Option(
         0.0, "--capital-em-conta",
         help="Quanto voce de fato tem na conta, para o supervisor CALCULAR "
@@ -197,6 +204,7 @@ def record(
             ea_dir=ea_dir,
             capital_em_conta=capital_em_conta,
             ea_modo_ticker=ea_modo_ticker,
+            ea_livro_ao_vivo=ea_livro_ao_vivo,
         ).run()
     )
 
