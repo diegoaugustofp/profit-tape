@@ -1949,6 +1949,101 @@ def ea_123_replay(
     typer.echo(f"\n  Agora: profit-tape diario {cfg.registro_dir} --ea {s.nome}")
 
 
+@app.command(name="ignicao")
+def ignicao_cmd(
+    raw: Path = typer.Option(Path("data/raw"), "--raw",
+                             help="Raiz com trade/dt=/sym= (raw ou curated)."),
+    de: str | None = typer.Option(None, "--de", help="YYYY-MM-DD"),
+    ate: str | None = typer.Option(None, "--ate", help="YYYY-MM-DD"),
+    dias: str | None = typer.Option(None, "--dias", help="YYYY-MM-DD,YYYY-MM-DD"),
+    symbol: str = typer.Option("WINFUT", "--symbol"),
+    confirmador: str = typer.Option("WDOFUT", "--confirmador"),
+    limiar_pts: float = typer.Option(150.0, "--limiar-pts", help="ignicao: WIN anda isto..."),
+    janela_s: float = typer.Option(60.0, "--janela-s", help="...em ate' isto"),
+    conf_pts: float = typer.Option(1.0, "--conf-pts", help="WDO no sentido oposto (2 ticks)"),
+    horizontes_s: str = typer.Option("300,900,1800", "--horizontes-s"),
+    refratario_s: float | None = typer.Option(
+        None, "--refratario-s", help="default = maior horizonte (sem sobreposicao)"),
+    alvo_pts: float = typer.Option(100.0, "--alvo-pts"),
+    stop_pts: float = typer.Option(100.0, "--stop-pts"),
+    custo_pts: float = typer.Option(9.0, "--custo-pts", help="spread + taxas, ida e volta"),
+    inicio_hhmm: int = typer.Option(915, "--inicio-hhmm"),
+    fim_hhmm: int = typer.Option(1700, "--fim-hhmm", help="ultima deteccao"),
+    top: int = typer.Option(10, "--top", help="maiores ignicoes listadas para inspecao"),
+    saida: Path = typer.Option(Path("data/research/ignicao"), "--saida"),
+    log_level: str = typer.Option("WARNING", "--log-level"),
+    log_file: Path | None = typer.Option(None, "--log-file"),
+) -> None:
+    """
+    IGNICOES do WIN: grandes movimentos DETECTADOS (nao previstos) e o que
+    acontece depois, separado pela confirmacao do WDO no sentido oposto.
+    Barreira +alvo/-stop resolvida pelo tape; empate em (stop+custo)/(alvo+stop).
+    Mede primeiro a TAXA por pregao. Ver research/ignicao.py.
+    """
+    configurar(log_level, arquivo=log_file, nivel_arquivo="INFO" if log_file else None)
+    import pandas as pd
+
+    from .research.ignicao import carregar_tape, detectar, linha_csv, resumir
+
+    base = raw / "trade"
+    todos = sorted(p.name.split("=", 1)[1] for p in base.glob("dt=*"))
+    if dias:
+        alvo_d = {d.strip() for d in dias.split(",")}
+        todos = [d for d in todos if d in alvo_d]
+    if de:
+        todos = [d for d in todos if d >= de]
+    if ate:
+        todos = [d for d in todos if d <= ate]
+    todos = [d for d in todos if (base / f"dt={d}" / f"sym={symbol}").exists()]
+    if not todos:
+        raise typer.BadParameter(f"nenhum pregao com {symbol} em {base}")
+    hs = sorted(int(x) for x in horizontes_s.split(","))
+    refr = refratario_s if refratario_s is not None else float(max(hs))
+    empate = (stop_pts + custo_pts) / (alvo_pts + stop_pts)
+
+    typer.echo("=" * 72)
+    typer.echo(f"IGNICOES {symbol}: >= {limiar_pts:g} pts em <= {janela_s:g}s  "
+               f"confirmacao {confirmador} >= {conf_pts:g} pts oposto")
+    typer.echo(f"  barreira +{alvo_pts:g}/-{stop_pts:g}  custo {custo_pts:g}  "
+               f"-> empate p_alvo = {empate:.3f}   refratario {refr:g}s")
+    typer.echo("=" * 72)
+    evs = []
+    for i, dia in enumerate(todos, 1):
+        win = carregar_tape(raw, symbol, dia)
+        wdo = carregar_tape(raw, confirmador, dia)
+        e = detectar(win, wdo, dia, limiar_pts=limiar_pts, janela_s=janela_s,
+                     refratario_s=refr, conf_pts=conf_pts, horizontes_s=hs,
+                     alvo_pts=alvo_pts, stop_pts=stop_pts,
+                     inicio_hhmm=inicio_hhmm, fim_hhmm=fim_hhmm)
+        evs.extend(e)
+        cont = {c: sum(x.classe == c for x in e) for c in ("confirma", "neutro", "contra")}
+        typer.echo(f"[{i}/{len(todos)}] {dia}  ignicoes={len(e)}  {cont}  "
+                   f"alvo={sum(x.barreira == 'alvo' for x in e)} "
+                   f"stop={sum(x.barreira == 'stop' for x in e)}")
+        log.info("ignicao.dia", i=i, n=len(todos), dia=dia, ignicoes=len(e), **cont)
+
+    r = resumir(evs, hs, len(todos))
+    typer.echo("\n" + "-" * 72)
+    typer.echo(f"TOTAL {len(todos)} pregoes, {len(evs)} ignicoes "
+               f"(pts do {symbol}, na direcao do movimento, a partir da DETECCAO)")
+    for nome, b in r.items():
+        typer.echo(f"  {nome}: {b}")
+    typer.echo(f"  Leitura: p_alvo acima de {empate:.3f} (empate com custo) E o IC95 "
+               f"acima disso; e confirma > neutro/contra. Olhe a TAXA (por_dia) antes.")
+    if evs and top > 0:
+        typer.echo(f"\n  maiores {top} (para inspecionar no grafico):")
+        for x in sorted(evs, key=lambda z: -abs(z.mov_pts))[:top]:
+            typer.echo(f"    {x.dia} {x.hora_brt}  {x.mov_pts:+.0f} pts  {x.classe:8s} "
+                       f"wdo={x.wdo_mov_pts}  agr={x.agressao}  ret={x.ret}  "
+                       f"mfe={x.mfe:+.0f} mae={x.mae:+.0f}  {x.barreira}")
+    if evs:
+        saida.mkdir(parents=True, exist_ok=True)
+        arq = saida / "ignicao_eventos.csv"
+        pd.DataFrame([linha_csv(x) for x in evs]).to_csv(arq, index=False)
+        typer.echo(f"\n  eventos: {arq.resolve()}")
+    log.info("ignicao.total", dias=len(todos), ignicoes=len(evs), resumo=r, empate=empate)
+
+
 @app.command(name="leadlag")
 def leadlag_cmd(
     raw: Path = typer.Option(Path("data/raw"), "--raw",

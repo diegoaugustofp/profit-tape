@@ -105,6 +105,7 @@ COMANDOS: dict[str, tuple[str, str]] = {
     "fechamento": ("contraparte", "RESEARCH_PLANO.md (AJUSTE/FECHAMENTO)"),
     "defasagem": ("contraparte", "RESEARCH_PLANO.md (DEFASAGEM)"),
     "leadlag": ("contraparte", "research/leadlag.py (docstring); HISTORICO 2026-09-25"),
+    "ignicao": ("contraparte", "research/ignicao.py (docstring); HISTORICO 2026-09-25"),
     "iceberg": ("contraparte", "RESEARCH_PLANO.md (ICEBERG)"),
     "book-recomposicao": ("contraparte", "RESEARCH_PLANO.md (RECOMPOSICAO NO LIVRO)"),
     "opcoes-vencimento": ("contraparte", "RESEARCH_PLANO.md (Opcao sobre acao)"),

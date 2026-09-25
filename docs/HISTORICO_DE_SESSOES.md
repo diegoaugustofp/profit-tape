@@ -3895,3 +3895,19 @@ Só documentação; nenhum código tocado (suíte verde; ruff e mypy limpos).
   Contexto: `defasagem` (17/09) mostrou o WIN chegando ANTES das ações em
   15 s. 10 testes (conferência à mão, defasagem conhecida de 300 ms,
   controle negativo independente, CLI ponta a ponta); suíte 1.122.
+- **Microprice, 10 pregões (v3.64):** taker DESCARTADO (bruto −4,1/op;
+  sonda +1,2 estável em 10/10 dias, break-even ~9). Ficha atualizada.
+- **Lead-lag FECHADO.** WDO→WIN: o WIN já andou antes (pre ≈ +8 pts);
+  parado +1,5–2,4 em 1 s. WIN→WDO, 10 pregões: WIN LIDERA em 50 ms e
+  100 ms em 10/10 dias (some em 250 ms), mas o WDO responde +0,03 pt
+  (~5% de tick). Mesma assinatura do microprice: real e pequeno demais.
+  Lição: microestrutura < 5 s com taker não paga no WIN.
+- **v3.66 — `profit-tape ignicao`** (`research/ignicao.py`): grandes
+  movimentos DETECTADOS, não previstos. Desenho declarado antes de ver
+  número: WIN ≥ 150 pts em ≤ 60 s; confirmação = WDO ≥ 1 pt no sentido
+  oposto na mesma janela; resultado a partir da detecção (ret 5/15/30
+  min, MFE/MAE, barreira ±100 resolvida pelo tape; empate 0,545 com
+  custo 9). Refratário = maior horizonte. Achado na conferência à mão:
+  MFE podia sair negativo (corrigido: partida conta). Controle negativo
+  (passeio sem momento): p_alvo 0,47–0,49, mas ret_5min médio −37 numa
+  semente — ler p_alvo, não média de pontos. 7 testes; suíte 1.129.

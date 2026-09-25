@@ -1,6 +1,6 @@
 # Microprice / queue imbalance (WIN) — fast-track
 
-> **Status:** protótipo — **Criado:** 2026-09-24 (v3.63), **revisado** 2026-09-25 (v3.64) — **Assunto:** scalper de topo de livro no WINFUT, em modo fast-track (sem pré-registro longo); config `config/ea_microprice.yaml`, código `ea/sinal_microprice.py` + `ea/service_microprice.py`.
+> **Status:** DESCARTADO como taker (2026-09-25); passiva pendente de modelo de fila — **Criado:** 2026-09-24 (v3.63), **revisado** 2026-09-25 (v3.64) — **Assunto:** scalper de topo de livro no WINFUT, em modo fast-track (sem pré-registro longo); config `config/ea_microprice.yaml`, código `ea/sinal_microprice.py` + `ea/service_microprice.py`.
 
 ## Identidade, fase e estado
 
@@ -98,3 +98,17 @@ passiva/passiva > −1 (se o fill não for adverso).
 **Leitura do próximo replay:** se `cruzado` tiver p90 ≤ ~50 ms, é
 artefato de reconstrução (e o filtro já o descarta). Se durar segundos,
 é outra coisa — olhar as amostras antes de interpretar o I.
+
+### v3.64 — 10 pregões (10/09–23/09, config `538457d8a0d0`, taker) — VEREDITO
+
+346 operações, bruto −1.435 (−4,1/op ≈ o spread), líquido −2.819. Todos
+os dias negativos. Sonda: h1s positiva em **10/10 dias** (+0,80 a +1,33),
+h5s em 10/10 (+0,57 a +1,69); h30s entre −0,02 e +3,36 — tendência do
+dia, não sinal (o +4,7 de 24/09 era isso). Livro cruzado: p90 1,5–3,2 ms
+em todos os dias; as amostras longas são o leilão de abertura.
+
+**Veredito: taker DESCARTADO.** O sinal é real e estável (~+1,2 pt em
+1–5 s) e ~8× menor que o break-even taker (~9). Passiva: não medida com
+honestidade — o fill pessimista só executa depois de o preço andar 1 tick
+contra. Reabre só com modelo de posição na fila pelo tape. Uso possível
+do I: FILTRO para outros EAs (não entrar contra desbalanço forte).
