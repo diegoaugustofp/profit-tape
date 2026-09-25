@@ -3986,3 +3986,20 @@ Só documentação; nenhum código tocado (suíte verde; ruff e mypy limpos).
   inclusive a quente; a flag só força desde a subida. Aberta fica até o fim
   da sessão (fechar/reabrir deixaria topo velho). 5 testes, incluindo o
   caso de 25/09 reproduzido.
+
+### 2026-09-25 — posicao vendida lida como comprada (v3.70)
+
+- Duas vezes, apos reconexao, a leitura devolveu COMPRADO em 1 com o EA
+  VENDIDO em 1, e a protecao de posicao inesperada zerou a mercado duas
+  posicoes legitimas. O extrato do Profit provou: pernas CANCELADAS, nao
+  executadas.
+- Correcao de uma afirmacao minha: eu disse que o mapeamento de
+  `open_side` "nunca foi testado com posicao aberta". A EA_ARQUITETURA
+  registra que FOI, em 11/09 (v2.48) -- com posicao COMPRADA e conexao
+  estavel. O que falhou em 25/09 foi VENDIDA apos RECONEXAO; qual dos dois
+  fatores quebra, ainda nao se sabe.
+- O sinal passa a vir das quantidades diarias da propria struct; sem
+  concordancia entre as duas fontes, implausivel e o EA nao age. A
+  divergencia e' logada para distinguir os dois casos.
+- Duas operacoes de 25/09 ficam FORA do forward.
+- 1.168 testes (reaplicado sobre a v3.69).

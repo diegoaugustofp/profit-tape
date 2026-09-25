@@ -68,6 +68,9 @@ class PosicaoConsultada:
     preco_medio: float
     lado_bruto: int
     plausivel: bool
+    # 2026-09-25: o SINAL nao vem mais de `open_side` (ver consultar_posicao).
+    liquida_diaria: int = 0        # compras - vendas do dia, pela propria struct
+    lado_bruto_concorda: bool | None = None
     bruto_hex: str = ""
 
 
@@ -512,13 +515,60 @@ class ProfitClient:
         # quando nao ha posicao aberta -- lado nao tem sentido para
         # quantidade zero. O layout da struct estava certo o tempo todo;
         # a checagem de plausibilidade estava rigida demais.
-        plausivel = (ret >= 0 and abs(pos.open_quantity) <= limite
-                    and (pos.open_quantity == 0 or pos.open_side in (1, 2)))
-        sinal = {0: 0, 1: 1, 2: -1}.get(pos.open_side, 0) if pos.open_quantity != 0 else 0
+        plausivel = ret >= 0 and abs(pos.open_quantity) <= limite
+        # ------------------------------------------------------------------
+        # O SINAL VEM DAS QUANTIDADES DIARIAS, NAO DE `open_side` (2026-09-25)
+        #
+        # Em 11/09 (v2.48) o `open_side` FOI confirmado com posicao aberta --
+        # mas COMPRADA (o operador abriu 1 pelo grafico; leu lado_bruto=1,
+        # encontrado=1) e com conexao estavel. Em 25/09, com o EA VENDIDO em 1
+        # e logo apos uma RECONEXAO, a leitura devolveu COMPRADO em 1 duas
+        # vezes (13:40 e 15:40). O extrato do Profit provou a posicao: entrada
+        # de venda executada, stop e alvo CANCELADOS -- nao executados. A
+        # protecao de "posicao inesperada" zerou a mercado duas posicoes
+        # legitimas, com prejuizo causado pelo defeito.
+        #
+        # Nao sabemos AINDA se o problema e' o caso VENDIDO ou a leitura logo
+        # apos reconexao: os dois sao novos em relacao ao teste de 11/09. Por
+        # isso o sinal passa a vir de `daily_buy_quantity -
+        # daily_sell_quantity`, que nao depende de interpretar byte nenhum
+        # (os dois campos ja' apareceram exatos no dump de 11/09), e toda
+        # divergencia com `open_side` e' LOGADA -- e' esse log que vai
+        # distinguir os dois casos.
+        #
+        # Em day trade (o caso do WIN) a liquida do dia E' a posicao. Quando a
+        # magnitude nao bate com `open_quantity` -- posicao carregada de outro
+        # dia, por exemplo --, o resultado sai IMPLAUSIVEL e o EA NAO AGE:
+        # prefere-se nao fazer nada a fazer a coisa errada.
+        # ------------------------------------------------------------------
+        liquida_diaria = int(pos.daily_buy_quantity) - int(pos.daily_sell_quantity)
+        qtd = int(pos.open_quantity)
+        concorda: bool | None = None
+        if qtd == 0:
+            sinal = 0
+        elif abs(liquida_diaria) == abs(qtd) and liquida_diaria != 0:
+            sinal = 1 if liquida_diaria > 0 else -1
+            concorda = ({0: 0, 1: 1, 2: -1}.get(int(pos.open_side), 0) == sinal)
+            if not concorda:
+                log.error("profitdll.posicao_lado_divergente", ticker=ticker,
+                          open_side=int(pos.open_side), open_quantity=qtd,
+                          liquida_diaria=liquida_diaria, sinal_usado=sinal,
+                          nota=("`open_side` discorda das quantidades diarias -- o SINAL "
+                                "usado e' o das quantidades. Registre o caso (vendido? "
+                                "logo apos reconexao?): e' assim que se descobre quando "
+                                "`open_side` mente"))
+        else:
+            sinal = 0
+            plausivel = False
+            log.error("profitdll.posicao_sem_conferencia", ticker=ticker,
+                      open_quantity=qtd, liquida_diaria=liquida_diaria,
+                      nota=("a liquida do dia nao bate com a quantidade aberta (posicao de "
+                            "outro dia?) -- IMPLAUSIVEL de proposito: o EA nao age"))
         return PosicaoConsultada(
             retorno=ret, ticker=ticker, corretora=int(corretora), conta=conta,
             quantidade_liquida=sinal * int(pos.open_quantity),
             preco_medio=float(pos.open_average_price), lado_bruto=int(pos.open_side),
+            liquida_diaria=liquida_diaria, lado_bruto_concorda=concorda,
             plausivel=plausivel, bruto_hex=bruto_hex,
         )
 

@@ -83,6 +83,7 @@ class FakeProfitDLL:
         # Ver _emitir_historico: simula a truncagem da 1a chamada por
         # ticker (medido 2026-09-11).
         self._hist_primeira_ja_vista: set[str] = set()
+        self.liquidas_diarias: dict[tuple[int, str, str], int] = {}
         # E3 (2026-09-11): posicao por (corretora, conta, ticker). Default
         # vazio = zerado (open_quantity=0, open_side=0). Testes configuram
         # via `fake.posicoes[(corretora, conta, ticker)] = (qtd, lado, preco)`.
@@ -546,6 +547,15 @@ class FakeProfitDLL:
         pos.open_quantity = qtd
         pos.open_side = lado
         pos.open_average_price = preco
+        # QUANTIDADES DIARIAS: e' delas que sai o SINAL desde 2026-09-25
+        # (`open_side` mentiu com posicao VENDIDA apos reconexao). Os testes
+        # configuram `liquidas_diarias[chave] = compras - vendas`; sem
+        # configurar, o fake fica coerente com o lado pedido.
+        liq = self.liquidas_diarias.get(chave)
+        if liq is None:
+            liq = qtd if lado == 1 else (-qtd if lado == 2 else 0)
+        pos.daily_buy_quantity = max(liq, 0)
+        pos.daily_sell_quantity = max(-liq, 0)
         return 0
 
     def _subs_de(self, ptr: object) -> list[str]:

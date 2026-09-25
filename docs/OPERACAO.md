@@ -1,5 +1,41 @@
 # Operacao
 
+## INCIDENTE 2026-09-25: posicao VENDIDA lida como COMPRADA (grave)
+
+**O que aconteceu.** Duas vezes (13:40 e 15:40 BRT), logo apos uma
+RECONEXAO, a reconciliacao leu `real=1 esperado=-1` e a protecao de
+posicao inesperada zerou a mercado uma posicao VENDIDA legitima.
+
+**A prova de que a leitura estava errada, nao a posicao:** no extrato do
+Profit as duas pernas (stop e alvo) aparecem **Canceladas**, nunca
+executadas, e a entrada de VENDA executada. O status `New` das pernas no
+log do EA NAO bastava (callbacks podem se perder numa queda) -- foi o
+extrato que decidiu.
+
+**Custo:** duas posicoes fechadas a mercado por engano (185.075 contra
+entrada 184.850; 184.740 contra 184.360). As duas operacoes de 25/09
+**NAO entram no forward** (desfecho `erro`, `pnl_pts` nulo); o resultado
+real esta' no extrato.
+
+**O que sabemos e o que NAO sabemos.** Em 11/09 (v2.48) o `open_side` foi
+confirmado com posicao ABERTA -- mas COMPRADA e com conexao estavel, e
+funcionou. Em 25/09 falhou com posicao VENDIDA logo apos reconexao. Os
+dois fatores sao novos; qual deles quebra ainda NAO se sabe.
+
+**Correcao (v3.70).** O sinal passa a vir de
+`daily_buy_quantity - daily_sell_quantity`, que nao depende de
+interpretar byte nenhum. Quando a magnitude nao bate com `open_quantity`,
+o resultado sai IMPLAUSIVEL e o EA NAO AGE. Toda divergencia com
+`open_side` sai em `profitdll.posicao_lado_divergente` -- e' esse log que
+vai dizer se o que quebra e' o lado VENDIDO ou a RECONEXAO.
+
+**Licao de metodo.** Uma protecao que ZERA POSICAO sozinha nao pode
+depender de uma unica leitura: precisa de duas fontes concordantes, e sem
+concordancia deve parar em vez de agir.
+
+---
+
+
 > **Status:** vivo — **Revisado:** 2026-09-23 — **Assunto:** rotina diária, incidentes, achados de DLL e checklist pós-pregão.
 
 ## ACHADO 2026-09-23: a nossa TABELA DE ERROS da DLL estava errada

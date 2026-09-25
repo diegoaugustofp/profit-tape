@@ -307,3 +307,46 @@ def test_record_reconciliar_exige_login_completo(tmp_path) -> None:  # type: ign
     with pytest.raises(SystemExit, match="login completo"):
         RecorderService(cfg, cred, dll_injetada=FakeProfitDLL(eventos_por_ativo=0),
                         reconciliar_em="10:00", reconciliar_ticker="WINV26")
+
+
+# --------------------------------------------------------------- 2026-09-25
+def test_o_SINAL_da_posicao_vem_das_QUANTIDADES_DIARIAS() -> None:
+    """Em 11/09 (v2.48) o `open_side` foi confirmado com posicao aberta --
+    mas COMPRADA e com conexao estavel. Em 25/09, com o EA VENDIDO em 1 e
+    logo apos uma reconexao, a leitura devolveu COMPRADO em 1, duas vezes.
+    O extrato do Profit provou a posicao: entrada de venda executada, stop e
+    alvo CANCELADOS. A protecao de posicao inesperada zerou a mercado duas
+    posicoes legitimas."""
+    fake = FakeProfitDLL()
+    chave = (32006, "DEMO-1", "WINV26")
+    fake.posicoes[chave] = (1, 1, 184410.0)        # open_side diz COMPRADA
+    fake.liquidas_diarias[chave] = -1              # o dia teve 1 VENDA, 0 compras
+    p = _client(fake).consultar_posicao(32006, "DEMO-1", "WINV26", "F")
+    assert p.quantidade_liquida == -1              # vendida, como no Profit
+    assert p.plausivel is True
+    assert p.lado_bruto_concorda is False          # e a divergencia fica registrada
+
+
+def test_o_caso_de_11_09_continua_lido_igual() -> None:
+    """Comprada em 1, `open_side=1`, conexao estavel: nada muda."""
+    fake = FakeProfitDLL()
+    chave = (32006, "DEMO-1", "WINV26")
+    fake.posicoes[chave] = (1, 1, 188820.0)
+    fake.liquidas_diarias[chave] = 1
+    p = _client(fake).consultar_posicao(32006, "DEMO-1", "WINV26", "F")
+    assert p.quantidade_liquida == 1 and p.lado_bruto_concorda is True
+
+
+def test_liquida_que_nao_explica_a_posicao_vira_IMPLAUSIVEL() -> None:
+    """Posicao carregada de outro dia: prefere-se NAO AGIR a agir errado."""
+    fake = FakeProfitDLL()
+    chave = (32006, "DEMO-1", "WINV26")
+    fake.posicoes[chave] = (3, 1, 189000.0)
+    fake.liquidas_diarias[chave] = -1
+    p = _client(fake).consultar_posicao(32006, "DEMO-1", "WINV26", "F")
+    assert p.plausivel is False and p.quantidade_liquida == 0
+
+
+def test_posicao_zerada_continua_plausivel_e_zero() -> None:
+    p = _client(FakeProfitDLL()).consultar_posicao(32006, "DEMO-1", "WINV26", "F")
+    assert p.quantidade_liquida == 0 and p.plausivel is True
