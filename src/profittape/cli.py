@@ -63,11 +63,12 @@ def record(
              "mas CONTAMINA a medicao -- ver ea/vagas.py."),
     ea_livro_ao_vivo: bool = typer.Option(
         False, "--ea-livro-ao-vivo",
-        help="Alimenta o topo do livro (tiny_book) para os EAs consultarem. "
-             "DESLIGADO por default: custa ~1,7 us por evento dentro do "
-             "callback da DLL, a ~1 milhao de eventos por pregao, e a "
-             "captura nao deve pagar por funcionalidade sem uso. So' ligue "
-             "se algum EA tiver `filtro_book: true`."),
+        help="FORCA o topo do livro (tiny_book) ligado desde a subida. "
+             "Normalmente desnecessario (v3.69): o livro liga SOZINHO quando "
+             "entra o 1o EA que o usa (microprice, ignicao, fluxo com "
+             "filtro_book) -- inclusive a quente pela --ea-dir. Desligado, "
+             "custa um booleano por evento; ligado, ~1,7 us dentro do "
+             "callback. Use para 'aquecer' o livro antes de o EA entrar."),
     capital_em_conta: float = typer.Option(
         0.0, "--capital-em-conta",
         help="Quanto voce de fato tem na conta, para o supervisor CALCULAR "

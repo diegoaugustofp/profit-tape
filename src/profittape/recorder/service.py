@@ -153,18 +153,24 @@ class RecorderService:
         # pelos EAs em O(1). Existe sempre -- custa uma tupla -- para que
         # qualquer EA possa consultar sem precisar de montagem propria.
         self.livro_ao_vivo = EstadoDoLivro()
+        # PORTA do livro (v3.69). O gancho vai SEMPRE para a DLL, mas fechado
+        # custa so' a leitura de um booleano por evento; aberto, ~1,7 us.
+        # Abre com --ea-livro-ao-vivo (desde a subida) OU sozinho quando o
+        # 1o EA que usa livro entra -- inclusive A QUENTE pela --ea-dir.
+        # Antes, o gancho era decidido na subida e capturado no callback:
+        # EA incluido depois ficava cego sem aviso (perdeu-se a medicao de
+        # deslizamento do EA de ignicao em 25/09). Uma vez aberta, fica
+        # aberta ate' o fim da sessao: fechar e reabrir deixaria topo velho.
+        self._livro_aberto = False
         if ea_livro_ao_vivo:
-            log.warning("recorder.livro_ao_vivo_ligado",
-                       nota="topo do livro alimentado a cada tiny_book "
-                            "(~1M eventos/pregao, ~1,7 us cada DENTRO do "
-                            "callback). So' faz sentido com algum EA usando "
-                            "filtro_book.")
+            self.ativar_livro_ao_vivo("--ea-livro-ao-vivo")
         self.despachante = DespachanteDeEAs()
         self.supervisor = SupervisorDeRisco(capital_em_conta=capital_em_conta)
         self.livro = LivroDePosicoes()
         self.registro = RegistroDeEAs(self.despachante, supervisor=self.supervisor,
                                       livro=self.livro, modo_ticker=ea_modo_ticker,
-                                      livro_ao_vivo=self.livro_ao_vivo)
+                                      livro_ao_vivo=self.livro_ao_vivo,
+                                      ao_precisar_livro=self.ativar_livro_ao_vivo)
         if ea_modo_ticker == "exclusivo":
             log.warning("recorder.ea_modo_exclusivo",
                        nota="varios EAs podem dividir um ticker; so' UM fica "
@@ -193,14 +199,9 @@ class RecorderService:
             tz_offset_horas=cfg.runtime.tz_offset_horas,
             on_state=self._on_state,
             on_trade_extra=self.despachante.publicar,
-            # SO' liga o hook se algum EA for usar. Sem isto, todo record
-            # -- inclusive o de captura pura -- pagaria ~1,7 us por evento
-            # de tiny_book (~1 milhao por pregao) DENTRO do callback da
-            # DLL, sem ninguem consumir o resultado. A captura e' o ativo
-            # que nao se refaz; ela nao paga por funcionalidade que nao
-            # esta' em uso.
-            on_tiny_extra=(self.livro_ao_vivo.atualizar
-                          if ea_livro_ao_vivo else None),
+            # Sempre ligado, mas atras da PORTA (ver __init__): a captura de
+            # quem nao usa livro paga um booleano por evento, nao ~1,7 us.
+            on_tiny_extra=self._alimentar_livro,
             dll=dll_injetada,
             login_completo=cfg.runtime.login_completo,
         )
@@ -320,6 +321,22 @@ class RecorderService:
     # EAs a quente (E5.4b) -- tudo roda na THREAD PRINCIPAL (construcao ou
     # laco de monitoramento), nunca de dentro de um callback da DLL.
     # ------------------------------------------------------------------
+
+    def ativar_livro_ao_vivo(self, motivo: str) -> None:
+        """Abre a porta do livro (idempotente). Chamado pela flag na subida
+        ou pelo registro quando entra um EA que usa livro."""
+        if self._livro_aberto:
+            return
+        self._livro_aberto = True
+        log.warning("recorder.livro_ao_vivo_ligado", motivo=motivo,
+                    nota="topo do livro alimentado a cada tiny_book (~1M "
+                         "eventos/pregao, ~1,7 us cada DENTRO do callback) "
+                         "ate' o fim da sessao")
+
+    def _alimentar_livro(self, evento: Any) -> None:
+        # Hot path: roda DENTRO do callback da DLL, ~1M vezes por pregao.
+        if self._livro_aberto:
+            self.livro_ao_vivo.atualizar(evento)
     def _exigir_pre_requisitos_de_ordem_real(self, ea_cfg: Any,
                                             origem: Path) -> None:
         """Falha ALTO e cedo se o EA pede ordem real sem o necessario.

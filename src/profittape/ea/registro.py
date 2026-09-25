@@ -25,6 +25,7 @@ significaria nao subir o processo.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -58,6 +59,14 @@ class EARegistrado:
     bridge: EABridge
 
 
+def usa_livro(cfg: object) -> bool:
+    """EA que consulta o topo do livro ao vivo: microprice (sinal), ignicao
+    (fill simulado e deslizamento) e fluxo com `filtro_book`."""
+    if isinstance(cfg, EAMicropriceConfig | EAIgnicaoConfig):
+        return True
+    return bool(getattr(cfg, "filtro_book", False))
+
+
 class RegistroDeEAs:
     """
     Um por processo. Dono da lista de EAs vivos e das regras de entrada.
@@ -73,7 +82,8 @@ class RegistroDeEAs:
                  livro: LivroDePosicoes | None = None,
                  modo_ticker: str = "unico",
                  client: object | None = None,
-                 livro_ao_vivo: EstadoDoLivro | None = None) -> None:
+                 livro_ao_vivo: EstadoDoLivro | None = None,
+                 ao_precisar_livro: Callable[[str], None] | None = None) -> None:
         """
         `modo_ticker` (E5.4c, decisao do operador 2026-09-13):
 
@@ -96,6 +106,10 @@ class RegistroDeEAs:
         # Topo do livro compartilhado por TODOS os EAs -- estado unico,
         # alimentado pelo callback da DLL (ver ea/livro_ao_vivo.py).
         self.livro_ao_vivo = livro_ao_vivo
+        # v3.69: o recorder abre a porta do livro quando o 1o EA que o usa
+        # entra -- inclusive A QUENTE. Antes, so' a flag da subida ligava, e
+        # um EA incluido no meio do pregao ficava cego sem avisar (25/09).
+        self._ao_precisar_livro = ao_precisar_livro
         self.vagas = VagasPorTicker() if modo_ticker == "exclusivo" else None
         self._registrados: dict[str, EARegistrado] = {}
 
@@ -210,6 +224,8 @@ class RegistroDeEAs:
                         cfg.risco.risco_max_pct)),
                 contratos=cfg.tamanho_posicao, ticker=cfg.symbol, subconta=None))
             self._supervisor.logar()
+        if self._ao_precisar_livro is not None and usa_livro(cfg):
+            self._ao_precisar_livro(nome_final)
         self._despachante.incluir(bridge)
         log.warning("ea_registro.incluido", nome=nome_final, symbol=cfg.symbol,
                    dry_run=cfg.dry_run, origem=str(origem) if origem else None,

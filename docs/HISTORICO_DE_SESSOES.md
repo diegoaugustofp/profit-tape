@@ -3972,3 +3972,17 @@ Só documentação; nenhum código tocado (suíte verde; ruff e mypy limpos).
   (0 == 0) — reforçado com tape construído. Texto "0.5 lim amplitude" do
   `--so-taxa` corrigido. Índice de EAs: microprice atualizado para
   DESCARTADO (a tabela estava atrás da ficha).
+- **Incidente 25/09 — livro ao vivo não liga a quente:** o record subiu sem
+  `--ea-livro-ao-vivo` e o EA de ignição entrou pela `--ea-dir`. O gancho
+  do tiny_book era decidido NA SUBIDA e capturado no callback da DLL; nada
+  depois o ligava, e o EA ficou sem livro sem aviso (fill=tape). Achado do
+  operador: a flag contradizia a inclusão a quente. O p_alvo do dia NÃO se
+  perde (a barreira é decidida pelo tape); perde-se só a medição de
+  deslizamento das entradas do dia.
+- **v3.69 — porta do livro:** o gancho vai SEMPRE para a DLL, atrás de uma
+  porta (`RecorderService._alimentar_livro`): fechada custa um booleano por
+  evento; aberta, ~1,7 µs. O registro abre a porta quando entra o 1º EA que
+  usa livro (`usa_livro`: microprice, ignição, fluxo com `filtro_book`),
+  inclusive a quente; a flag só força desde a subida. Aberta fica até o fim
+  da sessão (fechar/reabrir deixaria topo velho). 5 testes, incluindo o
+  caso de 25/09 reproduzido.
