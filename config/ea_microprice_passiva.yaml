@@ -1,3 +1,8 @@
+# VARIANTE PASSIVA do EA de microprice (v3.64). So' dry_run/replay.
+# Mesmo gatilho do ea_microprice.yaml; a entrada e' uma limitada no
+# proprio lado em vez de pagar o spread. NAO ponha os dois yamls na
+# mesma --ea-dir sem --ea-modo-ticker exclusivo (mesmo WINFUT).
+#
 # EA de MICROPRICE / QUEUE IMBALANCE -- fast-track (2026-09-24).
 # Ficha: docs/eas/microprice.md
 #
@@ -13,7 +18,7 @@
 # Nao ha' limiar "em ticks": microprice - mid = I * spread/2, que no WIN
 # (spread 1 tick) nunca passa de 2,5 pts. Ver config_microprice.py.
 tipo: "microprice"
-nome: ea_microprice
+nome: ea_microprice_passiva
 symbol: WINFUT
 tick: 5.0
 
@@ -41,7 +46,8 @@ perda_max_dia_pontos: 300
 
 sonda_horizontes_s: [1, 5, 30]
 sonda_refratario_s: 5      # v3.64: re-gatilho do mesmo lado em < 5 s nao conta
-entrada: taker             # variante passiva: config/ea_microprice_passiva.yaml
+entrada: passiva           # limitada no PROPRIO lado; fill pessimista pelo topo
+passiva_validade_ms: 2000  # sem fill em 2 s, cancela
 
 tamanho_posicao: 1
 custo_pontos_estimado: 4.0 # nota de 24/09: R$1,62 em 2 idas e voltas (IRRF fora)

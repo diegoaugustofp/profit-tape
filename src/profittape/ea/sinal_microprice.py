@@ -9,8 +9,10 @@ GATILHO
 
 I >= +limiar por `persistencia_ms` -> COMPRA (paga o ask).
 I <= -limiar por `persistencia_ms` -> VENDE (paga o bid).
-Posicionado, zera no PRIMEIRO de: alvo, stop, desbalanco inverteu,
-tempo maximo, fim da janela.
+Posicionado, zera no PRIMEIRO de: alvo, stop, desbalanco inverteu (por
+`persistencia_saida_ms`), tempo maximo, fim da janela.
+Com `entrada: passiva` o gatilho envia uma limitada no proprio lado em
+vez de pagar o spread (ver `passiva_executou`).
 
 MARCACAO HONESTA (taker)
 ------------------------
@@ -109,6 +111,22 @@ class PosicaoMicro:
     imbalance_entrada: float
 
 
+@dataclass
+class OrdemPassiva:
+    lado: int                 # +1 compra no bid, -1 venda no ask
+    preco: float
+    ts_envio_ns: int
+
+
+def passiva_executou(o: OrdemPassiva, leitura: Leitura) -> bool:
+    """Fill PESSIMISTA pelo topo. Compra em P: ask <= P (agrediram o nosso
+    nivel) ou bid < P (nivel consumido/sumiu -- assume fim da fila, o caso
+    ruim). Venda simetrica."""
+    if o.lado > 0:
+        return leitura.ask <= o.preco + 1e-9 or leitura.bid < o.preco - 1e-9
+    return leitura.bid >= o.preco - 1e-9 or leitura.ask > o.preco + 1e-9
+
+
 @dataclass(frozen=True)
 class Avaliacao:
     acao: Acao
@@ -139,8 +157,11 @@ class SondaDePrevisao:
     horizontes_s: list[float]
     _pendentes: dict[float, deque[tuple[int, int, float]]] = field(default_factory=dict)
     _acum: dict[float, _Acum] = field(default_factory=dict)
+    refratario_s: float = 0.0
     spread_soma: float = 0.0
     gatilhos: int = 0
+    suprimidos: int = 0
+    _ultimo_ns: dict[int, int] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         for h in self.horizontes_s:
@@ -148,6 +169,11 @@ class SondaDePrevisao:
             self._acum[h] = _Acum()
 
     def registrar(self, ts_ns: int, lado: int, mid: float, spread: float) -> None:
+        ultimo = self._ultimo_ns.get(lado)
+        if ultimo is not None and ts_ns - ultimo < self.refratario_s * _NS:
+            self.suprimidos += 1          # mesmo episodio: nao conta de novo
+            return
+        self._ultimo_ns[lado] = ts_ns
         self.gatilhos += 1
         self.spread_soma += spread
         for h in self.horizontes_s:
@@ -165,7 +191,7 @@ class SondaDePrevisao:
                 ac.contra += delta < 0
 
     def resumo(self) -> dict[str, object]:
-        return {"gatilhos": self.gatilhos,
+        return {"gatilhos": self.gatilhos, "suprimidos_refratario": self.suprimidos,
                 "spread_medio_pts": (round(self.spread_soma / self.gatilhos, 2)
                                      if self.gatilhos else None),
                 **{f"h{h:g}s": self._acum[h].resumo() for h in self.horizontes_s}}
@@ -180,6 +206,7 @@ class EstatisticasMicro:
     perdas_seguidas: int = 0
     bloqueado: str | None = None
     saidas: Counter[str] = field(default_factory=Counter)
+    passivas: Counter[str] = field(default_factory=Counter)
     filtros: Counter[str] = field(default_factory=Counter)
     duracao_soma_s: float = 0.0
 
@@ -195,7 +222,10 @@ class DecisorMicroprice:
         self.cfg = cfg
         self.posicao: PosicaoMicro | None = None
         self.stats = EstatisticasMicro()
-        self.sonda = SondaDePrevisao(list(cfg.sonda_horizontes_s))
+        self.sonda = SondaDePrevisao(list(cfg.sonda_horizontes_s),
+                                     refratario_s=cfg.sonda_refratario_s)
+        self.pendente: OrdemPassiva | None = None
+        self._inv_desde_ns: int | None = None
         self._cand = 0
         self._desde_ns = 0
         self._disparou = False
@@ -226,6 +256,35 @@ class DecisorMicroprice:
             self.sonda.registrar(agora_ns, lado, leitura.mid, leitura.spread)
         return lado
 
+    def _inversao_persistiu(self, leitura: Leitura, agora_ns: int, lado: int) -> bool:
+        """I contra a posicao por `persistencia_saida_ms` (0 = imediato)."""
+        if leitura.imbalance * lado > -self.cfg.limiar_saida:
+            self._inv_desde_ns = None
+            return False
+        if self._inv_desde_ns is None:
+            self._inv_desde_ns = agora_ns
+        return agora_ns - self._inv_desde_ns >= self.cfg.persistencia_saida_ms * 1_000_000
+
+    def _cuidar_da_passiva(self, leitura: Leitura, agora_ns: int) -> Avaliacao | None:
+        """Ordem limitada pendente: executou, venceu, ou segue esperando."""
+        o = self.pendente
+        assert o is not None
+        if not leitura.marcavel:
+            return Avaliacao(Acao.NADA, f"passiva_pendente ({leitura.motivo})")
+        if passiva_executou(o, leitura):
+            self.pendente = None
+            self.stats.passivas["executada"] += 1
+            return Avaliacao(Acao.COMPRAR if o.lado > 0 else Acao.VENDER,
+                             "passiva_executada", lado=o.lado, preco=o.preco,
+                             imbalance=leitura.imbalance, micro=leitura.micro,
+                             spread=leitura.spread)
+        vencida = agora_ns - o.ts_envio_ns >= self.cfg.passiva_validade_ms * 1_000_000
+        if vencida or hhmm_brt(agora_ns) >= self.cfg.janela_fim_hhmm:
+            self.pendente = None
+            self.stats.passivas["cancelada_validade" if vencida else "cancelada_janela"] += 1
+            return Avaliacao(Acao.NADA, "passiva_cancelada")
+        return Avaliacao(Acao.NADA, "passiva_pendente")
+
     def avaliar(self, topo: TopoDoLivro | None, agora_ns: int) -> Avaliacao:
         cfg = self.cfg
         leitura = ler_topo(topo, cfg, agora_ns)
@@ -246,7 +305,7 @@ class DecisorMicroprice:
                 motivo = "alvo"
             elif pnl <= -cfg.stop_ticks * cfg.tick + 1e-9:
                 motivo = "stop"
-            elif leitura.imbalance * p.lado <= -cfg.limiar_saida:
+            elif self._inversao_persistiu(leitura, agora_ns, p.lado):
                 motivo = "imbalance_inverteu"
             elif agora_ns - p.ts_entrada_ns >= cfg.tempo_max_s * _NS:
                 motivo = "tempo"
@@ -257,6 +316,12 @@ class DecisorMicroprice:
             return Avaliacao(Acao.ZERAR, motivo, preco=marca,
                              imbalance=leitura.imbalance, micro=leitura.micro,
                              spread=leitura.spread)
+
+        # ---------------- zerado: ordem passiva pendente ----------------
+        if self.pendente is not None:
+            av = self._cuidar_da_passiva(leitura, agora_ns)
+            if av is not None:
+                return av
 
         # ---------------- zerado: entrada ------------------------------
         if leitura.motivo is not None:
@@ -279,6 +344,13 @@ class DecisorMicroprice:
         if bloqueio:
             self.stats.filtros[bloqueio] += 1
             return Avaliacao(Acao.NADA, bloqueio)
+        if cfg.entrada == "passiva":
+            preco = leitura.bid if lado > 0 else leitura.ask
+            self.pendente = OrdemPassiva(lado, preco, agora_ns)
+            self.stats.passivas["enviada"] += 1
+            return Avaliacao(Acao.NADA, "passiva_enviada", lado=lado, preco=preco,
+                             imbalance=leitura.imbalance, micro=leitura.micro,
+                             spread=leitura.spread)
         acao = Acao.COMPRAR if lado > 0 else Acao.VENDER
         return Avaliacao(acao, f"imbalance={leitura.imbalance:+.2f} persistiu "
                                f"{cfg.persistencia_ms}ms", lado=lado,
@@ -289,6 +361,7 @@ class DecisorMicroprice:
     # ------------------------------------------------------------------
     def abrir(self, lado: int, preco: float, agora_ns: int, imbalance: float) -> None:
         self.posicao = PosicaoMicro(lado, preco, agora_ns, imbalance)
+        self._inv_desde_ns = None
 
     def fechar(self, preco: float, agora_ns: int, motivo: str) -> dict[str, float | int | str]:
         """Contabiliza e devolve os campos para o log de fechamento."""
@@ -324,6 +397,7 @@ class DecisorMicroprice:
                 "duracao_media_s": (round(s.duracao_soma_s / s.operacoes, 2)
                                     if s.operacoes else None),
                 "saidas": dict(s.saidas), "bloqueado": s.bloqueado,
+                "passivas": dict(s.passivas),
                 # conta AVALIACOES (cadencia de `avaliacao_ms`), nao eventos:
                 # serve para ver o que mais barra a entrada, nao para taxa.
                 "avaliacoes_filtradas": dict(s.filtros),

@@ -47,12 +47,29 @@ class EAMicropriceConfig(BaseModel):
     # desbalanco deixa de estar a favor (neutro ou contra).
     limiar_saida: float = Field(0.0, ge=0.0, lt=1.0)
     persistencia_ms: int = Field(300, ge=0)   # I tem que ficar do lado por X ms
+    # Saida por desbalanco tambem exige persistencia (v3.64). 0 = sai na
+    # primeira avaliacao invertida -- o comportamento do v3.63, que no
+    # replay de 24/09 fechou 8 de 12 operacoes em 0,39 s medio: com I
+    # avaliado a cada 50 ms, uma piscada fechava a posicao pagando spread.
+    persistencia_saida_ms: int = Field(0, ge=0)
     lado_permitido: Literal["ambos", "compra", "venda"] = "ambos"
 
     # --- filtros de qualidade do topo ----------------------------------
     spread_max_ticks: int = Field(1, ge=1)
     qtd_min_topo: int = Field(20, ge=0)    # qtd_bid + qtd_ask minima
     livro_max_idade_ms: int = Field(5000, ge=1)
+
+    # --- execucao da ENTRADA (v3.64) -----------------------------------
+    # taker  : paga o lado oposto (nasce em -1 spread).
+    # passiva: limitada no PROPRIO lado (compra no bid, venda no ask).
+    #   Fill PESSIMISTA so' com o topo: compra em P executa quando o ask
+    #   chega a P (vendedor agrediu) ou o bid cai abaixo de P (nivel
+    #   consumido -- assume que estavamos no fim da fila). Nao cancela
+    #   quando o I inverte, so' por validade: cancelar na inversao, no
+    #   replay sem latencia, evitaria justamente os fills adversos.
+    #   Saida continua taker. Nesta versao so' existe em dry_run/replay.
+    entrada: Literal["taker", "passiva"] = "taker"
+    passiva_validade_ms: int = Field(2000, ge=1)
 
     # --- saida -----------------------------------------------------------
     alvo_ticks: int = Field(3, ge=1)
@@ -70,9 +87,16 @@ class EAMicropriceConfig(BaseModel):
 
     # --- sonda: o sinal preve o mid? (independe de execucao) ------------
     sonda_horizontes_s: list[float] = [1.0, 5.0, 30.0]
+    # Novo gatilho do MESMO lado dentro deste intervalo nao conta (v3.64):
+    # I oscilando em torno do limiar gera varias bordas no mesmo episodio,
+    # e contar todas superestima o n. 0 = conta toda borda (v3.63).
+    sonda_refratario_s: float = Field(0.0, ge=0)
 
     tamanho_posicao: int = 1
-    custo_pontos_estimado: float = 11.0    # por operacao, ALEM do spread
+    # Por operacao (ida e volta, 1 contrato), ALEM do spread. Default 11
+    # e' a convencao antiga do projeto; a nota real do operador (25/09:
+    # R$ 1,62 de taxas em 2 idas e voltas, IRRF de 1% excluido) da' ~4.
+    custo_pontos_estimado: float = 11.0
     dry_run: bool = True                   # NUNCA False sem decisao explicita
     usar_conta_real: bool = False          # ignorado pela esteira (sempre demo)
     risco: RiscoConfig = RiscoConfig()     # informativo (supervisor)
@@ -83,6 +107,9 @@ class EAMicropriceConfig(BaseModel):
             raise ValueError("janela_fim_hhmm precisa ser depois de janela_inicio_hhmm")
         if not self.sonda_horizontes_s or any(h <= 0 for h in self.sonda_horizontes_s):
             raise ValueError("sonda_horizontes_s precisa de horizontes positivos")
+        if self.entrada == "passiva" and not self.dry_run:
+            raise ValueError("entrada: passiva so' existe em dry_run/replay nesta versao "
+                             "(o executor da esteira envia ordem a mercado)")
         return self
 
     def sha256(self) -> str:

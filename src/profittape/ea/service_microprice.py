@@ -67,6 +67,7 @@ class EAMicropriceService:
         self.sem_vaga = 0
         self._ultima_aval_ns = 0
         self._ultimo_aviso_sem_livro_ns = 0
+        self.diag_cruzado: dict[str, Any] | None = None
         self.carimbo = {"codigo": carimbo or _carimbo_codigo(),
                         "config_sha": config.sha256()}
         log.warning("ea.micro.iniciado", nome=self.nome, symbol=config.symbol,
@@ -145,6 +146,9 @@ class EAMicropriceService:
                  bloqueado=self.decisor.stats.bloqueado, **self.carimbo)
 
     def encerrar_dia(self) -> None:
+        if self.decisor.pendente is not None:
+            self.decisor.pendente = None
+            self.decisor.stats.passivas["cancelada_encerramento"] += 1
         if self.decisor.posicao is not None:
             agora = self._relogio()
             topo = self.livro.ler(self.config.symbol) if self.livro is not None else None
@@ -167,7 +171,8 @@ class EAMicropriceService:
 # ----------------------------------------------------------------------
 def replay_tiny_book(cfg: EAMicropriceConfig,
                      eventos: Iterable[tuple[int, int, float, int]],
-                     carimbo: str = "replay") -> EAMicropriceService:
+                     carimbo: str = "replay",
+                     n_amostras_cruzado: int = 10) -> EAMicropriceService:
     """
     `eventos`: (ts_recv_ns, side, price, quantidade) EM ORDEM de tempo.
     Cada evento atualiza o livro; avalia no maximo a cada `avaliacao_ms`
@@ -178,6 +183,14 @@ def replay_tiny_book(cfg: EAMicropriceConfig,
     cada mudanca do topo; ao vivo, a cada trade/0,5 s. E o fill simulado
     e' o topo no instante da decisao -- sem latencia de roteamento, que
     so' o E4 em demo mede. O replay e' portanto o TETO do que o vivo faz.
+
+    DIAGNOSTICO DE LIVRO CRUZADO (v3.64): o tiny_book chega UM LADO POR
+    MENSAGEM. Quando o preco anda um tick, o lado novo chega antes do
+    outro ser atualizado e o topo reconstruido fica travado/cruzado
+    (ask <= bid) ate' a segunda mensagem. Hipotese: os 19.660
+    `livro_cruzado` de 24/09 sao isso. `svc.diag_cruzado` MEDE em vez de
+    supor: episodios, duracao (ms, pelo relogio do dado) e as primeiras
+    amostras com a idade do lado que NAO foi atualizado.
     """
     cfg_replay = cfg.model_copy(update={"dry_run": True})
     livro = EstadoDoLivro()
@@ -185,9 +198,47 @@ def replay_tiny_book(cfg: EAMicropriceConfig,
     svc = EAMicropriceService(cfg_replay, livro=livro,
                               relogio=lambda: relogio_atual[0], carimbo=carimbo)
     sym = cfg.symbol
+    ult_ts: dict[int, int] = {}
+    inicio_cruz: int | None = None
+    duracoes_ms: list[float] = []
+    amostras: list[dict[str, Any]] = []
     for ts, side, price, qtd in eventos:
-        livro.atualizar(TinyBook(ts, sym, "F", int(side), float(price), int(qtd)))
-        relogio_atual[0] = int(ts)
+        ts, side = int(ts), int(side)
+        livro.atualizar(TinyBook(ts, sym, "F", side, float(price), int(qtd)))
+        ult_ts[side] = ts
+        topo = livro.ler(sym)
+        cruzado = (topo is not None and topo.preco_bid is not None
+                   and topo.preco_ask is not None and topo.completo
+                   and topo.preco_ask <= topo.preco_bid)
+        if cruzado and inicio_cruz is None:
+            inicio_cruz = ts
+            if len(amostras) < n_amostras_cruzado and topo is not None:
+                outro = [t for s_, t in ult_ts.items() if s_ != side]
+                amostras.append({
+                    "ts_ns": ts, "lado_atualizado": side,
+                    "bid": topo.preco_bid, "qb": topo.qtd_bid,
+                    "ask": topo.preco_ask, "qa": topo.qtd_ask,
+                    "idade_outro_lado_ms": (round((ts - outro[0]) / 1e6, 1)
+                                            if outro else None)})
+        elif not cruzado and inicio_cruz is not None:
+            duracoes_ms.append((ts - inicio_cruz) / 1e6)
+            inicio_cruz = None
+        relogio_atual[0] = ts
         svc.tick()
+    svc.diag_cruzado = _resumo_cruzado(duracoes_ms, amostras, aberto=inicio_cruz is not None)
     svc.encerrar_dia()
     return svc
+
+
+def _resumo_cruzado(duracoes_ms: list[float], amostras: list[dict[str, Any]],
+                    aberto: bool) -> dict[str, Any]:
+    d = sorted(duracoes_ms)
+
+    def q(p: float) -> float | None:
+        return round(d[min(len(d) - 1, int(p * len(d)))], 1) if d else None
+
+    return {"episodios": len(d), "aberto_no_fim": aberto,
+            "dur_ms_p50": q(0.5), "dur_ms_p90": q(0.9), "dur_ms_p99": q(0.99),
+            "dur_ms_max": round(d[-1], 1) if d else None,
+            "pct_ate_50ms": round(100 * sum(x <= 50 for x in d) / len(d), 1) if d else None,
+            "amostras": amostras}

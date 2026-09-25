@@ -1996,7 +1996,8 @@ def ea_micro_replay(
     typer.echo(f"REPLAY MICROPRICE — {cfg.symbol}  (config {cfg.sha256()})")
     typer.echo(f"  limiar={cfg.limiar_entrada} persist={cfg.persistencia_ms}ms "
                f"alvo={cfg.alvo_ticks}t stop={cfg.stop_ticks}t tempo={cfg.tempo_max_s}s "
-               f"custo={cfg.custo_pontos_estimado}pts")
+               f"custo={cfg.custo_pontos_estimado}pts entrada={cfg.entrada} "
+               f"persist_saida={cfg.persistencia_saida_ms}ms")
     typer.echo("=" * 72)
     tot_ops, tot_bruto, tot_liq = 0, 0.0, 0.0
     for i, dia in enumerate(todos, 1):
@@ -2023,6 +2024,15 @@ def ea_micro_replay(
                    f"dur_media={r['duracao_media_s']}s bloqueado={r['bloqueado']}")
         typer.echo(f"  saidas={r['saidas']}")
         typer.echo(f"  sonda={sonda}")
+        if r.get("passivas"):
+            typer.echo(f"  passivas={r['passivas']}")
+        dc = svc.diag_cruzado or {}
+        typer.echo(f"  cruzado: episodios={dc.get('episodios')} p50={dc.get('dur_ms_p50')}ms "
+                   f"p90={dc.get('dur_ms_p90')}ms p99={dc.get('dur_ms_p99')}ms "
+                   f"max={dc.get('dur_ms_max')}ms ate50ms={dc.get('pct_ate_50ms')}%")
+        for a in dc.get("amostras", [])[:5]:
+            typer.echo(f"    {a}")
+        log.info("ea_micro_replay.cruzado", dia=dia, **dc)
     typer.echo("\n" + "-" * 72)
     typer.echo(f"TOTAL {len(todos)} pregoes: ops={tot_ops} bruto={tot_bruto:.1f} "
                f"liquido={tot_liq:.1f} pts "

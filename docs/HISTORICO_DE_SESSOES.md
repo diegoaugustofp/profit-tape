@@ -3865,3 +3865,17 @@ Só documentação; nenhum código tocado (suíte verde; ruff e mypy limpos).
 - Tags: as de v3.60–v3.62 não estão no GitHub (só os commits); este
   bundle parte do commit `b115c0a`.
 - 26 testes novos; suíte, ruff e mypy limpos.
+
+## Sessão 2026-09-25 — microprice: replay lido, custo real, v3.64
+
+- **Entrega v3.63** (a sessão anterior parou antes do bundle): verificada
+  e empacotada a partir de `b115c0a`.
+- **Replay 24/09 lido** (ficha `docs/eas/microprice.md`): sonda prevê
+  direção (+0,9/+1,55/+3,7 pts em 1/5/30 s), mas as 12 operações só
+  mediram o spread — saída por I sem persistência, 0,39 s médio.
+- **Custo real pela nota do operador: ~4 pts** por ida e volta (não 11).
+- **v3.64**: `persistencia_saida_ms`, `sonda_refratario_s`, entrada
+  `passiva` (dry_run/replay, fill pessimista), diagnóstico de livro
+  cruzado no `ea-micro-replay`, yaml passivo novo. Defaults = v3.63
+  (26 testes antigos intactos). 10 testes novos; suíte 1.112, ruff e mypy
+  limpos.
