@@ -1,6 +1,6 @@
 # Ficha — 123 em volume BAIXO (ficha 12) — o gate do 123 no forward
 
-> **Status:** vivo — **Revisado:** 2026-09-24 — **Assunto:** 123 cuja barra de sinal fecha com volume abaixo da mediana do horário; gerada pelo complemento da ficha 9, replicada no WDO (0,534, IC exclui 0,50) e atravessa a quebra de 2020 nos dois instrumentos; INCONCLUSIVA pelo critério de 0,56, mas é o gate do 123 no E4 desde 22/09.
+> **Status:** vivo — **Revisado:** 2026-09-25 — **Assunto:** 123 cuja barra de sinal fecha com volume abaixo da mediana do horário; gerada pelo complemento da ficha 9, replicada no WDO (0,534, IC exclui 0,50) e atravessa a quebra de 2020 nos dois instrumentos; INCONCLUSIVA pelo critério de 0,56, mas é o gate do 123 no E4 desde 22/09.
 
 ## Identidade
 
@@ -96,6 +96,34 @@ do 123 — o caminho declarado no dia 1.
 O do E4 (`RUNBOOK_E4.md`): cancelamento total, ~50 pregões, slippage
 ≤ 6 pts em n = 100. Não trocar limiar (mediana) nem janela (20) — cada
 um é família nova sobre amostra queimada.
+
+## Próximas evoluções — candidatos ANOTADOS, nenhum em andamento
+
+> **Por que uma lista parada e não trabalho em curso** (decisão do
+> operador, 2026-09-25): o WIN 2015-2026 está queimado para a família
+> 123, então qualquer filtro novo precisa de amostra nova — WDO (que
+> também se gasta: cada teste é um trial) ou forward. Com ~1 sinal por
+> pregão e um efeito esperado de 3 a 5 pp, um teste com poder pede mais
+> de mil sinais: **anos**. Por isso a regra aqui é ACUMULAR candidatos e
+> revisar tudo de uma vez, com o número de testes declarado ANTES —
+> testar cinco filtros numa amostra nova e ficar com o melhor é o mesmo
+> erro de sempre, só que com dado fresco.
+>
+> Nada desta seção altera o EA. Quem quiser mexer: volte ao pré-registro.
+
+| # | candidato | de onde veio | o que se sabe hoje |
+|---|---|---|---|
+| 1 | **Filtro Éden** (MME8 e MME80 na mesma direção) | listado em "Fora da v0" na ficha 5 desde o desenho; **reforçado pela observação do operador em 25/09** — sinal armado às 16:30 com o gráfico lateralizado | O regime da ficha é só `close(t)` contra a MME80; em 25/09 o preço estava 776 pts ABAIXO dela (não é lateral por esse critério). O que falta é a direção das médias. Nunca medido |
+| 2 | **Inside bar** | "Fora da v0" na ficha 5 (a página do QuantBrasil oferece) | O funil reporta quantos sinais ele deixaria passar; nunca testado |
+| 3 | **Corte por D** | observação da ficha 9.2 | **A intuição está INVERTIDA**: Q1 (D < 390) deu p1 **0,575**, o melhor quartil; Q4 (D > 825) deu 0,498. Cortar sinal pequeno tiraria a parte boa. O que cai com D pequeno é o GANHO ABSOLUTO (D=195 → ~18 pts líquidos esperados; D=485 → ~60). Candidato de DIMENSIONAMENTO, não de filtro |
+| 4 | **Alvo por amplitude das 3 barras** | "Fora da v0" na ficha 5 | Assimétrico, variância maior; nunca medido |
+| 5 | **Porta de volume no rompimento** (agressão/delta na barra t+1) | ficha 5, "Porta de volume" | É a mesma porta do ORB; implementa-se uma vez. Nunca medida |
+
+**Como medir sem queimar (quando a revisão vier):** o diário pode
+GRAVAR a informação de cada candidato — direção da MME8, distância à
+MME80, inside bar, agressão em t+1 — sem que nada disso vire regra.
+Gravar é dimensionar; escolher é testar. Se a revisão começar com o
+diário já cheio dessas colunas, ela começa com dado em vez de memória.
 
 ## Onde está a discussão longa
 

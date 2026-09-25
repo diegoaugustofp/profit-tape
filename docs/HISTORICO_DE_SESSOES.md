@@ -4003,3 +4003,16 @@ Só documentação; nenhum código tocado (suíte verde; ruff e mypy limpos).
   divergencia e' logada para distinguir os dois casos.
 - Duas operacoes de 25/09 ficam FORA do forward.
 - 1.168 testes (reaplicado sobre a v3.69).
+- v3.71 (docs): a ficha do EA em produção (`docs/eas/123_volume_baixo.md`)
+  ganhou a seção **Próximas evoluções** -- os cinco candidatos anotados
+  (filtro Eden, inside bar, corte por D, alvo por amplitude, porta de
+  volume), de onde cada um veio e o que ja' se sabe, com a decisao do
+  operador registrada: nada em andamento, porque amostra nova custa anos
+  (~1 sinal/pregao para um efeito de 3-5 pp) e cada teste queima o que
+  sobra. Acumular e revisar de uma vez, com o numero de testes declarado
+  ANTES. Origem: o sinal de 25/09 as 16:30 em mercado lateralizado --
+  conferido, o EA fez exatamente o que a ficha manda (barra do meio com a
+  maior maxima, close abaixo da MME80 por 776 pts, D=195 > 20). Registrado
+  tambem o dado que contraria a intuicao: D pequeno foi o MELHOR quartil
+  (0,575), entao cortar sinal pequeno tiraria a parte boa -- e' candidato
+  de dimensionamento, nao de filtro.
