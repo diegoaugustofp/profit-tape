@@ -1,6 +1,6 @@
 # Fichas de estratégia — índice
 
-> **Status:** vivo — **Revisado:** 2026-09-24 — **Assunto:** uma ficha por estratégia/EA (vivas e mortas), com o pré-registro congelado, os resultados por trial e o veredito; é o único lugar onde o estado de uma estratégia é mantido.
+> **Status:** vivo — **Revisado:** 2026-09-25 — **Assunto:** uma ficha por estratégia/EA (vivas e mortas), com o pré-registro congelado, os resultados por trial e o veredito; é o único lugar onde o estado de uma estratégia é mantido.
 
 ## Regra de dono
 
@@ -29,7 +29,8 @@ não se edita** — uma versão nova empilha abaixo, com o que a motivou.
 | [`123_volume_baixo.md`](123_volume_baixo.md) — ficha 12 | preço + volume de candle | **F4 INCONCLUSIVO no WDO; é o GATE do 123 no forward** | WDO 0,534 IC [0,516; 0,552]; atravessa a quebra de 2020 nos dois instrumentos | 1 (WDO) | v2.86, v2.89 |
 | [`gap_abertura.md`](gap_abertura.md) — ficha 10 | preço M15 (noite) | **F4 — congelada; resultado só no catálogo** | "inconclusivo, por-ano sem padrão" — tabela n/p1/IC não está no repositório | 1 (WIN, a confirmar) | v2.94 |
 | [`vespera.md`](vespera.md) — ficha 11 | preço M15 (dia anterior) | **F3 — FECHADA sem p1** | estimador não serve em M15 (v0: 78% por tempo; v1: 54-74% ambígua) | 0 | v2.92, v2.93 |
-| [`microprice.md`](microprice.md) — fast-track | topo do livro (tiny_book) | **protótipo**, dry_run | — (fast-track: sonda + replay antes de qualquer forward) | 0 | v3.63 |
+| [`microprice.md`](microprice.md) — fast-track | topo do livro (tiny_book) | **DESCARTADO como taker**; passiva pendente de modelo de fila | sinal real e estável (~+1,2 pt em 1–5 s, 10/10 dias), ~8× menor que o break-even taker | 0 (fast-track) | v3.63, v3.64 |
+| [`ignicao.md`](ignicao.md) — fast-track | tape (WIN) | **F5 — forward em dry_run** a partir de 28/09 | estudo FAVORÁVEL: p_alvo 0,702 IC [0,560; 0,813], 47 decididos em 44 pregões (escolha cega + replicação) | forward em curso | v3.66–v3.68 |
 
 ## Convenções compartilhadas pelas fichas de preço (M15)
 

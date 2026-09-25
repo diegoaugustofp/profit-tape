@@ -33,6 +33,7 @@ import structlog
 from .bridge import EABridge
 from .config import EAConfig
 from .config_123 import EA123Config
+from .config_ignicao import EAIgnicaoConfig
 from .config_microprice import EAMicropriceConfig
 from .despachante import DespachanteDeEAs
 from .livro import LivroDePosicoes
@@ -115,7 +116,7 @@ class RegistroDeEAs:
         return None
 
     # ------------------------------------------------------------------
-    def validar(self, cfg: EAConfig | EA123Config | EAMicropriceConfig,
+    def validar(self, cfg: EAConfig | EA123Config | EAMicropriceConfig | EAIgnicaoConfig,
                 nome: str) -> None:
         """
         Levanta `InclusaoRecusada` se o EA nao puder entrar. Separado de
@@ -141,7 +142,7 @@ class RegistroDeEAs:
                 "reconciliacao nao sabe de quem e' a divergencia). Use um "
                 "ativo diferente -- ver EA_ARQUITETURA 4.2.")
 
-    def incluir(self, cfg: EAConfig | EA123Config | EAMicropriceConfig,
+    def incluir(self, cfg: EAConfig | EA123Config | EAMicropriceConfig | EAIgnicaoConfig,
                nome: str | None = None,
                origem: Path | None = None,
                executor: object | None = None) -> EARegistrado:
@@ -162,6 +163,10 @@ class RegistroDeEAs:
             from .service_microprice import EAMicropriceService
             servico = EAMicropriceService(cfg, executor=executor, vagas=self.vagas,
                                           nome=nome_final, livro=self.livro_ao_vivo)
+        elif isinstance(cfg, EAIgnicaoConfig):
+            from .service_ignicao import EAIgnicaoService
+            servico = EAIgnicaoService(cfg, executor=executor, vagas=self.vagas,
+                                       nome=nome_final, livro=self.livro_ao_vivo)
         else:
             servico = EAService(cfg, executor=executor,  # type: ignore[arg-type]
                                vagas=self.vagas, nome=nome_final,
@@ -195,6 +200,10 @@ class RegistroDeEAs:
                         cfg.stop_ticks * cfg.tick, cfg.tamanho_posicao,
                         cfg.risco.valor_ponto_reais, cfg.risco.risco_max_pct)
                     if isinstance(cfg, EAMicropriceConfig)
+                    else capital_recomendado_para(
+                        cfg.stop_pts, cfg.tamanho_posicao,
+                        cfg.risco.valor_ponto_reais, cfg.risco.risco_max_pct)
+                    if isinstance(cfg, EAIgnicaoConfig)
                     else capital_recomendado_para(
                         cfg.risco.stop_catastrofico_pontos,
                         cfg.tamanho_posicao, cfg.risco.valor_ponto_reais,

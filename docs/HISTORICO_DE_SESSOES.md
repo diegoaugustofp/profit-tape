@@ -3948,3 +3948,27 @@ Só documentação; nenhum código tocado (suíte verde; ruff e mypy limpos).
   fill atrasado 50 ms); 8/8 isolado e verde na suíte seguinte (1.135).
   Não tocado nesta entrega. Correção futura: espera ATIVA com timeout no
   lugar do atraso fixo (skill de engenharia, seção 2).
+- **Ignição v3.67 — escolha cega aplicada:** `--so-taxa` → limiar 500
+  (1,9/dia, 12% do teto), barreira ±530 (0,5 × amplitude 60 min de 1.058).
+  1ª medição (11 pregões): p_alvo 0,737 IC [0,512; 0,882]. Replicação em
+  33 pregões NÃO vistos (24/07–09/09): 0,679 IC [0,493; 0,821]. Combinado
+  47/44: **0,702 IC [0,560; 0,813] > 0,537 → FAVORÁVEL** pelo critério
+  declarado antes. Descritivos (não filtros): WDO confirma 17/21 em 500 pts
+  (não separa); 51% nos 5 min após âncora de agenda; 10:30 10/11 (visto
+  depois). Correção do operador: abertura das AÇÕES na B3 é 10:00 (10:30
+  é NY). Dados do WDO faltando em 02–03/09 e 11/09 09:30 (a conferir).
+- **v3.68 — EA de ignição em dry_run** (`ea/config_ignicao.py`,
+  `sinal_ignicao.py`, `service_ignicao.py`, `config/ea_ignicao.yaml`,
+  `ea-ignicao-replay`, ficha `docs/eas/ignicao.md` com a ficha de forward
+  CONGELADA: efeito 0,65, ~68 decididos, ~3 meses). Decide no trade pelo
+  relógio da bolsa; fill simulado no topo AO VIVO registra deslizamento e
+  atraso (critério usa o deslizamento MEDIDO). Equivalência com o estudo
+  testada nos dois lados (3 sementes idênticas; sobreposição construída;
+  controle negativo com limiar diferente reprova). Defeitos achados pelos
+  testes antes de entregar: (1) `_hb()` com `atraso_max_s` colidia com a
+  chave do próprio bridge → TypeError no log de fim de pregão; renomeado
+  `atraso_entrada_max_s`; (2) sem `tamanho_posicao`/`risco` o supervisor
+  quebrava na inclusão; (3) teste de sobreposição passava por vacuidade
+  (0 == 0) — reforçado com tape construído. Texto "0.5 lim amplitude" do
+  `--so-taxa` corrigido. Índice de EAs: microprice atualizado para
+  DESCARTADO (a tabela estava atrás da ficha).

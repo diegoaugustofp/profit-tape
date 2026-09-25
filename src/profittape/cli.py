@@ -1949,6 +1949,105 @@ def ea_123_replay(
     typer.echo(f"\n  Agora: profit-tape diario {cfg.registro_dir} --ea {s.nome}")
 
 
+@app.command(name="ea-ignicao-replay")
+def ea_ignicao_replay_cmd(
+    yaml_path: Path = typer.Argument(..., help="config/ea_ignicao.yaml"),
+    raw: Path = typer.Option(Path("data/raw"), "--raw", help="Raiz com trade/dt=/sym="),
+    de: str | None = typer.Option(None, "--de", help="YYYY-MM-DD"),
+    ate: str | None = typer.Option(None, "--ate", help="YYYY-MM-DD"),
+    dias: str | None = typer.Option(None, "--dias", help="YYYY-MM-DD,YYYY-MM-DD"),
+    log_level: str = typer.Option("WARNING", "--log-level"),
+    log_file: Path | None = typer.Option(None, "--log-file"),
+) -> None:
+    """
+    Replay do EA de ignicao sobre o tape gravado, LADO A LADO com o estudo
+    (`research/ignicao.py`) nos mesmos dias e parametros: conferencia dos
+    dois lados antes de ligar o forward. Fill = preco do negocio (sem livro):
+    mede a REGRA, nao a execucao. Ver docs/eas/ignicao.md.
+    """
+    configurar(log_level, arquivo=log_file, nivel_arquivo="INFO" if log_file else None)
+    from .ea.config_123 import carregar_config_ea
+    from .ea.config_ignicao import EAIgnicaoConfig
+    from .ea.service_ignicao import replay_trades
+    from .research.ignicao import carregar_tape, detectar, wilson
+
+    cfg = carregar_config_ea(yaml_path)
+    if not isinstance(cfg, EAIgnicaoConfig):
+        raise typer.BadParameter(f"{yaml_path} nao tem tipo: ignicao")
+    base = raw / "trade"
+    todos = sorted(p.name.split("=", 1)[1] for p in base.glob("dt=*"))
+    if dias:
+        alvo_d = {d.strip() for d in dias.split(",")}
+        todos = [d for d in todos if d in alvo_d]
+    if de:
+        todos = [d for d in todos if d >= de]
+    if ate:
+        todos = [d for d in todos if d <= ate]
+    todos = [d for d in todos if (base / f"dt={d}" / f"sym={cfg.symbol}").exists()]
+    if not todos:
+        raise typer.BadParameter(f"nenhum pregao com {cfg.symbol} em {base}")
+
+    typer.echo("=" * 72)
+    typer.echo(f"REPLAY EA IGNICAO {cfg.symbol} (config {cfg.sha256()})  "
+               f"{cfg.limiar_pts:g} pts/{cfg.janela_s:g}s  barreira +{cfg.alvo_pts:g}/"
+               f"-{cfg.stop_pts:g} em {cfg.tempo_max_s:g}s")
+    typer.echo("  EA x ESTUDO nos mesmos dias. Diferenca esperada so' em ignicao com")
+    typer.echo("  posicao aberta (EA ignora; estudo conta) e em edicao fora de ordem.")
+    typer.echo("=" * 72)
+    tot = {"alvo": 0, "stop": 0, "tempo": 0, "outras": 0}
+    pnl = {"bruto": 0.0, "liquido": 0.0}
+    est_alvo = est_stop = 0
+    divergencias = 0
+    for i, dia in enumerate(todos, 1):
+        tape = carregar_tape(raw, cfg.symbol, dia)
+        svc = replay_trades(cfg, zip(tape.ts.tolist(), tape.px.tolist(), strict=True),
+                            carimbo=f"replay:{dia}")
+        r = svc.decisor.resumo()
+        ev = detectar(tape, carregar_tape(raw, "__nenhum__", dia), dia,
+                      limiar_pts=cfg.limiar_pts, janela_s=cfg.janela_s,
+                      refratario_s=cfg.refratario_s, conf_pts=1.0,
+                      horizontes_s=[int(cfg.tempo_max_s)], alvo_pts=cfg.alvo_pts,
+                      stop_pts=cfg.stop_pts, inicio_hhmm=cfg.inicio_hhmm,
+                      fim_hhmm=cfg.fim_hhmm, barreira_s=cfg.tempo_max_s)
+        ea_ts = [op["ts"] for op in _ops_ts(svc)]
+        est_ts = [e.ts_ns for e in ev]
+        so_est = [e for e in ev if e.ts_ns not in ea_ts]
+        so_ea = [t for t in ea_ts if t not in est_ts]
+        divergencias += len(so_ea)
+        for op in svc.operacoes:
+            m = op["motivo"]
+            tot[m if m in ("alvo", "stop", "tempo") else "outras"] += 1
+            pnl["bruto"] += op["pnl_bruto"]
+            pnl["liquido"] += op["pnl_liquido"]
+        est_alvo += sum(e.barreira == "alvo" for e in ev)
+        est_stop += sum(e.barreira == "stop" for e in ev)
+        typer.echo(f"[{i}/{len(todos)}] {dia}  EA ops={r['operacoes']} {r['saidas']} "
+                   f"liq={r['pnl_liquido_pts']}  ignoradas={r['ignoradas']}  "
+                   f"fora_de_ordem={r['fora_de_ordem']}  | estudo eventos={len(ev)}"
+                   + (f"  SO' NO ESTUDO={len(so_est)}" if so_est else "")
+                   + (f"  SO' NO EA={len(so_ea)} <-- DIVERGENCIA" if so_ea else ""))
+        log.info("ea_ignicao_replay.dia", i=i, n=len(todos), dia=dia, ea=r,
+                 estudo_eventos=len(ev), so_no_estudo=len(so_est), so_no_ea=len(so_ea))
+    dec = tot["alvo"] + tot["stop"]
+    typer.echo("\n" + "-" * 72)
+    typer.echo(f"TOTAL {len(todos)} pregoes  EA: alvo={tot['alvo']} stop={tot['stop']} "
+               f"tempo={tot['tempo']} outras={tot['outras']}  p_alvo="
+               f"{round(tot['alvo'] / dec, 3) if dec else None} ic95={wilson(tot['alvo'], dec)}")
+    typer.echo(f"  pnl bruto={pnl['bruto']:.0f} liquido={pnl['liquido']:.0f} pts "
+               f"(fill = preco do negocio: SEM deslizamento, e' o teto)")
+    ed = est_alvo + est_stop
+    typer.echo(f"  ESTUDO: alvo={est_alvo} stop={est_stop} p_alvo="
+               f"{round(est_alvo / ed, 3) if ed else None}")
+    typer.echo(f"  eventos SO' NO EA (nao deveria haver): {divergencias}")
+    log.info("ea_ignicao_replay.total", dias=len(todos), ea=tot, pnl=pnl,
+             estudo={"alvo": est_alvo, "stop": est_stop}, divergencias=divergencias)
+
+
+def _ops_ts(svc: Any) -> list[dict[str, Any]]:
+    """ts de DETECCAO de cada operacao do replay (a entrada usa o ts da ignicao)."""
+    return [{"ts": op["ts_deteccao"]} for op in svc.operacoes]
+
+
 @app.command(name="ignicao")
 def ignicao_cmd(
     raw: Path = typer.Option(Path("data/raw"), "--raw",
@@ -2065,7 +2164,7 @@ def ignicao_cmd(
                           if sum(cont_taxa[lim]) / len(cont_taxa[lim]) <= taxa_alvo), None)
         barreira = (round(fracao_amplitude * amp / 5.0) * 5.0) if amp is not None else None
         typer.echo(f"\nREGRA: limiar = menor com por_dia <= {taxa_alvo:g}; barreira = "
-                   f"{fracao_amplitude:g} lim amplitude ({hbar:g}s), arredondada ao tick")
+                   f"{fracao_amplitude:g} x amplitude ({hbar:g}s), arredondada ao tick")
         if escolhido is None:
             typer.echo(f"  nenhum limiar da lista chega a <= {taxa_alvo:g}/dia: "
                        f"acrescente limiares MAIORES e rode de novo")

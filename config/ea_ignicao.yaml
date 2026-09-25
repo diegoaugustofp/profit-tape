@@ -1,0 +1,37 @@
+# EA de IGNICAO do WIN -- fast-track (v3.68, 2026-09-25). Ficha:
+# docs/eas/ignicao.md. SO' dry_run ate' a conta demo (E4) medir o
+# deslizamento real nos minutos de agenda.
+#
+# Regra = a TESTADA em `profit-tape ignicao` (v3.67): numeros escolhidos
+# pela regra CEGA do --so-taxa (limiar = menor com <= 2 eventos/dia;
+# barreira = 0,5 x amplitude mediana de 60 min), veredito favoravel na
+# amostra combinada (44 pregoes, p_alvo 0,702, IC 0,560-0,813).
+# MUDAR QUALQUER NUMERO = FICHA NOVA E CONTAGEM NOVA (config_sha muda).
+#
+# Rode com --ea-livro-ao-vivo: sem ele o fill simulado cai no preco do
+# negocio e o deslizamento sai ZERO por construcao, nao medido.
+
+tipo: ignicao
+nome: ea_ignicao
+symbol: WINFUT
+dry_run: true
+
+limiar_pts: 500          # WIN anda isto contra o negocio de >= 60 s atras
+janela_s: 60
+refratario_s: 1800
+inicio_hhmm: 915         # 1a deteccao as 09:16
+fim_hhmm: 1700           # ultima deteccao
+
+alvo_pts: 530            # a partir do preco de DETECCAO
+stop_pts: 530
+tempo_max_s: 3600        # sem barreira em 60 min: sai a mercado
+zerar_ate_hhmm: 1800
+
+max_operacoes_dia: 4
+tamanho_posicao: 1
+custo_pontos_estimado: 4.0   # taxas por ida e volta (nota de 24/09); spread vem do fill
+
+# So' REGISTRO (nao decide): agenda. 10:30 teve 10/11 alvos no estudo,
+# achado DEPOIS de olhar -- o forward confirma ou desmente.
+ancoras_hhmm: [930, 1000, 1030, 1500]
+ancora_janela_min: 5

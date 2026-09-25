@@ -188,6 +188,7 @@ def test_cli_so_taxa_aplica_a_regra_declarada(tmp_path: Path) -> None:
     assert r.exit_code == 0, r.output
     assert "amplitude normal em 30 min" in r.output and "260 pts" in r.output
     assert "-> limiar 100 pts, barreira +-130 pts" in r.output
+    assert "barreira = 0.5 x amplitude (1800s)" in r.output   # v3.68: saia "lim"
     assert "--limiar-pts 100 --alvo-pts 130 --stop-pts 130 --barreira-s 1800" in r.output
     r = CliRunner().invoke(app, ["ignicao", "--raw", str(tmp_path),
                                  "--so-taxa", "100,150", "--taxa-alvo", "0.5"])
