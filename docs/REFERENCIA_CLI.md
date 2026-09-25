@@ -2,7 +2,7 @@
 
 > **Status:** vivo (GERADO) — **Revisado:** pela ultima execucao de `tools/gera_referencia_cli.py` — **Assunto:** todos os comandos de `src/profittape/cli.py`, agrupados por categoria, com a nota de trial e o documento de referencia. NAO EDITE A MAO: rode o script.
 
-69 comandos. Categoria e documento vem do dicionario no script; nome e descricao vem do docstring do proprio comando (`profit-tape <cmd> --help` mostra as opcoes).
+70 comandos. Categoria e documento vem do dicionario no script; nome e descricao vem do docstring do proprio comando (`profit-tape <cmd> --help` mostra as opcoes).
 
 A distincao que mais importa: comandos que **consomem trial** sobem o limiar deflacionado a cada rodada e so' devem rodar com dado NOVO suficiente; os que nao consomem podem rodar quando quiser (skill `profit-tape-disciplina`, 2).
 
@@ -138,6 +138,7 @@ A distincao que mais importa: comandos que **consomem trial** sobem o limiar def
 | `ea` | FORWARD-TEST do EA (dry_run por default no config): conecta com login completo, assina o simbolo, constroi barras ao vivo e LOGA cada decisao que o EA teria tomado. | EA_ARQUITETURA.md |
 | `ea-123-replay` | REPLAY do EA 123 sobre um dia curado: semente, perfil de volume, gate, sinal, ciclo em dry_run e DIARIO, com barras reais e sem esperar pregao. | eas/123_m15.md |
 | `ea-contas` | DIAGNOSTICO (nao operacional): conecta com login completo e lista as contas de roteamento (GetAccount) -- demo e real. | EA_ARQUITETURA.md 2 (E1) |
+| `ea-micro-replay` | REPLAY do EA de microprice sobre o tiny_book GRAVADO: mesmo nucleo do vivo, relogio = ts_recv_ns, dry_run forcado. | eas/microprice.md |
 | `ea-ordem-teste` | E2 da trilha de execucao (2026-09-10): primeira ordem de teste real. | EA_ARQUITETURA.md 2 (E2) |
 | `ea-replay` | Forward-test SEM conexao propria: reler os trades que o `record` JA' CAPTUROU (parquet), alimentar o MESMO nucleo do EA (sinal, decisao, risco), e reportar as decisoes que teriam sido tomadas. | EA_ARQUITETURA.md |
 | `ea-replay-lote` | Roda ea-replay em TODOS os dias ja' capturados (uma instancia NOVA de EAService por dia -- circuit breaker e posicao reiniciam a cada dia, igual rodaria em producao de verdade), agrega o resultado. | EA_ARQUITETURA.md; BOAS_PRATICAS_PROGRESSO.md |

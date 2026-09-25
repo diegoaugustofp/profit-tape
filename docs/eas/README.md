@@ -29,6 +29,7 @@ não se edita** — uma versão nova empilha abaixo, com o que a motivou.
 | [`123_volume_baixo.md`](123_volume_baixo.md) — ficha 12 | preço + volume de candle | **F4 INCONCLUSIVO no WDO; é o GATE do 123 no forward** | WDO 0,534 IC [0,516; 0,552]; atravessa a quebra de 2020 nos dois instrumentos | 1 (WDO) | v2.86, v2.89 |
 | [`gap_abertura.md`](gap_abertura.md) — ficha 10 | preço M15 (noite) | **F4 — congelada; resultado só no catálogo** | "inconclusivo, por-ano sem padrão" — tabela n/p1/IC não está no repositório | 1 (WIN, a confirmar) | v2.94 |
 | [`vespera.md`](vespera.md) — ficha 11 | preço M15 (dia anterior) | **F3 — FECHADA sem p1** | estimador não serve em M15 (v0: 78% por tempo; v1: 54-74% ambígua) | 0 | v2.92, v2.93 |
+| [`microprice.md`](microprice.md) — fast-track | topo do livro (tiny_book) | **protótipo**, dry_run | — (fast-track: sonda + replay antes de qualquer forward) | 0 | v3.63 |
 
 ## Convenções compartilhadas pelas fichas de preço (M15)
 

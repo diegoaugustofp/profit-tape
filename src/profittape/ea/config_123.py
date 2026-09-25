@@ -86,11 +86,15 @@ class EA123Config(BaseModel):
 
 
 def carregar_config_ea(caminho: Path) -> Any:
-    """`tipo: "123"` -> EA123Config; senao EAConfig (fluxo)."""
+    """`tipo: "123"` -> EA123Config; `tipo: "microprice"` ->
+    EAMicropriceConfig; senao EAConfig (fluxo)."""
     import yaml
 
     from .config import EAConfig
     dados = yaml.safe_load(caminho.read_text(encoding="utf-8"))
     if isinstance(dados, dict) and dados.get("tipo") == "123":
         return EA123Config.de_dados(dados, caminho)
+    if isinstance(dados, dict) and dados.get("tipo") == "microprice":
+        from .config_microprice import EAMicropriceConfig
+        return EAMicropriceConfig(**dados)
     return EAConfig(**dados)

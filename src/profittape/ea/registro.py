@@ -33,6 +33,7 @@ import structlog
 from .bridge import EABridge
 from .config import EAConfig
 from .config_123 import EA123Config
+from .config_microprice import EAMicropriceConfig
 from .despachante import DespachanteDeEAs
 from .livro import LivroDePosicoes
 from .livro_ao_vivo import EstadoDoLivro
@@ -114,7 +115,8 @@ class RegistroDeEAs:
         return None
 
     # ------------------------------------------------------------------
-    def validar(self, cfg: EAConfig | EA123Config, nome: str) -> None:
+    def validar(self, cfg: EAConfig | EA123Config | EAMicropriceConfig,
+                nome: str) -> None:
         """
         Levanta `InclusaoRecusada` se o EA nao puder entrar. Separado de
         `incluir` para dar para checar sem efeito colateral (teste, CLI,
@@ -139,7 +141,8 @@ class RegistroDeEAs:
                 "reconciliacao nao sabe de quem e' a divergencia). Use um "
                 "ativo diferente -- ver EA_ARQUITETURA 4.2.")
 
-    def incluir(self, cfg: EAConfig | EA123Config, nome: str | None = None,
+    def incluir(self, cfg: EAConfig | EA123Config | EAMicropriceConfig,
+               nome: str | None = None,
                origem: Path | None = None,
                executor: object | None = None) -> EARegistrado:
         """
@@ -155,6 +158,10 @@ class RegistroDeEAs:
             from .service_123 import EA123Service
             servico = EA123Service(cfg, executor=executor, vagas=self.vagas,
                                    nome=nome_final, client=self._client)
+        elif isinstance(cfg, EAMicropriceConfig):
+            from .service_microprice import EAMicropriceService
+            servico = EAMicropriceService(cfg, executor=executor, vagas=self.vagas,
+                                          nome=nome_final, livro=self.livro_ao_vivo)
         else:
             servico = EAService(cfg, executor=executor,  # type: ignore[arg-type]
                                vagas=self.vagas, nome=nome_final,
@@ -184,6 +191,10 @@ class RegistroDeEAs:
                 # soma de N EAs seja comparavel ao que o operador tem.
                 capital_recomendado=(
                     cfg.capital_recomendado_informativo() if isinstance(cfg, EA123Config)
+                    else capital_recomendado_para(
+                        cfg.stop_ticks * cfg.tick, cfg.tamanho_posicao,
+                        cfg.risco.valor_ponto_reais, cfg.risco.risco_max_pct)
+                    if isinstance(cfg, EAMicropriceConfig)
                     else capital_recomendado_para(
                         cfg.risco.stop_catastrofico_pontos,
                         cfg.tamanho_posicao, cfg.risco.valor_ponto_reais,

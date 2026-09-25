@@ -3843,3 +3843,25 @@ Só documentação; nenhum código tocado (suíte verde; ruff e mypy limpos).
   `.env.example` idem para o bloco de EA. Ambos são texto em código,
   fora do escopo desta revisão.
 - Suíte: 1.076 testes; ruff e mypy limpos.
+
+## Sessão 2026-09-24 (noite, 4) — EA de microprice / queue imbalance, fast-track (v3.63)
+
+- **Pedido:** scalper de WIN pelo microprice do topo do livro, "compra
+  quando o microprice se afasta X ticks". **Achado de mecanismo antes
+  do código:** `microprice = mid + I·spread/2`, então com spread de 1
+  tick o desvio nunca passa de 2,5 pts — limiar em ticks não dispara.
+  O gatilho virou `I` (já existia como `TopoDoLivro.desequilibrio`).
+- **`ea/config_microprice.py`** (`tipo: "microprice"`, extra=forbid),
+  **`ea/sinal_microprice.py`** (núcleo puro: filtros do topo,
+  persistência, posição taker, limites do dia e SONDA de previsão do
+  mid por horizonte), **`ea/service_microprice.py`** (serviço para o
+  bridge, decide no `tick()` lendo o livro fresco — não na fila de
+  trades, que anda 2-5 s atrás — e `replay_tiny_book`).
+- `carregar_config_ea` e `RegistroDeEAs` reconhecem o tipo novo; os
+  tipos antigos têm teste de retrocompatibilidade.
+- **`profit-tape ea-micro-replay`**: roda o mesmo núcleo sobre o
+  `tiny_book` do raw, por pregão, com `[i/N]`.
+- `config/ea_microprice.yaml` (dry_run), ficha `docs/eas/microprice.md`.
+- Tags: as de v3.60–v3.62 não estão no GitHub (só os commits); este
+  bundle parte do commit `b115c0a`.
+- 26 testes novos; suíte, ruff e mypy limpos.

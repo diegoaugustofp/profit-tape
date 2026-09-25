@@ -111,6 +111,7 @@ COMANDOS: dict[str, tuple[str, str]] = {
     "ea-replay": ("ea", "EA_ARQUITETURA.md"),
     "ea-replay-lote": ("ea", "EA_ARQUITETURA.md; BOAS_PRATICAS_PROGRESSO.md"),
     "ea-123-replay": ("ea", "eas/123_m15.md"),
+    "ea-micro-replay": ("ea", "eas/microprice.md"),
     "barra-tempo-conferir": ("ea", "EAS_DE_PRECO.md 5.4"),
     "semente-conferir": ("ea", "EAS_DE_PRECO.md 5.4"),
     "diario": ("ea", "EA_ARQUITETURA.md 6"),

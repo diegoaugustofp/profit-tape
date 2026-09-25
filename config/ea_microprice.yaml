@@ -1,0 +1,46 @@
+# EA de MICROPRICE / QUEUE IMBALANCE -- fast-track (2026-09-24).
+# Ficha: docs/eas/microprice.md
+#
+# PRE-REQUISITO: o record precisa subir com --ea-livro-ao-vivo. Sem isso
+# o topo do livro nunca e' alimentado e este EA passa o dia em sem_livro.
+#
+# Mesmo ticker dos EAs 123 (WINFUT): com --ea-modo-ticker unico (default)
+# ele e' RECUSADO se outro EA de WINFUT ja' estiver na pasta. Use
+# --ea-modo-ticker exclusivo (EA em dry_run nao disputa vaga) ou rode-o
+# sozinho.
+#
+# Gatilho sobre I = (qtd_bid - qtd_ask)/(qtd_bid + qtd_ask), em [-1, +1].
+# Nao ha' limiar "em ticks": microprice - mid = I * spread/2, que no WIN
+# (spread 1 tick) nunca passa de 2,5 pts. Ver config_microprice.py.
+tipo: "microprice"
+nome: ea_microprice
+symbol: WINFUT
+tick: 5.0
+
+limiar_entrada: 0.6        # I >= +0.6 compra; I <= -0.6 vende
+limiar_saida: 0.0          # zera quando I deixa de estar a favor
+persistencia_ms: 300       # o desbalanco tem que durar isto
+lado_permitido: ambos
+
+spread_max_ticks: 1        # so' entra com spread de 1 tick
+qtd_min_topo: 20           # bid+ask no topo; abaixo disso o I e' ruido
+livro_max_idade_ms: 5000
+
+alvo_ticks: 3              # 15 pts, marcado do lado oposto (taker)
+stop_ticks: 3
+tempo_max_s: 30
+
+avaliacao_ms: 50
+cooldown_s: 2
+janela_inicio_hhmm: 915    # evita o leilao/abertura
+janela_fim_hhmm: 1720      # depois disto nao entra, e zera
+max_operacoes_dia: 200
+max_perdas_seguidas: 8
+perda_max_dia_pontos: 300
+
+sonda_horizontes_s: [1, 5, 30]
+
+tamanho_posicao: 1
+custo_pontos_estimado: 11.0
+dry_run: true              # E4 em demo so' depois de ler o replay e 1 pregao
+usar_conta_real: false

@@ -1949,6 +1949,88 @@ def ea_123_replay(
     typer.echo(f"\n  Agora: profit-tape diario {cfg.registro_dir} --ea {s.nome}")
 
 
+@app.command(name="ea-micro-replay")
+def ea_micro_replay(
+    yaml_path: Path = typer.Argument(..., help="config/ea_microprice.yaml"),
+    raw: Path = typer.Option(Path("data/raw"), "--raw",
+                            help="O tiny_book so' existe no raw (nunca e' curado)."),
+    dias: str | None = typer.Option(None, "--dias", help="YYYY-MM-DD,YYYY-MM-DD"),
+    de: str | None = typer.Option(None, "--de", help="YYYY-MM-DD"),
+    ate: str | None = typer.Option(None, "--ate", help="YYYY-MM-DD"),
+    log_level: str = typer.Option("WARNING", "--log-level"),
+    log_file: Path | None = typer.Option(
+        None, "--log-file", help="Arquivo sempre em INFO (cada entrada/saida)."),
+) -> None:
+    """
+    REPLAY do EA de microprice sobre o tiny_book GRAVADO: mesmo nucleo do
+    vivo, relogio = ts_recv_ns, dry_run forcado. Responde em segundos, sem
+    esperar pregao: (1) a SONDA diz se o desbalanco preve o mid; (2) as
+    operacoes dizem se sobra algo pagando spread + custo. E' o TETO do vivo
+    (sem latencia de roteamento).
+    """
+    configurar(log_level, arquivo=log_file, nivel_arquivo="INFO" if log_file else None)
+    import pyarrow.dataset as ds
+
+    from .ea.config_123 import carregar_config_ea
+    from .ea.config_microprice import EAMicropriceConfig
+    from .ea.service_microprice import replay_tiny_book
+
+    cfg = carregar_config_ea(yaml_path)
+    if not isinstance(cfg, EAMicropriceConfig):
+        raise typer.BadParameter(f"{yaml_path} nao tem tipo: microprice")
+    base = raw / "tiny_book"
+    pastas = sorted(base.glob("dt=*"))
+    todos = [p.name.split("=", 1)[1] for p in pastas]
+    if dias:
+        alvo = {d.strip() for d in dias.split(",")}
+        todos = [d for d in todos if d in alvo]
+    if de:
+        todos = [d for d in todos if d >= de]
+    if ate:
+        todos = [d for d in todos if d <= ate]
+    todos = [d for d in todos if (base / f"dt={d}" / f"sym={cfg.symbol}").exists()]
+    if not todos:
+        raise typer.BadParameter(f"nenhum pregao com tiny_book de {cfg.symbol} em {base}")
+
+    typer.echo("=" * 72)
+    typer.echo(f"REPLAY MICROPRICE — {cfg.symbol}  (config {cfg.sha256()})")
+    typer.echo(f"  limiar={cfg.limiar_entrada} persist={cfg.persistencia_ms}ms "
+               f"alvo={cfg.alvo_ticks}t stop={cfg.stop_ticks}t tempo={cfg.tempo_max_s}s "
+               f"custo={cfg.custo_pontos_estimado}pts")
+    typer.echo("=" * 72)
+    tot_ops, tot_bruto, tot_liq = 0, 0.0, 0.0
+    for i, dia in enumerate(todos, 1):
+        tb = ds.dataset(base / f"dt={dia}" / f"sym={cfg.symbol}", format="parquet",
+                        exclude_invalid_files=True).to_table(
+            columns=["ts_recv_ns", "side", "price", "quantidade"]).to_pandas()
+        tb = (tb.sort_values("ts_recv_ns", kind="stable")
+                .drop_duplicates(subset=["ts_recv_ns", "side", "price", "quantidade"]))
+        log.info("ea_micro_replay.dia", i=i, n=len(todos), dia=dia, eventos=len(tb))
+        svc = replay_tiny_book(cfg, zip(tb["ts_recv_ns"].to_numpy().tolist(),
+                                        tb["side"].to_numpy().tolist(),
+                                        tb["price"].to_numpy().tolist(),
+                                        tb["quantidade"].to_numpy().tolist(),
+                                        strict=True),
+                               carimbo=f"replay:{dia}")
+        r = svc.decisor.resumo()
+        tot_ops += int(r["operacoes"])  # type: ignore[call-overload]
+        tot_bruto += float(r["pnl_bruto_pts"])  # type: ignore[arg-type]
+        tot_liq += float(r["pnl_liquido_pts"])  # type: ignore[arg-type]
+        sonda = r["sonda"]
+        typer.echo(f"\n[{i}/{len(todos)}] {dia}  eventos={len(tb):,}")
+        typer.echo(f"  ops={r['operacoes']} ganho%={r['pct_ganho']} "
+                   f"bruto={r['pnl_bruto_pts']} liquido={r['pnl_liquido_pts']} pts "
+                   f"dur_media={r['duracao_media_s']}s bloqueado={r['bloqueado']}")
+        typer.echo(f"  saidas={r['saidas']}")
+        typer.echo(f"  sonda={sonda}")
+    typer.echo("\n" + "-" * 72)
+    typer.echo(f"TOTAL {len(todos)} pregoes: ops={tot_ops} bruto={tot_bruto:.1f} "
+               f"liquido={tot_liq:.1f} pts "
+               f"(R$ {tot_liq * cfg.risco.valor_ponto_reais * cfg.tamanho_posicao:.2f})")
+    typer.echo("  Leitura: sonda media_pts > 0 = preve direcao. Bruto por operacao "
+               "precisa passar o custo, e o bruto JA' paga o spread (fill taker).")
+
+
 @app.command(name="iceberg")
 def iceberg_cmd(
     de: str = typer.Option(..., "--de", help="YYYY-MM-DD"),
