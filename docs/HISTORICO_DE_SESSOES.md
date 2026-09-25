@@ -3911,3 +3911,40 @@ Só documentação; nenhum código tocado (suíte verde; ruff e mypy limpos).
   MFE podia sair negativo (corrigido: partida conta). Controle negativo
   (passeio sem momento): p_alvo 0,47–0,49, mas ret_5min médio −37 numa
   semente — ler p_alvo, não média de pontos. 7 testes; suíte 1.129.
+- **Ignição v3.66 rodada (10/09–23/09 + 24/09):** 133 eventos, p_alvo
+  0,474 (IC 0,39–0,56) < empate 0,545; confirma 0,491 ≈ neutro 0,475;
+  dose-resposta por acoplamento plana (0,47 / 0,43 / 0,53). Mas o desenho
+  tinha DOIS DEFEITOS DE ESCALA, achados por evidência cega ao resultado:
+  (1) taxa 13–15/dia contra teto de 16 imposto pelo refratário — 150
+  pts/60 s dispara sempre que pode, é oscilação comum, não "grande
+  movimento"; (2) barreira ±100 dentro da oscilação normal (MFE/MAE
+  medianos +290/−265 em 30 min) — cara ou coroa por construção. O candle
+  de +1.000 das 13:15 de 24/09 foi detectado às 12:53 (WDO −8, MFE +970),
+  tomou stop em −100 antes e o refratário escondeu o resto.
+- **Correção ≠ ajuste por resultado** (lembrete do operador, aceito):
+  corrigir a operacionalização de um conceito declarado, com evidência
+  que não olha desfecho, não reinicia a contagem. O que continua proibido
+  é escolher número por p_alvo. Por isso a escolha foi MECANIZADA.
+- **REGRA declarada ANTES de rodar (v3.67, aplicada pelo `--so-taxa`):**
+  limiar = menor da lista com por_dia ≤ 2; barreira = 0,5 × amplitude
+  mediana (máx − mín) no mesmo intervalo em que a barreira pode ser tocada
+  (`--barreira-s`), arredondada ao tick. Avaliação: os 10 dias já vistos
+  como 1ª medição do desenho corrigido; os 7 pregões NÃO vistos (24–27/08,
+  04, 08 e 09/09, após `compact`) como replicação. Pergunta inalterada:
+  p_alvo(confirma) > neutro/contra e acima do empate, com IC.
+- **v3.67:** `candidatos()` (detecção sem nada depois do instante — o
+  teste prova: truncar o tape após cada detecção não muda a contagem),
+  `maximo_possivel()` (teto inteiro: 16, não 15,5), `amplitude_mediana()`,
+  `--barreira-s`, `--so-taxa`, `--taxa-alvo`, `--fracao-amplitude`. mypy
+  pegou colisão de nomes entre os dois ramos da função (renomeado).
+  6 testes novos; suíte 1.135.
+- **Nota operacional:** edições que aparecem no sandbox "sem autoria"
+  (commit v3.63 já feito; teto e testes do v3.67) eram de turnos meus que
+  o operador INTERROMPEU — as ferramentas já tinham gravado antes do
+  corte. Não há concorrência. Ao retomar depois de interrupção: `git
+  status`/`git diff` antes de editar, e aproveitar o que estiver certo.
+- **Teste intermitente anotado:** `test_ea_ordem_teste_b.py::test_ciclo_
+  completo_stop_cancel_oco` falhou UMA vez na suíte completa (fake com
+  fill atrasado 50 ms); 8/8 isolado e verde na suíte seguinte (1.135).
+  Não tocado nesta entrega. Correção futura: espera ATIVA com timeout no
+  lugar do atraso fixo (skill de engenharia, seção 2).

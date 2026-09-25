@@ -1966,7 +1966,20 @@ def ignicao_cmd(
         None, "--refratario-s", help="default = maior horizonte (sem sobreposicao)"),
     alvo_pts: float = typer.Option(100.0, "--alvo-pts"),
     stop_pts: float = typer.Option(100.0, "--stop-pts"),
+    barreira_s: float | None = typer.Option(
+        None, "--barreira-s",
+        help="ate' quando a barreira pode ser tocada (default = maior horizonte)"),
+    so_taxa: str | None = typer.Option(
+        None, "--so-taxa",
+        help="lista de limiares (ex. 150,300,500,800): imprime SO' a taxa de eventos "
+             "e a amplitude normal do dia, sem nenhum resultado -- para escolher o "
+             "limiar e a barreira CEGO ao desfecho"),
     custo_pts: float = typer.Option(9.0, "--custo-pts", help="spread + taxas, ida e volta"),
+    taxa_alvo: float = typer.Option(
+        2.0, "--taxa-alvo", help="REGRA do --so-taxa: menor limiar com por_dia <= isto"),
+    fracao_amplitude: float = typer.Option(
+        0.5, "--fracao-amplitude",
+        help="REGRA do --so-taxa: barreira = isto x amplitude mediana em --barreira-s"),
     inicio_hhmm: int = typer.Option(915, "--inicio-hhmm"),
     fim_hhmm: int = typer.Option(1700, "--fim-hhmm", help="ultima deteccao"),
     top: int = typer.Option(10, "--top", help="maiores ignicoes listadas para inspecao"),
@@ -1981,9 +1994,18 @@ def ignicao_cmd(
     Mede primeiro a TAXA por pregao. Ver research/ignicao.py.
     """
     configurar(log_level, arquivo=log_file, nivel_arquivo="INFO" if log_file else None)
+    import numpy as np
     import pandas as pd
 
-    from .research.ignicao import carregar_tape, detectar, linha_csv, resumir
+    from .research.ignicao import (
+        amplitude_mediana,
+        candidatos,
+        carregar_tape,
+        detectar,
+        linha_csv,
+        maximo_possivel,
+        resumir,
+    )
 
     base = raw / "trade"
     todos = sorted(p.name.split("=", 1)[1] for p in base.glob("dt=*"))
@@ -2000,11 +2022,70 @@ def ignicao_cmd(
     hs = sorted(int(x) for x in horizontes_s.split(","))
     refr = refratario_s if refratario_s is not None else float(max(hs))
     empate = (stop_pts + custo_pts) / (alvo_pts + stop_pts)
+    hbar = barreira_s if barreira_s is not None else float(max(hs))
+
+    if so_taxa:
+        # ---- modo CEGO: nada depois do instante de deteccao e' calculado ----
+        lims = sorted(float(lim) for lim in so_taxa.split(","))
+        teto = maximo_possivel(refr, janela_s, inicio_hhmm, fim_hhmm)
+        typer.echo("=" * 72)
+        typer.echo(f"TAXA DE IGNICOES {symbol} (so' contagem, sem resultado)  janela "
+                   f"{janela_s:g}s  refratario {refr:g}s  teto {teto:.1f}/dia")
+        typer.echo("=" * 72)
+        cont_taxa: dict[float, list[int]] = {lim: [] for lim in lims}
+        amps: list[float] = []
+        for i, dia in enumerate(todos, 1):
+            win = carregar_tape(raw, symbol, dia)
+            for lim in lims:
+                cont_taxa[lim].append(len(candidatos(win, dia, limiar_pts=lim, janela_s=janela_s,
+                                              refratario_s=refr, inicio_hhmm=inicio_hhmm,
+                                              fim_hhmm=fim_hhmm)))
+            a = amplitude_mediana(win, dia, hbar, inicio_hhmm, fim_hhmm)
+            if a is not None:
+                amps.append(a)
+            typer.echo(f"[{i}/{len(todos)}] {dia}  " + "  ".join(
+                f"{lim:g}:{cont_taxa[lim][-1]}" for lim in lims)
+                + f"   amplitude {hbar / 60:g}min mediana={a}")
+            log.info("ignicao.taxa_dia", i=i, n=len(todos), dia=dia,
+                     contagens={str(lim): cont_taxa[lim][-1] for lim in lims}, amplitude=a)
+        typer.echo("\n" + "-" * 72)
+        typer.echo(f"{'limiar':>8} {'total':>6} {'por_dia':>8} {'min':>4} {'max':>4} "
+                   f"{'% do teto':>9}")
+        for lim in lims:
+            c = cont_taxa[lim]
+            pd_ = sum(c) / len(c)
+            typer.echo(f"{lim:8g} {sum(c):6d} {pd_:8.2f} {min(c):4d} {max(c):4d} "
+                       f"{100 * pd_ / teto:8.0f}%")
+        amp = float(np.median(amps)) if amps else None
+        if amp is not None:
+            typer.echo(f"\namplitude normal em {hbar / 60:g} min (max-min do preco, "
+                       f"mediana dos dias): {amp:.0f} pts")
+        # ---- REGRA declarada antes (HISTORICO 2026-09-25): aplicada, nao escolhida
+        escolhido = next((lim for lim in lims
+                          if sum(cont_taxa[lim]) / len(cont_taxa[lim]) <= taxa_alvo), None)
+        barreira = (round(fracao_amplitude * amp / 5.0) * 5.0) if amp is not None else None
+        typer.echo(f"\nREGRA: limiar = menor com por_dia <= {taxa_alvo:g}; barreira = "
+                   f"{fracao_amplitude:g} lim amplitude ({hbar:g}s), arredondada ao tick")
+        if escolhido is None:
+            typer.echo(f"  nenhum limiar da lista chega a <= {taxa_alvo:g}/dia: "
+                       f"acrescente limiares MAIORES e rode de novo")
+        elif barreira is None:
+            typer.echo("  sem amplitude medida (tape vazio?)")
+        else:
+            typer.echo(f"  -> limiar {escolhido:g} pts, barreira +-{barreira:g} pts em "
+                       f"ate' {hbar:g}s")
+            typer.echo(f"  rode: profit-tape ignicao --limiar-pts {escolhido:g} "
+                       f"--alvo-pts {barreira:g} --stop-pts {barreira:g} "
+                       f"--barreira-s {hbar:g} ...")
+        log.info("ignicao.taxa_total", limiares=lims,
+                 contagens={str(lim): cont_taxa[lim] for lim in lims}, amplitudes=amps, teto=teto,
+                 regra_limiar=escolhido, regra_barreira=barreira)
+        return
 
     typer.echo("=" * 72)
     typer.echo(f"IGNICOES {symbol}: >= {limiar_pts:g} pts em <= {janela_s:g}s  "
                f"confirmacao {confirmador} >= {conf_pts:g} pts oposto")
-    typer.echo(f"  barreira +{alvo_pts:g}/-{stop_pts:g}  custo {custo_pts:g}  "
+    typer.echo(f"  barreira +{alvo_pts:g}/-{stop_pts:g} em ate' {hbar:g}s  custo {custo_pts:g}  "
                f"-> empate p_alvo = {empate:.3f}   refratario {refr:g}s")
     typer.echo("=" * 72)
     evs = []
@@ -2014,7 +2095,7 @@ def ignicao_cmd(
         e = detectar(win, wdo, dia, limiar_pts=limiar_pts, janela_s=janela_s,
                      refratario_s=refr, conf_pts=conf_pts, horizontes_s=hs,
                      alvo_pts=alvo_pts, stop_pts=stop_pts,
-                     inicio_hhmm=inicio_hhmm, fim_hhmm=fim_hhmm)
+                     inicio_hhmm=inicio_hhmm, fim_hhmm=fim_hhmm, barreira_s=barreira_s)
         evs.extend(e)
         cont = {c: sum(x.classe == c for x in e) for c in ("confirma", "neutro", "contra")}
         typer.echo(f"[{i}/{len(todos)}] {dia}  ignicoes={len(e)}  {cont}  "

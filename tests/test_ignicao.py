@@ -110,3 +110,85 @@ def test_cli_ponta_a_ponta(tmp_path: Path) -> None:
     assert "09:25:30  +150 pts  confirma" in r.output
     df = pd.read_csv(tmp_path / "out" / "ignicao_eventos.csv")
     assert list(df["barreira"]) == ["alvo"] and list(df["classe"]) == ["confirma"]
+
+
+# ================================================================ v3.67
+from profittape.research.ignicao import (  # noqa: E402
+    amplitude_mediana,
+    candidatos,
+    maximo_possivel,
+)
+
+CKW = dict(janela_s=60, refratario_s=1800, inicio_hhmm=915, fim_hhmm=1700)
+
+
+def test_teto_de_eventos_por_dia_conferido_a_mao() -> None:
+    # 09:16 a 17:00 = 27.840 s; 27.840 // 1.800 = 15, +1 = 16
+    assert maximo_possivel(1800, 60, 915, 1700) == 16.0
+
+
+def test_candidatos_sao_cegos_ao_que_vem_depois() -> None:
+    """Truncar o tape logo depois de cada deteccao nao muda nada: a contagem
+    do --so-taxa nao depende do desfecho."""
+    rng = np.random.default_rng(11)
+    n = 7 * 3600 * 5
+    ts = T0 + np.arange(n, dtype=np.int64) * (S // 5)
+    px = (188000 + np.cumsum(rng.choice([-5, 0, 5], size=n, p=[0.3, 0.4, 0.3]))).astype(float)
+    win = Tape(ts, px, np.ones(n, np.int64), np.zeros(n, np.int64))
+    c = candidatos(win, DIA, limiar_pts=40, **CKW)  # type: ignore[arg-type]
+    assert len(c) > 5
+    corte = c[-1][0] + 1
+    trunc = Tape(ts[:corte], px[:corte], win.qtd[:corte], win.tipo[:corte])
+    assert candidatos(trunc, DIA, limiar_pts=40, **CKW) == c  # type: ignore[arg-type]
+    # limiar maior nunca gera MAIS eventos
+    assert len(candidatos(win, DIA, limiar_pts=80, **CKW)) <= len(c)  # type: ignore[arg-type]
+
+
+def test_amplitude_mediana_conferida_a_mao() -> None:
+    b0 = T0
+    win = _tape([b0 + 10 * S, b0 + 20 * S, b0 + 1810 * S, b0 + 1820 * S,
+                 b0 + 3610 * S, b0 + 3620 * S],
+                [188000, 188300, 188000, 188100, 188000, 188500])
+    # blocos de 30 min: amplitudes 300, 100, 500 -> mediana 300
+    assert amplitude_mediana(win, DIA, 1800, 915, 1700) == 300.0
+
+
+def test_barreira_s_mais_longa_decide_o_que_30min_nao_decidia() -> None:
+    win = _tape([B - 100 * S, B, B + 30 * S, B + 2500 * S],
+                [188000, 188000, 188150, 188500])
+    kw = dict(KW, alvo_pts=300, stop_pts=300)
+    assert detectar(win, _wdo(-1.0), DIA, **kw)[0].barreira == "nenhuma"  # type: ignore[arg-type]
+    e = detectar(win, _wdo(-1.0), DIA, barreira_s=3600, **kw)[0]  # type: ignore[arg-type]
+    assert e.barreira == "alvo"
+    assert e.mfe == 0.0          # MFE/MAE continuam no maior horizonte (30 min)
+
+
+def test_cli_so_taxa_nao_mostra_resultado(tmp_path: Path) -> None:
+    _gravar(tmp_path, "WINFUT", [B - 100 * S, B, B + 30 * S, B + 90 * S],
+            [188000, 188000, 188150, 188260])
+    r = CliRunner().invoke(app, ["ignicao", "--raw", str(tmp_path), "--so-taxa", "100,150,500",
+                                 "--saida", str(tmp_path / "out")])
+    assert r.exit_code == 0, r.output
+    assert "TAXA DE IGNICOES" in r.output and "teto 16.0/dia" in r.output
+    assert "100:1  150:1  500:0" in r.output
+    for proibido in ("p_alvo", "ret_", "mfe", "alvo=", "stop="):
+        assert proibido not in r.output
+    assert not (tmp_path / "out").exists()      # nem CSV
+
+
+def test_cli_so_taxa_aplica_a_regra_declarada(tmp_path: Path) -> None:
+    """Regra (HISTORICO 2026-09-25): limiar = menor com por_dia <= taxa-alvo;
+    barreira = fracao x amplitude mediana. Conferido a mao: contagens
+    100:1 150:1 500:0 -> 100; um bloco de 30 min de 188000 a 188260 ->
+    amplitude 260 -> barreira 130."""
+    _gravar(tmp_path, "WINFUT", [B - 100 * S, B, B + 30 * S, B + 90 * S],
+            [188000, 188000, 188150, 188260])
+    r = CliRunner().invoke(app, ["ignicao", "--raw", str(tmp_path),
+                                 "--so-taxa", "100,150,500"])
+    assert r.exit_code == 0, r.output
+    assert "amplitude normal em 30 min" in r.output and "260 pts" in r.output
+    assert "-> limiar 100 pts, barreira +-130 pts" in r.output
+    assert "--limiar-pts 100 --alvo-pts 130 --stop-pts 130 --barreira-s 1800" in r.output
+    r = CliRunner().invoke(app, ["ignicao", "--raw", str(tmp_path),
+                                 "--so-taxa", "100,150", "--taxa-alvo", "0.5"])
+    assert r.exit_code == 0 and "acrescente limiares MAIORES" in r.output

@@ -107,10 +107,12 @@ def _hora(ts: int) -> str:
     return dt.datetime.fromtimestamp(ts / _NS, _BRT).strftime("%H:%M:%S")
 
 
-def detectar(win: Tape, wdo: Tape, dia: str, *, limiar_pts: float, janela_s: float,
-             refratario_s: float, conf_pts: float, horizontes_s: list[int],
-             alvo_pts: float, stop_pts: float, inicio_hhmm: int, fim_hhmm: int
-             ) -> list[Ignicao]:
+def candidatos(win: Tape, dia: str, *, limiar_pts: float, janela_s: float,
+               refratario_s: float, inicio_hhmm: int, fim_hhmm: int
+               ) -> list[tuple[int, float]]:
+    """(indice no tape, movimento na janela) de cada ignicao, ja' com o
+    refratario. NAO olha nada depois do instante de deteccao: e' o que o
+    modo --so-taxa usa para escolher o limiar CEGO ao resultado."""
     if len(win) == 0:
         return []
     t0, t1 = janela_do_dia(dia, inicio_hhmm, fim_hhmm)
@@ -119,15 +121,64 @@ def detectar(win: Tape, wdo: Tape, dia: str, *, limiar_pts: float, janela_s: flo
     mov = win.px - antes
     cand = np.flatnonzero(np.isfinite(mov) & (np.abs(mov) >= limiar_pts - 1e-9)
                           & (win.ts >= t0 + jan) & (win.ts < t1))
-    hmax = max(horizontes_s) * _NS
-    out: list[Ignicao] = []
+    out: list[tuple[int, float]] = []
     livre_desde = -1
     for i in cand:
         t = int(win.ts[i])
         if t < livre_desde:
             continue
         livre_desde = t + int(refratario_s * _NS)
-        d = 1 if mov[i] > 0 else -1
+        out.append((int(i), float(mov[i])))
+    return out
+
+
+def maximo_possivel(refratario_s: float, janela_s: float,
+                    inicio_hhmm: int, fim_hhmm: int) -> float:
+    """Teto de eventos/dia imposto pelo refratario. Taxa perto dele = o
+    limiar dispara sempre que pode, e o evento nao e' raro (v3.66: 13-15
+    por dia com teto 16 -- 150 pts/60 s era oscilacao comum)."""
+    minutos = ((fim_hhmm // 100) * 60 + fim_hhmm % 100
+               - (inicio_hhmm // 100) * 60 - inicio_hhmm % 100)
+    return float(int((minutos * 60 - janela_s) // refratario_s) + 1)
+
+
+def amplitude_mediana(win: Tape, dia: str, bloco_s: float,
+                      inicio_hhmm: int, fim_hhmm: int) -> float | None:
+    """Mediana de (max - min) do preco em blocos consecutivos de `bloco_s`.
+    Mede a oscilacao NORMAL do dia, independente de qualquer evento -- e' a
+    regua para a barreira (v3.66: +-100 dentro de uma oscilacao de ~550 em
+    30 min virou cara ou coroa)."""
+    if len(win) == 0:
+        return None
+    t0, t1 = janela_do_dia(dia, inicio_hhmm, fim_hhmm)
+    passo = int(bloco_s * _NS)
+    amps = []
+    for a in range(t0, t1 - passo + 1, passo):
+        i0, i1 = np.searchsorted(win.ts, [a, a + passo], side="left")
+        if i1 - i0 >= 2:
+            seg = win.px[i0:i1]
+            amps.append(float(seg.max() - seg.min()))
+    return float(np.median(amps)) if amps else None
+
+
+def detectar(win: Tape, wdo: Tape, dia: str, *, limiar_pts: float, janela_s: float,
+             refratario_s: float, conf_pts: float, horizontes_s: list[int],
+             alvo_pts: float, stop_pts: float, inicio_hhmm: int, fim_hhmm: int,
+             barreira_s: float | None = None) -> list[Ignicao]:
+    """`barreira_s`: ate' quando a barreira pode ser tocada (default = maior
+    horizonte, o comportamento v3.66). Barreira larga precisa de mais tempo
+    para decidir; sem isso os `sem_decisao` crescem e saem do p_alvo."""
+    if len(win) == 0:
+        return []
+    jan = int(janela_s * _NS)
+    hmax = max(horizontes_s) * _NS
+    hbar = int((barreira_s if barreira_s is not None else max(horizontes_s)) * _NS)
+    out: list[Ignicao] = []
+    for i, mv in candidatos(win, dia, limiar_pts=limiar_pts, janela_s=janela_s,
+                            refratario_s=refratario_s, inicio_hhmm=inicio_hhmm,
+                            fim_hhmm=fim_hhmm):
+        t = int(win.ts[i])
+        d = 1 if mv > 0 else -1
         p0 = float(win.px[i])
 
         # --- confirmacao pelo WDO na mesma janela
@@ -163,14 +214,16 @@ def detectar(win: Tape, wdo: Tape, dia: str, *, limiar_pts: float, janela_s: flo
         # o ponto de partida conta: MFE >= 0 e MAE <= 0 por definicao
         mfe = max(0.0, float(cam.max())) if len(cam) else 0.0
         mae = min(0.0, float(cam.min())) if len(cam) else 0.0
+        kb = int(np.searchsorted(win.ts, t + hbar, side="right"))
+        cam_b = (win.px[i + 1:kb] - p0) * d
         barreira = "nenhuma"
-        hit_a = np.flatnonzero(cam >= alvo_pts - 1e-9)
-        hit_s = np.flatnonzero(cam <= -stop_pts + 1e-9)
+        hit_a = np.flatnonzero(cam_b >= alvo_pts - 1e-9)
+        hit_s = np.flatnonzero(cam_b <= -stop_pts + 1e-9)
         if len(hit_a) or len(hit_s):
             ia = hit_a[0] if len(hit_a) else math.inf
             is_ = hit_s[0] if len(hit_s) else math.inf
             barreira = "alvo" if ia < is_ else "stop"
-        out.append(Ignicao(dia, _hora(t), t, d, float(mov[i]), p0, wdo_mov, classe,
+        out.append(Ignicao(dia, _hora(t), t, d, mv, p0, wdo_mov, classe,
                            None if agressao is None else round(agressao, 3),
                            ret, mfe, mae, barreira))
     return out
