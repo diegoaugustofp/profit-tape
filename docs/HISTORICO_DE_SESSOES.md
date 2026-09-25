@@ -4016,3 +4016,13 @@ Só documentação; nenhum código tocado (suíte verde; ruff e mypy limpos).
   tambem o dado que contraria a intuicao: D pequeno foi o MELHOR quartil
   (0,575), entao cortar sinal pequeno tiraria a parte boa -- e' candidato
   de dimensionamento, nao de filtro.
+- v3.72 (docs): correcao do candidato 1 da ficha, depois de o operador
+  rejeitar o meu argumento -- e com razao. Ele falou de ESTADO DO MERCADO
+  (media horizontal, preco andando de lado num canal) e eu respondi com
+  DISTANCIA da media, que e' outra coisa. Medido em 25/09: as 15 barras
+  ate' o sinal tiveram canal de 1.150 pts e deslocamento liquido de 165;
+  as 15 anteriores, 2.275 e 840 -- metade do canal, um quinto do
+  movimento. O ponto de fundo: a ficha NAO TEM medida de estado do
+  mercado; o unico teste de regime e' close(t) contra o NIVEL da MME80.
+  Nao e' que o criterio de lateral seja a distancia da media -- e' que
+  criterio de lateral nao existe.

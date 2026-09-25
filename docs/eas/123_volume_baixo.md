@@ -113,15 +113,16 @@ um é família nova sobre amostra queimada.
 
 | # | candidato | de onde veio | o que se sabe hoje |
 |---|---|---|---|
-| 1 | **Filtro Éden** (MME8 e MME80 na mesma direção) | listado em "Fora da v0" na ficha 5 desde o desenho; **reforçado pela observação do operador em 25/09** — sinal armado às 16:30 com o gráfico lateralizado | O regime da ficha é só `close(t)` contra a MME80; em 25/09 o preço estava 776 pts ABAIXO dela (não é lateral por esse critério). O que falta é a direção das médias. Nunca medido |
+| 1 | **Estado do mercado: tendência x LATERALIZAÇÃO** — direção das médias (filtro Éden: MME8 e MME80 no mesmo sentido) e/ou compressão de amplitude | "Fora da v0" na ficha 5 desde o desenho, **e a observação do operador em 25/09**: sinal às 16:30 com o mercado andando de lado e a MME80 horizontal | **A ficha NÃO TEM medida de estado do mercado.** O único teste de regime é `close(t)` contra o NÍVEL da MME80 — não há inclinação, nem amplitude, nem compressão. Medido no dia: as 15 barras até o sinal tiveram canal de 1.150 pts e deslocamento líquido de 165; as 15 anteriores, 2.275 e 840. Metade do canal, um quinto do movimento. **Nunca medido no histórico** |
 | 2 | **Inside bar** | "Fora da v0" na ficha 5 (a página do QuantBrasil oferece) | O funil reporta quantos sinais ele deixaria passar; nunca testado |
 | 3 | **Corte por D** | observação da ficha 9.2 | **A intuição está INVERTIDA**: Q1 (D < 390) deu p1 **0,575**, o melhor quartil; Q4 (D > 825) deu 0,498. Cortar sinal pequeno tiraria a parte boa. O que cai com D pequeno é o GANHO ABSOLUTO (D=195 → ~18 pts líquidos esperados; D=485 → ~60). Candidato de DIMENSIONAMENTO, não de filtro |
 | 4 | **Alvo por amplitude das 3 barras** | "Fora da v0" na ficha 5 | Assimétrico, variância maior; nunca medido |
 | 5 | **Porta de volume no rompimento** (agressão/delta na barra t+1) | ficha 5, "Porta de volume" | É a mesma porta do ORB; implementa-se uma vez. Nunca medida |
 
 **Como medir sem queimar (quando a revisão vier):** o diário pode
-GRAVAR a informação de cada candidato — direção da MME8, distância à
-MME80, inside bar, agressão em t+1 — sem que nada disso vire regra.
+GRAVAR a informação de cada candidato — inclinação da MME8 e da MME80,
+canal e deslocamento líquido das N barras anteriores, inside bar,
+agressão em t+1 — sem que nada disso vire regra.
 Gravar é dimensionar; escolher é testar. Se a revisão começar com o
 diário já cheio dessas colunas, ela começa com dado em vez de memória.
 
