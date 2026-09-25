@@ -3879,3 +3879,19 @@ Só documentação; nenhum código tocado (suíte verde; ruff e mypy limpos).
   cruzado no `ea-micro-replay`, yaml passivo novo. Defaults = v3.63
   (26 testes antigos intactos). 10 testes novos; suíte 1.112, ruff e mypy
   limpos.
+- **Replay v3.64 lido (24/09):** livro cruzado = artefato de reconstrução
+  (42.722 episódios, p90 2 ms, 99,6% ≤ 50 ms; as amostras longas são o
+  leilão de abertura). Taker: bruto −5,3/op ≈ o spread; sonda h5s +1,4,
+  h30s +4,7 contra break-even ~9 → **microprice taker descartado**.
+  Passiva: −6,8/op, mas o fill pessimista só executa quando o preço já
+  andou 1 tick contra (o caso ask ≤ P é livro travado, filtrado) — é
+  limite inferior, não veredito. Pendência: fill com posição na fila pelo
+  tape. Tiny_book de mais 17 pregões em `D:\backup_raw\data\raw`.
+- **v3.65 — `profit-tape leadlag`** (`research/leadlag.py`): WDO → WIN em
+  ms. Grade fixa com ffill, correlação cruzada somada entre dias, leitura
+  COM SINAL (`defasagem` não serve: resume por `papel > win`, que inverte
+  para par de sentido oposto, e pula segundos vazios). Estudo de eventos
+  com subconjunto `seguidor_parado` ("o dólar andou, o índice não").
+  Contexto: `defasagem` (17/09) mostrou o WIN chegando ANTES das ações em
+  15 s. 10 testes (conferência à mão, defasagem conhecida de 300 ms,
+  controle negativo independente, CLI ponta a ponta); suíte 1.122.

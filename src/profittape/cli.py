@@ -1949,6 +1949,130 @@ def ea_123_replay(
     typer.echo(f"\n  Agora: profit-tape diario {cfg.registro_dir} --ea {s.nome}")
 
 
+@app.command(name="leadlag")
+def leadlag_cmd(
+    raw: Path = typer.Option(Path("data/raw"), "--raw",
+                             help="Raiz com trade/dt=/sym= (raw ou curated)."),
+    de: str | None = typer.Option(None, "--de", help="YYYY-MM-DD"),
+    ate: str | None = typer.Option(None, "--ate", help="YYYY-MM-DD"),
+    dias: str | None = typer.Option(None, "--dias", help="YYYY-MM-DD,YYYY-MM-DD"),
+    lider: str = typer.Option("WDOFUT", "--lider"),
+    seguidor: str = typer.Option("WINFUT", "--seguidor"),
+    tick_lider: float = typer.Option(0.5, "--tick-lider"),
+    tick_seguidor: float = typer.Option(5.0, "--tick-seguidor"),
+    sentido: int = typer.Option(-1, "--sentido", help="-1: seguidor anda CONTRA o lider"),
+    passo_ms: int = typer.Option(50, "--passo-ms", help="grade da correlacao cruzada"),
+    lags_ms: str = typer.Option("50,100,250,500,1000,2000", "--lags-ms",
+                                help="defasagens positivas; as negativas sao simetricas"),
+    limiar_ticks: int = typer.Option(2, "--limiar-ticks", help="evento: lider anda isto"),
+    janela_ms: int = typer.Option(500, "--janela-ms", help="...dentro desta janela"),
+    horizontes_ms: str = typer.Option("250,500,1000,5000,30000", "--horizontes-ms"),
+    refratario_ms: int = typer.Option(2000, "--refratario-ms"),
+    inicio_hhmm: int = typer.Option(915, "--inicio-hhmm"),
+    fim_hhmm: int = typer.Option(1720, "--fim-hhmm"),
+    log_level: str = typer.Option("WARNING", "--log-level"),
+    log_file: Path | None = typer.Option(None, "--log-file"),
+) -> None:
+    """
+    LEAD-LAG em milissegundos (default: WDO lidera o WIN, sentido oposto).
+    Correlacao cruzada em grade fixa + estudo de eventos "o dolar andou e
+    o indice ainda nao". Mede ESTRUTURA, nao simula fill: compare pos_h do
+    subconjunto `seguidor_parado` com ~9 pts (spread 5 + custo 4, taker).
+    Ver research/leadlag.py (inclusive por que nao o `defasagem`).
+    """
+    configurar(log_level, arquivo=log_file, nivel_arquivo="INFO" if log_file else None)
+    from .research.leadlag import (
+        AcumCorr,
+        assimetria,
+        carregar_precos,
+        eventos,
+        janela_do_dia,
+        resumir_eventos,
+        retornos_na_grade,
+    )
+
+    base = raw / "trade"
+    todos = sorted(p.name.split("=", 1)[1] for p in base.glob("dt=*"))
+    if dias:
+        alvo = {d.strip() for d in dias.split(",")}
+        todos = [d for d in todos if d in alvo]
+    if de:
+        todos = [d for d in todos if d >= de]
+    if ate:
+        todos = [d for d in todos if d <= ate]
+    todos = [d for d in todos if (base / f"dt={d}" / f"sym={lider}").exists()
+             and (base / f"dt={d}" / f"sym={seguidor}").exists()]
+    if not todos:
+        raise typer.BadParameter(f"nenhum pregao com {lider} E {seguidor} em {base}")
+    lags_pos = sorted({int(x) for x in lags_ms.split(",")})
+    if any(k % passo_ms for k in lags_pos):
+        raise typer.BadParameter("cada defasagem precisa ser multiplo de --passo-ms")
+    lags = [-k for k in reversed(lags_pos)] + [0] + lags_pos
+    hs = [int(x) for x in horizontes_ms.split(",")]
+
+    typer.echo("=" * 72)
+    typer.echo(f"LEAD-LAG {lider} -> {seguidor}  sentido={sentido:+d}  grade={passo_ms}ms  "
+               f"evento: {limiar_ticks} ticks em {janela_ms}ms")
+    typer.echo("=" * 72)
+    acc_total = AcumCorr(lags)
+    todos_ev = []
+    dias_lider_frente: dict[int, int] = {k: 0 for k in lags_pos}
+    for i, dia in enumerate(todos, 1):
+        tl, pl = carregar_precos(raw, lider, dia)
+        tsg, psg = carregar_precos(raw, seguidor, dia)
+        t0, t1 = janela_do_dia(dia, inicio_hhmm, fim_hhmm)
+        rl = retornos_na_grade(tl, pl, tick_lider, t0, t1, passo_ms)
+        rs = retornos_na_grade(tsg, psg, tick_seguidor, t0, t1, passo_ms)
+        acc_dia = AcumCorr(lags)
+        acc_dia.somar(rl, rs, passo_ms)
+        acc_total.somar(rl, rs, passo_ms)
+        c = acc_dia.corr()
+        a = assimetria(c, sentido)
+        for k in lags_pos:
+            dias_lider_frente[k] += bool(a.get(k) is not None and a[k] > 0)  # type: ignore[operator]
+        evs = eventos(tl, pl, tsg, psg, tick_lider=tick_lider, limiar_ticks=limiar_ticks,
+                      janela_ms=janela_ms, horizontes_ms=hs, refratario_ms=refratario_ms,
+                      sentido=sentido, t0=t0, t1=t1)
+        todos_ev.extend(evs)
+        r = resumir_eventos(evs, hs, tick_seguidor)
+        c0 = c.get(0)
+        typer.echo(f"\n[{i}/{len(todos)}] {dia}  negocios "
+                   f"{lider}={len(tl):,} {seguidor}={len(tsg):,}")
+        typer.echo(f"  corr0={None if c0 is None else round(c0, 3)}  assimetria(k>0 = "
+                   f"{lider} na frente): "
+                   + " ".join(f"{k}ms={None if v is None else round(v, 3)}" for k, v in a.items()))
+        typer.echo(f"  eventos={r['todos']['n']} parado={r['seguidor_parado']['n']}  "
+                   f"parado: " + " ".join(
+                       f"h{h}={r['seguidor_parado'].get(f'h{h}ms', {}).get('media_pts')}"
+                       for h in hs))
+        log.info("leadlag.dia", i=i, n=len(todos), dia=dia, corr=c, assimetria=a,
+                 eventos=r)
+
+    c = acc_total.corr()
+    a = assimetria(c, sentido)
+    r = resumir_eventos(todos_ev, hs, tick_seguidor)
+    typer.echo("\n" + "-" * 72)
+    typer.echo(f"TOTAL {len(todos)} pregoes (estatisticas SOMADAS, nao media de dias)")
+    typer.echo("  correlacao cruzada c(k) = corr(r_lider(t), r_seguidor(t+k)):")
+    for k in lags:
+        v = c[k]
+        typer.echo(f"    k={k:+6d}ms  c={'   -   ' if v is None else f'{v:+.4f}'}  "
+                   f"n={int(acc_total.n[k]):,}")
+    typer.echo("  assimetria s*(c(k)-c(-k)), >0 = lider na frente; dias com >0:")
+    for k in lags_pos:
+        v = a[k]
+        typer.echo(f"    {k:5d}ms  {'-' if v is None else f'{v:+.4f}'}   "
+                   f"{dias_lider_frente[k]}/{len(todos)} dias")
+    typer.echo("  eventos (pontos do seguidor, na direcao esperada):")
+    for nome in ("todos", "seguidor_parado"):
+        typer.echo(f"    {nome}: {r[nome]}")
+    typer.echo("  Leitura: so' interessa se `seguidor_parado` pos_h medio for positivo")
+    typer.echo("  E comparavel a ~9 pts (spread 5 + custo 4). Preco = ultimo negocio:")
+    typer.echo("  cada ponto carrega +-2,5 de bid-ask bounce (a media nao, a dispersao sim).")
+    log.info("leadlag.total", dias=len(todos), corr=c, assimetria=a, eventos=r,
+             dias_lider_frente=dias_lider_frente)
+
+
 @app.command(name="ea-micro-replay")
 def ea_micro_replay(
     yaml_path: Path = typer.Argument(..., help="config/ea_microprice.yaml"),
