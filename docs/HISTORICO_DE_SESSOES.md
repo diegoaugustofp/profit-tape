@@ -4026,3 +4026,31 @@ Só documentação; nenhum código tocado (suíte verde; ruff e mypy limpos).
   mercado; o unico teste de regime e' close(t) contra o NIVEL da MME80.
   Nao e' que o criterio de lateral seja a distancia da media -- e' que
   criterio de lateral nao existe.
+
+### 2026-09-25 — histórico M1 exportado do Profit (v3.73)
+
+- O operador exportou OHLC de 1 min do WIN, 27/09/2021 em diante
+  (`data/winfut_m1_historico.csv`; colunas data_hora, abertura, maxima,
+  minima, fechamento, volume, volume_ticks). Substitui o dump NTSL (limite
+  de ~2.000 linhas do console) para a linha da ignição.
+- **A série é AJUSTADA MULTIPLICATIVAMENTE:** na amostra, só 9 de 50
+  preços eram múltiplos de 5, e os degraus eram 8/9, 17, 25/26, 34, 43 —
+  o tick × ~1,71. 195.629 / 1,7146 ≈ 114.093 (WIN real de set/2021).
+  Pontos do passado são inflados pelo fator do dia; regra em pontos fixos
+  não serve; regra NORMALIZADA (fração da amplitude) é invariante; não há
+  salto nos vencimentos; custo em pts reais × fator.
+- **v3.73 — `profit-tape m1-valida`** (`research/m1_historico.py`): só
+  valida, não testa hipótese. Inventário; fator por dia pela granularidade
+  em DOIS estágios (o 1º sozinho deu 1,729 na amostra; o 2º, 1,7146);
+  conferência contra o tape nos dias em comum por dois caminhos
+  independentes (preço com a razão do dia; negócios/min × `volume_ticks`)
+  em deslocamentos −1/0/+1 min. Defeitos pegos pelos testes: (1) comparar
+  preço com o fator da granularidade media o erro do fator (0,1% a 188 mil
+  = 188 pts), não o alinhamento — passou a usar a razão medida do dia, e o
+  fator é conferido à parte em erro relativo; (2) contagem constante por
+  minuto dá correlação indefinida (NaN), que venceria ou perderia a escolha
+  por acaso — virou None. Controle negativo (rótulo pelo FIM do minuto):
+  apontado com 100% × 7% de fechamentos. 7 testes.
+- Pendente para o estudo M1 da ignição: divisão da amostra (proposta:
+  2021-09→2022 depuração; 2023–25 uma rodada; 2026 consistência) —
+  decisão do operador.

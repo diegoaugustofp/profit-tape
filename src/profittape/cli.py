@@ -1950,6 +1950,126 @@ def ea_123_replay(
     typer.echo(f"\n  Agora: profit-tape diario {cfg.registro_dir} --ea {s.nome}")
 
 
+@app.command(name="m1-valida")
+def m1_valida_cmd(
+    csv: Path = typer.Argument(Path("data/winfut_m1_historico.csv"),
+                               help="OHLC de 1 min exportado do Profit"),
+    raw: list[Path] = typer.Option(
+        [Path("data/raw")], "--raw",
+        help="Raiz(es) com trade/dt=/sym=WINFUT para conferir os dias em comum. "
+             "Repita a opcao para mais de uma (ex.: backup e local)."),
+    dias: str | None = typer.Option(None, "--dias",
+                                    help="Limita a conferencia a estes dias (YYYY-MM-DD,...)"),
+    sem_tape: bool = typer.Option(False, "--sem-tape", help="So' o inventario do export"),
+    saida: Path = typer.Option(Path("data/research/m1_historico"), "--saida"),
+    log_level: str = typer.Option("WARNING", "--log-level"),
+    log_file: Path | None = typer.Option(None, "--log-file"),
+) -> None:
+    """
+    VALIDA o historico M1 exportado, sem testar hipotese: inventario, fator
+    do ajuste multiplicativo por dia (pela granularidade) e, nos dias com
+    tape, conferencia de preco, fator e horario (deslocamento -1/0/+1 min)
+    por dois caminhos independentes. Ver research/m1_historico.py.
+    """
+    configurar(log_level, arquivo=log_file, nivel_arquivo="INFO" if log_file else None)
+    from itertools import pairwise
+
+    import numpy as np
+    import pandas as pd
+
+    from .research.ignicao import carregar_tape
+    from .research.m1_historico import (
+        barras_do_tape,
+        carregar_m1,
+        comparar_com_tape,
+        inventario_dia,
+        melhor_deslocamento,
+    )
+
+    df = carregar_m1(csv)
+    grupos = dict(tuple(df.groupby("dia", sort=True)))
+    inv = pd.DataFrame([{"dia": d, **inventario_dia(g)} for d, g in grupos.items()])
+    typer.echo("=" * 72)
+    typer.echo(f"HISTORICO M1 {csv.name}: {len(df):,} barras, {len(inv)} pregoes, "
+               f"{inv['dia'].iloc[0]} a {inv['dia'].iloc[-1]}")
+    typer.echo("=" * 72)
+    typer.echo(f"  barras/pregao: mediana {int(inv['barras'].median())}, "
+               f"min {int(inv['barras'].min())} "
+               f"({inv['dia'].iloc[int(inv['barras'].to_numpy().argmin())]}), "
+               f"max {int(inv['barras'].max())}")
+    typer.echo(f"  primeira barra: {inv['primeira'].value_counts().head(3).to_dict()}  "
+               f"ultima: {inv['ultima'].value_counts().head(3).to_dict()}")
+    typer.echo(f"  pregoes com duplicatas: {int((inv['duplicatas'] > 0).sum())}   "
+               f"com lacunas intradia: {int((inv['lacunas'] > 0).sum())} "
+               f"(mediana {int(inv['lacunas'].median())}, max {int(inv['lacunas'].max())})")
+    datas = pd.to_datetime(inv["dia"])
+    buracos = [(a.date().isoformat(), b.date().isoformat())
+               for a, b in pairwise(datas) if (b - a).days > 4]
+    typer.echo(f"  intervalos > 4 dias corridos sem pregao: {buracos or 'nenhum'}")
+    sem_fator = inv.loc[inv["fator"].isna(), "dia"].tolist()
+    typer.echo(f"  fator nao medido: {sem_fator or 'nenhum'}")
+    inv["mes"] = inv["dia"].str[:7]
+    fm = inv.groupby("mes")["fator"].median()
+    typer.echo("  fator do ajuste (mediana do mes; 1,0 = preco real):")
+    meses = list(fm.items())
+    for i in range(0, len(meses), 6):
+        typer.echo("    " + "  ".join(f"{m}={v:.4f}" for m, v in meses[i:i + 6]))
+    saida.mkdir(parents=True, exist_ok=True)
+    inv.to_csv(saida / "inventario_m1.csv", index=False)
+    log.info("m1_valida.inventario", pregoes=len(inv), barras=len(df),
+             sem_fator=sem_fator, buracos=buracos)
+    if sem_tape:
+        return
+
+    alvo = {d.strip() for d in dias.split(",")} if dias else None
+    comuns: list[tuple[str, Path]] = []
+    for r in raw:
+        for pasta in sorted((r / "trade").glob("dt=*")):
+            d = pasta.name.split("=", 1)[1]
+            if d in grupos and (pasta / "sym=WINFUT").exists() and (alvo is None or d in alvo) \
+                    and d not in {c[0] for c in comuns}:
+                comuns.append((d, r))
+    comuns.sort()
+    typer.echo(f"\nCONFERENCIA CONTRA O TAPE: {len(comuns)} pregoes em comum")
+    if not comuns:
+        return
+    linhas = []
+    for i, (d, r) in enumerate(comuns, 1):
+        tb = barras_do_tape(carregar_tape(r, "WINFUT", d))
+        g = grupos[d]
+        f = float(inv.loc[inv["dia"] == d, "fator"].iloc[0])
+        comp = comparar_com_tape(g, tb)
+        mel = melhor_deslocamento(comp)
+        c0 = comp.get(0, {})
+        linhas.append({"dia": d, "fator_gran": round(f, 5), **{
+            f"s{s}_{k}": v for s, cs in comp.items() for k, v in cs.items()}, **mel})
+        typer.echo(f"[{i}/{len(comuns)}] {d}  fator_gran={f:.5f} razao={c0.get('razao_mediana')} "
+                   "fech_ok(-1/0/+1)="
+                   + "/".join(str(comp[s].get("fech_ok_pct")) for s in (-1, 0, 1))
+                   + "  corr(-1/0/+1)=" + "/".join(
+                       str(comp[s].get("corr_negocios_x_volume_ticks")) for s in (-1, 0, 1))
+                   + f"  melhor: preco={mel['por_preco']} contagem={mel['por_contagem']}")
+        log.info("m1_valida.dia", i=i, n=len(comuns), dia=d, fator=f, comparacao=comp, melhor=mel)
+    res = pd.DataFrame(linhas)
+    res.to_csv(saida / "conferencia_tape.csv", index=False)
+    concord = res[(res["por_preco"] == res["por_contagem"])]
+    typer.echo("\n" + "-" * 72)
+    typer.echo(f"deslocamento (preco): {res['por_preco'].value_counts().to_dict()}   "
+               f"(contagem): {res['por_contagem'].value_counts().to_dict()}   "
+               f"concordam: {len(concord)}/{len(res)}")
+    if "s0_razao_mediana" in res:
+        err = 100 * (res["fator_gran"] / res["s0_razao_mediana"] - 1).abs()
+        typer.echo(f"fator da granularidade x razao medida: erro relativo mediano "
+                   f"{err.median():.3f}%, max {err.max():.3f}% "
+                   f"({res['dia'].iloc[int(err.to_numpy().argmax())]})")
+    typer.echo("  Leitura: deslocamento 0 nas duas medidas = rotulo do export e' o INICIO")
+    typer.echo("  do minuto; fator_gran ~ razao = o fator do historico e' confiavel.")
+    typer.echo(f"  arquivos: {(saida / 'inventario_m1.csv').resolve()} e conferencia_tape.csv")
+    log.info("m1_valida.total", dias=len(res), concordam=len(concord),
+             por_preco=res["por_preco"].value_counts().to_dict(),
+             media_fech_ok_s0=float(np.nanmean(res.get("s0_fech_ok_pct", pd.Series([np.nan])))))
+
+
 @app.command(name="ea-ignicao-replay")
 def ea_ignicao_replay_cmd(
     yaml_path: Path = typer.Argument(..., help="config/ea_ignicao.yaml"),
