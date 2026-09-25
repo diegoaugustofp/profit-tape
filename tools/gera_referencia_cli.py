@@ -107,6 +107,7 @@ COMANDOS: dict[str, tuple[str, str]] = {
     "leadlag": ("contraparte", "research/leadlag.py (docstring); HISTORICO 2026-09-25"),
     "ignicao": ("contraparte", "research/ignicao.py (docstring); HISTORICO 2026-09-25"),
     "m1-valida": ("contraparte", "research/m1_historico.py (docstring); HISTORICO 2026-09-25"),
+    "ignicao-m1": ("contraparte", "research/ignicao_m1.py (docstring); eas/ignicao.md"),
     "iceberg": ("contraparte", "RESEARCH_PLANO.md (ICEBERG)"),
     "book-recomposicao": ("contraparte", "RESEARCH_PLANO.md (RECOMPOSICAO NO LIVRO)"),
     "opcoes-vencimento": ("contraparte", "RESEARCH_PLANO.md (Opcao sobre acao)"),

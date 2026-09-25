@@ -4054,3 +4054,19 @@ Só documentação; nenhum código tocado (suíte verde; ruff e mypy limpos).
 - Pendente para o estudo M1 da ignição: divisão da amostra (proposta:
   2021-09→2022 depuração; 2023–25 uma rodada; 2026 consistência) —
   decisão do operador.
+- **Fast-track confirmado pelo operador para o histórico M1.** Perguntado
+  "o quanto estamos ferindo o fast-track", a resposta honesta foi: muito —
+  guarda de amostra, trials e divisão em 4 amostras são o rigor que a
+  instrução corta. Mantidas só as salvaguardas de minutos (critério antes,
+  número escolhido sem olhar resultado, conta à mão, verificador que
+  reprova o caso errado). Parâmetros: proporções do TAPE (λ 0,4726;
+  barreira 0,5 × A), escolhidas pelo operador. Mais de uma rodada permitida.
+  Sem corte de regime: todo o export é pós-pandemia (nota do operador).
+- **v3.74 — `profit-tape ignicao-m1`** (`research/ignicao_m1.py`): regra
+  na ficha `docs/eas/ignicao.md`. Testes: conta à mão, bordas (09:16,
+  17:00, candles não consecutivos, refratário), INVARIÂNCIA ao ajuste
+  (×1,7 não muda evento nem resultado), controle negativo e tradução
+  M1 × tape. Defeito pego pelo teste: o controle negativo gaussiano não
+  gerava NENHUM evento (550 pts em 1 min = 9 desvios) — passou a plantar
+  os mesmos saltos SEM continuação (p_alvo 0,475, IC cobre 0,5; com
+  continuação, 0,949).

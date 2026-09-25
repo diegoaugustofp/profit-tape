@@ -76,6 +76,36 @@ depois).
 3. Record com `--ea-livro-ao-vivo`: sem ele, `fill=tape` e o deslizamento
    sai zero **por construção**, não medido.
 
+## Histórico M1 — fast-track (declarado 2026-09-25, antes de qualquer número)
+
+**Decisão do operador:** seguir o fast-track do projeto. Sem guarda de
+amostra, sem contagem de trials, sem IC deflacionado; mais de uma rodada é
+permitida. Ficam as salvaguardas de engenharia: parâmetros fixados antes,
+conta à mão, ambíguo reportado. A **consistência por ano** faz o papel da
+amostra cega. (Uma divisão em quatro amostras, pela convenção de
+`eas_preco_teste.py`, foi proposta e recusada por ser o rigor que o
+fast-track corta.)
+
+- **Dado:** `data/winfut_m1_historico.csv`, 27/09/2021 em diante, série
+  AJUSTADA multiplicativamente (fator 1,715 → 1,000); validado contra o
+  tape (rótulo = início do minuto; `volume_ticks` = negócios do tape).
+- **A** = mediana das amplitudes de 60 min (blocos a partir de 09:15) dos
+  20 pregões anteriores.
+- **Evento:** fechamento(t) − fechamento(t−1), candles consecutivos,
+  |mov| ≥ **0,4726 × A** (proporção do tape: 500 / 1.058); decisão no fim do
+  candle t em [09:16, 17:00); refratário 30 min.
+- **Barreira** 0,5 × A a partir do fechamento de t, até 60 min; os dois
+  lados no mesmo candle = ambíguo (fora do p_alvo).
+- **Empate:** (B + C) / 2B, C = (9 + 30) pts reais × fator do dia.
+- **Critério:** IC95 comum do total acima do empate médio **e** p_alvo > 0,5
+  na maioria dos anos → favorável; IC95 superior abaixo do empate → contra;
+  resto → inconclusivo.
+- **Conferência de tradução:** eventos M1 de 2026 × CSVs de eventos do tape
+  (`--comparar-tape`). É outro evento (candle fixo × janela corrida de 60 s);
+  a conferência mede o quanto eles coincidem.
+
+Comando: `profit-tape ignicao-m1` (v3.74).
+
 ## Resultados do forward
 
 Nenhum ainda.

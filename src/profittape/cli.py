@@ -1950,6 +1950,89 @@ def ea_123_replay(
     typer.echo(f"\n  Agora: profit-tape diario {cfg.registro_dir} --ea {s.nome}")
 
 
+@app.command(name="ignicao-m1")
+def ignicao_m1_cmd(
+    csv: Path = typer.Argument(Path("data/winfut_m1_historico.csv"),
+                               help="OHLC de 1 min exportado do Profit"),
+    de: str | None = typer.Option(None, "--de", help="YYYY-MM-DD"),
+    ate: str | None = typer.Option(None, "--ate", help="YYYY-MM-DD"),
+    lambda_: float = typer.Option(
+        500.0 / 1058.0, "--lambda",
+        help="limiar = lambda x A (default: proporcao do tape, 500/1.058)"),
+    fracao_barreira: float = typer.Option(0.5, "--fracao-barreira",
+                                          help="barreira = fracao x A"),
+    comparar_tape: list[Path] = typer.Option(
+        [], "--comparar-tape",
+        help="CSV(s) de eventos do `profit-tape ignicao` (tape) para conferir a "
+             "TRADUCAO nos dias em comum. Repita para mais de um."),
+    saida: Path = typer.Option(Path("data/research/ignicao_m1"), "--saida"),
+    log_level: str = typer.Option("WARNING", "--log-level"),
+    log_file: Path | None = typer.Option(None, "--log-file"),
+) -> None:
+    """
+    IGNICAO no historico M1 -- FAST-TRACK: sem guarda de amostra, sem trial,
+    sem deflacao. Parametros fixados antes (proporcoes do tape), resultado
+    POR ANO (a consistencia substitui a amostra cega). Ver research/ignicao_m1.py.
+    """
+    configurar(log_level, arquivo=log_file, nivel_arquivo="INFO" if log_file else None)
+    import pandas as pd
+
+    from .research.ignicao_m1 import (
+        comparar_com_tape,
+        detectar_historico,
+        linha,
+        placar,
+    )
+    from .research.m1_historico import carregar_m1
+
+    df = carregar_m1(csv)
+    # A amplitude precisa dos 20 pregoes ANTES de --de: corta so' depois.
+    evs, dias = detectar_historico(df, lambda_=lambda_, fracao_barreira=fracao_barreira)
+    if de:
+        evs = [e for e in evs if e.dia >= de]
+        dias = dias[dias["dia"] >= de]
+    if ate:
+        evs = [e for e in evs if e.dia <= ate]
+        dias = dias[dias["dia"] <= ate]
+    uteis = dias[dias["A"].notna()]
+    typer.echo("=" * 72)
+    typer.echo(f"IGNICAO M1 (fast-track)  lambda={lambda_:.4f}  barreira={fracao_barreira:g} x A  "
+               f"custo (9+30) pts reais x fator")
+    typer.echo(f"  {len(uteis)} pregoes com A ({uteis['dia'].min()} a {uteis['dia'].max()})")
+    typer.echo("=" * 72)
+    anos = sorted({e.ano for e in evs})
+    for ano in anos:
+        n_p = int((uteis["dia"].str[:4] == str(ano)).sum())
+        typer.echo(f"  {ano}: {placar([e for e in evs if e.ano == ano], n_p)}")
+    tot = placar(evs, len(uteis))
+    typer.echo("-" * 72)
+    typer.echo(f"  TOTAL: {tot}")
+    anos_pos = sum(1 for a in anos if (placar([e for e in evs if e.ano == a])["p_alvo"] or 0) > 0.5)
+    ic = tot["ic95"]
+    ok_ic = bool(ic and tot["empate_medio"] is not None and ic[0] > tot["empate_medio"])
+    ok_anos = anos_pos > len(anos) / 2
+    veredito = ("FAVORAVEL" if ok_ic and ok_anos else
+                "CONTRA" if ic and tot["empate_medio"] is not None and ic[1] < tot["empate_medio"]
+                else "INCONCLUSIVO")
+    typer.echo(f"  criterio: IC95 inferior {ic[0] if ic else None} > empate medio "
+               f"{tot['empate_medio']}: {ok_ic};  p_alvo > 0,5 em {anos_pos}/{len(anos)} anos: "
+               f"{ok_anos}  ->  {veredito}")
+    typer.echo("  (fast-track: IC comum, sem deflacao; a consistencia por ano faz o papel "
+               "da amostra cega)")
+    if comparar_tape:
+        tape = pd.concat([pd.read_csv(p) for p in comparar_tape], ignore_index=True)
+        tape = tape.drop_duplicates(subset=["dia", "hora_brt"])
+        c = comparar_com_tape(evs, tape)
+        typer.echo(f"\nTRADUCAO M1 x TAPE: {c}")
+        log.info("ignicao_m1.traducao", **c)
+    saida.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame([linha(e) for e in evs]).to_csv(saida / "eventos_m1.csv", index=False)
+    typer.echo(f"\n  eventos: {(saida / 'eventos_m1.csv').resolve()}")
+    log.info("ignicao_m1.total", lambda_=lambda_, fracao_barreira=fracao_barreira,
+             total=tot, anos={a: placar([e for e in evs if e.ano == a]) for a in anos},
+             veredito=veredito)
+
+
 @app.command(name="m1-valida")
 def m1_valida_cmd(
     csv: Path = typer.Argument(Path("data/winfut_m1_historico.csv"),
