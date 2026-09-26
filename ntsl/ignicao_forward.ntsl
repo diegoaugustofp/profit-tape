@@ -1,0 +1,283 @@
+//=====================================================================
+// ignicao_forward — ACOMPANHAMENTO VISUAL do forward do EA de ignicao
+//
+// Desenha no grafico do Profit, SO' NO DIA ATUAL, onde o EA de ignicao
+// (config/ea_ignicao.yaml, config_sha 6e69f2da640f) teria entrado:
+//
+//     linha branca  = nivel de entrada (referencia +- 500)
+//     linha verde   = alvo  (entrada + 530 na direcao)
+//     linha vermelha= stop  (entrada - 530 na direcao)
+//     barra verde / vermelha = ignicao de COMPRA / VENDA que virou entrada
+//     barra cinza   = ignicao IGNORADA (posicionado ou limite do dia)
+//     barra amarela = saida (alvo, stop, tempo ou 18:00)
+//
+// NAO E' O JUIZ. Quem decide o forward e' o log do record (`ea.ign.*`).
+// Isto e' uma copia da regra em BARRAS, para o olho acompanhar o pregao.
+// Quando os dois discordarem, vale o log, e a discordancia se investiga
+// com `profit-tape ea-ignicao-replay`.
+//
+// GRAFICO: USE PERIODICIDADE EM SEGUNDOS (1 s ou 5 s). Conferido em
+// Python contra o EA, em tape sintetico (6 sementes, 52 operacoes):
+//     barra de 1 s  -> 52/52 entradas na mesma barra, saidas iguais
+//     barra de 5 s  -> 52/52
+//     barra de 1 min -> 27/52   (NAO SERVE: e' a licao do M1 — a regra
+//                               vive nos segundos e o minuto a perde)
+// Ajuste `BarrasJanela` para cobrir 60 s:  1 s = 60 | 5 s = 12 | 15 s = 4
+//
+// NAO OLHA PARA TRAS NEM PARA FRENTE
+// ----------------------------------
+// - Estado zerado a cada dia (nada carrega de ontem).
+// - Cada barra decide so' com ela e com as anteriores; a barra em
+//   formacao usa a maxima/minima ATE AGORA.
+// - Desenha so' o dia de `DiaPlot` (0 = hoje, pela data do computador).
+//   Em REPLAY do Profit, `CurrentDate` e' a data real, nao a do replay:
+//   ponha a data do replay em `DiaPlot` (formato 1AAMMDD, 25/09/2026 =
+//   1260925).
+//
+// DIFERENCAS CONHECIDAS PARA O EA (documentadas, nao corrigidas)
+// --------------------------------------------------------------
+// 1. Nivel de entrada = referencia +- 500 (onde o limiar foi cruzado).
+//    O EA usa o PRIMEIRO negocio alem do limiar, que pode estar alguns
+//    pontos adiante. Diferenca tipica: 0 a 15 pts.
+// 2. Referencia = fechamento da barra de `BarrasJanela` atras. No EA e'
+//    o ultimo negocio de >= 60 s atras. Com barra de 1 s, erro <= 1 s.
+// 3. Tempo (60 min) e refratario (30 min) contados em BARRAS. Segundo sem
+//    negocio nao gera barra, entao em fase muito parada o relogio daqui
+//    atrasa um pouco. No WIN em pregao isso quase nao acontece.
+// 4. Alvo e stop tocados na MESMA barra: nao da para saber a ordem.
+//    Fecha como "ambiguo" (motivo 5). Com barra de 1 s e' rarissimo.
+// 5. Hora vem de `Time` (HHMM): as janelas 09:16-17:00 e 18:00 tem
+//    resolucao de minuto — igual ao EA nas bordas exatas de minuto.
+//
+// LOG (para conferir com o EA depois do pregao)
+// ---------------------------------------------
+//   IGN|data|hora|lado|referencia|nivel|status
+//       status 1 = entrou, 2 = ignorada posicionado, 3 = ignorada limite
+//   SAI|data|hora|motivo|preco
+//       motivo 1 = alvo, 2 = stop, 3 = tempo, 4 = 18:00, 5 = ambiguo
+// So' barras que o motor nao reavalia mais (CurrentBar <= BarCount - 3,
+// mesmo criterio do absorcao_dir.ntsl): com barra de 1 s, 3 s de atraso.
+//
+// NUMEROS = OS DA FICHA CONGELADA. Mudar aqui NAO muda o EA; e mudar no
+// EA exige mudar aqui (docs/eas/ignicao.md).
+//=====================================================================
+
+input
+  BarrasJanela(60);         // barras que cobrem 60 s. 1 s=60 / 5 s=12
+  LimiarPts(500);
+  AlvoPts(530);
+  StopPts(530);
+  RefratarioSeg(1800);
+  TempoMaxSeg(3600);
+  PrimeiraHHMM(916);        // 09:15 + 60 s de janela
+  FimHHMM(1700);            // ultima deteccao antes das 17:00
+  ZerarHHMM(1800);
+  MaxOpsDia(4);
+  DiaPlot(0);               // 0 = hoje. Replay: 1AAMMDD do dia
+  LogAtivo(1);
+
+var
+  sData, sDataAnt, sDataRef, sHora, sDiaAlvo    : Float;
+  sClose, sHigh, sLow, sRef, sSegBarra, sNivel  : Float;
+  sPosLado, sPosPreco, sPosBarras, sRefrat, sOps: Float;
+  sAlvo, sStop, sLado, sMotivo, sSaidaPreco     : Float;
+  sStatus                                       : Float;
+  bHoje, bNaJanela, bTemRef, bFechado           : Boolean;
+begin
+  //-------------------------------------------------------------------
+  // LEITURAS POSICIONAIS NO TOPO, em atribuicao simples (skill 3.1:
+  // acesso posicional dentro de `if` tem comportamento indefinido).
+  // O estado da posicao e' CARREGADO EXPLICITAMENTE da barra anterior
+  // ([1]); assim a barra em formacao, reprocessada a cada negocio,
+  // recalcula sempre a partir do estado final da barra anterior.
+  //-------------------------------------------------------------------
+  sData      := Date;
+  sHora      := Time;
+  sClose     := Close;
+  sHigh      := High;
+  sLow       := Low;
+  sDataAnt   := sData[1];
+  sDataRef   := sData[BarrasJanela];
+  sRef       := sClose[BarrasJanela];
+  sPosLado   := sPosLado[1];
+  sPosPreco  := sPosPreco[1];
+  sPosBarras := sPosBarras[1];
+  sRefrat    := sRefrat[1];
+  sOps       := sOps[1];
+
+  sSegBarra := 60 / BarrasJanela;
+
+  // Dia novo: nada carrega de ontem.
+  if sData <> sDataAnt then
+  begin
+    sPosLado   := 0;
+    sPosPreco  := 0;
+    sPosBarras := 0;
+    sRefrat    := 0;
+    sOps       := 0;
+  end;
+
+  if DiaPlot = 0 then
+    sDiaAlvo := CurrentDate
+  else
+    sDiaAlvo := DiaPlot;
+  bHoje := sData = sDiaAlvo;
+
+  //-------------------------------------------------------------------
+  // 1. SAIDA — posicao aberta em barra ANTERIOR. Ordem do EA:
+  //    tempo -> alvo -> stop -> 18:00. Barreira a partir do NIVEL.
+  //-------------------------------------------------------------------
+  sMotivo := 0;
+  sSaidaPreco := 0;
+  if sPosLado <> 0 then
+  begin
+    sPosBarras := sPosBarras + 1;
+    sAlvo := sPosPreco + sPosLado * AlvoPts;
+    sStop := sPosPreco - sPosLado * StopPts;
+
+    if sPosBarras * sSegBarra > TempoMaxSeg then
+    begin
+      sMotivo := 3;
+      sSaidaPreco := sClose;
+    end
+    else if sPosLado > 0 then
+    begin
+      if (sHigh >= sAlvo) and (sLow <= sStop) then
+      begin
+        sMotivo := 5;
+        sSaidaPreco := sClose;
+      end
+      else if sHigh >= sAlvo then
+      begin
+        sMotivo := 1;
+        sSaidaPreco := sAlvo;
+      end
+      else if sLow <= sStop then
+      begin
+        sMotivo := 2;
+        sSaidaPreco := sStop;
+      end;
+    end
+    else
+    begin
+      if (sLow <= sAlvo) and (sHigh >= sStop) then
+      begin
+        sMotivo := 5;
+        sSaidaPreco := sClose;
+      end
+      else if sLow <= sAlvo then
+      begin
+        sMotivo := 1;
+        sSaidaPreco := sAlvo;
+      end
+      else if sHigh >= sStop then
+      begin
+        sMotivo := 2;
+        sSaidaPreco := sStop;
+      end;
+    end;
+
+    if (sMotivo = 0) and (sHora >= ZerarHHMM) then
+    begin
+      sMotivo := 4;
+      sSaidaPreco := sClose;
+    end;
+
+    if sMotivo <> 0 then
+      sPosLado := 0;
+  end;
+
+  //-------------------------------------------------------------------
+  // 2. DETECCAO — |preco - referencia| >= limiar, na janela do dia,
+  //    fora do refratario. O refratario comeca em TODA ignicao, mesmo
+  //    ignorada (igual ao DetectorIgnicao do EA).
+  //-------------------------------------------------------------------
+  if sRefrat > 0 then
+    sRefrat := sRefrat - 1;
+
+  bNaJanela := (sHora >= PrimeiraHHMM) and (sHora < FimHHMM);
+  bTemRef   := (CurrentBar > BarrasJanela) and (sDataRef = sData);
+
+  sLado := 0;
+  if bTemRef and bNaJanela and (sRefrat <= 0) then
+  begin
+    if sHigh - sRef >= LimiarPts then
+      sLado := 1;
+    if sRef - sLow >= LimiarPts then
+    begin
+      // Barra que cruzou os dois lados (so' em barra longa): vale o
+      // lado do fechamento.
+      if sLado = 0 then
+        sLado := -1
+      else if sClose < sRef then
+        sLado := -1;
+    end;
+  end;
+
+  sStatus := 0;
+  sNivel := 0;
+  if sLado <> 0 then
+  begin
+    sRefrat := RefratarioSeg / sSegBarra;
+    sNivel := sRef + sLado * LimiarPts;
+    if sPosLado <> 0 then
+      sStatus := 2
+    else if sOps >= MaxOpsDia then
+      sStatus := 3
+    else
+    begin
+      sStatus    := 1;
+      sPosLado   := sLado;
+      sPosPreco  := sNivel;
+      sPosBarras := 0;
+      sOps       := sOps + 1;
+    end;
+  end;
+
+  //-------------------------------------------------------------------
+  // 3. DESENHO — so' o dia escolhido.
+  //-------------------------------------------------------------------
+  if bHoje and (sPosLado <> 0) then
+  begin
+    sAlvo := sPosPreco + sPosLado * AlvoPts;
+    sStop := sPosPreco - sPosLado * StopPts;
+    Plot(sPosPreco);
+    Plot2(sAlvo);
+    Plot3(sStop);
+  end
+  else
+  begin
+    NoPlot(1);
+    NoPlot(2);
+    NoPlot(3);
+  end;
+
+  if bHoje then
+  begin
+    if sStatus = 1 then
+    begin
+      if sLado > 0 then
+        PaintBar(clLime)
+      else
+        PaintBar(clRed);
+    end
+    else if sStatus > 1 then
+      PaintBar(clGray)
+    else if sMotivo <> 0 then
+      PaintBar(clYellow);
+  end;
+
+  //-------------------------------------------------------------------
+  // 4. LOG — so' barras fechadas (fora da reavaliacao por negocio).
+  //-------------------------------------------------------------------
+  bFechado := CurrentBar <= BarCount - 3;
+  if (LogAtivo = 1) and bHoje and bFechado then
+  begin
+    if sStatus <> 0 then
+      ConsoleLog("IGN|" + sData + "|" + sHora + "|" + sLado + "|" + sRef
+        + "|" + sNivel + "|" + sStatus);
+    if sMotivo <> 0 then
+      ConsoleLog("SAI|" + sData + "|" + sHora + "|" + sMotivo + "|"
+        + sSaidaPreco);
+  end;
+end;

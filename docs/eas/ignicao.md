@@ -115,3 +115,20 @@ Nenhum ainda.
 Forward em dry_run. Depois, conta demo (E4) para medir o deslizamento
 real com ordem enviada. Variantes de saída (fixa, parcial + trailing,
 por tempo) só com ficha própria, declarada antes de olhar.
+
+## Acompanhamento visual no Profit (v3.75)
+
+`ntsl/ignicao_forward.ntsl` desenha no gráfico, **só no dia atual**, o nível
+de entrada, o alvo e o stop de cada ignição, pinta a barra da entrada
+(verde/vermelha), das ignições ignoradas (cinza) e da saída (amarela), e
+loga `IGN|` / `SAI|` no console.
+
+- **Não é o juiz**: o forward é decidido pelo log `ea.ign.*`. O indicador
+  é uma cópia da regra em barras, para o olho.
+- **Gráfico em segundos obrigatório** (1 s → `BarrasJanela` 60; 5 s → 12).
+  A lógica em barras foi conferida contra o EA em
+  `tests/test_ntsl_ignicao_logica.py`: 52/52 operações com barra de 1 s e
+  de 5 s, 27/52 com barra de 1 min (controle negativo, a lição do M1).
+- Replay do Profit: `CurrentDate` é a data real; informar o dia em
+  `DiaPlot` (1AAMMDD).
+- Mudar a regra do EA exige mudar o `.ntsl` e o `_ntsl` do teste juntos.
