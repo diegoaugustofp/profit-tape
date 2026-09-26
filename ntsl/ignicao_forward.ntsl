@@ -29,10 +29,11 @@
 // - Estado zerado a cada dia (nada carrega de ontem).
 // - Cada barra decide so' com ela e com as anteriores; a barra em
 //   formacao usa a maxima/minima ATE AGORA.
-// - Desenha so' o dia de `DiaPlot` (0 = hoje, pela data do computador).
-//   Em REPLAY do Profit, `CurrentDate` e' a data real, nao a do replay:
-//   ponha a data do replay em `DiaPlot` (formato 1AAMMDD, 25/09/2026 =
-//   1260925).
+// - Desenha so' o dia de `DiaPlot`, informado A MAO em AAAAMMDD
+//   (28/09/2026 = 20260928). E' manual de proposito: a versao que lia a
+//   data do computador (`CurrentDate`) nao desenhava nada no REPLAY,
+//   porque la' o grafico e' de outro dia. Ao vivo: troque todo dia.
+//   Replay: ponha o dia do replay.
 //
 // DIFERENCAS CONHECIDAS PARA O EA (documentadas, nao corrigidas)
 // --------------------------------------------------------------
@@ -73,7 +74,7 @@ input
   FimHHMM(1700);            // ultima deteccao antes das 17:00
   ZerarHHMM(1800);
   MaxOpsDia(4);
-  DiaPlot(0);               // 0 = hoje. Replay: 1AAMMDD do dia
+  DiaPlot(20260928);        // dia a desenhar, AAAAMMDD. TROCAR TODO DIA
   LogAtivo(1);
   Rotulos(1);               // 1 = escreve COMPRA/VENDA hhmm e a saida
 
@@ -118,10 +119,8 @@ begin
     sOps       := 0;
   end;
 
-  if DiaPlot = 0 then
-    sDiaAlvo := CurrentDate
-  else
-    sDiaAlvo := DiaPlot;
+  // `Date` vem em 1AAMMDD (ano - 1900): 20260928 - 19000000 = 1260928.
+  sDiaAlvo := DiaPlot - 19000000;
   bHoje := sData = sDiaAlvo;
 
   //-------------------------------------------------------------------

@@ -129,8 +129,9 @@ loga `IGN|` / `SAI|` no console.
   A lógica em barras foi conferida contra o EA em
   `tests/test_ntsl_ignicao_logica.py`: 52/52 operações com barra de 1 s e
   de 5 s, 27/52 com barra de 1 min (controle negativo, a lição do M1).
-- Replay do Profit: `CurrentDate` é a data real; informar o dia em
-  `DiaPlot` (1AAMMDD).
+- Dia desenhado = `DiaPlot`, **manual**, em AAAAMMDD (v3.77). A versão
+  automática (`CurrentDate`) não desenhava no replay, cujo dia é outro.
+  Ao vivo, trocar a data todo pregão.
 - Mudar a regra do EA exige mudar o `.ntsl` e o `_ntsl` do teste juntos.
 - v3.76: rótulos na barra da entrada (`COMPRA hhmm @ nível` / `VENDA ...`),
   da ignorada (`IGN hhmm`) e da saída (`ALVO`/`STOP`/`TEMPO`/`18H`/`AMBIG`),
