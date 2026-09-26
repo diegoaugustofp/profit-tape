@@ -136,3 +136,23 @@ loga `IGN|` / `SAI|` no console.
 - v3.76: rótulos na barra da entrada (`COMPRA hhmm @ nível` / `VENDA ...`),
   da ignorada (`IGN hhmm`) e da saída (`ALVO`/`STOP`/`TEMPO`/`18H`/`AMBIG`),
   via `PlotText`; desliga com `Rotulos = 0`. Só cosmético: não muda a lógica.
+
+## Variante em estudo: concentração da agressão (v3.78, declarada antes de rodar)
+
+Pergunta: ignições empurradas por agressão **concentrada** continuam mais?
+Direção fixada: concentração alta → p_alvo maior. O EA congelado não muda;
+se algo sair daqui, vira **outro EA em paralelo** (dry_run, outro YAML).
+
+- Janela: negócios do WIN em (t_det − 60 s, t_det], só agressão (tipos 2/3;
+  RLP, cross e leilão fora). V = volume agressor na direção do salto.
+- **C1 (por negócio):** 5 maiores negócios agressores na direção ÷ V.
+- **C2 (por corretora, saldo líquido):** maior saldo (comprado − vendido,
+  papéis passivo e agressor) na direção, entre corretoras identificadas ÷ V.
+  Market maker que agride e devolve passivamente zera o saldo e não conta.
+  Identidade da corretora de maior saldo só registrada.
+- Corte: mediana de cada variável; alta = acima; empate → baixa.
+- Etapa cega primeiro (`--cego`): distribuições, cortes, Spearman C1×C2
+  (> 0,8 = mesma variável → um EA só) e fração de agente não identificado.
+- Leitura: indicação (2 variáveis, ~25 eventos por metade); decide o forward.
+- Limitações: corretora ≠ cliente; market maker pode zerar em minutos, não
+  em 60 s.

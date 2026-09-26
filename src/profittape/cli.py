@@ -2033,6 +2033,81 @@ def ignicao_m1_cmd(
              veredito=veredito)
 
 
+@app.command(name="ignicao-agressao")
+def ignicao_agressao_cmd(
+    eventos: list[Path] = typer.Argument(
+        ..., help="CSV(s) de eventos do `profit-tape ignicao` (as 51 ignicoes do tape)"),
+    raw: list[Path] = typer.Option(
+        [Path("data/raw")], "--raw",
+        help="Raiz(es) com trade/dt=/sym=WINFUT. Repita para local e backup."),
+    symbol: str = typer.Option("WINFUT", "--symbol"),
+    cego: bool = typer.Option(
+        False, "--cego",
+        help="ETAPA CEGA: distribuicoes, cortes, correlacao C1xC2 e fracao de "
+             "agente nao identificado -- SEM resultado. Rode ANTES da medicao."),
+    saida: Path = typer.Option(Path("data/research/ignicao_agressao"), "--saida"),
+    log_level: str = typer.Option("WARNING", "--log-level"),
+    log_file: Path | None = typer.Option(None, "--log-file"),
+) -> None:
+    """
+    IGNICAO x CONCENTRACAO DA AGRESSAO -- fast-track. C1 = top-5 negocios
+    agressores na direcao / volume agressor na direcao; C2 = maior saldo
+    liquido (passivo + agressor) de uma corretora na direcao / o mesmo volume.
+    Corte na MEDIANA, alta = acima. Primeiro --cego; depois sem. Ver
+    research/ignicao_agressao.py (ficha no docstring).
+    """
+    configurar(log_level, arquivo=log_file, nivel_arquivo="INFO" if log_file else None)
+    import pandas as pd
+
+    from .research.ignicao_agressao import (
+        EMPATE_FICHA,
+        calcular,
+        etapa_cega,
+        ler_eventos,
+        linha_csv,
+        medir,
+    )
+
+    linhas = ler_eventos(eventos)
+    evs, avisos = calcular(raw, symbol, linhas)
+    dias = sorted({e.dia for e in evs})
+    typer.echo("=" * 72)
+    typer.echo(f"IGNICAO x AGRESSAO (fast-track)  {'ETAPA CEGA' if cego else 'MEDICAO'}  "
+               f"{len(evs)}/{len(linhas)} eventos em {len(dias)} pregoes")
+    typer.echo("=" * 72)
+    for a in avisos:
+        typer.echo(f"  AVISO: {a}")
+    cg = etapa_cega(evs)
+    for k, v in cg.items():
+        typer.echo(f"  {k}: {v}")
+    log.info("ignicao_agressao.cega", **cg, avisos=len(avisos))
+    saida.mkdir(parents=True, exist_ok=True)
+    arq = saida / ("features_cego.csv" if cego else "features_resultado.csv")
+    pd.DataFrame([linha_csv(e, not cego) for e in evs]).to_csv(arq, index=False)
+    if cego:
+        typer.echo("-" * 72)
+        typer.echo("  Resultado NAO calculado. Confira: anon baixo? spearman C1xC2 alto "
+                   "(>0,8 = mesma variavel)? Depois rode sem --cego.")
+        typer.echo(f"\n  features: {arq.resolve()}")
+        return
+    typer.echo("-" * 72)
+    typer.echo(f"  empate da ficha: {EMPATE_FICHA}   (alta = acima da mediana; "
+               f"empate na mediana -> baixa)")
+    for var, corte in (("c1", cg["corte_c1"]), ("c2", cg["corte_c2"])):
+        if corte is None:
+            typer.echo(f"  {var.upper()}: sem valores")
+            continue
+        r = medir(evs, var, corte)
+        typer.echo(f"  {var.upper()} corte={corte}")
+        typer.echo(f"     alta : {r['alta']}")
+        typer.echo(f"     baixa: {r['baixa']}")
+        typer.echo(f"     diferenca={r['diferenca']}  sem_valor={r['sem_valor']}  "
+                   f"-> {r['leitura']}")
+        log.info("ignicao_agressao.medicao", var=var, **r)
+    typer.echo("  (fast-track, 2 variaveis, ~25 por metade: INDICACAO; decide o forward)")
+    typer.echo(f"\n  features: {arq.resolve()}")
+
+
 @app.command(name="m1-valida")
 def m1_valida_cmd(
     csv: Path = typer.Argument(Path("data/winfut_m1_historico.csv"),

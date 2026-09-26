@@ -2,7 +2,7 @@
 
 > **Status:** vivo (GERADO) — **Revisado:** pela ultima execucao de `tools/gera_referencia_cli.py` — **Assunto:** todos os comandos de `src/profittape/cli.py`, agrupados por categoria, com a nota de trial e o documento de referencia. NAO EDITE A MAO: rode o script.
 
-75 comandos. Categoria e documento vem do dicionario no script; nome e descricao vem do docstring do proprio comando (`profit-tape <cmd> --help` mostra as opcoes).
+76 comandos. Categoria e documento vem do dicionario no script; nome e descricao vem do docstring do proprio comando (`profit-tape <cmd> --help` mostra as opcoes).
 
 A distincao que mais importa: comandos que **consomem trial** sobem o limiar deflacionado a cada rodada e so' devem rodar com dado NOVO suficiente; os que nao consomem podem rodar quando quiser (skill `profit-tape-disciplina`, 2).
 
@@ -123,6 +123,7 @@ A distincao que mais importa: comandos que **consomem trial** sobem o limiar def
 | `fechamento` | DESCRICAO do AJUSTE/FECHAMENTO (passo 1): o fluxo obrigatorio do fim do pregao (ajuste = margem; zeragem de day trade) deixa marca numa janela estreita? | RESEARCH_PLANO.md (AJUSTE/FECHAMENTO) |
 | `iceberg` | ICEBERG / LOTE REPETIDO, passo 1 (v2): negocios de mesma quantidade, no mesmo preco, COM O MESMO AGENTE PASSIVO, em sequencia -- existem alem do acaso? | RESEARCH_PLANO.md (ICEBERG) |
 | `ignicao` | IGNICOES do WIN: grandes movimentos DETECTADOS (nao previstos) e o que acontece depois, separado pela confirmacao do WDO no sentido oposto. | research/ignicao.py (docstring); HISTORICO 2026-09-25 |
+| `ignicao-agressao` | IGNICAO x CONCENTRACAO DA AGRESSAO -- fast-track. | research/ignicao_agressao.py (docstring); eas/ignicao.md |
 | `ignicao-m1` | IGNICAO no historico M1 -- FAST-TRACK: sem guarda de amostra, sem trial, sem deflacao. | research/ignicao_m1.py (docstring); eas/ignicao.md |
 | `leadlag` | LEAD-LAG em milissegundos (default: WDO lidera o WIN, sentido oposto). | research/leadlag.py (docstring); HISTORICO 2026-09-25 |
 | `m1-valida` | VALIDA o historico M1 exportado, sem testar hipotese: inventario, fator do ajuste multiplicativo por dia (pela granularidade) e, nos dias com tape, conferencia de preco, fator e horario (deslocamento -1/0/+1 min) por... | research/m1_historico.py (docstring); HISTORICO 2026-09-25 |
