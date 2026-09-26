@@ -75,6 +75,7 @@ input
   MaxOpsDia(4);
   DiaPlot(0);               // 0 = hoje. Replay: 1AAMMDD do dia
   LogAtivo(1);
+  Rotulos(1);               // 1 = escreve COMPRA/VENDA hhmm e a saida
 
 var
   sData, sDataAnt, sDataRef, sHora, sDiaAlvo    : Float;
@@ -265,6 +266,41 @@ begin
       PaintBar(clGray)
     else if sMotivo <> 0 then
       PaintBar(clYellow);
+  end;
+
+  //-------------------------------------------------------------------
+  // ROTULOS — texto na barra da entrada e na da saida, UMA vez cada
+  // (so' na barra do evento; nas outras a linha fala por si).
+  //   entrada:  "COMPRA 1031 @ 190500"  /  "VENDA 1031 @ 190500"
+  //   ignorada: "IGN 1402"  (posicionado ou limite do dia)
+  //   saida:    "ALVO 1049" / "STOP" / "TEMPO" / "18H" / "AMBIG"
+  // Hora = `Time` (HHMM do inicio da barra). A data nao entra: so' o dia
+  // de DiaPlot e' desenhado, entao ela seria igual em todo rotulo.
+  // PlotText(texto, cor, posicao, tamanho): posicao 0 = acima da barra,
+  // 1 = abaixo. NAO VERIFICADO NESTE PROFIT — ver INCREMENTO_v3.76.
+  //-------------------------------------------------------------------
+  if bHoje and (Rotulos = 1) then
+  begin
+    if sStatus = 1 then
+    begin
+      if sLado > 0 then
+        PlotText("COMPRA " + sHora + " @ " + sNivel, clLime, 1, 9)
+      else
+        PlotText("VENDA " + sHora + " @ " + sNivel, clRed, 0, 9);
+    end
+    else if sStatus > 1 then
+      PlotText("IGN " + sHora, clGray, 0, 8);
+
+    if sMotivo = 1 then
+      PlotText("ALVO " + sHora, clYellow, 0, 9)
+    else if sMotivo = 2 then
+      PlotText("STOP " + sHora, clYellow, 0, 9)
+    else if sMotivo = 3 then
+      PlotText("TEMPO " + sHora, clYellow, 0, 9)
+    else if sMotivo = 4 then
+      PlotText("18H " + sHora, clYellow, 0, 9)
+    else if sMotivo = 5 then
+      PlotText("AMBIG " + sHora, clYellow, 0, 9);
   end;
 
   //-------------------------------------------------------------------

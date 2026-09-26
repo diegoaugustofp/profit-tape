@@ -132,3 +132,6 @@ loga `IGN|` / `SAI|` no console.
 - Replay do Profit: `CurrentDate` é a data real; informar o dia em
   `DiaPlot` (1AAMMDD).
 - Mudar a regra do EA exige mudar o `.ntsl` e o `_ntsl` do teste juntos.
+- v3.76: rótulos na barra da entrada (`COMPRA hhmm @ nível` / `VENDA ...`),
+  da ignorada (`IGN hhmm`) e da saída (`ALVO`/`STOP`/`TEMPO`/`18H`/`AMBIG`),
+  via `PlotText`; desliga com `Rotulos = 0`. Só cosmético: não muda a lógica.
