@@ -1055,3 +1055,36 @@ Desde a v2.31: `client.request_history` acrescenta 09:00:00/18:35:00
 quando a data vem sem hora; o backfill espera `historico_100` e so'
 entao o quiesce; um Ctrl+C remove a particao do dia interrompido
 (retomada honesta, nao por timing).
+
+## INCIDENTE 2026-09-28: EA no ar 21 min depois da abertura -> 455 pts
+
+O E4 subiu as 09:21 (mercado aberto desde 09:00) e armou o primeiro sinal
+as 09:55, com a barra das 09:30. Nesse intervalo o mercado ja' tinha
+caido: a ordem de VENDA STOP em 183.915 saiu com o mercado 455 pts
+ABAIXO do gatilho, virou ordem a MERCADO e executou em 183.460 (aceite de
+182 ms, sem passar por `New`). O gemeo simulado, que preenche no nivel,
+fez +515 pts; o real fez **+60**. Operacao que deu certo, 455 pts
+perdidos so' no arranque.
+
+**Por que demorava (medido no log de 28/09):**
+
+| causa | efeito |
+|---|---|
+| parquet do grafico parado em 11/09 | 10 pregoes de PONTE reconstruidos do tape, negocio a negocio, e cresce 1 por dia |
+| perfil lia cada dia DUAS vezes (a 2a so' para saber se veio algo) | custo dobrado |
+| cada EA refazia tudo sozinho | 3 EAs no ar = 3x |
+| durante o pregao o disco disputa com o record (`writer.lote_lento` de minuto em minuto) | a 2a montagem levou 20 min; a 1a, com o mercado fechado, 8 |
+
+**Correcao (v3.79):** as barras derivadas do tape viram CACHE em disco,
+uma vez por dia, compartilhado entre semente e perfil e entre todos os
+EAs (`data/cache/barras_tape/`). Invalida sozinho quando o dia muda no
+curated (recura ou backfill, como o 18/09). A chamada dupla morreu.
+
+**Rotina que continua valendo:** subir o record cedo e conferir no log o
+horario de `ea.123.iniciado` de CADA EA. Se algum ficar pronto depois das
+09:00, ele comeca o dia atras -- e, com a trava de entrada ainda nao
+escrita (pre-registro pendente), atraso vira preco.
+
+**Alternativa manual, se algum dia o cache nao bastar:** exportar um dump
+novo do grafico e regerar `barras_123.parquet` (`eas-preco --ficha 123`),
+o que zera a ponte.

@@ -4070,3 +4070,13 @@ Só documentação; nenhum código tocado (suíte verde; ruff e mypy limpos).
   gerava NENHUM evento (550 pts em 1 min = 9 desvios) — passou a plantar
   os mesmos saltos SEM continuação (p_alvo 0,475, IC cobre 0,5; com
   continuação, 0,949).
+- v3.79: arranque do EA. Em 28/09 o E4 subiu 09:21 e armou 09:55 -- a
+  ordem stop saiu 455 pts alem do gatilho, virou ordem a mercado e a
+  operacao rendeu +60 em vez de +515 (o gemeo simulado). Causas medidas:
+  parquet parado em 11/09 (10 pregoes de ponte, +1 por dia), perfil lendo
+  cada dia DUAS vezes, cada EA refazendo tudo sozinho (3 no ar) e disputa
+  de disco com o record durante o pregao. Correcao: cache em disco das
+  barras derivadas do tape, uma vez por dia, compartilhado entre semente e
+  perfil e entre EAs, com invalidacao por assinatura (arquivos, linhas)
+  lida dos METADADOS -- cobre o caso real do 18/09, que ganhou 212 mil
+  negocios por backfill depois de lido. 6 testes; 1.210 no total.

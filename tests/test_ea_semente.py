@@ -55,8 +55,21 @@ def _tape_fake(monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
                              "price": closes, "quantidade": [1] * len(closes),
                              "trade_type": [2] * len(closes)})
     for dia in barras_por_dia:
-        (curated / "trade" / f"dt={dia}" / "sym=WINFUT").mkdir(parents=True)
-    monkeypatch.setattr(sm, "_carregar_dia", _carregar)
+        pasta = curated / "trade" / f"dt={dia}" / "sym=WINFUT"
+        pasta.mkdir(parents=True)
+        (pasta / "parte-0.parquet").write_bytes(b"")     # existir basta: o loader e' falso
+    # desde 2026-09-28 a reconstrucao vive no CACHE, compartilhada por
+    # semente e perfil -- e' la' que o tape falso entra. A memoria do cache
+    # e' limpa para os dias falsos nao vazarem entre testes, e a assinatura
+    # e' fixada porque os arquivos falsos nao tem metadado de parquet.
+    from profittape.ea import cache_barras as cb
+    cb.limpar_memoria()
+    monkeypatch.setattr(cb, "_carregar_dia", _carregar)
+    monkeypatch.setattr(cb, "assinatura",
+                        lambda cur, sym, dia: (1, len(barras_por_dia.get(dia, []))))
+    monkeypatch.setattr(cb, "barras_do_dia",
+                        lambda cur, sym, dia, per, cache_dir=None: cb._construir(
+                            cur, sym, dia, per))
     return curated
 
 

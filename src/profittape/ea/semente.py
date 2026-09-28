@@ -54,8 +54,7 @@ from typing import Any
 import pandas as pd
 import structlog
 
-from ..features.pipeline import _carregar_dia
-from .barra_tempo import ConstrutorDeBarraDeTempo
+from .cache_barras import barras_do_dia
 
 log = structlog.get_logger(__name__)
 
@@ -110,24 +109,10 @@ def _dias_uteis(a: dt.date, b: dt.date) -> list[dt.date]:
 
 def _barras_do_tape(curated: Path, symbol: str, dia: dt.date,
                     periodo_s: int) -> list[tuple[int, float]]:
-    """[(ts_open_ns, close)] das barras do dia, pelo construtor do EA."""
-    pasta = curated / "trade" / f"dt={dia.isoformat()}"
-    if not (pasta / f"sym={symbol}").exists():
-        return []
-    t = _carregar_dia(pasta, symbol)
-    if t.empty:
-        return []
-    c = ConstrutorDeBarraDeTempo(periodo_s)
-    out: list[tuple[int, float]] = []
-    for ts_ns, price, qtd, tipo in t[["ts_ns", "price", "quantidade", "trade_type"]].itertuples(
-            index=False):
-        b = c.processar_trade(int(ts_ns), float(price), int(qtd), int(tipo))
-        if b is not None:
-            out.append((b.ts_open_ns, b.close))
-    fim = c.avancar_relogio(int(t["ts_ns"].to_numpy()[-1]) + periodo_s * _NS)
-    if fim is not None:
-        out.append((fim.ts_open_ns, fim.close))
-    return out
+    """[(ts_open_ns, close)] das barras do dia. Desde 2026-09-28 vem do
+    CACHE compartilhado com o perfil -- o dia e' reconstruido uma vez so'."""
+    return [(ts, close) for ts, close, _vol, _ok in
+            barras_do_dia(curated, symbol, dia, periodo_s)]
 
 
 def construir_semente(parquet: Path, dia_alvo: dt.date, curated: Path | None = None,

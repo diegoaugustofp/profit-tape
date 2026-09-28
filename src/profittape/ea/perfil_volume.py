@@ -27,8 +27,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 import structlog
 
-from ..features.pipeline import _carregar_dia
-from .barra_tempo import ConstrutorDeBarraDeTempo
+from .cache_barras import barras_do_dia
 
 log = structlog.get_logger(__name__)
 _TZ = ZoneInfo("America/Sao_Paulo")
@@ -71,27 +70,6 @@ class PerfilVolumeHorario:
                 "janela": self.janela, "dias_carregados": self.dias_carregados[-3:]}
 
 
-def _barras_do_tape(curated: Path, symbol: str, dia: dt.date,
-                    periodo_s: int) -> list[tuple[int, float, bool]]:
-    pasta = curated / "trade" / f"dt={dia.isoformat()}"
-    if not (pasta / f"sym={symbol}").exists():
-        return []
-    t = _carregar_dia(pasta, symbol)
-    if t.empty:
-        return []
-    c = ConstrutorDeBarraDeTempo(periodo_s)
-    out: list[tuple[int, float, bool]] = []
-    for ts_ns, price, qtd, tipo in t[["ts_ns", "price", "quantidade", "trade_type"]].itertuples(
-            index=False):
-        b = c.processar_trade(int(ts_ns), float(price), int(qtd), int(tipo))
-        if b is not None:
-            out.append((b.ts_open_ns, float(b.vol_total), b.volume_confiavel))
-    fim = c.avancar_relogio(int(t["ts_ns"].to_numpy()[-1]) + periodo_s * _NS)
-    if fim is not None:
-        out.append((fim.ts_open_ns, float(fim.vol_total), fim.volume_confiavel))
-    return out
-
-
 def construir_perfil(parquet: Path, dia_alvo: dt.date, curated: Path | None = None,
                      symbol: str = "WINFUT", periodo_s: int = 900,
                      janela_pregoes: int = JANELA_PREGOES) -> PerfilVolumeHorario:
@@ -118,10 +96,14 @@ def construir_perfil(parquet: Path, dia_alvo: dt.date, curated: Path | None = No
         d = ini
         while d < dia_alvo:
             if d.weekday() < 5:
-                for ts_open, vol, ok in _barras_do_tape(curated, symbol, d, periodo_s):
+                # UMA leitura por dia, do cache (2026-09-28). Antes eram DUAS
+                # -- a segunda so' para saber se veio algo -- e sem cache: o
+                # arranque de cada EA reconstruia 10 pregoes do tape.
+                barras = barras_do_dia(curated, symbol, d, periodo_s)
+                for ts_open, _close, vol, ok in barras:
                     t = pd.Timestamp(ts_open, unit="ns", tz="UTC").tz_convert(_TZ)
                     p.registrar(d, t.hour * 100 + t.minute, vol, ok)
-                if _barras_do_tape(curated, symbol, d, periodo_s):
+                if barras:
                     p.dias_carregados.append(d.isoformat())
             d += dt.timedelta(days=1)
     log.info("ea.perfil_volume", dia_alvo=dia_alvo.isoformat(), **p.resumo())

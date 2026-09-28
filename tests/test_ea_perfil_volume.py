@@ -78,8 +78,7 @@ def test_ponte_pelo_tape_entra_no_perfil(tmp_path: Path, monkeypatch: pytest.Mon
     while prox.weekday() >= 5:
         prox += dt.timedelta(days=1)
     curated = _tape_fake(monkeypatch, tmp_path, {prox: [140000.0] * 37})
-    from profittape.ea import semente as sm
-    monkeypatch.setattr(pv, "_carregar_dia", sm._carregar_dia)     # o fake instalado em semente
+    # o tape falso ja' esta' instalado no CACHE por `_tape_fake` (2026-09-28)
     alvo = prox + dt.timedelta(days=1)
     perfil = pv.construir_perfil(p, alvo, curated)
     assert prox.isoformat() in perfil.dias_carregados
