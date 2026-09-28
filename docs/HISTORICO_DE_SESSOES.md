@@ -1,6 +1,6 @@
 # Histórico de sessões — profit-tape
 
-> **Status:** vivo — **Revisado:** 2026-09-24 — **Assunto:** uma entrada por sessão de trabalho, com as tags entregues — o eixo "quando".
+> **Status:** vivo — **Revisado:** 2026-09-28 — **Assunto:** uma entrada por sessão de trabalho, com as tags entregues — o eixo "quando".
 
 Log cronológico, uma entrada por sessão de trabalho. Cada entrada resume
 o que foi feito, organizado por assunto, com ponteiro para as
@@ -4088,3 +4088,91 @@ Só documentação; nenhum código tocado (suíte verde; ruff e mypy limpos).
   nivel exato ENVIA. Nao muda saidas. Contagem do forward nao reinicia
   (correcao para o codigo fazer o que a ficha ja' dizia). Aguarda
   aprovacao.
+
+### 2026-09-26/28 — ignição: M1 fechado, NTSL de acompanhamento, concentração da agressão (v3.75–v3.83)
+
+Continuação da sessão de 25/09 (fast-track). Ficha e resultados em
+`docs/eas/ignicao.md`; aqui só o resumo.
+
+- **Ignição no M1 (5 anos): CONTRA como regra própria.** 669 eventos,
+  p_alvo 0,459 IC [0,421; 0,497] contra empate 0,572; 0/6 anos > 0,5.
+  Tradução M1 × tape fraca (26/51 casados). **Na janela do tape
+  (24/07–24/09) o M1 dá 0,49 contra 0,702 do tape** → o CONTRA não se
+  transfere: a regra vive nos segundos (momento da entrada e/ou tamanho do
+  evento — o limiar real do M1 fica em ~345 pts, não 500). O histórico M1
+  NÃO valida o EA; o forward é o juiz. Erro meu corrigido no caminho: a
+  primeira "janela do tape" que passei (09/07–09/09) estava deslocada.
+- **`m1-valida` fechado (45/45 dias):** rótulo = início do minuto;
+  fator de ajuste = razão medida (erro mediano 0,000%, máx 0,031%);
+  `volume_ticks` = negócios do tape. Elimina a hipótese de defeito no dado
+  como explicação do CONTRA.
+- **Frequência nos 44 pregões do tape:** 11 dias sem sinal (25%), todos
+  entre 24/07 e 20/08; 18 dias com 1, 12 com 2, 3 com 3 (51 eventos, bate
+  com a tradução). Limiar fixo em pontos → fase calma = menos sinal.
+- **Caminho ao vivo de 25/09 conferido:** record × replay idênticos
+  (5.430.457 trades, 0 detecções). Dia sem sinal válido no forward.
+- **v3.75–v3.77 — `ntsl/ignicao_forward.ntsl`:** cópia da regra em barras
+  para acompanhar no gráfico (nível, alvo, stop, barras coloridas, rótulos
+  COMPRA/VENDA/IGN/ALVO/STOP, log IGN|/SAI|). A lógica foi portada para
+  Python e amarrada ao EA (`tests/test_ntsl_ignicao_logica.py`): 52/52
+  com barra de 1 s e 5 s; 27/52 com 1 min (controle negativo). Contagem
+  feita à mão dizia 54 — o assert pegou. v3.77: dia desenhado só por
+  parâmetro (AAAAMMDD); `CurrentDate` não desenhava no replay. **Validado
+  pelo operador no replay**: no 1 s reproduz o EA; no 1 min, entrada,
+  alvo e stop colapsam na mesma barra (a lição do M1, visível). Caso
+  observado: alvo por toque EXATO (amplitude do candle = 530) — alvo por
+  toque exato pode não executar em ordem limite real; o operador decidiu
+  NÃO pôr isso na ficha.
+- **Risco × retorno:** 1:1 empata em 0,537 (não 60%); 60% é margem de
+  conforto (IC inferior 0,560). 1:2 com stop 530 empata em 0,358; stop de
+  250 teria justificativa de mecanismo (devolveu metade do salto), mas
+  fica dentro do ruído de ±270. Nada declarado ainda.
+- **v3.78/v3.81 — `profit-tape ignicao-agressao`:** C1 = top-5 negócios
+  agressores / volume agressor na direção; C2 = maior SALDO LÍQUIDO de uma
+  corretora (passivo + agressor) / o mesmo volume — redefinida a pedido do
+  operador para que market maker que agride e devolve não conte. Etapa
+  cega separada: 51/51, anon 0%, Spearman C1×C2 −0,055, C1×volume −0,14
+  (C1 não é proxy de volume), C2×volume −0,37. **Medição: nenhuma sustenta
+  a hipótese.** C1 0,739 × 0,667 (encerrado); C2 0,625 × 0,783 — direção
+  CONTRÁRIA (~1,2 dp). Corretoras de maior saldo: 3 = XP (19/51), 8 = UBS
+  (estrangeiro, 10), 120 = Genial Institucional (6) — XP liderar reforça a
+  limitação "corretora ≠ cliente" (fluxo de varejo agregado); só registro.
+- **Incidente v3.79 desta sessão:** o passo 2 relia o tape de 33 pregões
+  (backup não compactado) e ficou 10 h sem uma linha no console. Agora
+  reaproveita `features_cego.csv` (valores conferidos) e imprime progresso.
+  Numeração colidiu com a v3.79 do cache de barras (outra sessão) e nunca
+  foi aplicada; reaplicada como **v3.81**.
+- **v3.82 — H-C2inv congelada ANTES dos dados:** no forward a partir de
+  29/09/2026, C2 ≤ 0,0641 (corte fixo) tem p_alvo maior que C2 > 0,0641;
+  os 51 eventos de origem fora; critério de leitura fixado.
+- **v3.83 — `ignicao-m1` grava `eventos_m1_<de>_<ate>.csv`:** a janela do
+  tape tinha sobrescrito o CSV dos 5 anos (a saída de 28/09 ainda mostra o
+  nome antigo — corrigido só agora). Teste: rodar a janela depois do
+  histórico deixa 2 arquivos.
+- **Arranque de 28/09:** `ea.ign.iniciado` às 09:21 com `sem_livro=false`
+  (livro ao vivo, deslizamento medido) e `codigo=entregue-v3.78`
+  (≥ v3.69, lógica do EA inalterada). Subida atrasada = mesma causa do E4
+  (cache de barras, v3.79 da outra sessão). A janela 09:16–09:21 de 28/09
+  ficou sem EA.
+
+**Tags:** entregue-v3.75 a v3.78, v3.81, v3.82, v3.83. Suíte 1.211.
+
+**Pendências:**
+1. **Conferência completa no 1º dia com ignição** (a partir de 29/09):
+   log do record × `ea-ignicao-replay` — entradas, saídas,
+   `desliz_entrada_medio` — com o NTSL (1 s) ao lado.
+2. Conferir no replay de 28/09 se houve ignição em 09:16–09:21 (fora do
+   ar); se houve, registrar como janela perdida, não como sinal.
+3. `compact` do backup (WINFUT e WDOFUT) — confirmar se terminou.
+4. Forward da ignição até ~68 decididos (ficha congelada).
+5. H-C2inv com ~50 eventos novos decididos (2–3 meses).
+6. Variante 1:2 — declarar stop, alvo e tempo antes de medir.
+7. Variantes em paralelo no WINFUT × modo `unico` — resolver antes do
+   primeiro EA paralelo.
+8. Pré-registro v3.80 (outra sessão) aguardando aprovação do operador.
+9. Opcional: diagnóstico nos 26 eventos casados M1 × tape (momento da
+   entrada × tamanho do evento).
+10. Continuam: teste intermitente `test_ciclo_completo_stop_cancel_oco`;
+    WDO faltando em 02–03/09 e 11/09. Ideias: sweep em minutos,
+    profundidade do livro como guarda, leilão de abertura, microprice
+    passivo com fila, gatilho próprio do WDO.

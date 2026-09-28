@@ -2026,8 +2026,11 @@ def ignicao_m1_cmd(
         typer.echo(f"\nTRADUCAO M1 x TAPE: {c}")
         log.info("ignicao_m1.traducao", **c)
     saida.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame([linha(e) for e in evs]).to_csv(saida / "eventos_m1.csv", index=False)
-    typer.echo(f"\n  eventos: {(saida / 'eventos_m1.csv').resolve()}")
+    # Nome com o intervalo: rodar uma janela nao sobrescreve os 5 anos
+    # (28/09: a janela do tape apagou o CSV do historico inteiro).
+    arq_ev = saida / f"eventos_m1_{uteis['dia'].min()}_{uteis['dia'].max()}.csv"
+    pd.DataFrame([linha(e) for e in evs]).to_csv(arq_ev, index=False)
+    typer.echo(f"\n  eventos: {arq_ev.resolve()}")
     log.info("ignicao_m1.total", lambda_=lambda_, fracao_barreira=fracao_barreira,
              total=tot, anos={a: placar([e for e in evs if e.ano == a]) for a in anos},
              veredito=veredito)

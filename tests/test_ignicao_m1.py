@@ -154,4 +154,12 @@ def test_cli_ponta_a_ponta(tmp_path: Path) -> None:
     assert r.exit_code == 0, r.output
     assert f"lambda={LAMBDA_TAPE:.4f}" in r.output and "20 pregoes com A" in r.output
     assert "2022:" in r.output and "TOTAL:" in r.output and "criterio:" in r.output
-    assert (tmp_path / "o" / "eventos_m1.csv").exists()
+    todos = list((tmp_path / "o").glob("eventos_m1_*.csv"))
+    assert len(todos) == 1
+    # janela menor grava OUTRO arquivo: nao sobrescreve o historico inteiro
+    dias = sorted(df["dia"].unique())
+    r2 = CliRunner().invoke(app, ["ignicao-m1", str(csv), "--saida", str(tmp_path / "o"),
+                                  "--de", str(dias[30])])
+    assert r2.exit_code == 0, r2.output
+    assert len(list((tmp_path / "o").glob("eventos_m1_*.csv"))) == 2
+    assert todos[0].exists()
