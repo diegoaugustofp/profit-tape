@@ -742,6 +742,67 @@ Passa a zerar na hora, mantendo o desfecho da primeira perna.
 
 ---
 
+## 10. PRE-REGISTRO: nao enviar entrada com o nivel JA ATRAVESSADO (2026-09-28)
+
+> Escrito e COMMITADO antes do codigo. **Aguarda aprovacao do operador.**
+
+**MOTIVO.** Em 28/09 o EA real subiu 09:21 e armou as 09:55 o sinal da
+barra das 09:30. A ordem de VENDA STOP em 183.915 foi enviada com o
+mercado ja' em 183.460 -- 455 pts ABAIXO do gatilho. Uma ordem stop cujo
+gatilho ja' foi atravessado nao e' ordem stop: e' ordem A MERCADO. Ela
+executou em 182 ms, sem passar por `New`, a 183.460. O gemeo simulado, que
+preenche no nivel, fez +515 pts; o real fez **+60**. Operacao certa, 455
+pts perdidos no envio.
+
+**MECANISMO, em uma frase.** A ficha supoe entrada NO NIVEL, quando o
+preco o alcanca; se o preco ja' passou, a ordem nao realiza a ficha --
+realiza outra coisa, a qualquer preco.
+
+**REGRA (fixa, e SEM PARAMETRO NOVO):**
+1. So' em modo REAL (`dry_run: false`). O gemeo simulado continua armando
+   e preenchendo no nivel -- e' ele a referencia do que a ficha faria, e a
+   diferenca entre os dois E' a medida do custo do atraso.
+2. No instante de enviar a ENTRADA, compara-se o nivel com o ultimo
+   negocio que o EA processou:
+   - venda: preco **estritamente abaixo** do nivel -> ja' atravessou;
+   - compra: preco **estritamente acima** do nivel -> ja' atravessou.
+   Preco EXATAMENTE no nivel NAO e' atravessado -- e' o gatilho legitimo,
+   e e' o que a ficha descreve.
+3. Atravessado: **nao envia**. O sinal vira descarte
+   `nivel_ja_atravessado` no diario, com nivel, ultimo preco, diferenca em
+   pontos e o atraso do EA no momento. Nao conta como operacao.
+4. Sem limiar de "sinal velho" em segundos: seria um parametro a calibrar,
+   e a travessia do nivel ja' e' a condicao que importa. Um sinal atrasado
+   cujo nivel NAO foi atravessado continua valendo -- e' exatamente o caso
+   em que a ficha ainda se realiza.
+
+**O QUE NAO MUDA:** a geometria, o gate, o alvo, o stop, a janela de t+1,
+e o caso normal (nivel ainda nao atravessado, que e' a maioria). **Nao se
+aplica as SAIDAS**: se o preco ja' passou do stop, sair a mercado e' o
+que se quer, e a protecao da secao 9 cuida disso.
+
+**CONTAGEM: NAO reinicia.** Pela regra 2 da disciplina de forward, e'
+correcao para o codigo fazer o que a ficha ja' dizia. A ficha descreve
+ordem que REPOUSA e e' acionada; mandar o equivalente a uma ordem a
+mercado nunca foi a regra.
+
+**EFEITO COLATERAL DECLARADO.** O EA real deixara' de operar sinais que o
+simulado opera, e as duas series deixam de ser pareadas nesses casos. E'
+o que se quer medir: o comparador ja' marca o nao-pareado, e a contagem
+de `nivel_ja_atravessado` passa a ser a metrica do custo do atraso.
+
+**VERIFICACAO (antes de ligar):** (1) preco ja' alem do nivel -> nao
+envia e registra o descarte; (2) preco EXATAMENTE no nivel -> ENVIA;
+(3) preco aquem -> envia (caso normal, intocado); (4) `dry_run` nao e'
+afetado; (5) o teste (1) rodado no codigo de hoje tem que REPROVAR POR
+ASSERCAO -- conferido pelo motivo, nao por erro de atributo.
+
+**O QUE ESPERAR.** Raro com o EA em dia (o cache da v3.79 reduz o atraso
+de arranque); frequente se o arranque atrasar. Se a contagem crescer, o
+problema nao e' a trava: e' o atraso, e o lugar de resolver e' o arranque.
+
+---
+
 ## Indice por assunto
 
 (2026-08-28, adicionado -- o arquivo cresceu demais para navegar so' por

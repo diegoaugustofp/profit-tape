@@ -4080,3 +4080,11 @@ Só documentação; nenhum código tocado (suíte verde; ruff e mypy limpos).
   perfil e entre EAs, com invalidacao por assinatura (arquivos, linhas)
   lida dos METADADOS -- cobre o caso real do 18/09, que ganhou 212 mil
   negocios por backfill depois de lido. 6 testes; 1.210 no total.
+- v3.80 (pre-registro, ANTES do codigo): nao enviar ordem de entrada
+  quando o nivel ja' foi atravessado -- uma ordem stop com o gatilho
+  ultrapassado e' ordem a mercado (28/09: venda stop enviada 455 pts
+  abaixo, +60 contra +515 do gemeo). Regra sem parametro novo: so' em modo
+  real, comparacao estrita com o ultimo negocio processado, preco no
+  nivel exato ENVIA. Nao muda saidas. Contagem do forward nao reinicia
+  (correcao para o codigo fazer o que a ficha ja' dizia). Aguarda
+  aprovacao.
