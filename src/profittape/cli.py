@@ -2046,6 +2046,10 @@ def ignicao_agressao_cmd(
         help="ETAPA CEGA: distribuicoes, cortes, correlacao C1xC2 e fracao de "
              "agente nao identificado -- SEM resultado. Rode ANTES da medicao."),
     saida: Path = typer.Option(Path("data/research/ignicao_agressao"), "--saida"),
+    recalcular: bool = typer.Option(
+        False, "--recalcular",
+        help="Medicao relendo o tape. Default: reaproveita features_cego.csv "
+             "da etapa cega (mesmos valores conferidos, sem reler 33 dias)."),
     log_level: str = typer.Option("WARNING", "--log-level"),
     log_file: Path | None = typer.Option(None, "--log-file"),
 ) -> None:
@@ -2064,12 +2068,22 @@ def ignicao_agressao_cmd(
         calcular,
         etapa_cega,
         ler_eventos,
+        ler_features_cegas,
         linha_csv,
         medir,
     )
 
     linhas = ler_eventos(eventos)
-    evs, avisos = calcular(raw, symbol, linhas)
+    cego_csv = saida / "features_cego.csv"
+    if not cego and not recalcular and cego_csv.exists():
+        typer.echo(f"reaproveitando a etapa cega: {cego_csv}")
+        evs, avisos = ler_features_cegas(cego_csv, linhas)
+    else:
+        if not cego and not recalcular:
+            typer.echo("SEM features_cego.csv: rode o --cego antes (ou --recalcular)")
+            raise typer.Exit(2)
+        evs, avisos = calcular(raw, symbol, linhas,
+                               progresso=lambda m: typer.echo(f"  {m}"))
     dias = sorted({e.dia for e in evs})
     typer.echo("=" * 72)
     typer.echo(f"IGNICAO x AGRESSAO (fast-track)  {'ETAPA CEGA' if cego else 'MEDICAO'}  "

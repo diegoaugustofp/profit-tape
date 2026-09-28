@@ -128,3 +128,30 @@ def test_medir_controles_positivo_e_negativo() -> None:
     r = medir(neg, "c1", float(np.median(c1)))
     assert abs(r["diferenca"]) < 0.3
     assert r["alta"]["n"] + r["baixa"]["n"] == 60
+
+
+def test_passo2_reaproveita_cego_sem_mudar_valores(tmp_path: Path) -> None:
+    """features_cego.csv -> ler_features_cegas devolve as MESMAS variaveis
+    e junta o resultado do estudo por dia+ts_ns (corte medido = corte visto)."""
+    from profittape.research.ignicao_agressao import ler_features_cegas, linha_csv
+
+    s = 1_000_000_000
+    t = 1_000 * s
+    _escrever_dia(tmp_path / "raw", "2026-08-03", [
+        (t - 30 * s, 300.0, 10, C, 1, 2),
+        (t, 600.0, 30, C, 3, 2),
+    ])
+    arq = tmp_path / "ev.csv"
+    with arq.open("w", newline="") as fh:
+        w = csv.writer(fh)
+        w.writerow(["dia", "hora_brt", "ts_ns", "direcao", "preco", "barreira"])
+        w.writerow(["2026-08-03", "10:00:00", t, 1, 600.0, "stop"])
+    linhas = ler_eventos([arq])
+    evs, _ = calcular([tmp_path / "raw"], "WINFUT", linhas)
+    cego = tmp_path / "features_cego.csv"
+    pd.DataFrame([linha_csv(e, False) for e in evs]).to_csv(cego, index=False)
+    assert "barreira" not in pd.read_csv(cego).columns
+    evs2, avisos = ler_features_cegas(cego, linhas)
+    assert avisos == []
+    assert [e.f for e in evs2] == [e.f for e in evs]
+    assert evs2[0].barreira == "stop"

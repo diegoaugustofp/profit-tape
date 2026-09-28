@@ -46,6 +46,8 @@ from __future__ import annotations
 
 import csv
 import math
+import time
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -179,7 +181,9 @@ def indice_deteccao(tape: TapeAg, ts_ns: int, preco: float) -> int | None:
 
 
 def calcular(raizes: list[Path], symbol: str, linhas: list[dict[str, str]],
-             janela_s: float = 60.0) -> tuple[list[EventoAg], list[str]]:
+             janela_s: float = 60.0,
+             progresso: Callable[[str], None] | None = None,
+             ) -> tuple[list[EventoAg], list[str]]:
     """Features de cada evento. Cada dia e' lido da 1a raiz que o tem
     (local e backup). Devolve (eventos, avisos)."""
     jan = int(janela_s * _NS)
@@ -188,7 +192,11 @@ def calcular(raizes: list[Path], symbol: str, linhas: list[dict[str, str]],
     por_dia: dict[str, list[dict[str, str]]] = {}
     for r in linhas:
         por_dia.setdefault(r["dia"], []).append(r)
-    for dia, rs in por_dia.items():
+    t0 = time.monotonic()
+    for n_dia, (dia, rs) in enumerate(por_dia.items(), 1):
+        if progresso is not None:
+            progresso(f"[{n_dia}/{len(por_dia)}] {dia}  {len(rs)} evento(s)  "
+                      f"{time.monotonic() - t0:,.0f} s decorridos")
         raiz = next((r for r in raizes
                      if (r / "trade" / f"dt={dia}" / f"sym={symbol}").exists()), None)
         tape = (carregar_tape_agentes(raiz, symbol, dia) if raiz is not None
@@ -280,3 +288,33 @@ def linha_csv(e: EventoAg, com_resultado: bool) -> dict[str, Any]:
     if com_resultado:
         d["barreira"] = e.barreira
     return d
+
+
+def ler_features_cegas(arq: Path, linhas: list[dict[str, str]]
+                       ) -> tuple[list[EventoAg], list[str]]:
+    """Passo 2 SEM reler o tape: as variaveis sao as da etapa cega (o CSV
+    conferido), e o resultado vem dos CSVs do estudo, casado por dia+ts_ns.
+    Garante que o corte medido e' o mesmo que foi visto as cegas."""
+    res = {(r["dia"], int(r["ts_ns"])): r["barreira"] for r in linhas}
+    evs: list[EventoAg] = []
+    avisos: list[str] = []
+
+    def num(x: str) -> float | None:
+        return None if x in ("", "nan", "None") else float(x)
+
+    with arq.open(newline="", encoding="utf-8") as fh:
+        for r in csv.DictReader(fh):
+            k = (r["dia"], int(r["ts_ns"]))
+            if k not in res:
+                avisos.append(f"{k[0]} {r['hora_brt']}: sem resultado nos CSVs do estudo")
+                continue
+            top = num(r["agente_top"])
+            f = Features(float(r["v_dir"]), num(r["c1"]), num(r["c2"]),
+                         None if top is None else int(top), num(r["anon"]),
+                         int(r["n_negocios"]))
+            evs.append(EventoAg(r["dia"], r["hora_brt"], k[1], int(r["direcao"]),
+                                res[k], f))
+    faltam = len(res) - len(evs)
+    if faltam > 0:
+        avisos.append(f"{faltam} evento(s) do estudo fora do CSV cego")
+    return evs, avisos
