@@ -156,3 +156,35 @@ se algo sair daqui, vira **outro EA em paralelo** (dry_run, outro YAML).
 - Leitura: indicação (2 variáveis, ~25 eventos por metade); decide o forward.
 - Limitações: corretora ≠ cliente; market maker pode zerar em minutos, não
   em 60 s.
+
+### Resultado (2026-09-28) e hipótese congelada para o forward
+
+Medição nos 51 eventos do tape (24/07–24/09), corte na mediana:
+
+| | alta | baixa | diferença |
+|---|---|---|---|
+| C1 (negócio) | 0,739 (17/23) | 0,667 (16/24) | +0,07 |
+| C2 (corretora) | 0,625 (15/24) | 0,783 (18/23) | −0,16 |
+
+Pela ficha: **nenhuma das duas sustenta a hipótese declarada** (alta →
+p_alvo maior). C1 sem efeito mensurável: encerrado. C2 veio na direção
+**contrária** (~1,2 desvio padrão, compatível com ruído). Nenhum EA de
+C1/C2 construído.
+
+**H-C2inv — registrada em 2026-09-28, ANTES de qualquer dado do teste:**
+
+> Entre as ignições do forward a partir de **29/09/2026**, as de
+> **C2 ≤ 0,0641** têm p_alvo maior que as de **C2 > 0,0641**.
+
+- Corte **congelado em 0,0641** (mediana dos 51 eventos acima). NÃO
+  recalcular a mediana nos dados novos.
+- Mesma definição de C2 da ficha acima (saldo líquido, janela de 60 s,
+  só tipos 2/3, agente ≤ 0 fora).
+- Amostra: só pregões a partir de 29/09/2026. Os 51 eventos de 24/07–24/09
+  NÃO entram (foi neles que a inversão apareceu).
+- Nenhuma mudança no EA: o tape do forward já é capturado. Procedimento:
+  `profit-tape ignicao` nos dias novos → `ignicao-agressao --cego` (conferir
+  anon e cobertura) → medição com o corte fixo.
+- Quando: com ~50 eventos decididos novos (~2–3 meses no ritmo atual).
+- Leitura: diferença baixa − alta > 0 **e** IC95 da metade baixa acima do
+  empate 0,537 → candidata a EA em paralelo. Caso contrário, encerrada.
