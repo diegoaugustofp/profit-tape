@@ -980,17 +980,57 @@ captura.
 Log por particao: `compact.processando` e `compact.particao_ok` com
 `arquivos_antes/depois`, `row_groups_antes/depois`, `linhas`, `segundos`.
 
-### `--workers N`: varios nucleos num lote grande (2026-09-29, v3.84)
+### v3.85: leitura por arquivo com `ParquetFile.read` -- o scanner do dataset era o gargalo (2026-09-29)
 
-Um lote grande (backup de 33 pregoes) levou 8h+ com o laco estritamente
-sequencial. Medido em sandbox numa particao no formato do incidente
-(519.600 linhas em 34.640 row groups): **leitura 43,7 s, `combine_chunks`
-0,5 s, escrita 0,5 s**. O tempo e' ~98% leitura -- custo linear de ~0,6 ms
-por row group de ORIGEM, dentro do C++ do Arrow; nenhuma variante de leitor
-(`ParquetFile.read`, `memory_map`, `pre_buffer`, `read_row_groups`) muda
-isso em mais de ~30%. O que sobra e' usar os nucleos parados: leitura e
-escrita soltam o GIL, entao `--workers N` roda N particoes inteiras em
-threads.
+O lote do backup levou 8h+ e continuava. Log real, `book_offer` de
+2026-08-26, v3.83:
+
+| particao | arquivos | row groups | segundos | ms / row group |
+|---|---|---|---|---|
+| VALE3  | 33 | 111.230   | 987   | 8,9 |
+| WDOFUT | 37 | 390.300   | 7.742 | 19,8 |
+| WINFUT | 37 | 1.101.349 | (>10h) | -- |
+
+Custo por row group CRESCENDO com o tamanho da particao, processo em 12%
+de CPU (um nucleo de oito a 100%), 0,1 MB/s de disco, antivirus ja'
+desligado na pasta: um laco SERIAL em C++. Medido pelo operador num
+`part-0003.parquet` de trade com 28.780 row groups (12 colunas, Windows,
+pyarrow 25.0.1):
+
+| caminho | ms / row group |
+|---|---|
+| `ds.dataset(...).to_table(use_threads=True)` -- compact ate' v3.84 | 0,57 |
+| `ds.dataset(...).to_table(use_threads=False)` | 0,30 |
+| `ParquetFile.read(use_threads=False)` | 0,22 |
+| **`ParquetFile.read(use_threads=True)`** -- v3.85 | **0,08** |
+| `read_row_groups(0..k)`, k de 2.500 a 20.000 | 0,19 -> 0,21 (linear) |
+
+O scanner do dataset (Acero) trata cada row group de 7-10 linhas como um
+batch com agendamento proprio; com threads ele PIORA 2x, e em particao de
+book com 37 arquivos e 10^5-10^6 row groups chegou a 20 ms/rg. `ParquetFile
+.read(use_threads=True)` paraleliza dentro do arquivo e e' linear.
+
+A v3.85 le arquivo a arquivo com `ParquetFile.read` e concatena. Arquivo
+com ZSTD podre por dentro (footer ok) e' pulado na propria leitura --
+nao existe mais a segunda passada "fragmento a fragmento" nem o log
+`compact.leitura_em_lote_falhou`. `--modo-leitura` continua aceito:
+`lote` = threads dentro do arquivo (default), `sequencial` = sem
+threads, `fragmento` = igual a `sequencial`. Verificacao pos-escrita,
+manifesto, commit e skips: inalterados. Teste que reprova a v3.84:
+`ds.dataset` monkeypatchado para explodir, o compact tem que funcionar.
+
+Compactacao interrompida no meio do lote antigo: matar e' seguro
+(originais intactos, sobra `.compacting` descartada na rodada seguinte)
+e reexecutar na v3.85 e' mais barato que esperar.
+
+### `--workers N`: varias particoes em paralelo (2026-09-29, v3.84)
+
+`--workers N` roda N particoes INTEIRAS em threads (`to_table` e a
+escrita soltam o GIL, medido). Util quando ha' muitas particoes; NAO
+encurta uma particao gigante isolada -- para essa, o que resolve e' a
+leitura da v3.85. O ganho com varios nucleos nao foi medido (sandbox de
+um nucleo); a v3.84 registrou a conclusao errada de que "nenhum leitor
+muda o custo" -- corrigida acima.
 
 ```bash
 profit-tape compact --raw data/raw --workers 4 --log-file logs/compact.jsonl
@@ -1008,35 +1048,19 @@ canceladas). Os totais do relatorio sao somados por particao. `progresso`
 no log e' o indice de submissao, aproximado: as particoes terminam fora
 de ordem.
 
-Quantos: comece com o numero de nucleos fisicos (4-8 numa maquina de
-trabalho). Memoria de pico ~= N x (maior particao em memoria + um row
-group); um dia cheio de WINFUT (~5 M linhas) e' ~400 MB em memoria. O
-ganho real em maquina com varios nucleos NAO foi medido (o sandbox tem
-um nucleo): meca uma vez, num dia fragmentado, `--dia X --workers 1`
-contra `--workers 4` comparando `segundos` em `compact.particao_ok` e o
-`tempo total` do relatorio. Se 4 nao render perto de 4x, o gargalo e'
-disco ou antivirus, nao CPU -- ver abaixo.
+Quantos: comece com o numero de nucleos fisicos (4-8). Memoria de pico
+~= N x (maior particao em memoria + um row group); um dia cheio de WINFUT
+(~5 M linhas de trade) e' ~400 MB; o book de WINFUT de 61 M linhas chegou
+a 6 GB numa particao so'.
 
-Escrita: em vez de `combine_chunks()` da tabela inteira (dobrava a
-memoria) + `write_table`, agora `ParquetWriter` recebe uma fatia de
+Escrita (v3.84): em vez de `combine_chunks()` da tabela inteira (dobrava
+a memoria) + `write_table`, `ParquetWriter` recebe uma fatia de
 `row_group_size` por vez, coalescida sozinha -- mesma velocidade, memoria
 extra de um row group. A verificacao pos-escrita (footer, `num_rows`,
-`num_row_groups <= ceil(linhas / row_group_size)`) e' a mesma, e continua
-sendo o que impede uma regressao de escrita em micro-lotes de trocar bom
-por ruim. `to_batches()` + `write_batch()` NAO e' opcao: `to_batches` nao
-funde chunks pequenos, e a tabela lida tem um chunk por row group de
-origem -- medido: 34.640 batches viram 34.640 row groups, o incidente de
-volta.
-
-**Antivirus (nota, nao medida):** o Windows Defender escaneia arquivo
-novo no fechamento e no rename (`.compacting` -> `.parquet`), e escaneia
-na abertura para leitura. No `compact` isso e' uma vez por arquivo, nao
-por row group, entao pelo numero acima nao deveria dominar -- mas se o
-`segundos` de uma particao ficar muito acima de ~1 ms por row group de
-origem, ou se `--workers 4` nao render nada, e' o primeiro suspeito
-depois do disco: excluir `data/raw` (e `logs/`) da protecao em tempo
-real, ou pelo menos conferir no Monitor de Recursos se `MsMpEng.exe`
-esta' consumindo CPU durante o comando.
+`num_row_groups <= ceil(linhas / row_group_size)`) e' a mesma.
+`to_batches()` + `write_batch()` NAO e' opcao: `to_batches` nao funde
+chunks pequenos, e a tabela lida tem um chunk por row group de origem --
+medido: 34.640 batches viram 34.640 row groups, o incidente de volta.
 
 ## Atualizar a ProfitDLL (protocolo, 2026-09-11)
 

@@ -4218,8 +4218,38 @@ Roteiro de medição em `OPERACAO.md` (`--dia X --workers 1` vs `4`,
 comparar `segundos`). Se não render perto de N×, o gargalo é disco ou
 antivírus (nota no mesmo documento), não CPU.
 
-**Tags:** entregue-v3.84. Suíte 1.219.
+**A conclusão acima estava errada, e o log do operador mostrou.** O
+`compact` do backup em v3.83 (book_offer 26/08): VALE3 111 mil row groups
+em 987 s (8,9 ms/rg), WDOFUT 390 mil em 7.742 s (19,8 ms/rg), WINFUT
+1,1 M ainda rodando após 10 h — custo por row group crescendo com a
+partição, 12% de CPU (um núcleo de oito), 0,1 MB/s de disco. Não era
+"custo do Arrow que nenhum leitor muda": o sandbox tinha um núcleo e
+partições pequenas. O operador rodou um benchmark num `part-0003.parquet`
+de 28.780 row groups (Windows, pyarrow 25.0.1): `ds.dataset().to_table
+(use_threads=True)` 0,57 ms/rg; **com threads pior que sem** (0,30);
+`ParquetFile.read(use_threads=True)` **0,08 ms/rg**, linear de 2.500 a
+20.000. O scanner do dataset serializa 10^5–10^6 batches minúsculos num
+laço próprio.
 
-**Pendências:** as da sessão anterior, com a 3 reformulada: rodar o
-`compact` do backup com `--workers 4` e anotar `tempo total` para
-comparar com as 8h+.
+**v3.85:** leitura arquivo a arquivo com `ParquetFile.read` +
+`concat_tables`; `ds.dataset` removido do módulo; arquivo com ZSTD podre
+é pulado na própria passada (fim da segunda passada "fragmento a
+fragmento" e do log `compact.leitura_em_lote_falhou`); `--modo-leitura
+fragmento` ≡ `sequencial`. Docstring da v3.84 corrigido no próprio
+módulo. +2 testes, os dois **provados reprovando a v3.84** (`ds.dataset`
+monkeypatchado para explodir; arquivo podre sem segunda passada). Suíte
+1.221. `--workers` da v3.84 continua útil para muitas partições; não
+encurta uma partição gigante — a v3.85 sim.
+
+**Lição registrada (disciplina 0 e 6):** medi o mecanismo num ambiente
+que não reproduzia a escala do problema e generalizei. O dado que
+decidiu veio do operador, na máquina real, em 5 minutos de benchmark —
+mais barato que qualquer sessão de teoria. Antes de concluir "é custo
+intrínseco", pedir uma medição na escala real.
+
+**Tags:** entregue-v3.84, entregue-v3.85. Suíte 1.221.
+
+**Pendências:** as da sessão anterior, com a 3 reformulada: matar o
+`compact` v3.83 do backup se ainda estiver no WINFUT, aplicar v3.85,
+rodar `--workers 4` nas pastas restantes e anotar `segundos` por
+partição — o WINFUT de 1,1 M row groups deve cair de >10 h para minutos.

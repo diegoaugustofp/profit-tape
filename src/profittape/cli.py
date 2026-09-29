@@ -621,8 +621,10 @@ def compact(
     modo_leitura: str = typer.Option(
         "lote",
         "--modo-leitura",
-        help="'lote' (default, paralelo) / 'sequencial' (sem threads) / "
-        "'fragmento' (arquivo a arquivo) -- mesma semantica do curate.",
+        help="'lote' (default: ParquetFile.read com threads DENTRO de cada "
+        "arquivo) / 'sequencial' (sem threads). A leitura ja' e' arquivo a "
+        "arquivo desde a v3.85; 'fragmento' e' aceito e equivale a "
+        "'sequencial'.",
     ),
     dia: str | None = typer.Option(
         None, "--dia", help="Restringe a UM dt=YYYY-MM-DD. Combinavel com --simbolo."

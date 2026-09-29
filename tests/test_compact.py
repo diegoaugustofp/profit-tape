@@ -565,3 +565,47 @@ def test_workers_invalido_e_recusado(tmp_raiz: Path) -> None:
     r2 = CliRunner().invoke(app, ["compact", "--raw", str(tmp_raiz), "--workers", "2"])
     assert r2.exit_code == 0, r2.output
     assert _row_groups(d) == {"part-0002.parquet": 1}
+
+
+def test_leitura_e_por_arquivo_com_parquetfile_e_nao_pelo_scanner_do_dataset(
+    tmp_raiz: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Medido pelo operador (2026-09-29, Windows, pyarrow 25.0.1, 28.780 row
+    groups): ds.dataset().to_table() 0,57 ms/rg, ParquetFile.read(threads)
+    0,08 ms/rg -- e o scanner chegou a 20 ms/rg em particao de book com
+    390 mil row groups. O scanner fica DESLIGADO: se qualquer caminho de
+    leitura do compact tocar nele, este teste explode. Reprova a v3.84."""
+    import pyarrow.dataset as ds
+
+    def _proibido(*a: object, **k: object) -> None:
+        raise AssertionError("compact usou ds.dataset -- caminho lento, proibido desde v3.85")
+
+    monkeypatch.setattr(ds, "dataset", _proibido)
+    d = _escrever_fragmentado(tmp_raiz, DIA, "WINFUT", n_arquivos=3, lotes_por_arquivo=10)
+    antes = pq.read_table(d / "part-0000.parquet").num_rows
+    for modo in ("lote", "sequencial", "fragmento"):
+        totais = compactar_raw(tmp_raiz, hoje=HOJE, modo_leitura=modo)
+        if modo == "lote":
+            assert totais["particoes"] == 1 and totais["linhas"] == 3 * antes
+        else:
+            assert totais["ja_compactas"] == 1        # idempotente nos outros modos
+
+
+def test_arquivo_podre_por_dentro_e_pulado_na_propria_leitura_sem_segunda_passada(
+    tmp_raiz: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Antes: to_table falhava na particao inteira, logava
+    compact.leitura_em_lote_falhou e relia fragmento a fragmento. Agora o
+    arquivo ruim e' isolado na primeira (e unica) passada."""
+    d = _escrever_fragmentado(tmp_raiz, DIA, "WINFUT", n_arquivos=3, lotes_por_arquivo=10)
+    ruim = d / "part-0001.parquet"
+    b = bytearray(ruim.read_bytes())
+    for i in range(50, min(80, len(b) - 8)):
+        b[i] = 0xFF
+    ruim.write_bytes(bytes(b))
+    totais = compactar_raw(tmp_raiz, hoje=HOJE)
+    out = capsys.readouterr().out
+    assert "compact.leitura_em_lote_falhou" not in out
+    assert out.count("compact.arquivo_pulado") == 1
+    assert totais["arquivos_pulados"] == 1 and totais["linhas"] == 300
+    assert ruim.exists()

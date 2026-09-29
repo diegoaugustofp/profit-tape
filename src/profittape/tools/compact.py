@@ -55,14 +55,16 @@ interrompida, que se resolve simplesmente rodando compact de novo.
 PARALELISMO E MEMORIA (2026-09-29)
 ----------------------------------
 Medido em sandbox com uma particao no formato do incidente (519.600 linhas
-em 34.640 row groups): to_table() 43,7 s, combine_chunks() 0,5 s,
-write_table() 0,5 s. As 8h+ de um lote grande sao ~98% LEITURA -- custo
-linear de ~0,6 ms por row group de origem, dentro do C++ do Arrow, e
-nenhuma variante de leitor (ParquetFile.read, memory_map, pre_buffer,
-read_row_groups) muda isso em mais de ~30%. O que muda e' usar mais
-nucleos: to_table() e a escrita soltam o GIL (medido: thread Python
-concorrente segue rodando), entao `workers>1` roda particoes inteiras em
-ThreadPoolExecutor. Cada particao e' independente no disco (.compacting e
+em 34.640 row groups): leitura 43,7 s, combine_chunks() 0,5 s,
+write_table() 0,5 s. As 8h+ de um lote grande sao ~98% LEITURA. A v3.84
+concluiu "custo do Arrow que nenhum leitor muda" -- ERRADO: o sandbox
+so' tinha um nucleo e particoes pequenas. Na maquina do operador (v3.85,
+comentario no laco de leitura) o culpado era ds.dataset().to_table(),
+7x mais lento que ParquetFile.read(use_threads=True) e superlinear em
+particao grande. A leitura e a escrita soltam o GIL (medido), entao
+`workers>1` roda particoes inteiras em ThreadPoolExecutor -- util para
+muitas particoes; a particao gigante isolada e' o ParquetFile que
+resolve. Cada particao e' independente no disco (.compacting e
 manifesto vivem no proprio diretorio), entao nao ha corrida; os totais
 saem de cada worker como dict e o chamador soma.
 
@@ -87,7 +89,6 @@ from datetime import date
 from pathlib import Path
 
 import pyarrow as pa
-import pyarrow.dataset as ds
 import pyarrow.parquet as pq
 import structlog
 
@@ -333,44 +334,42 @@ def _processar_particao(dia: str, sym: str, pasta: Path, progresso: str,
              row_groups=rg_antes, linhas=linhas_antes)
     t0 = time.monotonic()
 
-    # SEM partitioning hive: dt e sym vivem no caminho e NAO podem entrar
+    # Leitura ARQUIVO A ARQUIVO com ParquetFile.read, nunca
+    # ds.dataset(...).to_table(): medido pelo operador em 2026-09-29 num
+    # part-*.parquet de 28.780 row groups (12 colunas), Windows, pyarrow
+    # 25.0.1 -- ParquetFile.read(use_threads=True) 0,08 ms/rg; o scanner do
+    # dataset 0,57 ms/rg com threads e 0,30 SEM (as threads do scanner
+    # PIORAM: 10^4-10^6 batches de 7-10 linhas serializados num laco
+    # proprio, um nucleo em 100% e os outros parados). Em particao de book
+    # com 37 arquivos e 390 mil row groups o scanner chegou a 20 ms/rg
+    # (2h09 numa particao). ParquetFile.read e' linear (0,19 -> 0,21 ms/rg
+    # de 2.500 a 20.000 row groups) e paraleliza DENTRO do arquivo.
+    #
+    # Ler por arquivo tambem dispensa a antiga segunda passada "fragmento a
+    # fragmento": um arquivo com ZSTD podre por dentro (footer ok --
+    # incidente de 22/08) explode so' na propria leitura, e' pulado e fica
+    # no disco. `modo_leitura` sobrevive so' como use_threads:
+    # 'lote' = True; 'sequencial' e 'fragmento' = False.
+    #
+    # Sem partitioning hive: dt e sym vivem no caminho e NAO podem entrar
     # no arquivo (o curate ja' aprendeu isso: conflito de tipo na leitura
-    # do dataset). Lendo sem partitioning, a tabela sai com o schema dos
-    # arquivos e nada mais.
-    dataset = ds.dataset([str(q) for q in legiveis], format=ds.ParquetFileFormat())
-    tabela: pa.Table | None = None
-    lidos: list[Path] = list(legiveis)
-    if p.modo_leitura != "fragmento":
-        # Otimista, como o curate: to_table() em lote e' o caminho rapido
-        # e o que descarta as fronteiras de row group da origem. So' cai
-        # pro fragmento-a-fragmento se algum arquivo estiver podre por
-        # dentro (footer ok, ZSTD quebrado -- incidente de 22/08).
+    # do dataset). ParquetFile le so' o schema do arquivo, nada mais.
+    use_threads = p.modo_leitura == "lote"
+    partes_ok: list[pa.Table] = []
+    lidos: list[Path] = []
+    for arq in legiveis:
         try:
-            tabela = dataset.to_table(use_threads=(p.modo_leitura == "lote"))
+            partes_ok.append(pq.ParquetFile(arq).read(use_threads=use_threads))
+            lidos.append(arq)
         except Exception as exc:
-            log.warning("compact.leitura_em_lote_falhou", dia=dia, symbol=sym,
-                        erro=f"{type(exc).__name__}: {str(exc)[:150]}",
-                        nota="algum arquivo tem corrupcao interna -- isolando "
-                             "fragmento a fragmento")
-            tabela = None
-    if tabela is None:
-        partes_ok: list[pa.Table] = []
-        lidos = []
-        for frag in dataset.get_fragments():
-            caminho = Path(frag.path)
-            try:
-                partes_ok.append(frag.to_table())
-                lidos.append(caminho)
-            except Exception as exc2:
-                log.warning("compact.arquivo_pulado", dia=dia, symbol=sym,
-                            arquivo=caminho.name,
-                            erro=f"{type(exc2).__name__}: {str(exc2)[:100]}",
-                            nota="row group corrompido -- fica no disco como esta")
-                t["arquivos_pulados"] += 1
-        if not partes_ok:
-            log.warning("compact.particao_sem_arquivo_legivel", dia=dia, symbol=sym)
-            return t
-        tabela = pa.concat_tables(partes_ok, promote_options="permissive")
+            log.warning("compact.arquivo_pulado", dia=dia, symbol=sym, arquivo=arq.name,
+                        erro=f"{type(exc).__name__}: {str(exc)[:100]}",
+                        nota="row group corrompido -- fica no disco como esta")
+            t["arquivos_pulados"] += 1
+    if not partes_ok:
+        log.warning("compact.particao_sem_arquivo_legivel", dia=dia, symbol=sym)
+        return t
+    tabela = pa.concat_tables(partes_ok, promote_options="permissive")
 
     # Sem os arquivos pulados, o "antes" que faz sentido comparar e' so'
     # dos que entraram na reescrita -- do inventario, sem reler footer.
