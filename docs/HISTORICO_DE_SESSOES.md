@@ -4253,3 +4253,47 @@ intrínseco", pedir uma medição na escala real.
 `compact` v3.83 do backup se ainda estiver no WINFUT, aplicar v3.85,
 rodar `--workers 4` nas pastas restantes e anotar `segundos` por
 partição — o WINFUT de 1,1 M row groups deve cair de >10 h para minutos.
+
+### 2026-09-29 — EA VWAP + Volume Profile: desenho fechado e F1 conferível (v3.86)
+
+Ponto de partida: documento "A integração da VWAP e Volume Profile"
+(3 setups) pedido como fast-track. A conversa fechou o desenho antes de
+qualquer código, e o registro está em `docs/eas/vwap_vp.md`:
+
+- **Gatilhos "em palavras" não são discricionários, são sub-especificados**:
+  cada um tem 2–3 definições concorrentes na literatura de order flow, com
+  números convencionais do ES/NQ sem validação publicada. Decisão: não
+  converter, **medir no WIN** — limiar = percentil da distribuição por
+  barra M5 na amostra queimada, congelado como valor.
+- Dois dos três blocos já existiam medidos: absorção (`absorcao_dir`, z de
+  50 barras — REPROVADA sozinha em 30/08; aqui vira gate em LOCAL) e gate
+  de volume por horário (ficha 12). Faltava só delta por nível de preço.
+- **Setup B primeiro** (±2SD ∧ VAH/VAL de ontem ∧ absorção ≥ p80). VP de
+  referência = dia anterior fixo, do curated, com cache. Todos os negócios
+  no VWAP/VP (o que o Profit plota); RLP e leilão contados à parte.
+- **p90 é subgrupo do p80, não segunda variante**: um EA, valor bruto no
+  log, subgrupos pré-declarados (p90, `z_agf_3 ≥ 1,4`, com/sem RLP), mais
+  nenhum. Rótulo "agressivo/conservador" recusado — confunde seletividade
+  do gatilho com risco.
+- **Corretora não entra no gatilho**: C2 da ignição não sustentou a
+  hipótese e já paga forward (H-C2inv); `z_agf_3` gravado por observação.
+- **M5**, não M15 nem M1. Nota: "M15 só serve para ações" contradiz o 123
+  M15 (p1 0,5285, n=5.444) — não virar convenção do projeto.
+
+**Entregue (v3.86):** `ea/vwap_sessao.py` (VWAP de sessão O(1), desvio
+ponderado, origem deslocada para não perder precisão em p~1,4e5),
+`ea/perfil_preco.py` (histograma por bin, POC, área de valor, HVN/LVN
+parametrizados, delta por nível com RLP/leilão separados, cache por
+assinatura do curated), `research/vwapvp_conferir.py` + comando
+`vwapvp-conferir` (três conjuntos de negócios lado a lado, VWAP em
+checkpoints para dimensionar D6, histograma CSV). 18 testes com exemplos
+conferidos à mão (VWAP 107,5/sd 4,33; POC/VA; perfil em "M"). Suíte
+1.239, ruff e mypy limpos. Ficha F0 escrita; linha no índice de fichas.
+
+**Não feito / próximo:** nenhum dado real olhado (o sandbox não tem o
+curated). O operador confere 2–3 dias contra o Profit e anota o que
+divergiu (algoritmo da VA, conjunto de negócios, bin) na ficha. F2 =
+replay com distribuição do estimador e eventos/pregão por cláusula; só
+então TAXA/HORIZONTE. F3 = EA na esteira.
+
+**Tags:** entregue-v3.86. Suíte 1.239.

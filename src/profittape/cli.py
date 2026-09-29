@@ -1489,6 +1489,52 @@ def barra_tempo_conferir(
                "foi tirado, e as do comeco do dia se o record entrou tarde).")
 
 
+@app.command(name="vwapvp-conferir")
+def vwapvp_conferir(
+    dias: list[str] = typer.Option(..., "--dia", help="YYYY-MM-DD (repetivel)"),
+    curated: Path = typer.Option(Path("data/curated"), "--curated"),
+    symbol: str = typer.Option("WINFUT", "--symbol"),
+    bin_pts: float = typer.Option(25.0, "--bin-pts", help="largura do bin do perfil (D4)"),
+    pct: float = typer.Option(0.70, "--pct", help="fracao da area de valor"),
+    lvn_frac: float = typer.Option(0.30, "--lvn-frac"),
+    hvn_frac: float = typer.Option(0.50, "--hvn-frac"),
+    vizinhos: int = typer.Option(2, "--vizinhos"),
+    checkpoint: list[int] = typer.Option([1000, 1200, 1400, 1600], "--checkpoint",
+                                         help="hhmm em que reportar o VWAP (repetivel)"),
+    histograma_csv: Path | None = typer.Option(
+        None, "--histograma-csv", help="grava bin,volume,delta_agr,rlp de cada dia (para plotar)"),
+    log_level: str = typer.Option("INFO", "--log-level"),
+) -> None:
+    """
+    F1 do EA vwap_vp (docs/eas/vwap_vp.md): VWAP de sessao com bandas e
+    perfil de volume POR PRECO (POC, VAL, VAH, HVN/LVN) recalculados do
+    TAPE curado, para bater contra o grafico do Profit antes de qualquer
+    replay. Tres conjuntos de negocios lado a lado (todos / agressao+RLP /
+    agressao) para medir, nao assumir, o efeito do RLP e do leilao.
+    """
+    configurar(log_level)
+    from .research.vwapvp_conferir import conferir, formatar
+
+    r = conferir(curated, symbol, dias, bin_pts=bin_pts, pct=pct, lvn_frac=lvn_frac,
+                 hvn_frac=hvn_frac, vizinhos=vizinhos,
+                 checkpoints_hhmm=tuple(sorted(checkpoint)))
+    typer.echo("=" * 72)
+    typer.echo(f"VWAP DE SESSAO + PERFIL POR PRECO — {symbol}, do tape curado")
+    typer.echo("=" * 72)
+    for i, (dia, d) in enumerate(r["dias"].items(), 1):
+        typer.echo(f"[{i}/{len(dias)}] {dia}")
+        for linha in formatar(d):
+            typer.echo(linha)
+        if histograma_csv is not None and "histograma" in d:
+            arq = histograma_csv.with_name(f"{histograma_csv.stem}_{dia}{histograma_csv.suffix}")
+            d["histograma"].to_csv(arq, index=False)
+            typer.echo(f"    histograma -> {arq}")
+    typer.echo("\n  Como conferir: no Profit, VWAP com bandas de 2 desvios e Volume Profile "
+               "(area de valor 70%) do mesmo dia. VWAP e POC/VAL/VAH devem bater em ate' "
+               "1 bin; se 'todos' nao bater e 'agressao_rlp' bater, o grafico exclui o "
+               "leilao -- anote na ficha (D3).")
+
+
 @app.command(name="semente-conferir")
 def semente_conferir(
     parquet: Path = typer.Argument(..., help="barras_123.parquet (saida do eas-preco --ficha 123)"),

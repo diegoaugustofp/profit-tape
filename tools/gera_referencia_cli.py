@@ -120,6 +120,7 @@ COMANDOS: dict[str, tuple[str, str]] = {
     "ea-ignicao-replay": ("ea", "eas/ignicao.md"),
     "barra-tempo-conferir": ("ea", "EAS_DE_PRECO.md 5.4"),
     "semente-conferir": ("ea", "EAS_DE_PRECO.md 5.4"),
+    "vwapvp-conferir": ("ea", "eas/vwap_vp.md F1"),
     "diario": ("ea", "EA_ARQUITETURA.md 6"),
     "e4-comparar": ("ea", "RUNBOOK_E4.md"),
     "ea-ordem-teste": ("ea", "EA_ARQUITETURA.md 2 (E2)"),

@@ -2,7 +2,7 @@
 
 > **Status:** vivo (GERADO) — **Revisado:** pela ultima execucao de `tools/gera_referencia_cli.py` — **Assunto:** todos os comandos de `src/profittape/cli.py`, agrupados por categoria, com a nota de trial e o documento de referencia. NAO EDITE A MAO: rode o script.
 
-76 comandos. Categoria e documento vem do dicionario no script; nome e descricao vem do docstring do proprio comando (`profit-tape <cmd> --help` mostra as opcoes).
+77 comandos. Categoria e documento vem do dicionario no script; nome e descricao vem do docstring do proprio comando (`profit-tape <cmd> --help` mostra as opcoes).
 
 A distincao que mais importa: comandos que **consomem trial** sobem o limiar deflacionado a cada rodada e so' devem rodar com dado NOVO suficiente; os que nao consomem podem rodar quando quiser (skill `profit-tape-disciplina`, 2).
 
@@ -149,6 +149,7 @@ A distincao que mais importa: comandos que **consomem trial** sobem o limiar def
 | `ea-replay` | Forward-test SEM conexao propria: reler os trades que o `record` JA' CAPTUROU (parquet), alimentar o MESMO nucleo do EA (sinal, decisao, risco), e reportar as decisoes que teriam sido tomadas. | EA_ARQUITETURA.md |
 | `ea-replay-lote` | Roda ea-replay em TODOS os dias ja' capturados (uma instancia NOVA de EAService por dia -- circuit breaker e posicao reiniciam a cada dia, igual rodaria em producao de verdade), agrega o resultado. | EA_ARQUITETURA.md; BOAS_PRATICAS_PROGRESSO.md |
 | `semente-conferir` | Passo 2 do F5 do 123: semente da MME80 (parquet do grafico + ponte pelo tape) e a recursao ao longo do dia, comparada barra a barra com o mme80_ntsl do grafico no mesmo dia. | EAS_DE_PRECO.md 5.4 |
+| `vwapvp-conferir` | F1 do EA vwap_vp (docs/eas/vwap_vp.md): VWAP de sessao com bandas e perfil de volume POR PRECO (POC, VAL, VAH, HVN/LVN) recalculados do TAPE curado, para bater contra o grafico do Profit antes de qualquer replay. | eas/vwap_vp.md F1 |
 
 ## Infraestrutura e operacao
 
