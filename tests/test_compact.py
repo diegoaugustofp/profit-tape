@@ -202,13 +202,13 @@ def test_originais_so_sao_removidos_depois_dos_novos_gravados_e_verificados(
     antes = _row_groups(d)
     conteudo_antes = _ler_ordenado(d)
 
-    original = mod.pq.write_table
+    original = mod._gravar_arquivo
 
     def _explode(*a: object, **k: object) -> None:
         original(*a, **k)               # grava o temporario de verdade...
         raise OSError("disco cheio")    # ...e falha antes de terminar
 
-    monkeypatch.setattr(mod.pq, "write_table", _explode)
+    monkeypatch.setattr(mod, "_gravar_arquivo", _explode)
     with pytest.raises(OSError, match="disco cheio"):
         compactar_raw(tmp_raiz, hoje=HOJE)
 
@@ -229,14 +229,16 @@ def test_verificacao_pos_escrita_recusa_novo_com_row_groups_demais(
     d = _escrever_fragmentado(tmp_raiz, DIA, "WINFUT", n_arquivos=2, lotes_por_arquivo=20)
     antes = _row_groups(d)
 
-    def _write_batch_a_batch(table: pa.Table, where: Path, **k: object) -> None:
-        # simula a regressao: micro-lotes de 15 linhas
+    def _write_batch_a_batch(table: pa.Table, where: Path, row_group_size: int) -> None:
+        # simula a regressao: micro-lotes de 15 linhas. E' TAMBEM o que
+        # to_batches(max_chunksize=row_group_size) + write_batch faria com a
+        # tabela chunked lida do incidente -- to_batches nao funde chunks.
         w = pq.ParquetWriter(where, table.schema, compression="zstd")
         for b in table.to_batches(max_chunksize=15):
             w.write_batch(b)
         w.close()
 
-    monkeypatch.setattr(mod.pq, "write_table", _write_batch_a_batch)
+    monkeypatch.setattr(mod, "_gravar_arquivo", _write_batch_a_batch)
     with pytest.raises(RuntimeError, match="row groups"):
         compactar_raw(tmp_raiz, hoje=HOJE)
     assert _row_groups(d) == antes
@@ -366,3 +368,200 @@ def test_cli_compact_chega_em_compactar_raw(tmp_raiz: Path) -> None:
     r2 = CliRunner().invoke(app, ["compact", "--raw", str(tmp_raiz),
                                   "--row-group-size", "10", "--max-rows-per-file", "5"])
     assert r2.exit_code != 0
+
+
+# ---------------------------------------------------------------------------
+# --workers e escrita por fatia (2026-09-29)
+# ---------------------------------------------------------------------------
+
+def _seis_particoes(raiz: Path) -> list[Path]:
+    pastas = []
+    for dia in (DIA, "2026-08-15"):
+        for sym, n_arq, lotes in (("WINFUT", 3, 20), ("WDOFUT", 2, 12), ("PETR4", 1, 8)):
+            pastas.append(_escrever_fragmentado(raiz, dia, sym, n_arq, lotes))
+    return pastas
+
+
+def test_workers_paralelo_produz_o_mesmo_resultado_do_sequencial(tmp_path: Path) -> None:
+    """Mesmas 6 particoes em duas raizes: workers=1 numa, workers=4 na outra.
+    Totais (menos tempo), row groups por arquivo e conteudo por particao
+    tem que ser identicos -- a ordem em que terminam nao importa."""
+    seq_raiz, par_raiz = tmp_path / "seq", tmp_path / "par"
+    seq_raiz.mkdir()
+    par_raiz.mkdir()
+    seq = _seis_particoes(seq_raiz)
+    par = _seis_particoes(par_raiz)
+
+    t_seq = compactar_raw(seq_raiz, hoje=HOJE, workers=1, row_group_size=200)
+    t_par = compactar_raw(par_raiz, hoje=HOJE, workers=4, row_group_size=200)
+
+    del t_seq["segundos_total"], t_par["segundos_total"]
+    assert t_par == t_seq
+    assert t_par["particoes"] == 6
+    assert t_par["row_groups_antes"] == 2 * (60 + 24 + 8)
+    for a, b in zip(seq, par, strict=True):
+        assert _row_groups(a) == _row_groups(b)
+        assert _ler_ordenado(a).equals(_ler_ordenado(b))
+        assert not list(b.glob(f"*{SUFIXO_TEMP}")) and not (b / MANIFESTO).exists()
+
+
+def test_workers_respeita_skips_de_dia_corrente_e_inprogress(tmp_raiz: Path) -> None:
+    """Os skips sao decididos DENTRO do worker, na mesma ordem de antes."""
+    d_hoje = _escrever_fragmentado(tmp_raiz, HOJE.isoformat(), "WINFUT", 2, 10)
+    suja = _escrever_fragmentado(tmp_raiz, DIA, "WDOFUT", 2, 10)
+    (suja / "part-0002.parquet.inprogress").write_bytes(b"PAR1 parcial")
+    sadia = _escrever_fragmentado(tmp_raiz, DIA, "WINFUT", 2, 10)
+    antes_hoje, antes_suja = _row_groups(d_hoje), _row_groups(suja)
+
+    totais = compactar_raw(tmp_raiz, hoje=HOJE, workers=3)
+
+    assert totais["puladas_dia_corrente"] == 1
+    assert totais["puladas_inprogress"] == 1
+    assert totais["particoes"] == 1
+    assert _row_groups(d_hoje) == antes_hoje
+    assert _row_groups(suja) == antes_suja
+    assert _row_groups(sadia) == {"part-0002.parquet": 1}
+
+
+def test_escrita_por_fatia_gera_exatamente_um_row_group_por_fatia(tmp_raiz: Path) -> None:
+    """A tabela lida do incidente chega com um chunk por row group de origem
+    (aqui: 3.600 linhas em 240 chunks de 15). A escrita por fatia tem que
+    produzir ceil(linhas/row_group_size) row groups -- nem um a mais (seria
+    a regressao de write_batch por chunk) -- cada um com <= row_group_size."""
+    d = _escrever_fragmentado(tmp_raiz, DIA, "WINFUT", n_arquivos=4, lotes_por_arquivo=60)
+    antes = _ler_ordenado(d)
+    # 700 nao divide 3.600: ultima fatia parcial (3.600 = 5 x 700 + 100)
+    compactar_raw(tmp_raiz, hoje=HOJE, row_group_size=700, max_rows_per_file=10_000)
+    meta = pq.ParquetFile(d / "part-0004.parquet").metadata
+    assert meta.num_row_groups == 6
+    tamanhos = [meta.row_group(i).num_rows for i in range(meta.num_row_groups)]
+    assert tamanhos == [700, 700, 700, 700, 700, 100]
+    assert _ler_ordenado(d).equals(antes)
+
+
+def test_gravar_arquivo_recebe_tabela_chunked_e_nao_reproduz_o_incidente(tmp_path: Path) -> None:
+    """Unitario do helper: entrada com 240 chunks de 15 linhas, saida com
+    ceil(3600/1000) = 4 row groups. E' o verificador rodado contra o caso
+    que ele deveria pegar: to_batches+write_batch daria 240."""
+    import profittape.tools.compact as mod
+
+    tab = pa.concat_tables([pa.Table.from_batches([_batch(list(range(i, i + 15)), "X")])
+                            for i in range(0, 3600, 15)])
+    assert tab.column(0).num_chunks == 240
+    destino = tmp_path / "o.parquet"
+    mod._gravar_arquivo(tab, destino, row_group_size=1000)
+    meta = pq.ParquetFile(destino).metadata
+    assert meta.num_row_groups == 4
+    assert meta.num_rows == 3600
+    assert meta.row_group(0).column(0).compression == "ZSTD"
+    assert meta.row_group(0).column(0).statistics is not None
+    # contraprova: o caminho proibido produz 240
+    w = pq.ParquetWriter(tmp_path / "ruim.parquet", tab.schema, compression="zstd")
+    for b in tab.to_batches(max_chunksize=1000):
+        w.write_batch(b)
+    w.close()
+    assert pq.ParquetFile(tmp_path / "ruim.parquet").metadata.num_row_groups == 240
+
+
+def test_retomada_de_commit_funciona_com_workers_maior_que_1(
+    tmp_raiz: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Interrupcao no commit de UMA particao (rodada sequencial); a rodada
+    seguinte, paralela, retoma esse commit e compacta as outras."""
+    import profittape.tools.compact as mod
+
+    d_int = _escrever_fragmentado(tmp_raiz, DIA, "WINFUT", n_arquivos=3, lotes_por_arquivo=10)
+    outras = [_escrever_fragmentado(tmp_raiz, DIA, s, 2, 10) for s in ("PETR4", "WDOFUT")]
+    conteudo_antes = _ler_ordenado(d_int)
+
+    def _morre_no_meio(pasta: Path, conteudo: dict[str, object]) -> None:
+        originais = conteudo["originais"]
+        assert isinstance(originais, list)
+        (pasta / originais[0]).unlink()
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(mod, "_commit", _morre_no_meio)
+    with pytest.raises(KeyboardInterrupt):
+        compactar_raw(tmp_raiz, hoje=HOJE, simbolo_filtro="WINFUT")
+    monkeypatch.undo()
+    assert (d_int / MANIFESTO).exists()
+
+    totais = compactar_raw(tmp_raiz, hoje=HOJE, workers=3)
+    assert "compact.retomando_commit" in capsys.readouterr().out
+    assert _row_groups(d_int) == {"part-0003.parquet": 1}
+    assert _ler_ordenado(d_int).equals(conteudo_antes)
+    assert not (d_int / MANIFESTO).exists()
+    assert totais["ja_compactas"] == 1          # a retomada nao conta como reescrita
+    assert totais["particoes"] == 2
+    for o in outras:
+        assert _row_groups(o) == {"part-0002.parquet": 1}
+
+
+def test_falha_numa_particao_com_workers_aborta_e_nao_deixa_temporario(
+    tmp_raiz: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Uma particao explode na escrita: a excecao sobe como antes, as outras
+    (rodando ou canceladas) nao deixam .compacting nem manifesto, e a que
+    falhou fica com os originais intactos."""
+    import profittape.tools.compact as mod
+
+    ruim = _escrever_fragmentado(tmp_raiz, DIA, "WINFUT", 3, 10)
+    outras = [_escrever_fragmentado(tmp_raiz, DIA, s, 2, 10) for s in ("PETR4", "WDOFUT", "VALE3")]
+    antes_ruim = _row_groups(ruim)
+    conteudos = {p: _ler_ordenado(p) for p in [ruim, *outras]}
+    original = mod._gravar_arquivo
+
+    def _explode_so_no_winfut(tabela: pa.Table, destino: Path, row_group_size: int) -> None:
+        original(tabela, destino, row_group_size)
+        if destino.parent.name == "sym=WINFUT":
+            raise OSError("disco cheio")
+
+    monkeypatch.setattr(mod, "_gravar_arquivo", _explode_so_no_winfut)
+    with pytest.raises(OSError, match="disco cheio"):
+        compactar_raw(tmp_raiz, hoje=HOJE, workers=2)
+
+    assert _row_groups(ruim) == antes_ruim
+    for p in [ruim, *outras]:
+        assert not list(p.glob(f"*{SUFIXO_TEMP}")), p
+        assert not (p / MANIFESTO).exists(), p
+        assert _ler_ordenado(p).equals(conteudos[p]), "conteudo mudou apos falha"
+
+
+def test_inventario_le_o_footer_de_cada_arquivo_uma_unica_vez(
+    tmp_raiz: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Antes, rg_antes_lidos relia pq.read_metadata de cada original depois
+    da leitura (3 leituras por arquivo: varredura de corrompidos do
+    storage/validacao, inventario, soma do 'antes'). Agora reutiliza o
+    inventario: 2 por arquivo. O teste reprova o codigo antigo."""
+    import profittape.tools.compact as mod
+
+    _escrever_fragmentado(tmp_raiz, DIA, "WINFUT", n_arquivos=5, lotes_por_arquivo=4)
+    chamadas: list[str] = []
+    original = mod.pq.read_metadata
+
+    def _conta(caminho: object, **k: object) -> object:
+        chamadas.append(Path(str(caminho)).name)
+        return original(caminho, **k)
+
+    monkeypatch.setattr(mod.pq, "read_metadata", _conta)
+    totais = compactar_raw(tmp_raiz, hoje=HOJE)
+    assert totais["particoes"] == 1 and totais["row_groups_antes"] == 20
+    from collections import Counter
+    assert Counter(chamadas) == {f"part-{i:04d}.parquet": 2 for i in range(5)}
+
+
+def test_workers_invalido_e_recusado(tmp_raiz: Path) -> None:
+    from typer.testing import CliRunner
+
+    from profittape.cli import app
+
+    with pytest.raises(ValueError, match="workers"):
+        compactar_raw(tmp_raiz, hoje=HOJE, workers=0)
+    d = _escrever_fragmentado(tmp_raiz, "2020-01-02", "WINFUT", 2, 10)
+    r = CliRunner().invoke(app, ["compact", "--raw", str(tmp_raiz), "--workers", "0"])
+    assert r.exit_code != 0
+    assert len(_row_groups(d)) == 2                     # nada tocado
+    r2 = CliRunner().invoke(app, ["compact", "--raw", str(tmp_raiz), "--workers", "2"])
+    assert r2.exit_code == 0, r2.output
+    assert _row_groups(d) == {"part-0002.parquet": 1}

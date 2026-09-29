@@ -980,6 +980,64 @@ captura.
 Log por particao: `compact.processando` e `compact.particao_ok` com
 `arquivos_antes/depois`, `row_groups_antes/depois`, `linhas`, `segundos`.
 
+### `--workers N`: varios nucleos num lote grande (2026-09-29, v3.84)
+
+Um lote grande (backup de 33 pregoes) levou 8h+ com o laco estritamente
+sequencial. Medido em sandbox numa particao no formato do incidente
+(519.600 linhas em 34.640 row groups): **leitura 43,7 s, `combine_chunks`
+0,5 s, escrita 0,5 s**. O tempo e' ~98% leitura -- custo linear de ~0,6 ms
+por row group de ORIGEM, dentro do C++ do Arrow; nenhuma variante de leitor
+(`ParquetFile.read`, `memory_map`, `pre_buffer`, `read_row_groups`) muda
+isso em mais de ~30%. O que sobra e' usar os nucleos parados: leitura e
+escrita soltam o GIL, entao `--workers N` roda N particoes inteiras em
+threads.
+
+```bash
+profit-tape compact --raw data/raw --workers 4 --log-file logs/compact.jsonl
+```
+
+O que NAO muda com `--workers`: cada particao continua sendo processada do
+inicio ao fim pela mesma thread, na mesma ordem de antes (manifesto
+pendente, dia corrente, `.inprogress` reconferido no disco imediatamente
+antes de ler, inventario, leitura, `.compacting`, verificacao, manifesto,
+commit). `.compacting` e manifesto vivem no diretorio da particao, e duas
+particoes nunca compartilham diretorio -- nao ha corrida. Uma falha em
+qualquer particao aborta o comando como antes (as que estavam rodando
+terminam e limpam os proprios temporarios; as enfileiradas sao
+canceladas). Os totais do relatorio sao somados por particao. `progresso`
+no log e' o indice de submissao, aproximado: as particoes terminam fora
+de ordem.
+
+Quantos: comece com o numero de nucleos fisicos (4-8 numa maquina de
+trabalho). Memoria de pico ~= N x (maior particao em memoria + um row
+group); um dia cheio de WINFUT (~5 M linhas) e' ~400 MB em memoria. O
+ganho real em maquina com varios nucleos NAO foi medido (o sandbox tem
+um nucleo): meca uma vez, num dia fragmentado, `--dia X --workers 1`
+contra `--workers 4` comparando `segundos` em `compact.particao_ok` e o
+`tempo total` do relatorio. Se 4 nao render perto de 4x, o gargalo e'
+disco ou antivirus, nao CPU -- ver abaixo.
+
+Escrita: em vez de `combine_chunks()` da tabela inteira (dobrava a
+memoria) + `write_table`, agora `ParquetWriter` recebe uma fatia de
+`row_group_size` por vez, coalescida sozinha -- mesma velocidade, memoria
+extra de um row group. A verificacao pos-escrita (footer, `num_rows`,
+`num_row_groups <= ceil(linhas / row_group_size)`) e' a mesma, e continua
+sendo o que impede uma regressao de escrita em micro-lotes de trocar bom
+por ruim. `to_batches()` + `write_batch()` NAO e' opcao: `to_batches` nao
+funde chunks pequenos, e a tabela lida tem um chunk por row group de
+origem -- medido: 34.640 batches viram 34.640 row groups, o incidente de
+volta.
+
+**Antivirus (nota, nao medida):** o Windows Defender escaneia arquivo
+novo no fechamento e no rename (`.compacting` -> `.parquet`), e escaneia
+na abertura para leitura. No `compact` isso e' uma vez por arquivo, nao
+por row group, entao pelo numero acima nao deveria dominar -- mas se o
+`segundos` de uma particao ficar muito acima de ~1 ms por row group de
+origem, ou se `--workers 4` nao render nada, e' o primeiro suspeito
+depois do disco: excluir `data/raw` (e `logs/`) da protecao em tempo
+real, ou pelo menos conferir no Monitor de Recursos se `MsMpEng.exe`
+esta' consumindo CPU durante o comando.
+
 ## Atualizar a ProfitDLL (protocolo, 2026-09-11)
 
 A DLL nao exporta versao; o que existe e' a versao do ARQUIVO (Explorer >

@@ -51,6 +51,28 @@ Sufixo .compacting, e nao .inprogress, de proposito: .inprogress significa
 "writer vivo ou sobra de crash de captura", e a resposta operacional a ele
 (encerrar a captura, ou apagar) e' a errada para uma compactacao
 interrompida, que se resolve simplesmente rodando compact de novo.
+
+PARALELISMO E MEMORIA (2026-09-29)
+----------------------------------
+Medido em sandbox com uma particao no formato do incidente (519.600 linhas
+em 34.640 row groups): to_table() 43,7 s, combine_chunks() 0,5 s,
+write_table() 0,5 s. As 8h+ de um lote grande sao ~98% LEITURA -- custo
+linear de ~0,6 ms por row group de origem, dentro do C++ do Arrow, e
+nenhuma variante de leitor (ParquetFile.read, memory_map, pre_buffer,
+read_row_groups) muda isso em mais de ~30%. O que muda e' usar mais
+nucleos: to_table() e a escrita soltam o GIL (medido: thread Python
+concorrente segue rodando), entao `workers>1` roda particoes inteiras em
+ThreadPoolExecutor. Cada particao e' independente no disco (.compacting e
+manifesto vivem no proprio diretorio), entao nao ha corrida; os totais
+saem de cada worker como dict e o chamador soma.
+
+A escrita e' ParquetWriter + write_table por FATIA de row_group_size, com
+combine_chunks() da fatia (nao da tabela inteira): mesma velocidade do
+combine total, memoria extra limitada a um row group em vez de dobrar a
+tabela. NUNCA to_batches()/write_batch(): to_batches nao funde chunks
+pequenos, e a tabela lida de 34 mil row groups tem 34 mil chunks --
+write_batch por chunk recriaria exatamente o incidente (medido: 34.640
+batches -> 34.640 row groups).
 """
 
 from __future__ import annotations
@@ -59,6 +81,8 @@ import json
 import math
 import os
 import time
+from concurrent.futures import Future, ThreadPoolExecutor
+from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
@@ -89,7 +113,8 @@ def compactar_raw(raiz_raw: Path,
                   modo_leitura: str = "lote",
                   dia_filtro: str | None = None,
                   simbolo_filtro: str | None = None,
-                  hoje: date | None = None) -> dict[str, int | float]:
+                  hoje: date | None = None,
+                  workers: int = 1) -> dict[str, int | float]:
     """
     Compacta, particao por particao de (stream, dia, simbolo), todos os
     streams presentes em raiz_raw (trade, book_*). Nunca o dataset inteiro
@@ -105,6 +130,11 @@ def compactar_raw(raiz_raw: Path,
     FICA NO DISCO: a compactacao so' remove o que conseguiu ler por inteiro.
     Perder um arquivo ruim nao pode custar a particao inteira, e apagar
     evidencia nao e' papel desta ferramenta (e' da quarentena).
+
+    `workers` > 1 processa particoes em paralelo (threads; ver docstring do
+    modulo). Com 1, o laco e' sequencial e identico ao de antes. A ordem em
+    que as particoes terminam nao importa: o resultado por particao e' o
+    mesmo, e os totais sao somados.
     """
     if modo_leitura not in ("lote", "sequencial", "fragmento"):
         raise ValueError(
@@ -112,6 +142,8 @@ def compactar_raw(raiz_raw: Path,
             "(esperado 'lote', 'sequencial' ou 'fragmento')")
     if row_group_size <= 0 or max_rows_per_file <= 0:
         raise ValueError("row_group_size e max_rows_per_file precisam ser > 0")
+    if workers < 1:
+        raise ValueError(f"workers precisa ser >= 1 (recebido {workers})")
     if row_group_size > max_rows_per_file:
         raise ValueError(
             f"row_group_size ({row_group_size}) nao pode exceder "
@@ -158,9 +190,54 @@ def compactar_raw(raiz_raw: Path,
 
     log.info("compact.destino", raiz_raw=str(raiz_raw.resolve()),
              streams=[s.name for s in streams], particoes_encontradas=len(trabalho),
-             row_group_size=row_group_size, max_rows_per_file=max_rows_per_file)
+             row_group_size=row_group_size, max_rows_per_file=max_rows_per_file,
+             workers=workers)
 
-    totais: dict[str, int | float] = {
+    totais = _totais_zerados()
+    params = _Params(row_group_size=row_group_size, max_rows_per_file=max_rows_per_file,
+                     modo_leitura=modo_leitura, hoje=hoje,
+                     particoes_com_inprogress=particoes_com_inprogress)
+    n = len(trabalho)
+
+    if workers == 1:
+        # Laco sequencial, identico ao de antes: nada de executor no caminho
+        # default (mesma ordem de log, mesma ordem de disco).
+        for idx, (dia, sym, pasta) in enumerate(trabalho, 1):
+            _somar(totais, _processar_particao(dia, sym, pasta, f"{idx}/{n}", params))
+        return totais
+
+    # Paralelo: cada future e' UMA particao inteira (checagens + inventario +
+    # leitura + escrita + commit). O `progresso` e' o indice de submissao --
+    # aproximado, ja' que as particoes terminam fora de ordem. Uma falha em
+    # qualquer particao aborta o comando como antes: as que ja' estavam
+    # rodando terminam (cada uma limpa os proprios temporarios), as
+    # enfileiradas sao canceladas, e a excecao sobe.
+    executor = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="compact")
+    futures: list[Future[dict[str, int | float]]] = []
+    try:
+        for idx, (dia, sym, pasta) in enumerate(trabalho, 1):
+            futures.append(executor.submit(
+                _processar_particao, dia, sym, pasta, f"{idx}/{n}", params))
+        for fut in futures:
+            _somar(totais, fut.result())
+    except BaseException:
+        executor.shutdown(wait=True, cancel_futures=True)
+        raise
+    executor.shutdown(wait=True)
+    return totais
+
+
+@dataclass(frozen=True)
+class _Params:
+    row_group_size: int
+    max_rows_per_file: int
+    modo_leitura: str
+    hoje: date
+    particoes_com_inprogress: set[Path] = field(default_factory=set)
+
+
+def _totais_zerados() -> dict[str, int | float]:
+    return {
         "particoes": 0, "puladas_dia_corrente": 0, "puladas_inprogress": 0,
         "ja_compactas": 0, "arquivos_pulados": 0,
         "arquivos_antes": 0, "arquivos_depois": 0,
@@ -168,142 +245,156 @@ def compactar_raw(raiz_raw: Path,
         "linhas": 0, "segundos_total": 0.0,
     }
 
-    for idx, (dia, sym, pasta) in enumerate(trabalho, 1):
-        progresso = f"{idx}/{len(trabalho)}"
-        stream_nome = pasta.parent.parent.name
 
-        # Commit inacabado de uma rodada anterior tem prioridade absoluta:
-        # enquanto o manifesto existir, a particao esta' num estado
-        # intermediario que so' ele sabe desfazer.
-        if (pasta / MANIFESTO).exists():
-            _retomar_commit(pasta, dia, sym)
+def _somar(acumulado: dict[str, int | float], parcial: dict[str, int | float]) -> None:
+    for chave, valor in parcial.items():
+        acumulado[chave] += valor
 
-        if dia >= hoje.isoformat():
-            log.info("compact.particao_pulada_dia_corrente", stream=stream_nome,
-                     dia=dia, symbol=sym, progresso=progresso)
-            totais["puladas_dia_corrente"] += 1
+
+def _processar_particao(dia: str, sym: str, pasta: Path, progresso: str,
+                        p: _Params) -> dict[str, int | float]:
+    """
+    Uma particao do inicio ao fim, devolvendo os totais DELA (o chamador
+    soma). E' a unidade de trabalho do worker: tudo o que toca o disco desta
+    particao acontece aqui, na mesma thread, na mesma ordem de sempre --
+    inclusive a reconferencia de .inprogress imediatamente antes de ler.
+    """
+    t = _totais_zerados()
+    stream_nome = pasta.parent.parent.name
+    row_group_size, max_rows_per_file = p.row_group_size, p.max_rows_per_file
+
+    # Commit inacabado de uma rodada anterior tem prioridade absoluta:
+    # enquanto o manifesto existir, a particao esta' num estado
+    # intermediario que so' ele sabe desfazer.
+    if (pasta / MANIFESTO).exists():
+        _retomar_commit(pasta, dia, sym)
+
+    if dia >= p.hoje.isoformat():
+        log.info("compact.particao_pulada_dia_corrente", stream=stream_nome,
+                 dia=dia, symbol=sym, progresso=progresso)
+        t["puladas_dia_corrente"] += 1
+        return t
+    # Reconfere no disco, nao so' na varredura inicial: um backfill pode
+    # ter comecado depois dela.
+    if pasta in p.particoes_com_inprogress or any(pasta.glob("*.parquet.inprogress")):
+        log.warning("compact.particao_pulada_inprogress", stream=stream_nome,
+                    dia=dia, symbol=sym, progresso=progresso,
+                    nota="ha escrita em andamento (ou sobra de crash nao triada) "
+                         "nesta particao -- compactar agora corromperia dado. "
+                         "Encerre a captura/backfill ou trie o .inprogress e "
+                         "rode de novo.")
+        t["puladas_inprogress"] += 1
+        return t
+
+    # Sobra .compacting SEM manifesto = crash antes do commit comecar:
+    # os originais estao intactos, a sobra e' lixo.
+    for sobra in pasta.glob(f"*{SUFIXO_TEMP}"):
+        sobra.unlink()
+        log.info("compact.temporario_descartado", dia=dia, symbol=sym, arquivo=sobra.name)
+
+    arquivos = sorted(q for q in pasta.glob("*.parquet") if q.is_file())
+    if not arquivos:
+        return t
+
+    # Inventario ANTES de ler: quantos row groups cada arquivo tem, e
+    # quais nem footer tem (esses nao entram no dataset -- o construtor
+    # do dataset ja' explodiria neles). O num_row_groups fica guardado
+    # por arquivo para nao reler o footer depois da leitura.
+    rg_por_arquivo: dict[Path, int] = {}
+    linhas_antes = 0
+    for arq in arquivos:
+        try:
+            meta = pq.read_metadata(arq)
+        except Exception as exc:
+            log.warning("compact.arquivo_pulado", dia=dia, symbol=sym, arquivo=arq.name,
+                        erro=f"{type(exc).__name__}: {str(exc)[:100]}",
+                        nota="sem footer legivel -- fica no disco como esta")
+            t["arquivos_pulados"] += 1
             continue
-        # Reconfere no disco, nao so' na varredura inicial: um backfill pode
-        # ter comecado depois dela.
-        if pasta in particoes_com_inprogress or any(pasta.glob("*.parquet.inprogress")):
-            log.warning("compact.particao_pulada_inprogress", stream=stream_nome,
-                        dia=dia, symbol=sym, progresso=progresso,
-                        nota="ha escrita em andamento (ou sobra de crash nao triada) "
-                             "nesta particao -- compactar agora corromperia dado. "
-                             "Encerre a captura/backfill ou trie o .inprogress e "
-                             "rode de novo.")
-            totais["puladas_inprogress"] += 1
-            continue
+        rg_por_arquivo[arq] = meta.num_row_groups
+        linhas_antes += meta.num_rows
+    legiveis = list(rg_por_arquivo)
+    rg_antes = sum(rg_por_arquivo.values())
+    if not legiveis:
+        log.warning("compact.particao_sem_arquivo_legivel", dia=dia, symbol=sym)
+        return t
 
-        # Sobra .compacting SEM manifesto = crash antes do commit comecar:
-        # os originais estao intactos, a sobra e' lixo.
-        for sobra in pasta.glob(f"*{SUFIXO_TEMP}"):
-            sobra.unlink()
-            log.info("compact.temporario_descartado", dia=dia, symbol=sym, arquivo=sobra.name)
-
-        arquivos = sorted(p for p in pasta.glob("*.parquet") if p.is_file())
-        if not arquivos:
-            continue
-
-        # Inventario ANTES de ler: quantos row groups cada arquivo tem, e
-        # quais nem footer tem (esses nao entram no dataset -- o construtor
-        # do dataset ja' explodiria neles).
-        legiveis: list[Path] = []
-        rg_antes = 0
-        linhas_antes = 0
-        for arq in arquivos:
-            try:
-                meta = pq.read_metadata(arq)
-            except Exception as exc:
-                log.warning("compact.arquivo_pulado", dia=dia, symbol=sym, arquivo=arq.name,
-                            erro=f"{type(exc).__name__}: {str(exc)[:100]}",
-                            nota="sem footer legivel -- fica no disco como esta")
-                totais["arquivos_pulados"] += 1
-                continue
-            legiveis.append(arq)
-            rg_antes += meta.num_row_groups
-            linhas_antes += meta.num_rows
-        if not legiveis:
-            log.warning("compact.particao_sem_arquivo_legivel", dia=dia, symbol=sym)
-            continue
-
-        arquivos_esperados = max(1, math.ceil(linhas_antes / max_rows_per_file))
-        rg_esperados = _row_groups_esperados(linhas_antes, max_rows_per_file, row_group_size)
-        if len(legiveis) <= arquivos_esperados and rg_antes <= rg_esperados:
-            log.info("compact.particao_ja_compacta", stream=stream_nome, dia=dia,
-                     symbol=sym, progresso=progresso, arquivos=len(legiveis),
-                     row_groups=rg_antes, linhas=linhas_antes)
-            totais["ja_compactas"] += 1
-            continue
-
-        log.info("compact.processando", stream=stream_nome, dia=dia, symbol=sym,
-                 progresso=progresso, arquivos=len(legiveis),
+    arquivos_esperados = max(1, math.ceil(linhas_antes / max_rows_per_file))
+    rg_esperados = _row_groups_esperados(linhas_antes, max_rows_per_file, row_group_size)
+    if len(legiveis) <= arquivos_esperados and rg_antes <= rg_esperados:
+        log.info("compact.particao_ja_compacta", stream=stream_nome, dia=dia,
+                 symbol=sym, progresso=progresso, arquivos=len(legiveis),
                  row_groups=rg_antes, linhas=linhas_antes)
-        t0 = time.monotonic()
+        t["ja_compactas"] += 1
+        return t
 
-        # SEM partitioning hive: dt e sym vivem no caminho e NAO podem entrar
-        # no arquivo (o curate ja' aprendeu isso: conflito de tipo na leitura
-        # do dataset). Lendo sem partitioning, a tabela sai com o schema dos
-        # arquivos e nada mais.
-        dataset = ds.dataset([str(p) for p in legiveis], format=ds.ParquetFileFormat())
-        tabela: pa.Table | None = None
-        lidos: list[Path] = list(legiveis)
-        if modo_leitura != "fragmento":
-            # Otimista, como o curate: to_table() em lote e' o caminho rapido
-            # e o que descarta as fronteiras de row group da origem. So' cai
-            # pro fragmento-a-fragmento se algum arquivo estiver podre por
-            # dentro (footer ok, ZSTD quebrado -- incidente de 22/08).
+    log.info("compact.processando", stream=stream_nome, dia=dia, symbol=sym,
+             progresso=progresso, arquivos=len(legiveis),
+             row_groups=rg_antes, linhas=linhas_antes)
+    t0 = time.monotonic()
+
+    # SEM partitioning hive: dt e sym vivem no caminho e NAO podem entrar
+    # no arquivo (o curate ja' aprendeu isso: conflito de tipo na leitura
+    # do dataset). Lendo sem partitioning, a tabela sai com o schema dos
+    # arquivos e nada mais.
+    dataset = ds.dataset([str(q) for q in legiveis], format=ds.ParquetFileFormat())
+    tabela: pa.Table | None = None
+    lidos: list[Path] = list(legiveis)
+    if p.modo_leitura != "fragmento":
+        # Otimista, como o curate: to_table() em lote e' o caminho rapido
+        # e o que descarta as fronteiras de row group da origem. So' cai
+        # pro fragmento-a-fragmento se algum arquivo estiver podre por
+        # dentro (footer ok, ZSTD quebrado -- incidente de 22/08).
+        try:
+            tabela = dataset.to_table(use_threads=(p.modo_leitura == "lote"))
+        except Exception as exc:
+            log.warning("compact.leitura_em_lote_falhou", dia=dia, symbol=sym,
+                        erro=f"{type(exc).__name__}: {str(exc)[:150]}",
+                        nota="algum arquivo tem corrupcao interna -- isolando "
+                             "fragmento a fragmento")
+            tabela = None
+    if tabela is None:
+        partes_ok: list[pa.Table] = []
+        lidos = []
+        for frag in dataset.get_fragments():
+            caminho = Path(frag.path)
             try:
-                tabela = dataset.to_table(use_threads=(modo_leitura == "lote"))
-            except Exception as exc:
-                log.warning("compact.leitura_em_lote_falhou", dia=dia, symbol=sym,
-                            erro=f"{type(exc).__name__}: {str(exc)[:150]}",
-                            nota="algum arquivo tem corrupcao interna -- isolando "
-                                 "fragmento a fragmento")
-                tabela = None
-        if tabela is None:
-            partes_ok: list[pa.Table] = []
-            lidos = []
-            for frag in dataset.get_fragments():
-                caminho = Path(frag.path)
-                try:
-                    partes_ok.append(frag.to_table())
-                    lidos.append(caminho)
-                except Exception as exc2:
-                    log.warning("compact.arquivo_pulado", dia=dia, symbol=sym,
-                                arquivo=caminho.name,
-                                erro=f"{type(exc2).__name__}: {str(exc2)[:100]}",
-                                nota="row group corrompido -- fica no disco como esta")
-                    totais["arquivos_pulados"] += 1
-            if not partes_ok:
-                log.warning("compact.particao_sem_arquivo_legivel", dia=dia, symbol=sym)
-                continue
-            tabela = pa.concat_tables(partes_ok, promote_options="permissive")
+                partes_ok.append(frag.to_table())
+                lidos.append(caminho)
+            except Exception as exc2:
+                log.warning("compact.arquivo_pulado", dia=dia, symbol=sym,
+                            arquivo=caminho.name,
+                            erro=f"{type(exc2).__name__}: {str(exc2)[:100]}",
+                            nota="row group corrompido -- fica no disco como esta")
+                t["arquivos_pulados"] += 1
+        if not partes_ok:
+            log.warning("compact.particao_sem_arquivo_legivel", dia=dia, symbol=sym)
+            return t
+        tabela = pa.concat_tables(partes_ok, promote_options="permissive")
 
-        # Sem os arquivos pulados, o "antes" que faz sentido comparar e' so'
-        # dos que entraram na reescrita.
-        rg_antes_lidos = sum(pq.read_metadata(p).num_row_groups for p in lidos)
-        if tabela.num_rows == 0:
-            continue
+    # Sem os arquivos pulados, o "antes" que faz sentido comparar e' so'
+    # dos que entraram na reescrita -- do inventario, sem reler footer.
+    rg_antes_lidos = sum(rg_por_arquivo[q] for q in lidos)
+    if tabela.num_rows == 0:
+        return t
 
-        novos = _escrever_compactado(pasta, tabela, lidos, row_group_size, max_rows_per_file)
-        rg_depois = sum(pq.ParquetFile(p).metadata.num_row_groups for p in novos)
-        segundos = round(time.monotonic() - t0, 1)
+    novos = _escrever_compactado(pasta, tabela, lidos, row_group_size, max_rows_per_file)
+    rg_depois = sum(pq.ParquetFile(q).metadata.num_row_groups for q in novos)
+    segundos = round(time.monotonic() - t0, 1)
 
-        totais["particoes"] += 1
-        totais["arquivos_antes"] += len(lidos)
-        totais["arquivos_depois"] += len(novos)
-        totais["row_groups_antes"] += rg_antes_lidos
-        totais["row_groups_depois"] += rg_depois
-        totais["linhas"] += tabela.num_rows
-        totais["segundos_total"] += segundos
-        log.info("compact.particao_ok", stream=stream_nome, dia=dia, symbol=sym,
-                 progresso=progresso, linhas=tabela.num_rows,
-                 arquivos_antes=len(lidos), arquivos_depois=len(novos),
-                 row_groups_antes=rg_antes_lidos, row_groups_depois=rg_depois,
-                 segundos=segundos)
-
-    return totais
+    t["particoes"] += 1
+    t["arquivos_antes"] += len(lidos)
+    t["arquivos_depois"] += len(novos)
+    t["row_groups_antes"] += rg_antes_lidos
+    t["row_groups_depois"] += rg_depois
+    t["linhas"] += tabela.num_rows
+    t["segundos_total"] += segundos
+    log.info("compact.particao_ok", stream=stream_nome, dia=dia, symbol=sym,
+             progresso=progresso, linhas=tabela.num_rows,
+             arquivos_antes=len(lidos), arquivos_depois=len(novos),
+             row_groups_antes=rg_antes_lidos, row_groups_depois=rg_depois,
+             segundos=segundos)
+    return t
 
 
 def _row_groups_esperados(linhas: int, max_rows_per_file: int, row_group_size: int) -> int:
@@ -340,11 +431,6 @@ def _escrever_compactado(pasta: Path, tabela: pa.Table, originais: list[Path],
     Qualquer falha ANTES do manifesto apaga os temporarios e relanca --
     originais intactos, nada mudou no disco visivel.
     """
-    # combine_chunks: a tabela lida de 34 mil row groups tem 34 mil chunks
-    # por coluna. write_table consolida de qualquer jeito (medido: 2000
-    # chunks -> 1 row group), mas coalescer antes torna a escrita
-    # sequencial em vez de um mosaico de copias pequenas.
-    tabela = tabela.combine_chunks()
     seq = _proximo_indice(pasta)
     temporarios: list[Path] = []
     finais: list[Path] = []
@@ -359,18 +445,7 @@ def _escrever_compactado(pasta: Path, tabela: pa.Table, originais: list[Path],
             # para apagar (pego por teste: registrar so' depois deixava
             # sobra .compacting na falha).
             temporarios.append(temp)
-            # O QUE CORRIGE O PROBLEMA: a tabela inteira numa chamada, com
-            # row_group_size explicito. NUNCA write_batch em loop, nunca
-            # confiar so' no default -- e' exatamente o que recriaria os
-            # row groups de 15 linhas.
-            pq.write_table(
-                fatia, temp,
-                row_group_size=row_group_size,
-                compression="zstd",
-                # Estatistica por coluna e' o que permite pular row group por
-                # janela de tempo na leitura -- o filtro mais comum em tape.
-                write_statistics=True,
-            )
+            _gravar_arquivo(fatia, temp, row_group_size)
             _fsync(temp)
             if not _footer_ok(temp):
                 raise RuntimeError(f"footer nao confirmado no disco: {temp}")
@@ -407,6 +482,32 @@ def _escrever_compactado(pasta: Path, tabela: pa.Table, originais: list[Path],
     _fsync(manifesto)
     _commit(pasta, conteudo)
     return finais
+
+
+def _gravar_arquivo(tabela: pa.Table, destino: Path, row_group_size: int) -> None:
+    """
+    O QUE CORRIGE O PROBLEMA: um row group por fatia de row_group_size
+    linhas, explicito. A tabela chega com um chunk por row group de ORIGEM
+    (34 mil, no incidente); cada fatia e' coalescida sozinha
+    (combine_chunks da fatia, nao da tabela) e entregue ao writer numa
+    unica chamada de write_table, que grava exatamente um row group.
+    Memoria extra: uma fatia, nao a tabela inteira.
+
+    NUNCA to_batches()/write_batch() em loop: to_batches nao funde chunks
+    pequenos, e write_batch fecha um row group por chunk -- e' exatamente
+    o que recriaria os row groups de 15 linhas (medido em 2026-09-29:
+    34.640 batches -> 34.640 row groups).
+    """
+    # Estatistica por coluna e' o que permite pular row group por janela
+    # de tempo na leitura -- o filtro mais comum em tape.
+    writer = pq.ParquetWriter(destino, tabela.schema, compression="zstd",
+                              write_statistics=True)
+    try:
+        for inicio in range(0, tabela.num_rows, row_group_size):
+            fatia = tabela.slice(inicio, row_group_size).combine_chunks()
+            writer.write_table(fatia, row_group_size=row_group_size)
+    finally:
+        writer.close()
 
 
 def _commit(pasta: Path, conteudo: dict[str, object]) -> None:

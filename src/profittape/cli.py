@@ -630,6 +630,15 @@ def compact(
     simbolo: str | None = typer.Option(
         None, "--simbolo", help="Restringe a UM simbolo. Combinavel com --dia."
     ),
+    workers: int = typer.Option(
+        1,
+        "--workers",
+        help="Particoes processadas em paralelo (threads). 1 = sequencial, como "
+        "antes. O custo e' ~98% leitura dos row groups minusculos, em C++ que "
+        "solta o GIL; em lote grande, 4-8 usa os nucleos que antes ficavam "
+        "parados. Cada particao e' independente no disco -- atomicidade e "
+        "skips nao mudam.",
+    ),
 ) -> None:
     """
     Reescreve o raw de dias FECHADOS consolidando row groups minusculos.
@@ -649,6 +658,8 @@ def compact(
         raise typer.BadParameter("--modo-leitura precisa ser 'lote', 'sequencial' ou 'fragmento'")
     if row_group_size > max_rows_per_file:
         raise typer.BadParameter("--row-group-size nao pode exceder --max-rows-per-file")
+    if workers < 1:
+        raise typer.BadParameter("--workers precisa ser >= 1")
     imprimir_relatorio(
         compactar_raw(
             raw,
@@ -657,6 +668,7 @@ def compact(
             modo_leitura=modo_leitura,
             dia_filtro=dia,
             simbolo_filtro=simbolo,
+            workers=workers,
         )
     )
 

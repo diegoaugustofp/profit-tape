@@ -4176,3 +4176,50 @@ Continuação da sessão de 25/09 (fast-track). Ficha e resultados em
     WDO faltando em 02–03/09 e 11/09. Ideias: sweep em minutos,
     profundidade do livro como guarda, leilão de abertura, microprice
     passivo com fila, gatilho próprio do WDO.
+
+## Sessão 2026-09-29 — `compact --workers` e escrita por fatia (v3.84)
+
+**Pedido:** o `compact` do backup (pendência 3 da sessão anterior) levou
+8h+ processando partições em série. Paralelizar, eliminar a cópia do
+`combine_chunks()` e cachear o inventário de row groups.
+
+**O que a medição mudou no pedido.** Antes de codificar, medi em sandbox
+uma partição no formato do incidente (519.600 linhas, 34.640 row groups):
+leitura 43,7 s, `combine_chunks` 0,5 s, escrita 0,5 s. O tempo é ~98%
+leitura, ~0,6 ms por row group de origem, linear, dentro do C++ do Arrow;
+nenhuma variante de leitor muda isso em mais de ~30%. Consequências:
+
+- Eliminar o `combine_chunks` **não reduz tempo** (a escrita chunked é 3×
+  mais lenta que combine+escrita); o que compra é memória de pico. Feito
+  por memória, com `combine_chunks` **da fatia** de `row_group_size` e
+  `ParquetWriter.write_table` por fatia — mesma velocidade do combine
+  total, memória extra de um row group.
+- A opção A do pedido (`to_batches(max_chunksize)` + `write_batch`)
+  **recriaria o incidente**: `to_batches` não funde chunks pequenos, e a
+  tabela lida tem um chunk por row group de origem. Medido: 34.640
+  batches → 34.640 row groups. Há teste unitário com a contraprova.
+- `to_table` e a escrita **soltam o GIL** (medido com thread Python
+  concorrente): `ThreadPoolExecutor` basta, sem processo.
+
+**Entregue (v3.84):** `compact --workers N` (default 1 = laço sequencial
+idêntico ao anterior, sem executor). Com N>1 cada partição inteira
+(manifesto pendente, skips, inventário, leitura, escrita, commit) roda
+numa thread; totais somados por partição; falha em uma aborta como antes
+(rodando terminam e limpam, enfileiradas canceladas). Inventário guarda
+`num_row_groups` por arquivo e o "antes" não relê o footer (3 → 2
+leituras de metadata por arquivo). Suíte 1.219 (+8): paralelo ≡
+sequencial em 6 partições, skips dentro do worker, um row group por
+fatia com tabela chunked, retomada de commit com workers>1, falha numa
+partição sem temporário em nenhuma, inventário lido uma vez, `--workers
+0` recusado.
+
+**Não medido:** o ganho real com vários núcleos — o sandbox tem um.
+Roteiro de medição em `OPERACAO.md` (`--dia X --workers 1` vs `4`,
+comparar `segundos`). Se não render perto de N×, o gargalo é disco ou
+antivírus (nota no mesmo documento), não CPU.
+
+**Tags:** entregue-v3.84. Suíte 1.219.
+
+**Pendências:** as da sessão anterior, com a 3 reformulada: rodar o
+`compact` do backup com `--workers 4` e anotar `tempo total` para
+comparar com as 8h+.
