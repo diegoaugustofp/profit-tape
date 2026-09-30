@@ -4456,3 +4456,28 @@ verificação determinística do cache. Suíte 1.254.
 **Próximo:** Diego roda `ea-vwapvp-replay --saida data\vwapvp_f2`.
 
 **Tags:** entregue-v3.90 (sobre v3.89). Suíte 1.254.
+
+### 2026-09-30d — VWAP + VP: dias truncados fora do replay; verificação dos cálculos de cima (v3.91)
+
+Perguntas do Diego: o buraco do book (27/08–04/09) afeta o cálculo? Como
+garantir que os zeros não têm o mesmo problema da absorção?
+
+- Book não entra: o replay lê só `curated/trade/`, e o tape de negócios
+  está inteiro no trecho (113 barras/dia, 16–20 M contratos).
+- O `barras.csv` mostrou o que o book não tinha: **31/07 começa às 12:35
+  e 15/09 às 10:05** — VWAP de sessão parcial o dia inteiro, perfil de
+  referência incompleto para 03/08 e 16/09. Entraram na 1ª rodada. Regra
+  declarada antes da 2ª: dia sem a barra das 09:00 ou < 110 barras sai de
+  tudo; referência = último dia completo anterior (`dia_completo`,
+  `dias_excluidos` na saída, teste com dia truncado e referência pulando).
+- Zeros são subconjuntos de `c_absorcao_p80` = 1 (aritmética). Dos
+  cálculos de cima, verificado do CSV: `dist_vah/val` exatos contra o
+  perfil batido no Profit; VWAP/SD = `conferir`; z de 27/07 à mão. O que
+  só o operador faz: bandas de 2 desvios no Profit nas barras `c_banda`
+  (definição do desvio pode diferir) e VAH/VAL de ontem nas 9 `c_nivel`.
+
+Suíte: uma passagem com falha intermitente em
+`test_ea_ordem_teste_b::test_ciclo_completo_stop_cancel_oco` (passa
+isolado, com e sem a mudança; arquivo não tocado), rerodada verde. 1.255.
+
+**Tags:** entregue-v3.91 (sobre v3.90). Suíte 1.255.

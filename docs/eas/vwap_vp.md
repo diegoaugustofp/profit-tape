@@ -1,6 +1,6 @@
 # VWAP + Volume Profile (WIN) — fast-track
 
-> **Status:** F2 — primeira rodada real feita (30/09, 46 dias): **Setup B com VP de ontem morto por taxa como escrito** (0,20 episódios/dia no local); barras validadas contra o Profit (112/113); rerodar em v3.90 com z contínuo, estimador de absorção corrigido e as variantes declaradas — **Criado:** 2026-09-29 (v3.86); F2 em v3.87–v3.89 — **Código:** `ea/vwap_sessao.py`, `ea/perfil_preco.py`, `research/vwapvp_conferir.py`, `research/vwapvp_replay.py`, comandos `vwapvp-conferir` e `ea-vwapvp-replay` — **Origem:** documento "A integração da VWAP e Volume Profile" (3 setups), decisões desta ficha tomadas em conversa de 29/09.
+> **Status:** F2 — primeira rodada real feita (30/09, 46 dias): **Setup B com VP de ontem morto por taxa como escrito** (0,20 episódios/dia no local); barras validadas contra o Profit (112/113); rerodar em v3.91 com z contínuo, estimador de absorção corrigido, dias truncados excluídos e as variantes declaradas — **Criado:** 2026-09-29 (v3.86); F2 em v3.87–v3.89 — **Código:** `ea/vwap_sessao.py`, `ea/perfil_preco.py`, `research/vwapvp_conferir.py`, `research/vwapvp_replay.py`, comandos `vwapvp-conferir` e `ea-vwapvp-replay` — **Origem:** documento "A integração da VWAP e Volume Profile" (3 setups), decisões desta ficha tomadas em conversa de 29/09.
 
 ## Identidade, fase e estado
 
@@ -200,7 +200,27 @@ subindo 20% do range → 0,40; caindo até a mínima → 1,0; a barra de 27/07 �
 comp 0, vend 0,116). Pego pela pergunta "como é calculado" — regra 1 da
 disciplina, mecanismo antes do número, aplicada tarde mas antes de ligar.
 
-### F2 — segunda rodada (v3.90, a fazer)
+**Dias truncados (v3.91, declarado antes da 2ª rodada).** O `barras.csv` da
+1ª rodada mostra 31/07 começando às 12:35 (71 barras) e 15/09 às 10:05
+(101). Neles a VWAP "de sessão" começa no meio do pregão — desvio e bandas
+errados o dia inteiro — e o perfil que alimentam (03/08 e 16/09) é
+incompleto. Regra: **dia sem a barra das 09:00 ou com < 110 barras sai de
+tudo** (distribuição, episódios, referência); o dia seguinte usa o último
+dia **completo** como referência. Buraco do book (27/08–04/09) não entra:
+o replay lê só negócios, e o tape de negócios está inteiro nesse trecho.
+
+**Verificação dos cálculos de cima (30/09, do `barras.csv`):** `dist_vah`/
+`dist_val` de 28/09 = `close − 184900` / `close − 183775` em todas as barras
+(diferença 0,0), os números do perfil batido no Profit; VWAP/SD às 10:00 =
+os do `conferir`; `z_vwap` de 27/07 18:10 refeito à mão = 2,683. O que
+resta e só o operador pode fazer: no Profit com VWAP + bandas de 2 desvios,
+confirmar que o fechamento das barras `c_banda` está fora da banda (se não
+estiver, é definição do desvio — o meu é ponderado por volume e
+populacional — e não erro); e nas 9 barras `c_nivel`, que o fechamento está
+colado no VAH/VAL **do dia anterior**. Os zeros de `c_janela`/`p90` são
+subconjuntos de `c_absorcao_p80` (1 barra às 18:10): aritmética, não cálculo.
+
+### F2 — segunda rodada (v3.91, a fazer)
 
 Comando (a primeira rodada com cache custa ~1 min/dia; depois, segundos):
 

@@ -140,10 +140,10 @@ def test_sonda_mfe_mae_e_toque_conferidos_a_mao() -> None:
 
 # ------------------------------------------------------------- dias/curated
 def _dia_sintetico(curated: Path, dia: dt.date, precos: list[float], symbol: str = "WINFUT",
-                   passo_s: int = 10) -> None:
+                   passo_s: int = 10, inicio: str = "09:00") -> None:
     pasta = curated / "trade" / f"dt={dia.isoformat()}" / f"sym={symbol}"
     pasta.mkdir(parents=True, exist_ok=True)
-    t0 = int(pd.Timestamp(f"{dia} 09:00", tz="America/Sao_Paulo").value)
+    t0 = int(pd.Timestamp(f"{dia} {inicio}", tz="America/Sao_Paulo").value)
     n = len(precos)
     # agressor variando por barra (senao absorcao_vend e' 0 constante e o z nao existe)
     tipos = [int(x) for x in np.random.default_rng(len(precos) + dia.day).choice([2, 3], size=n)]
@@ -159,11 +159,11 @@ def _dia_sintetico(curated: Path, dia: dt.date, precos: list[float], symbol: str
 def _curated_dois_dias(tmp_path: Path) -> Path:
     cur = tmp_path / "curated"
     rng = np.random.default_rng(7)
-    # dia 1: passeio de 8 h (2.880 negocios a 10 s) em torno de 100.000 -> perfil de referencia
-    p1 = 100_000 + np.cumsum(rng.choice([-5.0, 0.0, 5.0], size=2880))
+    # dia 1: passeio 09:00-18:25 (3.390 negocios a 10 s = 113 barras M5, dia completo)
+    p1 = 100_000 + np.cumsum(rng.choice([-5.0, 0.0, 5.0], size=3390))
     _dia_sintetico(cur, dt.date(2026, 9, 24), list(p1))
     # dia 2: mesmo passeio, com um esticao para cima no meio do dia
-    p2 = 100_000 + np.cumsum(rng.choice([-5.0, 0.0, 5.0], size=2880))
+    p2 = 100_000 + np.cumsum(rng.choice([-5.0, 0.0, 5.0], size=3390))
     p2[1400:1500] += np.linspace(0, 600, 100)
     p2[1500:1700] += 600
     _dia_sintetico(cur, dt.date(2026, 9, 25), list(p2))
@@ -231,6 +231,30 @@ def test_rodar_replay_ponta_a_ponta_com_cache(tmp_path: Path,
     assert r3["dias"] == 1 and r3["dias_com_referencia"] == 0
     r4 = vr.rodar(cur, "WDOFUT")            # simbolo sem pasta: erro com lista vazia
     assert "erro" in r4 and r4["dias_disponiveis"] == []
+
+
+def test_dia_truncado_e_excluido_e_a_referencia_pula_para_o_ultimo_completo(
+        tmp_path: Path) -> None:
+    """31/07 (comeca 12:35) e 15/09 (10:05) entraram na 1a rodada com VWAP de
+    sessao parcial. Regra v3.91: dia sem a barra das 09:00 ou com < 110 barras
+    sai de tudo; o dia seguinte usa o ultimo dia COMPLETO como referencia."""
+    cur = _curated_dois_dias(tmp_path)              # 24/09 e 25/09 completos
+    rng = np.random.default_rng(3)
+    p3 = 100_000 + np.cumsum(rng.choice([-5.0, 0.0, 5.0], size=2100))
+    _dia_sintetico(cur, dt.date(2026, 9, 28), list(p3), inicio="12:35")   # truncado
+    p4 = 100_000 + np.cumsum(rng.choice([-5.0, 0.0, 5.0], size=3390))
+    _dia_sintetico(cur, dt.date(2026, 9, 29), list(p4))                   # completo
+    r = vr.rodar(cur, "WINFUT", None, cache_dir=tmp_path / "cache")
+    assert r["dias"] == 3 and [x["dia"] for x in r["dias_excluidos"]] == ["2026-09-28"]
+    assert r["dias_excluidos"][0]["primeira"] == 1235
+    refs = {x["dia"]: x["ref"] for x in r["area_de_valor_dois_algoritmos"]}
+    assert refs["2026-09-29"] == "2026-09-25"      # pulou o 28 truncado
+    assert refs["2026-09-25"] == "2026-09-24"
+    assert "2026-09-28" not in set(r["_barras"]["dia"])
+    assert any("EXCLUIDOS" in x for x in vr.formatar(r))
+    # so' o truncado pedido: nenhum dia completo -> erro com a lista
+    r2 = vr.rodar(cur, "WINFUT", ["2026-09-28"], cache_dir=tmp_path / "cache")
+    assert "erro" in r2 and r2["excluidos"][0]["dia"] == "2026-09-28"
 
 
 def test_escolher_variante_por_taxa() -> None:

@@ -119,6 +119,10 @@ class ParametrosReplay:
         (2.0, 25.0), (2.0, 50.0), (1.5, 25.0), (1.5, 50.0))
     minimo_por_dia: float = 1.0        # regra de escolha: >= 1 episodio/dia em c_janela
     z_sonda_minimo: float = 1.5        # sonda cacheada para |z_vwap| >= isto (cobre as variantes)
+    # v3.91: dia completo = primeira barra abre as 09:00 e >= minimo_barras (113 e' o dia cheio).
+    # 31/07 (comeca 12:35) e 15/09 (10:05) entraram na 1a rodada com VWAP de sessao parcial.
+    hhmm_abertura_sessao: int = 900
+    minimo_barras: int = 110
 
 
 # ---------------------------------------------------------------- utilitarios
@@ -180,15 +184,21 @@ class DiaReplay:
     referencia: str | None
     barras: pd.DataFrame
     ref: dict[str, Any] = field(default_factory=dict)
+    completo: bool = True
+
+
+def dia_completo(df: pd.DataFrame, p: ParametrosReplay) -> bool:
+    return (len(df) >= p.minimo_barras
+            and int(df["hhmm_abertura"].iloc[0]) == p.hhmm_abertura_sessao)
 
 
 _VERSAO_CACHE = 2      # v3.90: absorcao_comp/vend + hhmm_abertura
 
 
-def _referencia(curated: Path, symbol: str, dia: dt.date, p: ParametrosReplay,
+def _referencia(curated: Path, symbol: str, ref_dia: dt.date | None, p: ParametrosReplay,
                 cache_dir: Path | None) -> dict[str, Any]:
-    """VAH/VAL/POC do dia util anterior (D2), do cache do perfil quando ha'."""
-    ref_dia = dia_de_referencia(curated, symbol, dia)
+    """VAH/VAL/POC do dia de referencia (D2: ultimo dia COMPLETO anterior),
+    do cache do perfil quando ha'."""
     if ref_dia is None:
         return {}
     perfil = perfil_do_dia(curated, symbol, ref_dia, p.bin_pts, None, cache_dir)
@@ -296,14 +306,12 @@ def _barras_do_dia(curated: Path, symbol: str, dia: dt.date, p: ParametrosReplay
                 log.warning("vwapvp.replay.cache_nao_gravou", erro=str(e), arquivo=str(arq))
     if df.empty:
         return None
-    ref = _referencia(curated, symbol, dia, p, cache_dir)
     df = df.copy()
     df["dia"] = dia.isoformat()
-    df["dist_vah"] = (df["close"] - ref["vah"]) if ref else np.nan
-    df["dist_val"] = (df["close"] - ref["val"]) if ref else np.nan
+    completo = dia_completo(df, p)
     log.info("vwapvp.replay.dia", dia=dia.isoformat(), barras=len(df), origem=origem,
-             referencia=ref.get("dia"))
-    return DiaReplay(dia.isoformat(), ref.get("dia"), df, ref)
+             completo=completo, primeira=int(df["hhmm_abertura"].iloc[0]))
+    return DiaReplay(dia.isoformat(), None, df, {}, completo)
 
 
 def _json_default(o: Any) -> Any:
@@ -439,17 +447,40 @@ def rodar(curated: Path, symbol: str = "WINFUT", dias: list[str] | None = None,
     todos = dias_disponiveis(curated, symbol)
     escolhidos = [dt.date.fromisoformat(d) for d in dias] if dias else todos
     dias_ok: list[DiaReplay] = []
+    excluidos: list[dict[str, Any]] = []
     for dia in escolhidos:
         r = _barras_do_dia(curated, symbol, dia, p, cache_dir)
         if r is None:
             log.info("vwapvp.replay.dia_sem_tape", dia=dia.isoformat())
             continue
-        if not r.ref:
-            log.info("vwapvp.replay.sem_referencia", dia=dia.isoformat(),
-                     nota="primeiro dia do curated: sem VAH/VAL de ontem, so' distribuicao")
+        if not r.completo:
+            excluidos.append({"dia": r.dia, "barras": len(r.barras),
+                              "primeira": int(r.barras["hhmm_abertura"].iloc[0])})
+            log.warning("vwapvp.replay.dia_incompleto_excluido", **excluidos[-1])
+            continue
         dias_ok.append(r)
     if not dias_ok:
-        return {"erro": "nenhum dia com tape", "dias_disponiveis": [d.isoformat() for d in todos]}
+        return {"erro": "nenhum dia completo com tape",
+                "dias_disponiveis": [d.isoformat() for d in todos], "excluidos": excluidos}
+    # referencia = ultimo dia COMPLETO anterior (entre os processados ou nao:
+    # se o replay for de um subconjunto, o anterior no curated pode ser um dia
+    # nao pedido; usa-se dia_de_referencia e confere-se completude pelo cache)
+    completos = {r.dia for r in dias_ok}
+    for r in dias_ok:
+        cand = dia_de_referencia(curated, symbol, dt.date.fromisoformat(r.dia))
+        while cand is not None and cand.isoformat() not in completos:
+            anterior = _barras_do_dia(curated, symbol, cand, p, cache_dir)
+            if anterior is not None and anterior.completo:
+                completos.add(cand.isoformat())
+                break
+            cand = dia_de_referencia(curated, symbol, cand)
+        r.ref = _referencia(curated, symbol, cand, p, cache_dir)
+        r.referencia = r.ref.get("dia")
+        r.barras["dist_vah"] = (r.barras["close"] - r.ref["vah"]) if r.ref else np.nan
+        r.barras["dist_val"] = (r.barras["close"] - r.ref["val"]) if r.ref else np.nan
+        if not r.ref:
+            log.info("vwapvp.replay.sem_referencia", dia=r.dia,
+                     nota="sem dia completo anterior: so' distribuicao")
 
     barras = pd.concat([r.barras for r in dias_ok], ignore_index=True)
     barras = barras.sort_values(["dia", "ts_close_ns"], kind="stable").reset_index(drop=True)
@@ -509,7 +540,7 @@ def rodar(curated: Path, symbol: str = "WINFUT", dias: list[str] | None = None,
 
     return {
         "parametros": asdict(p), "symbol": symbol,
-        "dias": n_dias, "dias_com_referencia": n_dias_ref,
+        "dias": n_dias, "dias_com_referencia": n_dias_ref, "dias_excluidos": excluidos,
         "primeiro_dia": dias_ok[0].dia, "ultimo_dia": dias_ok[-1].dia,
         "barras": len(barras), "barras_com_z": int(est.size),
         "estimador_percentis": perc,
@@ -535,9 +566,14 @@ def formatar(r: dict[str, Any]) -> list[str]:
             ln.append("  dias disponiveis: " + ", ".join(r["dias_disponiveis"]))
         return ln
     p = r["parametros"]
-    ln = [f"  {r['dias']} dias ({r['primeiro_dia']}..{r['ultimo_dia']}), "
-          f"{r['dias_com_referencia']} com VAH/VAL de ontem, "
+    ln = [f"  {r['dias']} dias completos ({r['primeiro_dia']}..{r['ultimo_dia']}), "
+          f"{r['dias_com_referencia']} com VAH/VAL do ultimo dia completo anterior, "
           f"{r['barras']} barras M{p['periodo_s'] // 60}"]
+    if r["dias_excluidos"]:
+        ln.append("  EXCLUIDOS (incompletos: sem barra das 09:00 ou < "
+                  f"{p['minimo_barras']} barras): " + ", ".join(
+                      f"{x['dia']} ({x['barras']} barras, comeca {x['primeira']:04d})"
+                      for x in r["dias_excluidos"]))
     pc = r["estimador_percentis"]
     ln.append(f"  Estimador: z da absorcao do lado exausto (v3.90), {r['barras_com_z']} barras: "
               f"p50={pc[50]:.2f} p80={pc[80]:.2f} p90={pc[90]:.2f} p95={pc[95]:.2f}")

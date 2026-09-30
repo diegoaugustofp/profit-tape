@@ -31,7 +31,7 @@ não se edita** — uma versão nova empilha abaixo, com o que a motivou.
 | [`vespera.md`](vespera.md) — ficha 11 | preço M15 (dia anterior) | **F3 — FECHADA sem p1** | estimador não serve em M15 (v0: 78% por tempo; v1: 54-74% ambígua) | 0 | v2.92, v2.93 |
 | [`microprice.md`](microprice.md) — fast-track | topo do livro (tiny_book) | **DESCARTADO como taker**; passiva pendente de modelo de fila | sinal real e estável (~+1,2 pt em 1–5 s, 10/10 dias), ~8× menor que o break-even taker | 0 (fast-track) | v3.63, v3.64 |
 | [`ignicao.md`](ignicao.md) — fast-track | tape (WIN) | **F5 — forward em dry_run** a partir de 28/09 | estudo FAVORÁVEL: p_alvo 0,702 IC [0,560; 0,813], 47 decididos em 44 pregões (escolha cega + replicação) | forward em curso | v3.66–v3.68 |
-| [`vwap_vp.md`](vwap_vp.md) — fast-track | preço M5 + VWAP + perfil por preço (tape) | **F2 — 1ª rodada: local dá 0,20/dia (morto por taxa como escrito)**; 2ª rodada com variantes declaradas e regra de escolha por taxa | nenhum ainda; POC e barras M5 batem no Profit, POC é platô, RLP uniforme, absorção redefinida (mecanismo) | 0 (fast-track) | v3.90 |
+| [`vwap_vp.md`](vwap_vp.md) — fast-track | preço M5 + VWAP + perfil por preço (tape) | **F2 — 1ª rodada: local dá 0,20/dia (morto por taxa como escrito)**; 2ª rodada com variantes declaradas e regra de escolha por taxa | nenhum ainda; POC e barras M5 batem no Profit, POC é platô, RLP uniforme, absorção redefinida (mecanismo), dias truncados excluídos | 0 (fast-track) | v3.91 |
 
 ## Convenções compartilhadas pelas fichas de preço (M15)
 
