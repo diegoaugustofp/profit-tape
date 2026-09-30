@@ -1,6 +1,6 @@
 # VWAP + Volume Profile (WIN) — fast-track
 
-> **Status:** F2 — F1 conferido contra o Profit (25/09 e 28/09); replay entregue, **ainda não rodado no curated real** — **Criado:** 2026-09-29 (v3.86); F2 em v3.87 — **Código:** `ea/vwap_sessao.py`, `ea/perfil_preco.py`, `research/vwapvp_conferir.py`, `research/vwapvp_replay.py`, comandos `vwapvp-conferir` e `ea-vwapvp-replay` — **Origem:** documento "A integração da VWAP e Volume Profile" (3 setups), decisões desta ficha tomadas em conversa de 29/09.
+> **Status:** F2 — primeira rodada real feita (30/09, 46 dias): **Setup B com VP de ontem morto por taxa como escrito** (0,20 episódios/dia no local); rerodar em v3.89 com z contínuo e as variantes declaradas — **Criado:** 2026-09-29 (v3.86); F2 em v3.87–v3.89 — **Código:** `ea/vwap_sessao.py`, `ea/perfil_preco.py`, `research/vwapvp_conferir.py`, `research/vwapvp_replay.py`, comandos `vwapvp-conferir` e `ea-vwapvp-replay` — **Origem:** documento "A integração da VWAP e Volume Profile" (3 setups), decisões desta ficha tomadas em conversa de 29/09.
 
 ## Identidade, fase e estado
 
@@ -130,9 +130,59 @@ O que isso decidiu:
 - Em 28/09 a +2SD cruzou o VAH de 25/09 (184900) entre 12h e 16h — o evento
   existiu pelo menos uma vez. A taxa é do replay.
 
-### F2 — replay
+### F2 — primeira rodada (30/09, v3.87, 46 dias 24/07–28/09, 2.875 s)
 
-Não rodado no curated real (o sandbox não o tem). Comando:
+    Estimador (z x lado), 2844 barras: p50=-0,02 p80=1,00 p90=1,37 p95=1,64   [NAO congelar: ver defeito 1]
+    c_banda          barras=550  episodios=151  /dia=3,36
+    c_nivel          barras= 15  episodios=  9  /dia=0,20
+    c_absorcao_p80   barras=  1  episodios=  1  /dia=0,02
+    c_janela         barras=  0  episodios=  0  /dia=0,00
+    c_banda por hora: 9h:8 10h:34 11h:18 12h:19 13h:17 14h:12 15h:9 16h:10 17h:16 18h:8
+    c_nivel por hora: 11h:1 13h:1 14h:1 15h:2 17h:2 18h:2
+    2SD mediana por hora: 9h:619 10h:761 11h:1026 12h:1138 13h+:1186–1229
+    Sonda c_nivel (n=9, VWAP a 1216 pts): MFE med 60–75, MAE med 105–115 (p75 até 330), 0% tocou VWAP
+    Area de valor bin x pares (45 dias): |dif| mediana 1 bin, max 8–13; plato do POC mediana 100 pts
+
+**Leitura (30/09):**
+
+- **Morto por taxa, como o documento o escreve.** A cláusula de local
+  sozinha (banda ∧ 25 pts do VAH/VAL de ontem) dá 9 episódios em 45
+  pregões. n=100 levaria ~500 pregões. É raro por construção: a banda tem
+  1.000–1.230 pts de largura de 11h em diante e o VAH de ontem é um ponto;
+  exigir os dois a 25 pts é exigir a coincidência de referências
+  independentes. Absorção e janela não são a causa — chegam a 1 e 0.
+- Os 9 eventos de local, sem absorção, **não reverteram** (MAE > MFE em
+  todo horizonte, 0% tocou a VWAP). n=9 não conclui; registrado como
+  observação na direção do risco "dia de tendência atropela reversão".
+- `c_banda` sozinha tem taxa operável (3,36/dia) e é a única cláusula com
+  amostra. Pico às 10h, quando a banda ainda tem 760 pts.
+- Área de valor bin a bin × pares: irrelevante na mediana (1 bin), grande
+  na exceção (8–13). Some da ficha como decisão; fica gravada como subgrupo.
+
+**Defeitos da rodada (corrigidos em v3.89):**
+
+1. O z de absorção reiniciava a cada dia (janela de 50 barras M5 = 250 min):
+   o estimador só existia de ~13:10 em diante, 2.844 de 5.144 barras (55%).
+   No gráfico a janela atravessa dias. **p80 = 1,00 e p90 = 1,37 NÃO estão
+   congelados** — foram medidos só em tardes. Não muda a taxa de `c_nivel`.
+2. Os negócios de todos os dias ficavam em memória para a sonda (~4 GB).
+   Agora a sonda é calculada por dia para toda barra com |z| ≥ 1,5 e vai
+   para o cache junto com as barras: a rodada cara acontece uma vez.
+
+**Regra de escolha da variante — aceita em 30/09, ANTES da segunda rodada:**
+variantes declaradas (z_banda, tolerância) = (2,0, 25) (2,0, 50) (1,5, 25)
+(1,5, 50), só com contagens. Escolhida = a mais restritiva (menor taxa em
+`c_nivel`; empate → maior z, menor tolerância) com **≥ 1 episódio/dia em
+`c_janela`**. A sonda é impressa só para `c_banda` (linha de base) e para
+a escolhida. Nenhuma chega → **abandono por taxa** do Setup B com VP de
+ontem, decisão de poder tomada antes de olhar resultado; o desenho
+seguinte (banda sozinha? VP de ontem como regime "abriu dentro/fora da
+VA", em vez de toque a 25 pts?) é ficha nova com contagem nova.
+[Provável] nenhuma chega: 0,2 × 2 × 2 = 0,8 no melhor caso.
+
+### F2 — segunda rodada (v3.89, a fazer)
+
+Comando (a primeira rodada com cache custa ~1 min/dia; depois, segundos):
 
     profit-tape ea-vwapvp-replay --saida data/vwapvp_f2
 
@@ -150,11 +200,12 @@ Nenhum.
 
 ## Próximo passo
 
-1. Operador roda `ea-vwapvp-replay --saida data/vwapvp_f2` (todos os dias do
-   curated; 24/07 é o primeiro e não tem referência) e cola a saída aqui.
-2. Com a saída: congelar p80/p90, fechar TAXA e HORIZONTE, escrever EFEITO e
-   CRITERIO a partir da sonda (alvo/stop em pontos), decidir a hora de
-   início. Se HORIZONTE > 6 meses, afrouxar **antes** de ligar e anotar.
+1. Operador roda `ea-vwapvp-replay --saida data/vwapvp_f2` (v3.89) e cola a
+   saída: p80/p90 com z contínuo, tabela das 4 variantes, escolhida ou
+   abandono.
+2. Se houver escolhida: congelar p80/p90, fechar TAXA/HORIZONTE, EFEITO e
+   CRITERIO da sonda dela, hora de início. Se abandono: fechar esta ficha
+   com veredito "abandonado por taxa" e abrir a próxima.
 3. F3: `sinal_vwapvp.py` + `service_vwapvp.py` + `config_vwapvp.py` + tipo
    `vwap_vp` no registro + YAML com os valores congelados; dry_run, um
    pregão com barras olhadas uma a uma.

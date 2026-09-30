@@ -1584,7 +1584,10 @@ def ea_vwapvp_replay(
     congelados como VALOR), episodios por clausula e por hora, sonda de
     excursao (MFE/MAE, toque na VWAP) por horizonte, e VAL/VAH pelos dois
     algoritmos da area de valor. Fecha TAXA/HORIZONTE/EFEITO da ficha.
-    Nao decide e nao varre grade: os parametros sao os declarados.
+    Nao escolhe por resultado: as variantes (z_banda x tolerancia) sao as
+    declaradas na ficha e a escolhida sai da regra de TAXA aceita em 30/09.
+    Barras e sonda ficam em cache por dia (data/cache/vwapvp_barras): a
+    primeira rodada custa ~1 min/dia, as seguintes segundos.
     """
     configurar(log_level)
     from .research.vwapvp_replay import ParametrosReplay, formatar, rodar
@@ -1605,11 +1608,13 @@ def ea_vwapvp_replay(
         (saida / "vwapvp_replay.json").write_text(
             json.dumps(publico, indent=2, default=str, ensure_ascii=False), encoding="utf-8")
         r["_barras"].to_csv(saida / "barras.csv", index=False)
-        for c, e in r["_episodios"].items():
-            e.to_csv(saida / f"episodios_{c}.csv", index=False)
-        for c, s in r["_sondas"].items():
-            s.to_csv(saida / f"sonda_{c}.csv", index=False)
-        typer.echo(f"\n  saida -> {saida}")
+        for v in r["_variantes"]:
+            rot = f"z{v['z_banda']:g}_tol{v['tolerancia_pts']:g}"
+            for c, e in v["_episodios"].items():
+                if len(e):
+                    e.to_csv(saida / f"episodios_{rot}_{c}.csv", index=False)
+        typer.echo(f"\n  saida -> {saida}  (barras.csv tem a sonda de toda barra com |z|>=1,5; "
+                   "os episodios_*.csv sao subconjuntos dela)")
 
 
 @app.command(name="semente-conferir")

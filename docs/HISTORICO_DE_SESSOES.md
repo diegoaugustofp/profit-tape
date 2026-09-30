@@ -4388,3 +4388,37 @@ sido a PRIMEIRA entrega, não a quarta.
 v3.88 (`--workers 1`, default sequencial) e anotar `ms_por_row_group`
 por partição; se ficar em 0,2–0,9, o WINFUT de um dia leva ~40 min e o
 backup inteiro cabe numa noite.
+
+### 2026-09-30b — VWAP + VP: primeira rodada real do F2 e correções (v3.89, sobre v3.88)
+
+**Resultado (46 dias, 2.875 s):** o Setup B com VP de ontem, como o
+documento o escreve, está **morto por taxa**: a cláusula de local sozinha
+(±2SD ∧ 25 pts do VAH/VAL de ontem) dá 9 episódios em 45 pregões
+(0,20/dia); absorção deixa 1, janela 0. Raro por construção — a banda tem
+1.000–1.230 pts de largura de 11h em diante e o VAH de ontem é um ponto.
+Os 9 não reverteram (MAE > MFE, 0% tocou a VWAP; n=9, observação, não
+veredito). `c_banda` sozinha: 3,36/dia, pico às 10h. Área de valor bin ×
+pares: 1 bin na mediana, 8–13 no máximo.
+
+**Dois defeitos meus na rodada:** (1) o z de absorção reiniciava por dia
+— janela de 250 min, estimador só de ~13:10 em diante, 55% das barras; os
+p80/p90 impressos foram medidos em tardes e NÃO estão congelados; (2)
+~4 GB de negócios em memória para a sonda. Também subestimei o tempo
+total ("alguns minutos por dia" sem multiplicar por 46).
+
+**Entregue (v3.89):** z contínuo entre dias; cache por dia das barras e
+da sonda de toda barra com |z| ≥ 1,5 (`data/cache/vwapvp_barras`) — a
+rodada cara acontece uma vez, variações de cláusula em segundos, sem
+guardar negócios; log por dia com segundos; tabela das 4 variantes
+declaradas (z 2,0/1,5 × tolerância 25/50) só com contagens, com a
+**regra de escolha por taxa aceita pelo Diego antes da segunda rodada**
+(≥ 1/dia em c_janela; mais restritiva = menor taxa em c_nivel; nenhuma =
+abandono por taxa); sonda impressa só para c_banda (linha de base) e a
+escolhida. Ficha com a leitura, os defeitos e a regra. +1 teste líquido
+(cache, z contínuo, monotonicidade das variantes, regra). Suíte 1.253.
+
+**Próximo:** Diego roda de novo; com a tabela, ou F3 da escolhida ou
+fecha a ficha como abandono por taxa e abre a próxima (banda sozinha, ou
+VP de ontem como regime "abriu dentro/fora da VA" em vez de toque).
+
+**Tags:** entregue-v3.89 (sobre v3.88). Suíte 1.253.

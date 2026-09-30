@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import datetime as dt
 import math
+import time
 from pathlib import Path
 
 import numpy as np
@@ -161,29 +162,62 @@ def test_dias_disponiveis_e_referencia(tmp_path: Path) -> None:
     assert pp.dias_disponiveis(cur, "WDOFUT") == []
 
 
-def test_rodar_replay_ponta_a_ponta(tmp_path: Path) -> None:
+def test_rodar_replay_ponta_a_ponta_com_cache(tmp_path: Path) -> None:
     cur = _curated_dois_dias(tmp_path)
-    r = vr.rodar(cur, "WINFUT", None, vr.ParametrosReplay(), cache_dir=tmp_path / "cache")
+    cache = tmp_path / "cache"
+    t0 = time.perf_counter()
+    r = vr.rodar(cur, "WINFUT", None, vr.ParametrosReplay(), cache_dir=cache)
+    primeira = time.perf_counter() - t0
     assert "erro" not in r
     assert r["dias"] == 2 and r["dias_com_referencia"] == 1
     assert r["barras"] > 100 and r["barras_com_z"] > 0
     perc = r["estimador_percentis"]
     assert perc[50] <= perc[80] <= perc[90] <= perc[95]
     assert r["limiar_p80_congelado"] == perc[80]
-    # clausulas acumulativas: cada uma <= a anterior
-    e = r["episodios_por_clausula"]
-    assert e["c_banda"] >= e["c_nivel"] >= e["c_absorcao_p80"] >= e["c_janela"]
-    assert e["c_absorcao_p80"] >= e["c_absorcao_p90"]
+    # z continuo: o dia 2 tem z desde a primeira barra (a janela fechou no dia 1)
+    b = r["_barras"]
+    d2 = b[b["dia"] == "2026-09-25"]
+    assert d2["z_absorcao"].notna().iloc[0]
+    # 4 variantes declaradas, clausulas acumulativas em cada uma
+    assert len(r["variantes"]) == 4
+    for v in r["variantes"]:
+        e = v["episodios_por_clausula"]
+        assert e["c_banda"] >= e["c_nivel"] >= e["c_absorcao_p80"] >= e["c_janela"]
+        assert e["c_absorcao_p80"] >= e["c_absorcao_p90"]
+    # afrouxar so' pode aumentar a taxa
+    taxas = [v["episodios_por_dia"]["c_banda"] for v in r["variantes"]]
+    assert taxas[2] >= taxas[0] and taxas[3] >= taxas[1]
     assert len(r["area_de_valor_dois_algoritmos"]) == 1
-    assert set(r["sonda"]) == {"c_nivel", "c_janela", "c_janela_p90"}
-    assert all(isinstance(v, float) for v in r["banda_2sd_por_hora_pts"].values())
+    assert any(k.startswith("c_banda") for k in r["sonda"])
+    # sonda cacheada por barra: toda barra com |z| >= 1,5 tem dist_vwap_pts
+    com_z = b[b["z_vwap"].abs() >= 1.5]
+    if len(com_z):
+        assert com_z["dist_vwap_pts"].notna().all()
     linhas = vr.formatar(r)
-    assert any("CONGELADO" in x for x in linhas)
+    assert any("CONGELADO" in x for x in linhas) and any("regra:" in x for x in linhas)
+    # segunda rodada vem do cache: dois arquivos, e bem mais rapida
+    assert len(list((cache).glob("WINFUT_*_300_*.json"))) == 2
+    t1 = time.perf_counter()
+    r2 = vr.rodar(cur, "WINFUT", None, vr.ParametrosReplay(), cache_dir=cache)
+    segunda = time.perf_counter() - t1
+    assert r2["barras"] == r["barras"] and r2["estimador_percentis"] == perc
+    assert segunda < primeira / 2
     # dia sem tape e sem referencia nao quebram
-    r2 = vr.rodar(cur, "WINFUT", ["2026-09-24", "2026-09-30"], cache_dir=tmp_path / "cache")
-    assert r2["dias"] == 1 and r2["dias_com_referencia"] == 0
-    r3 = vr.rodar(cur, "WDOFUT")            # simbolo sem pasta: erro com lista vazia
-    assert "erro" in r3 and r3["dias_disponiveis"] == []
+    r3 = vr.rodar(cur, "WINFUT", ["2026-09-24", "2026-09-30"], cache_dir=cache)
+    assert r3["dias"] == 1 and r3["dias_com_referencia"] == 0
+    r4 = vr.rodar(cur, "WDOFUT")            # simbolo sem pasta: erro com lista vazia
+    assert "erro" in r4 and r4["dias_disponiveis"] == []
+
+
+def test_escolher_variante_por_taxa() -> None:
+    def v(z: float, tol: float, nivel: float, janela: float) -> dict[str, object]:
+        return {"z_banda": z, "tolerancia_pts": tol,
+                "episodios_por_dia": {"c_nivel": nivel, "c_janela": janela}}
+    vs = [v(2.0, 25, 0.2, 0.0), v(2.0, 50, 0.5, 0.4), v(1.5, 25, 0.9, 1.1), v(1.5, 50, 1.8, 1.6)]
+    assert vr.escolher_variante(vs, 1.0) == 2          # a mais restritiva que chega a 1/dia
+    assert vr.escolher_variante(vs, 2.0) is None       # nenhuma: abandono por taxa
+    empate = [v(2.0, 50, 1.0, 1.2), v(1.5, 25, 1.0, 1.3)]
+    assert vr.escolher_variante(empate, 1.0) == 0      # empate em c_nivel -> maior z_banda
 
 
 def test_cli_replay_e_conferir_sem_dia(tmp_path: Path) -> None:
@@ -197,6 +231,7 @@ def test_cli_replay_e_conferir_sem_dia(tmp_path: Path) -> None:
     assert "CONGELADO" in r.output
     assert (tmp_path / "out" / "vwapvp_replay.json").exists()
     assert (tmp_path / "out" / "barras.csv").exists()
+    assert "regra:" in r.output
 
     r = runner.invoke(app, ["vwapvp-conferir", "--curated", str(cur)])
     assert r.exit_code == 0, r.output

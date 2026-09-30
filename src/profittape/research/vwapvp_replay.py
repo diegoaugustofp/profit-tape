@@ -22,8 +22,20 @@ O que este modulo mede (e nada mais)
    bin x pares), porque o Profit nao marca VAL/VAH e a escolha nao e'
    conferivel na tela.
 
-O que NAO faz: nao decide, nao escolhe limiar por resultado, nao varre
-grade. A unica grade e' a de HORIZONTES da sonda, declarada.
+O que NAO faz: nao escolhe limiar por resultado, nao varre grade de
+resultado. As unicas grades sao a de HORIZONTES da sonda e a de VARIANTES
+de taxa (z_banda x tolerancia), as duas declaradas na ficha ANTES da
+primeira rodada; a variante e' escolhida por TAXA (contagem), nunca pela
+sonda, e a sonda so' e' impressa para a escolhida (regra aceita em 30/09).
+
+v3.89 (apos a primeira rodada real, 30/09, 46 dias em 2.875 s):
+- o z de absorcao atravessa os dias, como no grafico (antes reiniciava
+  por dia e so' existia a partir de ~13:10: 55% das barras);
+- CACHE POR DIA das barras (OHLC, VWAP, SD, absorcao crua) e da sonda de
+  toda barra com |z_vwap| >= 1,5: a rodada cara acontece uma vez, e
+  qualquer variacao de clausula responde em segundos, sem guardar os
+  negocios (4 GB na primeira rodada);
+- log por dia com segundos.
 
 Estimador de absorcao (o que ja' existe, `absorcao_dir.ntsl` /
 `research/absorcao_barra.py`, REPROVADO sozinho em 30/08 -- aqui e' gate
@@ -46,7 +58,9 @@ imbalance usa so' 2/3. E' o mesmo desenho do NTSL.
 from __future__ import annotations
 
 import datetime as dt
+import json
 import math
+import time
 from collections import deque
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -58,6 +72,7 @@ import pandas as pd
 import structlog
 
 from ..ea.barra_tempo import ConstrutorDeBarraDeTempo
+from ..ea.cache_barras import assinatura
 from ..ea.perfil_preco import dia_de_referencia, dias_disponiveis, perfil_do_dia
 from ..ea.sinal import BarraFechada
 from ..ea.vwap_sessao import VWAPSessao
@@ -84,6 +99,11 @@ class ParametrosReplay:
     horizontes_s: tuple[int, ...] = (300, 900, 1800, 3600)
     percentil_gatilho: int = 80
     percentil_subgrupo: int = 90
+    # variantes de TAXA declaradas (ficha, 29/09): (z_banda, tolerancia_pts)
+    variantes: tuple[tuple[float, float], ...] = (
+        (2.0, 25.0), (2.0, 50.0), (1.5, 25.0), (1.5, 50.0))
+    minimo_por_dia: float = 1.0        # regra de escolha: >= 1 episodio/dia em c_janela
+    z_sonda_minimo: float = 1.5        # sonda cacheada para |z_vwap| >= isto (cobre as variantes)
 
 
 # ---------------------------------------------------------------- utilitarios
@@ -126,54 +146,47 @@ class DiaReplay:
     dia: str
     referencia: str | None
     barras: pd.DataFrame
-    trades_ts: np.ndarray
-    trades_px: np.ndarray
     ref: dict[str, Any] = field(default_factory=dict)
 
 
-def _barras_do_dia(curated: Path, symbol: str, dia: dt.date, p: ParametrosReplay,
-                   cache_dir: Path | None) -> DiaReplay | None:
-    from ..features.pipeline import _carregar_dia
+_VERSAO_CACHE = 1
 
-    pasta = curated / "trade" / f"dt={dia.isoformat()}"
-    if not (pasta / f"sym={symbol}").exists():
-        return None
-    t = _carregar_dia(pasta, symbol)
-    if t.empty:
-        return None
 
+def _referencia(curated: Path, symbol: str, dia: dt.date, p: ParametrosReplay,
+                cache_dir: Path | None) -> dict[str, Any]:
+    """VAH/VAL/POC do dia util anterior (D2), do cache do perfil quando ha'."""
     ref_dia = dia_de_referencia(curated, symbol, dia)
-    ref: dict[str, Any] = {}
-    if ref_dia is not None:
-        perfil = perfil_do_dia(curated, symbol, ref_dia, p.bin_pts, None, cache_dir)
-        if not perfil.vazio:
-            va = perfil.area_de_valor(p.pct, "bin")
-            vp = perfil.area_de_valor(p.pct, "pares")
-            pf = perfil.poc_faixa()
-            assert va is not None and vp is not None and pf is not None
-            ref = {"dia": ref_dia.isoformat(), "poc": perfil.poc(),
-                   "poc_faixa": pf, "val": va[0], "vah": va[1],
-                   "val_pares": vp[0], "vah_pares": vp[1]}
+    if ref_dia is None:
+        return {}
+    perfil = perfil_do_dia(curated, symbol, ref_dia, p.bin_pts, None, cache_dir)
+    if perfil.vazio:
+        return {}
+    va = perfil.area_de_valor(p.pct, "bin")
+    vp = perfil.area_de_valor(p.pct, "pares")
+    pf = perfil.poc_faixa()
+    assert va is not None and vp is not None and pf is not None
+    return {"dia": ref_dia.isoformat(), "poc": perfil.poc(), "poc_faixa": list(pf),
+            "val": va[0], "vah": va[1], "val_pares": vp[0], "vah_pares": vp[1]}
 
+
+def _construir_barras(t: pd.DataFrame, p: ParametrosReplay) -> pd.DataFrame:
+    """O caminho caro: M5 + VWAP negocio a negocio, absorcao CRUA por barra
+    (o z e' calculado depois, continuo entre dias), e a sonda de toda barra
+    com |z_vwap| >= z_sonda_minimo enquanto os negocios do dia estao na
+    memoria -- e' o que dispensa guarda-los."""
     vwap = VWAPSessao()
     c = ConstrutorDeBarraDeTempo(p.periodo_s)
-    zr = ZRolante(p.janela_z)
     linhas: list[dict[str, Any]] = []
 
     def fechar(b: BarraFechada) -> None:
         vw, sd = vwap.vwap, vwap.desvio
         z_vwap = None if vw is None or not sd else (b.close - vw) / sd
-        a = absorcao_dir(b)
-        z_abs = None if a is None else zr.z(a)
-        if a is not None:
-            zr.empurrar(a)
         linhas.append({
             "ts_close_ns": b.ts_close_ns, "hhmm": _hhmm(b.ts_close_ns - 1),
             "open": b.open, "high": b.high, "low": b.low, "close": b.close,
             "vol_total": b.vol_total, "vol_agr_compra": b.vol_agr_compra,
             "vol_agr_venda": b.vol_agr_venda, "volume_confiavel": b.volume_confiavel,
-            "vwap": vw, "sd": sd, "z_vwap": z_vwap,
-            "absorcao": a, "z_absorcao": z_abs,
+            "vwap": vw, "sd": sd, "z_vwap": z_vwap, "absorcao": absorcao_dir(b),
         })
 
     ts = t["ts_ns"].to_numpy(dtype=np.int64)
@@ -187,16 +200,86 @@ def _barras_do_dia(curated: Path, symbol: str, dia: dt.date, p: ParametrosReplay
     fim = c.avancar_relogio(int(ts[-1]) + p.periodo_s * _NS)
     if fim is not None:
         fechar(fim)
-
     df = pd.DataFrame(linhas)
+    if df.empty:
+        return df
+    # sonda por barra, so' onde alguma variante pode disparar
+    sondas: list[dict[str, Any]] = []
+    for i, r in df.iterrows():
+        z = r["z_vwap"]
+        if z is None or pd.isna(z) or abs(z) < p.z_sonda_minimo:
+            continue
+        ep = pd.Series({"ts_close_ns": r["ts_close_ns"], "lado": -1 if z > 0 else 1,
+                        "close": r["close"], "vwap": r["vwap"]})
+        sondas.append({"_i": i, **_sonda(ep, ts, px, p.horizontes_s)})
+    if sondas:
+        sd_df = pd.DataFrame(sondas).set_index("_i")
+        df = df.join(sd_df)
+    return df
+
+
+def _caminho_cache(curated: Path, symbol: str, dia: dt.date, p: ParametrosReplay,
+                   cache_dir: Path | None) -> Path:
+    destino = cache_dir or (curated.parent / "cache" / "vwapvp_barras")
+    hz = "-".join(str(h) for h in p.horizontes_s)
+    return destino / f"{symbol}_{dia.isoformat()}_{p.periodo_s}_{p.z_sonda_minimo:g}_{hz}.json"
+
+
+def _barras_do_dia(curated: Path, symbol: str, dia: dt.date, p: ParametrosReplay,
+                   cache_dir: Path | None) -> DiaReplay | None:
+    from ..features.pipeline import _carregar_dia
+
+    pasta = curated / "trade" / f"dt={dia.isoformat()}"
+    if not (pasta / f"sym={symbol}").exists():
+        return None
+    ass = assinatura(curated, symbol, dia)
+    arq = _caminho_cache(curated, symbol, dia, p, cache_dir)
+    df: pd.DataFrame | None = None
+    if ass is not None and arq.exists():
+        try:
+            d = json.loads(arq.read_text(encoding="utf-8"))
+            if tuple(d["assinatura"]) == ass and d.get("versao") == _VERSAO_CACHE:
+                df = pd.DataFrame(d["barras"])
+        except Exception:
+            df = None
+    origem = "cache"
+    if df is None:
+        t0 = time.perf_counter()
+        t = _carregar_dia(pasta, symbol)
+        if t.empty:
+            return None
+        df = _construir_barras(t, p)
+        origem = f"construido em {time.perf_counter() - t0:.0f} s"
+        if ass is not None and not df.empty:
+            try:
+                arq.parent.mkdir(parents=True, exist_ok=True)
+                arq.write_text(json.dumps({"versao": _VERSAO_CACHE, "assinatura": list(ass),
+                                           "barras": df.to_dict(orient="records")},
+                                          default=_json_default), encoding="utf-8")
+            except OSError as e:
+                log.warning("vwapvp.replay.cache_nao_gravou", erro=str(e), arquivo=str(arq))
+    if df.empty:
+        return None
+    ref = _referencia(curated, symbol, dia, p, cache_dir)
+    df = df.copy()
     df["dia"] = dia.isoformat()
-    if ref:
-        df["dist_vah"] = df["close"] - ref["vah"]
-        df["dist_val"] = df["close"] - ref["val"]
-    else:
-        df["dist_vah"] = np.nan
-        df["dist_val"] = np.nan
-    return DiaReplay(dia.isoformat(), ref.get("dia"), df, ts, px, ref)
+    df["dist_vah"] = (df["close"] - ref["vah"]) if ref else np.nan
+    df["dist_val"] = (df["close"] - ref["val"]) if ref else np.nan
+    log.info("vwapvp.replay.dia", dia=dia.isoformat(), barras=len(df), origem=origem,
+             referencia=ref.get("dia"))
+    return DiaReplay(dia.isoformat(), ref.get("dia"), df, ref)
+
+
+def _json_default(o: Any) -> Any:
+    if isinstance(o, (np.integer,)):
+        return int(o)
+    if isinstance(o, (np.floating,)):
+        return None if np.isnan(o) else float(o)
+    if isinstance(o, (np.bool_,)):
+        return bool(o)
+    if isinstance(o, float) and math.isnan(o):
+        return None
+    raise TypeError(f"nao serializavel: {type(o)}")
 
 
 # --------------------------------------------------------- clausulas/episodios
@@ -259,9 +342,62 @@ def _sonda(ep: pd.Series, ts: np.ndarray, px: np.ndarray,
 
 
 # ------------------------------------------------------------------- rodar
+def _resumo_sonda(s: pd.DataFrame, horizontes_s: tuple[int, ...]) -> dict[str, Any]:
+    if s.empty or "dist_vwap_pts" not in s:
+        return {"n": 0}
+    s = s[s["dist_vwap_pts"].notna()]
+    if s.empty:
+        return {"n": 0}
+    out: dict[str, Any] = {"n": len(s), "dist_vwap_mediana": float(s["dist_vwap_pts"].median())}
+    for h in horizontes_s:
+        out[f"h{h}"] = {
+            "mfe_mediana": float(s[f"mfe_{h}"].median()),
+            "mfe_p25": float(s[f"mfe_{h}"].quantile(0.25)),
+            "mae_mediana": float(s[f"mae_{h}"].median()),
+            "mae_p75": float(s[f"mae_{h}"].quantile(0.75)),
+            "frac_tocou_vwap": float(s[f"tocou_vwap_{h}"].astype(bool).mean()),
+        }
+    return out
+
+
+_COLS_CLAUSULA = [f"c_{c}" for c in CLAUSULAS] + ["c_absorcao_p90", "c_janela_p90"]
+
+
+def _avaliar_variante(barras: pd.DataFrame, p: ParametrosReplay, p80: float, p90: float,
+                      n_dias_ref: int) -> dict[str, Any]:
+    d = _marcar_clausulas(barras, p, p80, p90)
+    episodios = {c: _episodios(d, c, p.cooldown_s) for c in _COLS_CLAUSULA}
+    n = {c: len(e) for c, e in episodios.items()}
+    return {
+        "z_banda": p.z_banda, "tolerancia_pts": p.tolerancia_pts,
+        "barras_por_clausula": {c: int(d[c].sum()) for c in _COLS_CLAUSULA},
+        "episodios_por_clausula": n,
+        "episodios_por_dia": {c: (v / n_dias_ref if n_dias_ref else 0.0) for c, v in n.items()},
+        "episodios_por_hora": {c: (episodios[c]["hhmm"] // 100).value_counts().sort_index()
+                               .to_dict() if len(episodios[c]) else {} for c in _COLS_CLAUSULA},
+        "_barras": d, "_episodios": episodios,
+    }
+
+
+def escolher_variante(variantes: list[dict[str, Any]], minimo_por_dia: float) -> int | None:
+    """REGRA ACEITA EM 30/09 (taxa, nunca resultado): entre as variantes com
+    >= minimo_por_dia episodios/dia em c_janela, a mais restritiva = a de
+    MENOR taxa em c_nivel; empate -> maior z_banda, depois menor tolerancia.
+    None = nenhuma chega: abandono por taxa."""
+    ok = [(i, v) for i, v in enumerate(variantes)
+          if v["episodios_por_dia"]["c_janela"] >= minimo_por_dia]
+    if not ok:
+        return None
+    ok.sort(key=lambda iv: (iv[1]["episodios_por_dia"]["c_nivel"],
+                            -iv[1]["z_banda"], iv[1]["tolerancia_pts"]))
+    return ok[0][0]
+
+
 def rodar(curated: Path, symbol: str = "WINFUT", dias: list[str] | None = None,
           p: ParametrosReplay | None = None,
           cache_dir: Path | None = None) -> dict[str, Any]:
+    from dataclasses import replace
+
     p = p or ParametrosReplay()
     todos = dias_disponiveis(curated, symbol)
     escolhidos = [dt.date.fromisoformat(d) for d in dias] if dias else todos
@@ -279,56 +415,44 @@ def rodar(curated: Path, symbol: str = "WINFUT", dias: list[str] | None = None,
         return {"erro": "nenhum dia com tape", "dias_disponiveis": [d.isoformat() for d in todos]}
 
     barras = pd.concat([r.barras for r in dias_ok], ignore_index=True)
+    barras = barras.sort_values(["dia", "ts_close_ns"], kind="stable").reset_index(drop=True)
+    # z de absorcao CONTINUO entre dias (como no grafico), sobre a absorcao crua
+    zr = ZRolante(p.janela_z)
+    zs: list[float | None] = []
+    for a in barras["absorcao"]:
+        if a is None or pd.isna(a):
+            zs.append(None)
+            continue
+        zs.append(zr.z(float(a)))
+        zr.empurrar(float(a))
+    barras["z_absorcao"] = pd.Series(zs, dtype="float64")
+
     # 1. distribuicao do estimador (amostra queimada, congelada como valor)
-    zv = barras["z_vwap"].fillna(0.0)
+    zv = barras["z_vwap"].astype("float64").fillna(0.0)
     est = (barras["z_absorcao"] * np.sign(zv))[(zv != 0) & barras["z_absorcao"].notna()]
     if est.empty:
         return {"erro": "nenhuma barra com z de absorcao (janela de 50 barras nao fechou)"}
     perc = {q: float(np.percentile(est, q)) for q in (50, 80, 90, 95)}
     p80, p90 = perc[p.percentil_gatilho], perc[p.percentil_subgrupo]
-
-    d = _marcar_clausulas(barras, p, p80, p90)
     n_dias = len(dias_ok)
     n_dias_ref = sum(1 for r in dias_ok if r.ref)
 
-    # 2. eventos por clausula, por dia e por hora
-    cols = [f"c_{c}" for c in CLAUSULAS] + ["c_absorcao_p90", "c_janela_p90"]
-    barras_por_clausula = {c: int(d[c].sum()) for c in cols}
-    episodios: dict[str, pd.DataFrame] = {c: _episodios(d, c, p.cooldown_s) for c in cols}
-    ep_por_clausula = {c: len(e) for c, e in episodios.items()}
-    por_hora = {c: (episodios[c]["hhmm"] // 100).value_counts().sort_index().to_dict()
-                if len(episodios[c]) else {} for c in cols}
-    por_dia = {c: episodios[c].groupby("dia").size().to_dict() if len(episodios[c]) else {}
-               for c in cols}
+    # 2. variantes declaradas: so' TAXA. A primeira e' a principal (2.0, 25).
+    variantes = [_avaliar_variante(barras, replace(p, z_banda=z, tolerancia_pts=tol),
+                                   p80, p90, n_dias_ref) for z, tol in p.variantes]
+    escolhida = escolher_variante(variantes, p.minimo_por_dia)
+    principal = variantes[0]
 
-    # 3. sonda nos episodios de nivel (so' local) e de janela (evento completo)
-    ts_por_dia = {r.dia: (r.trades_ts, r.trades_px) for r in dias_ok}
-
-    sondas: dict[str, pd.DataFrame] = {}
-    for c in ("c_nivel", "c_janela", "c_janela_p90"):
-        rows = []
-        for _, ep in episodios[c].iterrows():
-            ts, px = ts_por_dia[ep["dia"]]
-            s = _sonda(ep, ts, px, p.horizontes_s)
-            s.update({"dia": ep["dia"], "hhmm": int(ep["hhmm"]), "lado": int(ep["lado"]),
-                      "close": ep["close"], "z_vwap": ep["z_vwap"],
-                      "estimador": ep["estimador"], "sd": ep["sd"]})
-            rows.append(s)
-        sondas[c] = pd.DataFrame(rows)
-
-    def resumo_sonda(s: pd.DataFrame) -> dict[str, Any]:
-        if s.empty:
-            return {"n": 0}
-        out: dict[str, Any] = {"n": len(s), "dist_vwap_mediana": float(s["dist_vwap_pts"].median())}
-        for h in p.horizontes_s:
-            out[f"h{h}"] = {
-                "mfe_mediana": float(s[f"mfe_{h}"].median()),
-                "mfe_p25": float(s[f"mfe_{h}"].quantile(0.25)),
-                "mae_mediana": float(s[f"mae_{h}"].median()),
-                "mae_p75": float(s[f"mae_{h}"].quantile(0.75)),
-                "frac_tocou_vwap": float(s[f"tocou_vwap_{h}"].mean()),
-            }
-        return out
+    # 3. sonda: linha de base (c_banda da principal) e, se houver escolhida,
+    #    c_nivel e c_janela DELA. Nada mais e' impresso.
+    sonda: dict[str, dict[str, Any]] = {
+        f"c_banda (linha de base, z={principal['z_banda']:g})":
+            _resumo_sonda(principal["_episodios"]["c_banda"], p.horizontes_s)}
+    if escolhida is not None:
+        v = variantes[escolhida]
+        rot = f"z={v['z_banda']:g} tol={v['tolerancia_pts']:g}"
+        for c in ("c_nivel", "c_janela", "c_janela_p90"):
+            sonda[f"{c} ({rot})"] = _resumo_sonda(v["_episodios"][c], p.horizontes_s)
 
     # 4. area de valor: os dois algoritmos
     va_dif = [{"dia": r.dia, "ref": r.ref["dia"],
@@ -338,9 +462,8 @@ def rodar(curated: Path, symbol: str = "WINFUT", dias: list[str] | None = None,
                "dif_vah_bins": (r.ref["vah"] - r.ref["vah_pares"]) / p.bin_pts,
                "poc_faixa_pts": r.ref["poc_faixa"][1] - r.ref["poc_faixa"][0]}
               for r in dias_ok if r.ref]
-
-    # largura da banda por hora (D6): mediana de 2*sd por hora do dia
-    banda_por_hora = (d.assign(h=d["hhmm"] // 100, b2=2 * d["sd"])
+    banda_por_hora = (principal["_barras"].assign(h=barras["hhmm"] // 100,
+                                                  b2=2 * barras["sd"].astype("float64"))
                       .groupby("h")["b2"].median().round(0).to_dict())
 
     return {
@@ -350,15 +473,16 @@ def rodar(curated: Path, symbol: str = "WINFUT", dias: list[str] | None = None,
         "barras": len(barras), "barras_com_z": int(est.size),
         "estimador_percentis": perc,
         "limiar_p80_congelado": p80, "limiar_p90_congelado": p90,
-        "barras_por_clausula": barras_por_clausula,
-        "episodios_por_clausula": ep_por_clausula,
-        "episodios_por_dia_medio": {c: (n / n_dias_ref if n_dias_ref else 0.0)
-                                    for c, n in ep_por_clausula.items()},
-        "episodios_por_hora": por_hora, "episodios_por_dia": por_dia,
+        "variantes": [{k: v for k, v in x.items() if not k.startswith("_")} for x in variantes],
+        "variante_escolhida": escolhida,
+        "regra_de_escolha": (f">= {p.minimo_por_dia:g} episodio/dia em c_janela; a mais "
+                             "restritiva = menor taxa em c_nivel; nenhuma = abandono por taxa"),
         "banda_2sd_por_hora_pts": banda_por_hora,
-        "sonda": {c: resumo_sonda(s) for c, s in sondas.items()},
+        "sonda": sonda,
         "area_de_valor_dois_algoritmos": va_dif,
-        "_barras": d, "_episodios": episodios, "_sondas": sondas,
+        "_barras": principal["_barras"],
+        "_episodios": principal["_episodios"],
+        "_variantes": variantes,
     }
 
 
@@ -379,16 +503,27 @@ def formatar(r: dict[str, Any]) -> list[str]:
     ln.append(f"    CONGELADO: gatilho p{p['percentil_gatilho']} = "
               f"{r['limiar_p80_congelado']:.3f}   "
               f"subgrupo p{p['percentil_subgrupo']} = {r['limiar_p90_congelado']:.3f}")
-    ln.append("  Episodios por clausula (acumulativas; cooldown "
-              f"{p['cooldown_s'] // 60} min) -> por dia:")
-    for c in [f"c_{x}" for x in CLAUSULAS] + ["c_absorcao_p90", "c_janela_p90"]:
-        ln.append(f"    {c:16s} barras={r['barras_por_clausula'][c]:5d}  "
-                  f"episodios={r['episodios_por_clausula'][c]:4d}  "
-                  f"/dia={r['episodios_por_dia_medio'][c]:.2f}")
-    ln.append("  Episodios de c_banda por hora: " + ", ".join(
-        f"{h}h:{n}" for h, n in r["episodios_por_hora"]["c_banda"].items()))
-    ln.append("  Episodios de c_nivel por hora: " + ", ".join(
-        f"{h}h:{n}" for h, n in r["episodios_por_hora"]["c_nivel"].items()))
+    ln.append("  Variantes declaradas (so' TAXA; episodios/dia, cooldown "
+              f"{p['cooldown_s'] // 60} min, {r['dias_com_referencia']} dias com referencia):")
+    ln.append("    z_banda tol   c_banda  c_nivel  c_abs_p80  c_janela  c_abs_p90  c_janela_p90")
+    for i, v in enumerate(r["variantes"]):
+        e = v["episodios_por_dia"]
+        marca = "  <- escolhida" if r["variante_escolhida"] == i else ""
+        ln.append(f"    {v['z_banda']:5.1f}  {v['tolerancia_pts']:4.0f}  "
+                  f"{e['c_banda']:7.2f}  {e['c_nivel']:7.2f}  {e['c_absorcao_p80']:9.2f}  "
+                  f"{e['c_janela']:8.2f}  {e['c_absorcao_p90']:9.2f}  "
+                  f"{e['c_janela_p90']:12.2f}{marca}")
+    ln.append(f"    regra: {r['regra_de_escolha']}")
+    if r["variante_escolhida"] is None:
+        ln.append("    NENHUMA variante chega ao minimo: ABANDONO POR TAXA do Setup B com VP "
+                  "de ontem (decisao de poder, tomada antes de olhar resultado).")
+    v0 = r["variantes"][0]
+    ln.append(f"  Episodios de c_banda por hora (z={v0['z_banda']:g}): " + ", ".join(
+        f"{h}h:{n}" for h, n in v0["episodios_por_hora"]["c_banda"].items()))
+    ln.append(f"  Episodios de c_nivel por hora (z={v0['z_banda']:g}, "
+              f"tol={v0['tolerancia_pts']:g}): "
+              + (", ".join(f"{h}h:{n}" for h, n in v0["episodios_por_hora"]["c_nivel"].items())
+                 or "nenhum"))
     ln.append("  Largura 2SD mediana por hora (pts): " + ", ".join(
         f"{h}h:{v:.0f}" for h, v in r["banda_2sd_por_hora_pts"].items()))
     for c, s in r["sonda"].items():
