@@ -1,6 +1,6 @@
 # VWAP + Volume Profile (WIN) — fast-track
 
-> **Status:** F2 — primeira rodada real feita (30/09, 46 dias): **Setup B com VP de ontem morto por taxa como escrito** (0,20 episódios/dia no local); barras validadas contra o Profit (112/113); rerodar em v3.91 com z contínuo, estimador de absorção corrigido, dias truncados excluídos e as variantes declaradas — **Criado:** 2026-09-29 (v3.86); F2 em v3.87–v3.89 — **Código:** `ea/vwap_sessao.py`, `ea/perfil_preco.py`, `research/vwapvp_conferir.py`, `research/vwapvp_replay.py`, comandos `vwapvp-conferir` e `ea-vwapvp-replay` — **Origem:** documento "A integração da VWAP e Volume Profile" (3 setups), decisões desta ficha tomadas em conversa de 29/09.
+> **Status:** **ABANDONADO POR TAXA** (30/09, v3.92) — Setup B com VP de ontem: melhor variante pré-declarada dá 0,11 episódio/dia (mínimo 1). Módulos (VWAP de sessão, perfil por preço, replay com cache) ficam como infraestrutura validada — **Criado:** 2026-09-29 (v3.86); fechado em v3.92 —
 
 ## Identidade, fase e estado
 
@@ -220,9 +220,34 @@ populacional — e não erro); e nas 9 barras `c_nivel`, que o fechamento está
 colado no VAH/VAL **do dia anterior**. Os zeros de `c_janela`/`p90` são
 subconjuntos de `c_absorcao_p80` (1 barra às 18:10): aritmética, não cálculo.
 
-### F2 — segunda rodada (v3.91, a fazer)
+### F2 — segunda rodada (30/09, v3.91, 46 dias completos 24/07–30/09, 566 s)
 
-Comando (a primeira rodada com cache custa ~1 min/dia; depois, segundos):
+    EXCLUIDOS: 2026-07-31 (71 barras, comeca 1230), 2026-09-15 (101, comeca 1000)
+    Estimador (lado exausto, z50 continuo), 5148 barras: p50=-0,39 p80=0,92 p90=1,59 p95=2,23
+    z_banda tol   c_banda  c_nivel  c_abs_p80  c_janela  c_abs_p90  c_janela_p90
+      2,0    25     3,47     0,20       0,13      0,04       0,00          0,00
+      2,0    50     3,47     0,24       0,13      0,04       0,00          0,00
+      1,5    25     7,07     0,31       0,13      0,04       0,00          0,00
+      1,5    50     7,07     0,40       0,20      0,11       0,07          0,07
+    NENHUMA variante chega a 1/dia em c_janela -> abandono por taxa
+    c_banda por hora (z=2): 9h:9 10h:34 11h:18 12h:18 13h:16 14h:13 15h:11 16h:11 17h:18 18h:8
+    2SD mediana por hora: 9h:621 10h:772 11h:1031 12h:1147 13h+:1186–1280
+    Sonda c_banda (linha de base, n=156, VWAP a 1068 pts):
+       5 min  MFE 78 (p25 30)   MAE 100 (p75 195)   tocou VWAP 1%
+      15 min  MFE 145 (55)      MAE 185 (359)       7%
+      30 min  MFE 185 (71)      MAE 250 (541)       12%
+      60 min  MFE 220 (90)      MAE 315 (641)       13%
+    Area de valor bin x pares: |dif| mediana 1 bin (max 8–13); plato do POC mediana 100 pts
+
+**Leitura:** o local (banda ∧ VAH/VAL de ontem) é raro por construção e a
+absorção do lado exausto, agora com o mecanismo certo, deixa 0,13/dia
+antes da janela. A linha de base da banda sozinha (n=156, descritiva,
+amostra queimada) tem excursão **contra** maior que a favor em todo
+horizonte e 13% de retorno à VWAP em 60 min: o preço a 2 desvios tende a
+continuar, não a voltar. Um EA de "reversão na banda sozinha" nasceria
+contra a própria linha de base.
+
+Comando (barras e sonda em cache; qualquer variação responde em segundos):
 
     profit-tape ea-vwapvp-replay --saida data/vwapvp_f2
 
@@ -236,19 +261,28 @@ ficha.
 
 ## Veredito
 
-Nenhum.
+**Abandonado por taxa (30/09).** Decisão de poder pela regra aceita antes
+da rodada: nenhuma das 4 variantes pré-declaradas chega a 1 episódio/dia;
+a melhor dá 0,11 (um a cada 9 pregões; n=100 levaria ~4 anos). Não é
+veredito sobre a hipótese — ela não foi testada, porque o evento não
+acontece com frequência testável. Setups A e C do documento não foram
+testados e não serão como escritos: A exige coincidência de duas
+referências móveis (VWAP e um POC que é platô de 100 pts); C exige um LVN
+que um perfil liso de 17 M contratos não tem.
+
+**O que sobrevive:** `ea/vwap_sessao.py`, `ea/perfil_preco.py` (POC e
+barras M5 batidos no Profit) e o replay com cache — infraestrutura para
+qualquer ficha que use VWAP/bandas/perfil como cláusula ou regime.
 
 ## Próximo passo
 
-1. Operador roda `ea-vwapvp-replay --saida data/vwapvp_f2` (v3.89) e cola a
-   saída: p80/p90 com z contínuo, tabela das 4 variantes, escolhida ou
-   abandono.
-2. Se houver escolhida: congelar p80/p90, fechar TAXA/HORIZONTE, EFEITO e
-   CRITERIO da sonda dela, hora de início. Se abandono: fechar esta ficha
-   com veredito "abandonado por taxa" e abrir a próxima.
-3. F3: `sinal_vwapvp.py` + `service_vwapvp.py` + `config_vwapvp.py` + tipo
-   `vwap_vp` no registro + YAML com os valores congelados; dry_run, um
-   pregão com barras olhadas uma a uma.
+Nenhum nesta ficha. Qualquer desenho seguinte é **ficha nova, pré-registrada
+antes de olhar mais dados**, escolhido entre o que a linha de base mostrou
+ter amostra: a banda ±2SD (3,5/dia; 7/dia a 1,5) — como **continuação**
+(a direção que a linha de base sugere, hipótese invertida à maneira da
+H-C2inv) ou com o VP de ontem como **regime** ("abriu dentro/fora da VA")
+em vez de toque a 25 pts. A amostra do replay está queimada para as duas;
+o teste é forward.
 
 ## Onde está a discussão longa
 

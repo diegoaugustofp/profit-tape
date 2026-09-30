@@ -4481,3 +4481,24 @@ Suíte: uma passagem com falha intermitente em
 isolado, com e sem a mudança; arquivo não tocado), rerodada verde. 1.255.
 
 **Tags:** entregue-v3.91 (sobre v3.90). Suíte 1.255.
+
+### 2026-09-30e — VWAP + VP: segunda rodada e fechamento por taxa (v3.92)
+
+Segunda rodada (46 dias completos, 31/07 e 15/09 excluídos, 566 s com o
+cache v2 reconstruído). Estimador do lado exausto com z contínuo em 99%
+das barras: p80 0,916, p90 1,586. Tabela das 4 variantes pré-declaradas:
+`c_janela` de 0,04 a 0,11/dia — **nenhuma chega ao mínimo de 1/dia →
+abandono por taxa**, pela regra aceita pelo Diego antes de rodar.
+
+Linha de base da banda sozinha (n=156, descritiva): MAE > MFE em todo
+horizonte (315 vs 220 aos 60 min; p75 MAE 641 vs p25 MFE 90), 13% toca
+a VWAP em 1 h com ela a 1.068 pts. A 2 desvios o preço tende a continuar.
+Registrado como o dado que orienta a próxima ficha, não como teste.
+
+Ficha fechada: veredito, o que sobrevive (VWAP de sessão, perfil por
+preço e replay com cache, batidos no Profit) e os dois candidatos a ficha
+nova (banda como continuação; VP de ontem como regime). Setups A e C do
+documento não serão testados como escritos (mesma estrutura de
+coincidência que matou o B). Sem código novo além da ficha.
+
+**Tags:** entregue-v3.92 (sobre v3.91). Suíte 1.255.
