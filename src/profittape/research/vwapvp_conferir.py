@@ -53,10 +53,10 @@ def conferir_dia(curated: Path, symbol: str, dia: dt.date, bin_pts: float = 25.0
 
     pasta = curated / "trade" / f"dt={dia.isoformat()}"
     if not (pasta / f"sym={symbol}").exists():
-        return {"erro": "dia sem tape no curated"}
+        return {"erro": "dia sem tape no curated", "dia": dia.isoformat()}
     t = _carregar_dia(pasta, symbol)
     if t.empty:
-        return {"erro": "dia vazio no curated"}
+        return {"erro": "dia vazio no curated", "dia": dia.isoformat()}
 
     vwaps = {nome: VWAPSessao() for nome in CONJUNTOS}
     pendentes = sorted(checkpoints_hhmm)
@@ -121,8 +121,12 @@ def formatar(r: dict[str, Any]) -> list[str]:
     p = r["perfil"]
     ln.append(f"    Perfil (bin {p['bin_pts']:g} pts, {p['bins']} bins, "
               f"{p['min']:.0f}..{p['max']:.0f}):")
-    ln.append(f"      POC={p['poc']:.0f}  VAL={p['val']:.0f}  VAH={p['vah']:.0f}  "
-              f"(area de valor {r['parametros']['pct']:.0%})")
+    pf = p["poc_faixa"]
+    vp = p["va_pares"]
+    ln.append(f"      POC={p['poc']:.0f} (plato {pf[0]:.0f}..{pf[1]:.0f})  "
+              f"VAL={p['val']:.0f}  VAH={p['vah']:.0f}  "
+              f"(area de valor {r['parametros']['pct']:.0%}, bin a bin; "
+              f"por pares: {vp[0]:.0f}..{vp[1]:.0f})")
     ln.append(f"      volume={p['volume']:.0f}  rlp={p['volume_rlp']:.0f} "
               f"({p['volume_rlp'] / p['volume']:.1%})  leilao={p['volume_leilao']:.0f}  "
               f"agr compra={p['agr_compra']:.0f} venda={p['agr_venda']:.0f}")

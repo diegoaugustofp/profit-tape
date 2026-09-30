@@ -1,6 +1,6 @@
 # VWAP + Volume Profile (WIN) — fast-track
 
-> **Status:** F1 — módulos puros entregues e conferíveis; nenhum replay, nenhum pregão rodado — **Criado:** 2026-09-29 (v3.86) — **Código:** `ea/vwap_sessao.py`, `ea/perfil_preco.py`, `research/vwapvp_conferir.py`, comando `vwapvp-conferir` — **Origem:** documento "A integração da VWAP e Volume Profile" (3 setups), decisões desta ficha tomadas em conversa de 29/09.
+> **Status:** F2 — F1 conferido contra o Profit (25/09 e 28/09); replay entregue, **ainda não rodado no curated real** — **Criado:** 2026-09-29 (v3.86); F2 em v3.87 — **Código:** `ea/vwap_sessao.py`, `ea/perfil_preco.py`, `research/vwapvp_conferir.py`, `research/vwapvp_replay.py`, comandos `vwapvp-conferir` e `ea-vwapvp-replay` — **Origem:** documento "A integração da VWAP e Volume Profile" (3 setups), decisões desta ficha tomadas em conversa de 29/09.
 
 ## Identidade, fase e estado
 
@@ -53,19 +53,23 @@ de valor conhecida, e o fluxo que chegou lá já não move o preço.
   cada observação como subgrupo. C2 da ignição (saldo por corretora) não
   sustentou a hipótese e já paga seu forward (H-C2inv); não repetir aqui.
 
-## Ficha rápida (forward) — a completar em F2
+## Ficha rápida (forward) — fecha com a saída do `ea-vwapvp-replay`
 
-    HIPOTESE   preço em ±2SD ∧ VAH/VAL de ontem ∧ absorção acima de p80 volta à VWAP
+    HIPOTESE   preço em ±2SD ∧ VAH/VAL de ontem ∧ absorção acima de p80 volta em direção à VWAP
     EVENTO     barra M5 fechada com: |z_vwap| >= 2; |close − VAH| <= 25 pts (venda) ou
-               |close − VAL| <= 25 (compra); absorcao_dir·lado >= p80 (valor congelado);
-               09:30–17:00; sem posição; fora de cooldown
-    TAXA       A MEDIR EM F2, por cláusula (±2SD só / +VAH-VAL / +absorção / +janela)
-    EFEITO     p_alvo >= 0,58 vs 0,50 (binário: VWAP antes do stop)
+               |close − VAL| <= 25 (compra); z_absorcao·lado >= p80 (VALOR congelado pelo
+               replay); 09:30–17:00; sem posição; cooldown 30 min
+    TAXA       A MEDIR: `ea-vwapvp-replay` dá episódios/dia por cláusula e por hora
+    EFEITO     A DEFINIR PELA SONDA. A linha anterior (p_alvo >= 0,58, binário "VWAP antes do
+               stop") foi RETIRADA em 29/09: a banda +2SD está a 1.000–1.160 pts da VWAP a
+               partir de 12h (F1) e o binário com stop de 50 não mede nada. O replay dá MFE/MAE
+               em 5/15/30/60 min e a fração que toca a VWAP; alvo e stop saem em pontos daí
     HORIZONTE  A CALCULAR de TAXA × EFEITO; se > 6 meses, afrouxar (±1,5SD ou tolerância 50)
-    CRITERIO   IC 95% de p_alvo acima de 0,50 = favorável; abaixo = contra; cruza = inconclusivo
+               ANTES de ligar, e anotar aqui
+    CRITERIO   a fixar junto com EFEITO (IC 95% do que a sonda escolher como métrica)
     PARADA     olhar só no n da linha HORIZONTE. Subgrupos declarados (p90, z_agf_3 >= 1,4,
-               com/sem RLP) respondem DEPOIS do principal e não autorizam trocar o gatilho.
-               Mudou parâmetro = contagem nova (carimbo tag + sha do YAML).
+               com/sem RLP, área de valor por pares) respondem DEPOIS do principal e não
+               autorizam trocar o gatilho. Mudou parâmetro = contagem nova (carimbo tag + sha).
 
 ## Regras (o suficiente para reimplementar — F3, ainda não escrito)
 
@@ -80,17 +84,65 @@ de valor conhecida, e o fluxo que chegou lá já não move o preço.
 
 ## Como conferir (F1)
 
-    profit-tape vwapvp-conferir --dia 2026-09-26 --dia 2026-09-29 --histograma-csv out/vp.csv
+    profit-tape vwapvp-conferir                      # os 2 últimos dias do curated
+    profit-tape vwapvp-conferir --dia 2026-09-25 --dia 2026-09-28 --histograma-csv data/vp.csv
 
-No Profit, mesmo dia: VWAP com bandas de 2 desvios e Volume Profile com
-área de valor 70%. Devem bater em até 1 bin. Se "todos" não bater e
-"agressao_rlp" bater, o gráfico exclui o leilão — anotar aqui e trocar o
-D3 **antes** de F2, nunca depois.
+No Profit, mesmo dia, Volume Profile com **"negócios de leilão" DESLIGADO**
+(ligado, o Profit soma o call num preço médio — 183.504,25 em 28/09 — que o
+tape não tem, e o POC muda de bin). O POC do Profit deve cair dentro do
+`poc_faixa`. O Profit **não marca VAL/VAH** e não deixa configurar o %: o
+algoritmo da área de valor não é conferível na tela — o replay calcula os
+dois (bin a bin e pares) e mede a diferença. Fim de semana e dia em captura
+são recusados pelo comando.
 
 ## Resultados
 
-Nenhum. F1 entregue em v3.86 sem dado real olhado — o sandbox não tem o
-curated. A conferência é do operador.
+### F1 — conferência contra o Profit (29/09, dias 25/09 e 28/09, 5,4–5,6 M negócios/dia)
+
+| | 25/09 | 28/09 |
+|---|---|---|
+| VWAP todos / agr+RLP / agr | 184326 / 184322 / 184324 | 183977 / 183979 / 183979 |
+| SD final | 486 | 554 |
+| 2SD em pts às 10h / 12h / 14h / 16h | 579 / 1003 / 1047 / 993 | 748 / 1145 / 1158 / 1160 |
+| POC (bin 25) | 184575 — Profit 184578 ✓ | 184100 — Profit 184100 ✓ (leilão desligado) |
+| VAL / VAH (bin a bin) | 183775 / 184900 | 183550 / 184975 |
+| RLP | 26,1% do volume | 25,9% |
+
+O que isso decidiu:
+
+- **D3 fechado:** RLP e leilão movem a VWAP em **4 pts**. "Todos" fica; a
+  conferência de VWAP na tela é dispensável.
+- **POC é um platô, não um ponto:** os 8 maiores bins ficam a 3% um do outro
+  numa faixa de ~150 pts (25/09: 184475–184650; 28/09: 184000–184150).
+  `poc_faixa` (bins ≥ 90% do máximo) passa a ser gravado; alvo ancorado em
+  POC tem ±100 pts de indeterminação por construção. Setup B fica nas bordas.
+- **RLP é uniforme por nível** (26–27% em todo bin, inclusive no POC e no
+  183500 disputado): não desenha o perfil. Chute de RLP concentrado em nível
+  morto por dado.
+- **Delta por nível na escala do dia é ~0 em todo lugar** (±11 k sobre
+  470 k no POC de 28/09). Delta só significa algo em janela (Setup A).
+- **A banda dobra entre 10h e 12h** — "z = 2" às 09:40 é um esticão de ~400
+  pts, às 14h de 1.100. O replay conta episódios por hora; a janela pode
+  precisar começar às 10:00.
+- **HVN/LVN como definidos não servem**: 25/09 só LVN na cauda de cima; 28/09
+  9 HVN e 1 LVN no fundo. Perfil de 17 M contratos em 92 bins é liso. Fica
+  para a ficha do Setup C, com outra definição.
+- Em 28/09 a +2SD cruzou o VAH de 25/09 (184900) entre 12h e 16h — o evento
+  existiu pelo menos uma vez. A taxa é do replay.
+
+### F2 — replay
+
+Não rodado no curated real (o sandbox não o tem). Comando:
+
+    profit-tape ea-vwapvp-replay --saida data/vwapvp_f2
+
+Devolve: percentis 50/80/90/95 do estimador (p80 e p90 **congelados como
+valor** — copiar para cá e para o YAML do F3); episódios por cláusula
+(banda → nível → absorção → janela) por dia e por hora; sonda MFE/MAE/toque
+na VWAP em 5/15/30/60 min para `c_nivel` (só local) e `c_janela` (evento
+completo) e o subgrupo p90; diferença VAL/VAH bin a bin × pares; largura
+2SD por hora. Nada é escolhido por resultado; os parâmetros são os desta
+ficha.
 
 ## Veredito
 
@@ -98,14 +150,14 @@ Nenhum.
 
 ## Próximo passo
 
-1. Operador roda `vwapvp-conferir` em 2–3 dias e bate contra o Profit;
-   anota aqui o que divergiu (algoritmo da área de valor, conjunto de
-   negócios, bin).
-2. F2 (v3.87): `ea-vwapvp-replay` sobre o curated — distribuição do
-   estimador de absorção por barra M5 (p80/p90 congelados como valor),
-   eventos/pregão por cláusula, distância ±2SD→VWAP por horário, sonda em
-   1/5/15 min. Só então a ficha rápida fecha TAXA/HORIZONTE.
-3. F3: EA na esteira, dry_run, um pregão com barras olhadas uma a uma.
+1. Operador roda `ea-vwapvp-replay --saida data/vwapvp_f2` (todos os dias do
+   curated; 24/07 é o primeiro e não tem referência) e cola a saída aqui.
+2. Com a saída: congelar p80/p90, fechar TAXA e HORIZONTE, escrever EFEITO e
+   CRITERIO a partir da sonda (alvo/stop em pontos), decidir a hora de
+   início. Se HORIZONTE > 6 meses, afrouxar **antes** de ligar e anotar.
+3. F3: `sinal_vwapvp.py` + `service_vwapvp.py` + `config_vwapvp.py` + tipo
+   `vwap_vp` no registro + YAML com os valores congelados; dry_run, um
+   pregão com barras olhadas uma a uma.
 
 ## Onde está a discussão longa
 

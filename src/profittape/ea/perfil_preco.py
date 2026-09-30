@@ -126,10 +126,30 @@ class PerfilDePreco:
         cands = [b for b in bs if self._total[b] == maior]
         return min(cands, key=lambda b: (abs(b - centro), b))
 
-    def area_de_valor(self, pct: float = 0.70) -> tuple[float, float] | None:
+    def poc_faixa(self, frac: float = 0.90) -> tuple[float, float] | None:
+        """(inferior, superior) dos bins com volume >= frac x maximo -- o
+        PLATO do POC. Medido em 25/09 e 28/09 (F1): os 8 maiores bins
+        ficam a 3% um do outro numa faixa de ~150 pts; o POC "vence" por
+        pouco e um alvo ancorado nele tem +-100 pts de indeterminacao por
+        construcao. Bordas externas, como VAL/VAH."""
+        if not self._total:
+            return None
+        maior = max(self._total.values())
+        bs = [b for b in self.bins() if self._total[b] >= frac * maior]
+        return (bs[0], bs[-1] + self.bin_pts)
+
+    def area_de_valor(self, pct: float = 0.70, modo: str = "bin") -> tuple[float, float] | None:
         """(VAL, VAH): bordas externas da menor faixa contigua em torno do
-        POC com >= pct do volume. Expande para o vizinho MAIOR; empate
-        expande para cima (bin a bin, nao dois a dois como o TPO classico)."""
+        POC com >= pct do volume.
+
+        modo="bin"   expande UM bin por vez para o vizinho maior; empate
+                     expande para cima (declarado na ficha, D4).
+        modo="pares" expande DOIS bins por vez, comparando a soma dos dois
+                     acima com a dos dois abaixo (TPO classico / Sierra).
+        O Profit nao marca VAL/VAH (F1, 29/09), entao a escolha nao e'
+        conferivel na tela: o replay calcula os dois e mede a diferenca."""
+        if modo not in ("bin", "pares"):
+            raise ValueError(f"modo={modo!r}: use 'bin' ou 'pares'")
         p = self.poc()
         if p is None:
             return None
@@ -137,14 +157,22 @@ class PerfilDePreco:
         i_lo = i_hi = bs.index(p)
         alvo = pct * self.volume
         acum = self._total[p]
+        passo = 1 if modo == "bin" else 2
         while acum < alvo and (i_lo > 0 or i_hi < len(bs) - 1):
-            abaixo = self._total[bs[i_lo - 1]] if i_lo > 0 else -1.0
-            acima = self._total[bs[i_hi + 1]] if i_hi < len(bs) - 1 else -1.0
+            abaixo = sum(self._total[bs[i]] for i in range(max(0, i_lo - passo), i_lo))
+            acima = sum(self._total[bs[i]]
+                        for i in range(i_hi + 1, min(len(bs), i_hi + 1 + passo)))
+            if i_hi >= len(bs) - 1:
+                acima = -1.0
+            if i_lo <= 0:
+                abaixo = -1.0
             if acima >= abaixo:
-                i_hi += 1
+                n = min(passo, len(bs) - 1 - i_hi)
+                i_hi += n
                 acum += acima
             else:
-                i_lo -= 1
+                n = min(passo, i_lo)
+                i_lo -= n
                 acum += abaixo
         return (bs[i_lo], bs[i_hi] + self.bin_pts)
 
@@ -189,8 +217,10 @@ class PerfilDePreco:
                 "min": bs[0] if bs else None,
                 "max": (bs[-1] + self.bin_pts) if bs else None,
                 "poc": self.poc(),
+                "poc_faixa": self.poc_faixa(),
                 "val": None if va is None else va[0],
-                "vah": None if va is None else va[1]}
+                "vah": None if va is None else va[1],
+                "va_pares": self.area_de_valor(pct, "pares")}
 
     # ------------------------------------------------------------- cache
     def _para_json(self) -> dict[str, Any]:
@@ -258,3 +288,28 @@ def perfil_do_dia(curated: Path, symbol: str, dia: dt.date, bin_pts: float = 25.
     except OSError as e:               # cache e' otimizacao: falhar nao quebra o EA
         log.warning("ea.perfil_preco.nao_gravou", erro=str(e), arquivo=str(arq))
     return p
+
+
+# ------------------------------------------------------------ dias do curated
+def dias_disponiveis(curated: Path, symbol: str) -> list[dt.date]:
+    """Dias com pasta `trade/dt=.../sym=<symbol>` no curated, em ordem."""
+    base = curated / "trade"
+    if not base.exists():
+        return []
+    out: list[dt.date] = []
+    for pasta in base.iterdir():
+        if not pasta.name.startswith("dt=") or not (pasta / f"sym={symbol}").exists():
+            continue
+        try:
+            out.append(dt.date.fromisoformat(pasta.name[3:]))
+        except ValueError:
+            continue
+    return sorted(out)
+
+
+def dia_de_referencia(curated: Path, symbol: str, dia: dt.date) -> dt.date | None:
+    """O ultimo dia com tape ANTES de `dia` (D2: perfil de referencia = dia
+    util anterior, fixo). None se nao ha' dia anterior no curated."""
+    ant = [d for d in dias_disponiveis(curated, symbol) if d < dia]
+    return ant[-1] if ant else None
+

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import datetime as _dt
+import json
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -1491,7 +1493,8 @@ def barra_tempo_conferir(
 
 @app.command(name="vwapvp-conferir")
 def vwapvp_conferir(
-    dias: list[str] = typer.Option(..., "--dia", help="YYYY-MM-DD (repetivel)"),
+    dias: list[str] = typer.Option(
+        [], "--dia", help="YYYY-MM-DD (repetivel); omitido = os 2 ultimos dias do curated"),
     curated: Path = typer.Option(Path("data/curated"), "--curated"),
     symbol: str = typer.Option("WINFUT", "--symbol"),
     bin_pts: float = typer.Option(25.0, "--bin-pts", help="largura do bin do perfil (D4)"),
@@ -1513,8 +1516,25 @@ def vwapvp_conferir(
     agressao) para medir, nao assumir, o efeito do RLP e do leilao.
     """
     configurar(log_level)
+    from .ea.perfil_preco import dias_disponiveis
     from .research.vwapvp_conferir import conferir, formatar
 
+    disponiveis = dias_disponiveis(curated, symbol)
+    if not dias:
+        dias = [d.isoformat() for d in disponiveis[-2:]]
+        if not dias:
+            typer.echo(f"nenhum dia de {symbol} em {curated / 'trade'}")
+            raise typer.Exit(1)
+        typer.echo(f"--dia omitido: usando os ultimos do curated: {', '.join(dias)}")
+    hoje = _dt.date.today()
+    ruins = [d for d in dias if _dt.date.fromisoformat(d).weekday() >= 5
+             or _dt.date.fromisoformat(d) >= hoje]
+    if ruins:
+        faixa = (f"{disponiveis[0]}..{disponiveis[-1]}" if disponiveis else "-")
+        typer.echo(f"recusado: {', '.join(ruins)} (fim de semana ou dia ainda em captura). "
+                   f"Dias no curated: {faixa}, "
+                   f"ultimos: {', '.join(d.isoformat() for d in disponiveis[-5:])}")
+        raise typer.Exit(1)
     r = conferir(curated, symbol, dias, bin_pts=bin_pts, pct=pct, lvn_frac=lvn_frac,
                  hvn_frac=hvn_frac, vizinhos=vizinhos,
                  checkpoints_hhmm=tuple(sorted(checkpoint)))
@@ -1529,10 +1549,64 @@ def vwapvp_conferir(
             arq = histograma_csv.with_name(f"{histograma_csv.stem}_{dia}{histograma_csv.suffix}")
             d["histograma"].to_csv(arq, index=False)
             typer.echo(f"    histograma -> {arq}")
-    typer.echo("\n  Como conferir: no Profit, VWAP com bandas de 2 desvios e Volume Profile "
-               "(area de valor 70%) do mesmo dia. VWAP e POC/VAL/VAH devem bater em ate' "
-               "1 bin; se 'todos' nao bater e 'agressao_rlp' bater, o grafico exclui o "
-               "leilao -- anote na ficha (D3).")
+    typer.echo("\n  Como conferir (F1, 29/09): no Profit, Volume Profile do mesmo dia com "
+               "'negocios de leilao' DESLIGADO -- ligado, o Profit soma o call num preco "
+               "medio que o tape nao tem e o POC muda de bin. O POC deve cair dentro do "
+               "poc_faixa (plato); o Profit nao marca VAL/VAH. VWAP: 'todos' vs "
+               "'agressao' diferem ~4 pts, nao discriminavel na tela.")
+
+
+@app.command(name="ea-vwapvp-replay")
+def ea_vwapvp_replay(
+    curated: Path = typer.Option(Path("data/curated"), "--curated"),
+    symbol: str = typer.Option("WINFUT", "--symbol"),
+    dias: list[str] = typer.Option(
+        [], "--dia", help="YYYY-MM-DD (repetivel); omitido = todos os dias do curated"),
+    bin_pts: float = typer.Option(25.0, "--bin-pts"),
+    pct: float = typer.Option(0.70, "--pct"),
+    periodo_s: int = typer.Option(300, "--periodo-s", help="barra; 300 = M5 (decisao 29/09)"),
+    janela_z: int = typer.Option(50, "--janela-z"),
+    z_banda: float = typer.Option(2.0, "--z-banda"),
+    tolerancia_pts: float = typer.Option(25.0, "--tolerancia-pts"),
+    hhmm_inicio: int = typer.Option(930, "--inicio"),
+    hhmm_fim: int = typer.Option(1700, "--fim"),
+    cooldown_s: int = typer.Option(1800, "--cooldown-s"),
+    saida: Path | None = typer.Option(
+        None, "--saida", help="pasta para JSON + CSVs (barras, episodios, sondas)"),
+    log_level: str = typer.Option("INFO", "--log-level"),
+) -> None:
+    """
+    F2 do EA vwap_vp (docs/eas/vwap_vp.md): replay do Setup B sobre o tape
+    curado -- distribuicao do estimador de absorcao por barra M5 (p80/p90
+    congelados como VALOR), episodios por clausula e por hora, sonda de
+    excursao (MFE/MAE, toque na VWAP) por horizonte, e VAL/VAH pelos dois
+    algoritmos da area de valor. Fecha TAXA/HORIZONTE/EFEITO da ficha.
+    Nao decide e nao varre grade: os parametros sao os declarados.
+    """
+    configurar(log_level)
+    from .research.vwapvp_replay import ParametrosReplay, formatar, rodar
+
+    p = ParametrosReplay(bin_pts=bin_pts, pct=pct, periodo_s=periodo_s, janela_z=janela_z,
+                         z_banda=z_banda, tolerancia_pts=tolerancia_pts,
+                         hhmm_inicio=hhmm_inicio, hhmm_fim=hhmm_fim, cooldown_s=cooldown_s)
+    t0 = time.perf_counter()
+    r = rodar(curated, symbol, dias or None, p)
+    typer.echo("=" * 72)
+    typer.echo(f"REPLAY VWAP + VP, Setup B — {symbol} ({time.perf_counter() - t0:.0f} s)")
+    typer.echo("=" * 72)
+    for linha in formatar(r):
+        typer.echo(linha)
+    if saida is not None and "erro" not in r:
+        saida.mkdir(parents=True, exist_ok=True)
+        publico = {k: v for k, v in r.items() if not k.startswith("_")}
+        (saida / "vwapvp_replay.json").write_text(
+            json.dumps(publico, indent=2, default=str, ensure_ascii=False), encoding="utf-8")
+        r["_barras"].to_csv(saida / "barras.csv", index=False)
+        for c, e in r["_episodios"].items():
+            e.to_csv(saida / f"episodios_{c}.csv", index=False)
+        for c, s in r["_sondas"].items():
+            s.to_csv(saida / f"sonda_{c}.csv", index=False)
+        typer.echo(f"\n  saida -> {saida}")
 
 
 @app.command(name="semente-conferir")

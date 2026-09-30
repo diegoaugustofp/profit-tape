@@ -4297,3 +4297,40 @@ replay com distribuição do estimador e eventos/pregão por cláusula; só
 então TAXA/HORIZONTE. F3 = EA na esteira.
 
 **Tags:** entregue-v3.86. Suíte 1.239.
+
+### 2026-09-29b — VWAP + VP: F1 conferido no Profit, F2 (replay) entregue (v3.87)
+
+**Conferência (25/09 e 28/09, 5,4–5,6 M negócios/dia).** POC bate nos dois
+dias (184578 e 184100 na tela vs bins 184575 e 184100) — mas só com a
+opção "negócios de leilão" do Profit **desligada**: ligada, ele soma o
+call num preço médio (183.504,25) que o tape não tem, e o POC muda de bin.
+O Profit não marca VAL/VAH nem deixa configurar o %. Achados que mudaram
+a ficha:
+- D3 fechado: RLP (26%) e leilão (0,4%) movem a VWAP em 4 pts. Dois chutes
+  meus sobre RLP morreram por dado no mesmo dia (VWAP; concentração em
+  nível — é 26–27% uniforme em todo bin).
+- POC é um platô de ~150 pts (8 maiores bins a 3% um do outro): alvo em
+  POC tem ±100 pts por construção. `poc_faixa` gravado; Setup B nas bordas.
+- 2SD dobra entre 10h e 12h (580→1.000 pts): "z=2" não é a mesma coisa o
+  dia inteiro. A linha EFEITO da ficha (p_alvo ≥ 0,58 binário, stop 50)
+  foi **retirada** — com alvo de 1.000 pts não mede nada; sai da sonda.
+- Delta por nível na escala do dia ≈ 0 em todo lugar; HVN/LVN como
+  definidos não separam nada num perfil liso de 17 M contratos.
+
+**Entregue (v3.87):** `research/vwapvp_replay.py` + `ea-vwapvp-replay`:
+distribuição do estimador de absorção (`absorcao_dir` z50 × lado) por
+barra M5 com p80/p90 congelados como valor, episódios por cláusula
+acumulativa (banda → nível → absorção → janela) por dia e por hora com
+cooldown, sonda MFE/MAE/toque na VWAP em 5/15/30/60 min, VAL/VAH pelos
+dois algoritmos (bin a bin × pares, novo `modo=`), `poc_faixa`,
+`dias_disponiveis`/`dia_de_referencia` (D2). `vwapvp-conferir`: `--dia`
+opcional (últimos 2), recusa fim de semana/dia em captura com a lista,
+data na linha de erro, platô e VA por pares na saída. +9 testes com
+exemplos à mão (estimador 0,3; z 2/√(2/3); sonda 11/2/toque 40 s). Suíte
+1.248, ruff/mypy limpos. Ficha atualizada com a tabela do F1.
+
+**Não feito:** o replay não rodou no curated real. Próximo: operador roda
+`ea-vwapvp-replay --saida data/vwapvp_f2` e cola a saída; daí TAXA,
+HORIZONTE, EFEITO, hora de início; só então F3.
+
+**Tags:** entregue-v3.86, entregue-v3.87. Suíte 1.248.
