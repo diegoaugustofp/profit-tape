@@ -1023,6 +1023,55 @@ Compactacao interrompida no meio do lote antigo: matar e' seguro
 (originais intactos, sobra `.compacting` descartada na rodada seguinte)
 e reexecutar na v3.85 e' mais barato que esperar.
 
+### v3.88: o que a rodada real da v3.85 ensinou (2026-09-29/30)
+
+`compact --dia 2026-08-26 --simbolo WINFUT --workers 1 --modo-leitura
+sequencial` na v3.85: **13.947 s (3h52)** para 4 particoes, 2,84 M row
+groups. Por particao: book_offer 6,35 ms/rg, book_price 4,10, tiny_book
+2,02, trade 5,88. Um `diag` lendo UM arquivo da mesma particao, mesmo
+modo, mesma maquina: 0,16-0,86 ms/rg -- **7-13x mais rapido que o
+compact**. E `compactar_raw` rodado numa COPIA da particao (arvore com
+um so' stream): 227,6 s para 444.599 rg = **0,51 ms/rg**, na faixa do
+diag. Ou seja: o codigo do compact esta' certo; o que o deixa 7-13x mais
+lento e' o **contexto da rodada** -- e a unica coisa que o compact faz
+antes da primeira particao e' a varredura de `validacao.relatorio` da
+arvore inteira: `read_metadata` de todos os ~5.000 arquivos do backup
+(8-17 min por rodada, medido), cada footer com 20-36 mil row groups de
+structs Thrift, alocados e liberados no heap do runtime C, com o
+resultado **descartado** (`_corrompidos`). Hipotese de trabalho
+(diag_prescan, em andamento): a varredura deixa o heap degradado e toda
+alocacao pequena do leitor de Parquet fica lenta depois dela.
+
+Independente da hipotese, a varredura era redundante: corrompido e'
+detectado pelo inventario da propria particao (`compact.arquivo_pulado`),
+e `.inprogress` e' reconferido no disco antes de ler. A v3.88 a remove
+(coleta de `.inprogress` vira um glob de diretorio, sem abrir arquivo).
+Tambem:
+
+- `--stream book_offer` restringe a um stream (combinavel com `--dia` e
+  `--simbolo`): medir uma particao passa a custar minutos, nao horas.
+- `--modo-leitura` default = `sequencial` (uma thread, sem pool interno
+  do Arrow): o medido mais rapido nesta maquina.
+- `compact.particao_ok` traz `seg_leitura`, `seg_escrita` e
+  `ms_por_row_group` -- o instrumento que faltou na investigacao inteira.
+  A referencia saudavel e' **0,2-0,9 ms/rg**; acima de 2 ms/rg, algo no
+  contexto (record vivo? outro processo? heap?) esta' errado e o primeiro
+  teste e' rodar a mesma particao numa copia em arvore isolada.
+
+Paralelismo, medido em 2026-09-29 (`diag_pool`, 4 arquivos de streams
+diferentes, mesma particao):
+
+| leitura dos 4 arquivos | soma dos 4 isolados | os 4 ao mesmo tempo |
+|---|---|---|
+| `use_threads=True` | 35,7 s | **113 s** |
+| `use_threads=False` | 55,7 s | **147 s** |
+
+Concorrente perde de sequencial por 2,6-3x, com ou sem pool interno.
+`py-spy dump` do compact com `--workers 4`: os 4 workers parados em
+`arrow::FutureImpl::Wait`, um nucleo a 100%. **`--workers` fica em 1**;
+a opcao continua existindo para experimento, documentada como
+prejudicial nesta maquina.
+
 ### `--workers N`: varias particoes em paralelo (2026-09-29, v3.84)
 
 `--workers N` roda N particoes INTEIRAS em threads (`to_table` e a

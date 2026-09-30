@@ -621,12 +621,12 @@ def compact(
         5_000_000, "--max-rows-per-file", help="Linhas por arquivo (mesmo limite do sink)."
     ),
     modo_leitura: str = typer.Option(
-        "lote",
+        "sequencial",
         "--modo-leitura",
-        help="'lote' (default: ParquetFile.read com threads DENTRO de cada "
-        "arquivo) / 'sequencial' (sem threads). A leitura ja' e' arquivo a "
-        "arquivo desde a v3.85; 'fragmento' e' aceito e equivale a "
-        "'sequencial'.",
+        help="'sequencial' (default: uma thread, sem pool interno do Arrow -- "
+        "o medido mais rapido) / 'lote' (threads DENTRO de cada arquivo; "
+        "medido 2,6x pior em concorrencia). 'fragmento' e' aceito e equivale "
+        "a 'sequencial'.",
     ),
     dia: str | None = typer.Option(
         None, "--dia", help="Restringe a UM dt=YYYY-MM-DD. Combinavel com --simbolo."
@@ -637,11 +637,13 @@ def compact(
     workers: int = typer.Option(
         1,
         "--workers",
-        help="Particoes processadas em paralelo (threads). 1 = sequencial, como "
-        "antes. O custo e' ~98% leitura dos row groups minusculos, em C++ que "
-        "solta o GIL; em lote grande, 4-8 usa os nucleos que antes ficavam "
-        "parados. Cada particao e' independente no disco -- atomicidade e "
-        "skips nao mudam.",
+        help="Particoes em paralelo (threads). DEIXE EM 1: medido prejudicial "
+        "na maquina de operacao (4 concorrentes = 2,6x mais lento que em "
+        "sequencia). Mantido para experimento; atomicidade e skips nao mudam.",
+    ),
+    stream: str | None = typer.Option(
+        None, "--stream", help="Restringe a UM stream (book_offer, trade...). "
+        "Combinavel com --dia e --simbolo.",
     ),
 ) -> None:
     """
@@ -673,6 +675,7 @@ def compact(
             dia_filtro=dia,
             simbolo_filtro=simbolo,
             workers=workers,
+            stream_filtro=stream,
         )
     )
 

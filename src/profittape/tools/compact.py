@@ -92,8 +92,6 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import structlog
 
-from ..storage.validacao import relatorio
-
 log = structlog.get_logger(__name__)
 
 SUFIXO_TEMP = ".compacting"
@@ -111,11 +109,12 @@ MAX_ROWS_PER_FILE_DEFAULT = 5_000_000
 def compactar_raw(raiz_raw: Path,
                   row_group_size: int = ROW_GROUP_SIZE_DEFAULT,
                   max_rows_per_file: int = MAX_ROWS_PER_FILE_DEFAULT,
-                  modo_leitura: str = "lote",
+                  modo_leitura: str = "sequencial",
                   dia_filtro: str | None = None,
                   simbolo_filtro: str | None = None,
                   hoje: date | None = None,
-                  workers: int = 1) -> dict[str, int | float]:
+                  workers: int = 1,
+                  stream_filtro: str | None = None) -> dict[str, int | float]:
     """
     Compacta, particao por particao de (stream, dia, simbolo), todos os
     streams presentes em raiz_raw (trade, book_*). Nunca o dataset inteiro
@@ -157,16 +156,22 @@ def compactar_raw(raiz_raw: Path,
     if not streams:
         raise SystemExit(f"Nao ha dado em {raiz_raw}. Rode record ou backfill antes.")
 
-    # Mesma varredura do curate: lista corrompidos e .inprogress no console.
-    # Diferenca: aqui .inprogress NAO aborta o comando -- so' a particao
-    # onde esta. O caso comum e' o recorder vivo no dia de HOJE enquanto se
-    # compactam os dias passados; abortar tudo tornaria o comando inutil
-    # em dia de pregao.
-    particoes_com_inprogress: set[Path] = set()
-    for stream in streams:
-        _corrompidos, inprogress = relatorio(stream)
-        for p in inprogress:
-            particoes_com_inprogress.add(p.parent)
+    if stream_filtro is not None:
+        streams = [s for s in streams if s.name == stream_filtro]
+        if not streams:
+            raise SystemExit(f"--stream {stream_filtro} nao encontrado em {raiz_raw}")
+
+    # SEM a varredura de footers da arvore inteira (validacao.relatorio) que
+    # existia ate' a v3.87: ela abria o footer de TODOS os ~5.000 arquivos do
+    # backup (8-17 min por rodada, medido) e o resultado era descartado --
+    # corrompido e' detectado pelo inventario da propria particao, e
+    # .inprogress e' reconferido no disco antes de ler. Aqui so' um glob de
+    # diretorio: nada de abrir arquivo. `.inprogress` NAO aborta o comando,
+    # so' a particao onde esta' (recorder vivo no dia de HOJE enquanto se
+    # compactam os passados).
+    particoes_com_inprogress: set[Path] = {
+        p.parent for stream in streams for p in stream.glob("dt=*/sym=*/*.parquet.inprogress")
+    }
 
     trabalho: list[tuple[str, str, Path]] = []
     dias_vistos: set[str] = set()
@@ -192,7 +197,7 @@ def compactar_raw(raiz_raw: Path,
     log.info("compact.destino", raiz_raw=str(raiz_raw.resolve()),
              streams=[s.name for s in streams], particoes_encontradas=len(trabalho),
              row_group_size=row_group_size, max_rows_per_file=max_rows_per_file,
-             workers=workers)
+             modo_leitura=modo_leitura, workers=workers)
 
     totais = _totais_zerados()
     params = _Params(row_group_size=row_group_size, max_rows_per_file=max_rows_per_file,
@@ -354,6 +359,10 @@ def _processar_particao(dia: str, sym: str, pasta: Path, progresso: str,
     # Sem partitioning hive: dt e sym vivem no caminho e NAO podem entrar
     # no arquivo (o curate ja' aprendeu isso: conflito de tipo na leitura
     # do dataset). ParquetFile le so' o schema do arquivo, nada mais.
+    # Default 'sequencial' desde a v3.88: na maquina do operador (Windows,
+    # 8 nucleos) threads DENTRO do arquivo e workers entre particoes foram
+    # medidos prejudiciais -- 4 leituras concorrentes 2,6x mais lentas que
+    # as 4 em sequencia (diag_pool, 2026-09-29).
     use_threads = p.modo_leitura == "lote"
     partes_ok: list[pa.Table] = []
     lidos: list[Path] = []
@@ -370,6 +379,8 @@ def _processar_particao(dia: str, sym: str, pasta: Path, progresso: str,
         log.warning("compact.particao_sem_arquivo_legivel", dia=dia, symbol=sym)
         return t
     tabela = pa.concat_tables(partes_ok, promote_options="permissive")
+    del partes_ok
+    seg_leitura = round(time.monotonic() - t0, 1)
 
     # Sem os arquivos pulados, o "antes" que faz sentido comparar e' so'
     # dos que entraram na reescrita -- do inventario, sem reler footer.
@@ -377,8 +388,10 @@ def _processar_particao(dia: str, sym: str, pasta: Path, progresso: str,
     if tabela.num_rows == 0:
         return t
 
+    t1 = time.monotonic()
     novos = _escrever_compactado(pasta, tabela, lidos, row_group_size, max_rows_per_file)
     rg_depois = sum(pq.ParquetFile(q).metadata.num_row_groups for q in novos)
+    seg_escrita = round(time.monotonic() - t1, 1)
     segundos = round(time.monotonic() - t0, 1)
 
     t["particoes"] += 1
@@ -392,7 +405,8 @@ def _processar_particao(dia: str, sym: str, pasta: Path, progresso: str,
              progresso=progresso, linhas=tabela.num_rows,
              arquivos_antes=len(lidos), arquivos_depois=len(novos),
              row_groups_antes=rg_antes_lidos, row_groups_depois=rg_depois,
-             segundos=segundos)
+             segundos=segundos, seg_leitura=seg_leitura, seg_escrita=seg_escrita,
+             ms_por_row_group=round(seg_leitura * 1000 / max(1, rg_antes_lidos), 2))
     return t
 
 

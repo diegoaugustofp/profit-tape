@@ -4334,3 +4334,57 @@ exemplos à mão (estimador 0,3; z 2/√(2/3); sonda 11/2/toque 40 s). Suíte
 HORIZONTE, EFEITO, hora de início; só então F3.
 
 **Tags:** entregue-v3.86, entregue-v3.87. Suíte 1.248.
+
+## Sessão 2026-09-29/30 — compact: a rodada real da v3.85, `--workers` medido prejudicial, varredura removida (v3.88)
+
+**O que a rodada real mostrou.** `compact --workers 4` na v3.85 ficou
+3h15 nas 4 partições WINFUT de 26/08 sem terminar: 13% de CPU (um
+núcleo), disco zero. `py-spy dump`: os 4 workers em
+`arrow::FutureImpl::Wait`. `diag_pool` (4 arquivos, mesma partição): os
+4 concorrentes 2,6–3× **mais lentos** que os 4 em sequência, com ou sem
+`use_threads`. `--workers` é negativo nesta máquina — a feature da v3.84
+foi entregue sem medição em multi-core e o operador mediu: prejudicial.
+Fica em 1, documentada.
+
+Rodada `--workers 1 --modo-leitura sequencial`: **3h52**, 6,35 ms/rg no
+book_offer. Um diag lendo um arquivo da mesma partição: 0,16–0,86 ms/rg.
+`diag_pipeline` (leitura + concat + `_gravar_arquivo` real): 170 s para
+a partição de tiny_book de 27/08. `compactar_raw` numa **cópia** da
+partição em árvore isolada: 227,6 s = 0,51 ms/rg. O código está certo; o
+contexto da rodada real o deixa 7–13× mais lento. A única diferença de
+contexto: a varredura `validacao.relatorio` da árvore inteira no
+arranque — `read_metadata` de ~5.000 footers (8–17 min), resultado
+descartado. `diag_heap` (37 arquivos guardando vs descartando as
+tabelas): 215 s vs 113 s — segurar tabelas também custa, mas explica só
+2× dos 7–13×. Também aprendido: `ParquetFile.read` já devolve um chunk
+por arquivo (`chunks/col=36`), então a tabela de "536 mil chunks" que
+guiou a v3.84 nunca existiu.
+
+**v3.88:** varredura da árvore removida (`.inprogress` vira glob de
+diretório; corrompido já era detectado pelo inventário da partição);
+`--stream`; default `sequencial`; `seg_leitura`/`seg_escrita`/
+`ms_por_row_group` em `compact.particao_ok`. +4 testes, todos provados
+reprovando a v3.87 (nenhum footer fora da partição alvo; `.inprogress`
+sem abrir footer; `--stream`; default sequencial + fases no log); o
+teste do inventário passa a exigir **1** leitura de footer por arquivo
+(reprova v3.83, v3.84 e v3.87). Suíte 1.252.
+
+**Pendente de medição:** `diag_prescan` (leitura antes/depois da
+varredura) para fechar a hipótese do heap. Se confirmar, a v3.88 já
+corrige (não há mais varredura). Se não confirmar, o próximo instrumento
+é `compact --stream tiny_book --dia X` na v3.88 lendo `ms_por_row_group`
+no log: acima de ~1 ms/rg sem varredura, há um terceiro fator no
+contexto do CLI a caçar.
+
+**Lições (disciplina 0 e 6):** três versões seguidas concluídas a partir
+de um sandbox que não reproduzia a escala nem o sistema operacional do
+problema. O que decidiu cada rodada foi um script de 30 linhas na
+máquina real, em minutos. E a instrumentação (fases no log) deveria ter
+sido a PRIMEIRA entrega, não a quarta.
+
+**Tags:** entregue-v3.88 (sobre v3.87). Suíte 1.252.
+
+**Pendências:** rodar `diag_prescan` até o fim; compactar o backup na
+v3.88 (`--workers 1`, default sequencial) e anotar `ms_por_row_group`
+por partição; se ficar em 0,2–0,9, o WINFUT de um dia leva ~40 min e o
+backup inteiro cabe numa noite.

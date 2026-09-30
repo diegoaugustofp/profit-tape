@@ -530,10 +530,11 @@ def test_falha_numa_particao_com_workers_aborta_e_nao_deixa_temporario(
 def test_inventario_le_o_footer_de_cada_arquivo_uma_unica_vez(
     tmp_raiz: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Antes, rg_antes_lidos relia pq.read_metadata de cada original depois
-    da leitura (3 leituras por arquivo: varredura de corrompidos do
-    storage/validacao, inventario, soma do 'antes'). Agora reutiliza o
-    inventario: 2 por arquivo. O teste reprova o codigo antigo."""
+    """v3.83: 3 leituras de footer por arquivo (varredura da arvore inteira
+    em storage/validacao, inventario, soma do 'antes'). v3.84: 2 (o 'antes'
+    reutiliza o inventario). v3.88: 1 -- a varredura da arvore inteira saiu
+    (8-17 min por rodada, medido, resultado descartado). O teste reprova as
+    tres versoes anteriores."""
     import profittape.tools.compact as mod
 
     _escrever_fragmentado(tmp_raiz, DIA, "WINFUT", n_arquivos=5, lotes_por_arquivo=4)
@@ -548,7 +549,7 @@ def test_inventario_le_o_footer_de_cada_arquivo_uma_unica_vez(
     totais = compactar_raw(tmp_raiz, hoje=HOJE)
     assert totais["particoes"] == 1 and totais["row_groups_antes"] == 20
     from collections import Counter
-    assert Counter(chamadas) == {f"part-{i:04d}.parquet": 2 for i in range(5)}
+    assert Counter(chamadas) == {f"part-{i:04d}.parquet": 1 for i in range(5)}
 
 
 def test_workers_invalido_e_recusado(tmp_raiz: Path) -> None:
@@ -609,3 +610,93 @@ def test_arquivo_podre_por_dentro_e_pulado_na_propria_leitura_sem_segunda_passad
     assert out.count("compact.arquivo_pulado") == 1
     assert totais["arquivos_pulados"] == 1 and totais["linhas"] == 300
     assert ruim.exists()
+
+
+# ---------------------------------------------------------------------------
+# v3.88: sem varredura da arvore, --stream, default sequencial, fases no log
+# ---------------------------------------------------------------------------
+
+def test_compact_nao_abre_footer_fora_das_particoes_que_vai_processar(
+    tmp_raiz: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Com --dia/--simbolo, nenhum footer de outra particao e' aberto. Na
+    v3.87, validacao.relatorio abria TODOS (5.000 no backup, 8-17 min).
+    Reprova a v3.87."""
+    import profittape.tools.compact as mod
+
+    alvo = _escrever_fragmentado(tmp_raiz, DIA, "WINFUT", 2, 10)
+    outros = [_escrever_fragmentado(tmp_raiz, d, s, 2, 10)
+              for d in (DIA, "2026-08-15") for s in ("PETR4", "WDOFUT")]
+    abertos: list[Path] = []
+    original = mod.pq.read_metadata
+
+    def _registra(caminho: object, **k: object) -> object:
+        abertos.append(Path(str(caminho)))
+        return original(caminho, **k)
+
+    monkeypatch.setattr(mod.pq, "read_metadata", _registra)
+    totais = compactar_raw(tmp_raiz, hoje=HOJE, dia_filtro=DIA, simbolo_filtro="WINFUT")
+    assert totais["particoes"] == 1
+    assert {a.parent for a in abertos} == {alvo}
+    for o in outros:
+        assert len(_row_groups(o)) == 2                 # intocados
+
+
+def test_inprogress_e_detectado_sem_abrir_footer_algum(
+    tmp_raiz: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A coleta de .inprogress e' um glob de diretorio: a particao suja e'
+    pulada e o footer dela NUNCA e' aberto."""
+    import profittape.tools.compact as mod
+
+    suja = _escrever_fragmentado(tmp_raiz, DIA, "WDOFUT", 2, 10)
+    (suja / "part-0002.parquet.inprogress").write_bytes(b"PAR1 parcial")
+    sadia = _escrever_fragmentado(tmp_raiz, DIA, "WINFUT", 2, 10)
+    abertos: list[Path] = []
+    original = mod.pq.read_metadata
+    monkeypatch.setattr(mod.pq, "read_metadata",
+                        lambda c, **k: (abertos.append(Path(str(c))), original(c, **k))[1])
+    totais = compactar_raw(tmp_raiz, hoje=HOJE)
+    assert totais["puladas_inprogress"] == 1 and totais["particoes"] == 1
+    assert all(a.parent == sadia for a in abertos)
+
+
+def test_stream_filtro_restringe_e_recusa_desconhecido(tmp_raiz: Path) -> None:
+    from typer.testing import CliRunner
+
+    from profittape.cli import app
+
+    a = _escrever_fragmentado(tmp_raiz, DIA, "WINFUT", 2, 10, stream="trade")
+    b = _escrever_fragmentado(tmp_raiz, DIA, "WINFUT", 2, 10, stream="book_offer")
+    totais = compactar_raw(tmp_raiz, hoje=HOJE, stream_filtro="trade")
+    assert totais["particoes"] == 1
+    assert _row_groups(a) == {"part-0002.parquet": 1} and len(_row_groups(b)) == 2
+    with pytest.raises(SystemExit, match="--stream nada"):
+        compactar_raw(tmp_raiz, hoje=HOJE, stream_filtro="nada")
+    r = CliRunner().invoke(app, ["compact", "--raw", str(tmp_raiz), "--stream", "book_offer"])
+    assert r.exit_code == 0, r.output
+    assert _row_groups(b) == {"part-0002.parquet": 1}
+
+
+def test_default_e_sequencial_e_log_traz_fases(
+    tmp_raiz: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Default 'sequencial' = ParquetFile.read(use_threads=False); e
+    particao_ok separa seg_leitura / seg_escrita / ms_por_row_group -- o
+    instrumento que faltou em toda a investigacao de 29/09."""
+    import profittape.tools.compact as mod
+
+    _escrever_fragmentado(tmp_raiz, DIA, "WINFUT", 2, 10)
+    vistos: list[bool] = []
+    original = mod.pq.ParquetFile.read
+
+    def _espiona(self: object, *a: object, use_threads: bool = True, **k: object) -> object:
+        vistos.append(use_threads)
+        return original(self, *a, use_threads=use_threads, **k)
+
+    monkeypatch.setattr(mod.pq.ParquetFile, "read", _espiona)
+    compactar_raw(tmp_raiz, hoje=HOJE)
+    assert vistos and not any(vistos)
+    out = capsys.readouterr().out
+    assert "seg_leitura=" in out and "seg_escrita=" in out and "ms_por_row_group=" in out
+    assert "modo_leitura=sequencial" in out
