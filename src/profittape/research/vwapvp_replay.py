@@ -37,22 +37,37 @@ v3.89 (apos a primeira rodada real, 30/09, 46 dias em 2.875 s):
   negocios (4 GB na primeira rodada);
 - log por dia com segundos.
 
-Estimador de absorcao (o que ja' existe, `absorcao_dir.ntsl` /
-`research/absorcao_barra.py`, REPROVADO sozinho em 30/08 -- aqui e' gate
-em local, hipotese diferente):
+Estimador de absorcao -- CORRIGIDO EM v3.90 (30/09), ANTES da segunda rodada
+-------------------------------------------------------------------------------
+A v3.87 reaproveitou `absorcao_dir = imbalance - desloc_norm` (Rota B, z50,
+REPROVADO sozinho em 30/08). O unico episodio da primeira rodada (27/07
+18:10) mostrou o defeito de MECANISMO: a barra era VENDEDORES batendo e o
+preco CAINDO (imbalance -0,26, desloc -0,56 -> +0,30). Isso e' momento
+vendedor, nao "exaustao do fluxo comprador" como o documento define. O
+`absorcao_dir` da' positivo em duas situacoes opostas: (a) compradores
+agridem e o preco nao sobe (absorcao, o que se quer) e (b) vendedores
+agridem e o preco despenca (eficiencia vendedora). Pego pela pergunta do
+Diego "como e' calculado".
 
-    imbalance    = (agr_compra - agr_venda) / (agr_compra + agr_venda)
-    desloc_norm  = (close - open) / (high - low)
-    absorcao_dir = imbalance - desloc_norm
-    z            = (x - media[1..J]) / desvio[1..J]      J = 50 barras
+Definicao fiel ao documento (conferida a mao):
 
-Lado: venda em +2SD quer compradores absorvidos (imbalance > 0, preco nao
-sobe -> absorcao_dir > 0); compra em -2SD quer o espelho (< 0). O
-`estimador` da distribuicao e' `z * sinal(z_vwap)`, positivo quando a
-absorcao esta' do lado do setup.
+    imb = (agr_compra - agr_venda) / (agr_compra + agr_venda)   > 0: compradores agridem
+    des = (close - open) / (high - low)                          > 0: preco subiu
+    absorcao_comp = max(imb, 0) * (1 - des)    gate da VENDA em +2SD: compradores
+                                               agridem e o preco nao sobe (ou cai)
+    absorcao_vend = max(-imb, 0) * (1 + des)   gate da COMPRA em -2SD: espelho
 
-OHLC da barra: `barra_tempo` usa TODOS os negocios (e' o do grafico);
-imbalance usa so' 2/3. E' o mesmo desenho do NTSL.
+Zero quando o agressor nao e' o lado que deveria estar exausto. Exemplos:
+compra 30 / venda 10, preco sobe 20% do range -> 0,5 x 0,8 = 0,40; mesma
+agressao com o preco caindo ate' a minima (des = -1) -> 0,5 x 2 = 1,0;
+27/07 18:10 -> comp = 0 (nao eram compradores), vend = 0,26 x 0,44 = 0,11.
+z de 50 barras CONTINUO em cada serie; `estimador` da barra = z_comp se
+z_vwap > 0, z_vend se z_vwap < 0; p80/p90 sao dessa serie. O
+`absorcao_dir` continua no CSV como coluna, nao como clausula.
+
+OHLC da barra: `barra_tempo` usa TODOS os negocios (e' o do grafico;
+conferido em 28/09: 112 de 113 barras identicas ao Profit em OHLC e
+volume, a ultima sem o call de fechamento); imbalance usa so' 2/3.
 """
 
 from __future__ import annotations
@@ -107,12 +122,30 @@ class ParametrosReplay:
 
 
 # ---------------------------------------------------------------- utilitarios
-def absorcao_dir(b: BarraFechada) -> float | None:
+def _imb_des(b: BarraFechada) -> tuple[float, float] | None:
     va = b.vol_agr_compra + b.vol_agr_venda
     amp = b.high - b.low
     if va <= 0 or amp <= 0:
         return None
-    return (b.vol_agr_compra - b.vol_agr_venda) / va - (b.close - b.open) / amp
+    return (b.vol_agr_compra - b.vol_agr_venda) / va, (b.close - b.open) / amp
+
+
+def absorcao_dir(b: BarraFechada) -> float | None:
+    """Rota B (historico): imbalance - desloc. NAO e' a clausula; ver docstring."""
+    r = _imb_des(b)
+    return None if r is None else r[0] - r[1]
+
+
+def absorcao_comp(b: BarraFechada) -> float | None:
+    """Compradores agridem e o preco nao sobe: max(imb,0) x (1 - des)."""
+    r = _imb_des(b)
+    return None if r is None else max(r[0], 0.0) * (1.0 - r[1])
+
+
+def absorcao_vend(b: BarraFechada) -> float | None:
+    """Vendedores agridem e o preco nao cai: max(-imb,0) x (1 + des)."""
+    r = _imb_des(b)
+    return None if r is None else max(-r[0], 0.0) * (1.0 + r[1])
 
 
 class ZRolante:
@@ -149,7 +182,7 @@ class DiaReplay:
     ref: dict[str, Any] = field(default_factory=dict)
 
 
-_VERSAO_CACHE = 1
+_VERSAO_CACHE = 2      # v3.90: absorcao_comp/vend + hhmm_abertura
 
 
 def _referencia(curated: Path, symbol: str, dia: dt.date, p: ParametrosReplay,
@@ -183,10 +216,13 @@ def _construir_barras(t: pd.DataFrame, p: ParametrosReplay) -> pd.DataFrame:
         z_vwap = None if vw is None or not sd else (b.close - vw) / sd
         linhas.append({
             "ts_close_ns": b.ts_close_ns, "hhmm": _hhmm(b.ts_close_ns - 1),
+            "hhmm_abertura": _hhmm(b.ts_open_ns),   # rotulo do Profit (09:00 = 09:00-09:05)
             "open": b.open, "high": b.high, "low": b.low, "close": b.close,
             "vol_total": b.vol_total, "vol_agr_compra": b.vol_agr_compra,
             "vol_agr_venda": b.vol_agr_venda, "volume_confiavel": b.volume_confiavel,
-            "vwap": vw, "sd": sd, "z_vwap": z_vwap, "absorcao": absorcao_dir(b),
+            "vwap": vw, "sd": sd, "z_vwap": z_vwap,
+            "absorcao_dir": absorcao_dir(b),
+            "absorcao_comp": absorcao_comp(b), "absorcao_vend": absorcao_vend(b),
         })
 
     ts = t["ts_ns"].to_numpy(dtype=np.int64)
@@ -288,7 +324,8 @@ def _marcar_clausulas(df: pd.DataFrame, p: ParametrosReplay,
     d = df.copy()
     z = d["z_vwap"]
     d["lado"] = np.where(z >= p.z_banda, -1, np.where(z <= -p.z_banda, 1, 0))  # -1 venda, +1 compra
-    d["estimador"] = d["z_absorcao"] * np.sign(z.fillna(0.0))
+    if "estimador" not in d:          # barras sinteticas de teste trazem so' z_absorcao
+        d["estimador"] = d["z_absorcao"] * np.sign(z.fillna(0.0))
     d["c_banda"] = d["lado"] != 0
     perto = np.where(d["lado"] == -1, d["dist_vah"].abs() <= p.tolerancia_pts,
                      np.where(d["lado"] == 1, d["dist_val"].abs() <= p.tolerancia_pts, False))
@@ -416,20 +453,24 @@ def rodar(curated: Path, symbol: str = "WINFUT", dias: list[str] | None = None,
 
     barras = pd.concat([r.barras for r in dias_ok], ignore_index=True)
     barras = barras.sort_values(["dia", "ts_close_ns"], kind="stable").reset_index(drop=True)
-    # z de absorcao CONTINUO entre dias (como no grafico), sobre a absorcao crua
-    zr = ZRolante(p.janela_z)
-    zs: list[float | None] = []
-    for a in barras["absorcao"]:
-        if a is None or pd.isna(a):
-            zs.append(None)
-            continue
-        zs.append(zr.z(float(a)))
-        zr.empurrar(float(a))
-    barras["z_absorcao"] = pd.Series(zs, dtype="float64")
+    # z CONTINUO entre dias (como no grafico), sobre cada serie crua
+    for col in ("absorcao_dir", "absorcao_comp", "absorcao_vend"):
+        zr = ZRolante(p.janela_z)
+        zs: list[float | None] = []
+        for a in barras[col]:
+            if a is None or pd.isna(a):
+                zs.append(None)
+                continue
+            zs.append(zr.z(float(a)))
+            zr.empurrar(float(a))
+        barras["z_" + col] = pd.Series(zs, dtype="float64")
+    # estimador da barra: z da serie do LADO QUE DEVERIA ESTAR EXAUSTO (v3.90)
+    zv = barras["z_vwap"].astype("float64").fillna(0.0)
+    barras["estimador"] = np.where(zv > 0, barras["z_absorcao_comp"],
+                                   np.where(zv < 0, barras["z_absorcao_vend"], np.nan))
 
     # 1. distribuicao do estimador (amostra queimada, congelada como valor)
-    zv = barras["z_vwap"].astype("float64").fillna(0.0)
-    est = (barras["z_absorcao"] * np.sign(zv))[(zv != 0) & barras["z_absorcao"].notna()]
+    est = barras["estimador"][(zv != 0) & barras["estimador"].notna()]
     if est.empty:
         return {"erro": "nenhuma barra com z de absorcao (janela de 50 barras nao fechou)"}
     perc = {q: float(np.percentile(est, q)) for q in (50, 80, 90, 95)}
@@ -498,7 +539,7 @@ def formatar(r: dict[str, Any]) -> list[str]:
           f"{r['dias_com_referencia']} com VAH/VAL de ontem, "
           f"{r['barras']} barras M{p['periodo_s'] // 60}"]
     pc = r["estimador_percentis"]
-    ln.append(f"  Estimador de absorcao (z x lado), {r['barras_com_z']} barras: "
+    ln.append(f"  Estimador: z da absorcao do lado exausto (v3.90), {r['barras_com_z']} barras: "
               f"p50={pc[50]:.2f} p80={pc[80]:.2f} p90={pc[90]:.2f} p95={pc[95]:.2f}")
     ln.append(f"    CONGELADO: gatilho p{p['percentil_gatilho']} = "
               f"{r['limiar_p80_congelado']:.3f}   "

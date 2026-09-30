@@ -1,6 +1,6 @@
 # VWAP + Volume Profile (WIN) — fast-track
 
-> **Status:** F2 — primeira rodada real feita (30/09, 46 dias): **Setup B com VP de ontem morto por taxa como escrito** (0,20 episódios/dia no local); rerodar em v3.89 com z contínuo e as variantes declaradas — **Criado:** 2026-09-29 (v3.86); F2 em v3.87–v3.89 — **Código:** `ea/vwap_sessao.py`, `ea/perfil_preco.py`, `research/vwapvp_conferir.py`, `research/vwapvp_replay.py`, comandos `vwapvp-conferir` e `ea-vwapvp-replay` — **Origem:** documento "A integração da VWAP e Volume Profile" (3 setups), decisões desta ficha tomadas em conversa de 29/09.
+> **Status:** F2 — primeira rodada real feita (30/09, 46 dias): **Setup B com VP de ontem morto por taxa como escrito** (0,20 episódios/dia no local); barras validadas contra o Profit (112/113); rerodar em v3.90 com z contínuo, estimador de absorção corrigido e as variantes declaradas — **Criado:** 2026-09-29 (v3.86); F2 em v3.87–v3.89 — **Código:** `ea/vwap_sessao.py`, `ea/perfil_preco.py`, `research/vwapvp_conferir.py`, `research/vwapvp_replay.py`, comandos `vwapvp-conferir` e `ea-vwapvp-replay` — **Origem:** documento "A integração da VWAP e Volume Profile" (3 setups), decisões desta ficha tomadas em conversa de 29/09.
 
 ## Identidade, fase e estado
 
@@ -20,7 +20,7 @@ de valor conhecida, e o fluxo que chegou lá já não move o preço.
 
 | palavra | definição adotada | de onde |
 |---|---|---|
-| "absorção / exaustão" | `absorcao_dir = imbalance − desloc_norm`, z de 50 barras M5 — o estimador que já existe (`absorcao_dir.ntsl`, `research/absorcao_barra.py`) | reuso; **sozinho foi REPROVADO no IC em 30/08** (CONTRA nas 12 células). Aqui é gate em LOCAL, hipótese diferente; não é evidência |
+| "absorção / exaustão" | **v3.90:** `absorcao_comp = max(imb,0)·(1−des)` para a venda em +2SD (compradores agridem e o preço não sobe); `absorcao_vend = max(−imb,0)·(1+des)` para a compra; z de 50 barras contínuo em cada série | definição fiel ao documento. A v3.87 reaproveitou `absorcao_dir = imb − des` (Rota B, reprovado sozinho em 30/08) e o único episódio da 1ª rodada mostrou que ele dispara em **vendedores batendo com o preço caindo** — momento, não exaustão. Corrigido ANTES da 2ª rodada; `absorcao_dir` fica no CSV como coluna |
 | "VAH / VAL / POC" | perfil por preço em bins de 25 pts; POC = bin de maior volume; área de valor 70% expandindo bin a bin para o vizinho maior | `ea/perfil_preco.py` — algoritmo a **conferir contra o Profit** (D4) |
 | "banda ±2 SD" | desvio ponderado pelo volume, populacional, da sessão | `ea/vwap_sessao.py` |
 | "agressão / delta" (A e C) | `agr_compra − agr_venda` por bin, tipos 2/3 | `perfil_preco.delta_no_bin` — fichas futuras |
@@ -180,7 +180,27 @@ seguinte (banda sozinha? VP de ontem como regime "abriu dentro/fora da
 VA", em vez de toque a 25 pts?) é ficha nova com contagem nova.
 [Provável] nenhuma chega: 0,2 × 2 × 2 = 0,8 no melhor caso.
 
-### F2 — segunda rodada (v3.89, a fazer)
+**Validação das barras (30/09, export do Profit de 28/09):** 112 de 113
+barras M5 idênticas em OHLC e volume (`vol_total` = `QuantityVol`). A última
+(18:20–18:25) tem no Profit +22 k contratos e fechamento 183855: é o call de
+fechamento, que o tape não recebe — mesmo fenômeno da opção "leilão" do
+Volume Profile. Irrelevante para a janela e para as bordas. A primeira barra
+(09:00) sai `volume_confiavel=False` embora bata exatamente: falso positivo
+da regra de parcial no `barra_tempo`, módulo compartilhado com EAs em
+forward — não tocado. O CSV traz `hhmm` (fechamento) e `hhmm_abertura`
+(rótulo do Profit).
+
+**Mecanismo da absorção corrigido (v3.90, antes da 2ª rodada).** O único
+episódio de absorção da 1ª rodada (27/07 18:10, +2,68 SD, no VAH de 24/07)
+era vendedores agredindo (imb −0,26) com o preço caindo (des −0,56):
+`absorcao_dir` = +0,30, z 1,03 > p80. Isso é momento vendedor, não
+"exaustão do fluxo comprador". O estimador reaproveitado dá positivo em
+duas situações opostas. Definição nova, conferida à mão (compra 30/venda 10
+subindo 20% do range → 0,40; caindo até a mínima → 1,0; a barra de 27/07 →
+comp 0, vend 0,116). Pego pela pergunta "como é calculado" — regra 1 da
+disciplina, mecanismo antes do número, aplicada tarde mas antes de ligar.
+
+### F2 — segunda rodada (v3.90, a fazer)
 
 Comando (a primeira rodada com cache custa ~1 min/dia; depois, segundos):
 

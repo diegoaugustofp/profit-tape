@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import datetime as dt
 import math
-import time
 from pathlib import Path
 
 import numpy as np
@@ -35,10 +34,28 @@ def _barra(o: float, h: float, lo: float, c: float, compra: int, venda: int) -> 
 # --------------------------------------------------------------- estimador
 def test_absorcao_dir_conferida_a_mao() -> None:
     """compra 30 / venda 10 -> imbalance 0,5; open 100 close 102 em range 10
-    -> desloc 0,2; absorcao = 0,3 (compradores empurram, preco nao anda)."""
+    -> desloc 0,2; absorcao_dir = 0,3. Coluna historica, nao clausula."""
     assert vr.absorcao_dir(_barra(100, 110, 100, 102, 30, 10)) == pytest.approx(0.3)
     assert vr.absorcao_dir(_barra(100, 100, 100, 100, 30, 10)) is None      # range 0
     assert vr.absorcao_dir(_barra(100, 110, 100, 105, 0, 0)) is None        # sem agressao
+
+
+def test_absorcao_do_lado_exausto_conferida_a_mao() -> None:
+    """v3.90. compra 30 / venda 10 (imb 0,5), sobe 20% do range (des 0,2):
+    comp = 0,5 x 0,8 = 0,40; vend = 0 (nao sao vendedores agredindo).
+    Mesma agressao, preco cai ate' a minima (open 110 close 100, des -1):
+    comp = 0,5 x 2 = 1,0. Barra de 27/07 18:10 (compra 8870 / venda 15249,
+    open 176845 close 176775 high 176870 low 176745): comp = 0 e vend =
+    0,2645 x 0,44 = 0,116 -- o absorcao_dir dava +0,30 e disparava."""
+    b = _barra(100, 110, 100, 102, 30, 10)
+    assert vr.absorcao_comp(b) == pytest.approx(0.40)
+    assert vr.absorcao_vend(b) == 0.0
+    assert vr.absorcao_comp(_barra(110, 110, 100, 100, 30, 10)) == pytest.approx(1.0)
+    b27 = _barra(176845, 176870, 176745, 176775, 8870, 15249)
+    assert vr.absorcao_comp(b27) == 0.0
+    assert vr.absorcao_vend(b27) == pytest.approx(0.2645 * 0.44, abs=1e-3)
+    assert vr.absorcao_dir(b27) == pytest.approx(0.2955, abs=1e-3)
+    assert vr.absorcao_comp(_barra(100, 100, 100, 100, 30, 10)) is None
 
 
 def test_z_rolante_usa_so_as_anteriores() -> None:
@@ -128,7 +145,8 @@ def _dia_sintetico(curated: Path, dia: dt.date, precos: list[float], symbol: str
     pasta.mkdir(parents=True, exist_ok=True)
     t0 = int(pd.Timestamp(f"{dia} 09:00", tz="America/Sao_Paulo").value)
     n = len(precos)
-    tipos = [2 if i % 3 else 3 for i in range(n)]
+    # agressor variando por barra (senao absorcao_vend e' 0 constante e o z nao existe)
+    tipos = [int(x) for x in np.random.default_rng(len(precos) + dia.day).choice([2, 3], size=n)]
     tab = pa.table({"ts_ns": [t0 + i * passo_s * NS for i in range(n)],
                     "symbol": [symbol] * n, "trade_id": list(range(n)),
                     "price": precos, "quantidade": [5] * n, "trade_type": tipos,
@@ -162,12 +180,11 @@ def test_dias_disponiveis_e_referencia(tmp_path: Path) -> None:
     assert pp.dias_disponiveis(cur, "WDOFUT") == []
 
 
-def test_rodar_replay_ponta_a_ponta_com_cache(tmp_path: Path) -> None:
+def test_rodar_replay_ponta_a_ponta_com_cache(tmp_path: Path,
+                                               monkeypatch: pytest.MonkeyPatch) -> None:
     cur = _curated_dois_dias(tmp_path)
     cache = tmp_path / "cache"
-    t0 = time.perf_counter()
     r = vr.rodar(cur, "WINFUT", None, vr.ParametrosReplay(), cache_dir=cache)
-    primeira = time.perf_counter() - t0
     assert "erro" not in r
     assert r["dias"] == 2 and r["dias_com_referencia"] == 1
     assert r["barras"] > 100 and r["barras_com_z"] > 0
@@ -177,7 +194,12 @@ def test_rodar_replay_ponta_a_ponta_com_cache(tmp_path: Path) -> None:
     # z continuo: o dia 2 tem z desde a primeira barra (a janela fechou no dia 1)
     b = r["_barras"]
     d2 = b[b["dia"] == "2026-09-25"]
-    assert d2["z_absorcao"].notna().iloc[0]
+    assert d2["z_absorcao_comp"].notna().iloc[0] and d2["z_absorcao_vend"].notna().iloc[0]
+    # estimador = z da serie do lado exausto; comp e vend nunca positivos juntos
+    assert ((b["absorcao_comp"] > 0) & (b["absorcao_vend"] > 0)).sum() == 0
+    acima = b[b["z_vwap"].astype(float) > 0]
+    assert (acima["estimador"].fillna(-9) == acima["z_absorcao_comp"].fillna(-9)).all()
+    assert (b["hhmm_abertura"] < b["hhmm"]).all() or (b["hhmm_abertura"] <= b["hhmm"]).all()
     # 4 variantes declaradas, clausulas acumulativas em cada uma
     assert len(r["variantes"]) == 4
     for v in r["variantes"]:
@@ -195,13 +217,15 @@ def test_rodar_replay_ponta_a_ponta_com_cache(tmp_path: Path) -> None:
         assert com_z["dist_vwap_pts"].notna().all()
     linhas = vr.formatar(r)
     assert any("CONGELADO" in x for x in linhas) and any("regra:" in x for x in linhas)
-    # segunda rodada vem do cache: dois arquivos, e bem mais rapida
+    # segunda rodada vem do cache: dois arquivos, e o caminho caro nao e' chamado
     assert len(list((cache).glob("WINFUT_*_300_*.json"))) == 2
-    t1 = time.perf_counter()
+
+    def _nao_construir(*a: object, **k: object) -> pd.DataFrame:
+        raise AssertionError("construiu barras com cache valido")
+    monkeypatch.setattr(vr, "_construir_barras", _nao_construir)
     r2 = vr.rodar(cur, "WINFUT", None, vr.ParametrosReplay(), cache_dir=cache)
-    segunda = time.perf_counter() - t1
     assert r2["barras"] == r["barras"] and r2["estimador_percentis"] == perc
-    assert segunda < primeira / 2
+    monkeypatch.undo()
     # dia sem tape e sem referencia nao quebram
     r3 = vr.rodar(cur, "WINFUT", ["2026-09-24", "2026-09-30"], cache_dir=cache)
     assert r3["dias"] == 1 and r3["dias_com_referencia"] == 0

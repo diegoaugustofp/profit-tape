@@ -4422,3 +4422,37 @@ fecha a ficha como abandono por taxa e abre a próxima (banda sozinha, ou
 VP de ontem como regime "abriu dentro/fora da VA" em vez de toque).
 
 **Tags:** entregue-v3.89 (sobre v3.88). Suíte 1.253.
+
+### 2026-09-30c — VWAP + VP: barras validadas no Profit; mecanismo da absorção estava errado (v3.90)
+
+**Validação:** export M5 do Profit de 28/09 contra `barras.csv`: 112 de
+113 barras idênticas em OHLC e volume. A última (18:20) tem +22 k
+contratos e fechamento 183855 no Profit — call de fechamento, que o tape
+não recebe (mesmo fenômeno da opção "leilão" do VP). Primeira barra sai
+`volume_confiavel=False` embora bata: falso positivo de parcial no
+`barra_tempo`, não tocado (compartilhado com forwards). Antes disso, o
+Diego tinha comparado um export de 30/09 com barras de 28/09 — e o `hhmm`
+meu é fechamento, o do Profit é abertura: coluna `hhmm_abertura` no CSV.
+
+**Mecanismo errado, pego pelo Diego:** "como é calculado a absorção?" O
+único episódio da 1ª rodada (27/07 18:10) era vendedores batendo (imb
+−0,26) com o preço caindo (des −0,56); `absorcao_dir = imb − des` = +0,30
+disparou como se fosse exaustão compradora. O estimador da Rota B mede
+"preço andou mais do que a agressão justifica", positivo tanto em
+compradores absorvidos quanto em vendedores eficientes — situações
+opostas. Reaproveitei sem conferir que implementava a frase do documento.
+Regra 1 da disciplina (mecanismo antes do número), aplicada tarde mas
+antes da 2ª rodada e antes de ligar.
+
+**Entregue (v3.90):** `absorcao_comp = max(imb,0)·(1−des)` (venda em
++2SD) e `absorcao_vend = max(−imb,0)·(1+des)` (compra), zero quando o
+agressor não é o lado que deveria estar exausto; z50 contínuo por série;
+`estimador` = z da série do lado; `absorcao_dir` fica como coluna. Cache
+das barras versão 2 (invalida o da v3.89 — a próxima rodada reconstrói,
+~1 min/dia). Teste com a barra real de 27/07 conferida à mão (comp 0,
+vend 0,116, dir 0,296). Trocado um assert de tempo intermitente por
+verificação determinística do cache. Suíte 1.254.
+
+**Próximo:** Diego roda `ea-vwapvp-replay --saida data\vwapvp_f2`.
+
+**Tags:** entregue-v3.90 (sobre v3.89). Suíte 1.254.
