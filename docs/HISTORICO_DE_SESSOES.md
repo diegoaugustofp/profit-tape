@@ -4502,3 +4502,32 @@ documento não serão testados como escritos (mesma estrutura de
 coincidência que matou o B). Sem código novo além da ficha.
 
 **Tags:** entregue-v3.92 (sobre v3.91). Suíte 1.255.
+
+### 2026-09-30f — VWAP + VP: circuito de validação NTSL (v3.93)
+
+Diego: "já erramos muitas vezes e só pegamos quando validamos contra o
+gráfico; estou cético quanto aos números". Correto — nada do replay além
+de OHLC/vol e POC tinha conferência de tela; a entrada da absorção
+(`AgressionVolBuy/Sell` × `vol_agr` do tape) nunca foi batida.
+
+**Entregue (v3.93):** `ntsl/vwapvp_conferir.ntsl` escrito comparando com
+o `absorcao_dir.ntsl` (acesso posicional só no topo, série em `var`, sem
+`Abs()`, log de `CurrentBar <= BarCount-3`, acumulado de sessão derivado
+de `s[1]` para sobreviver ao reprocessamento da barra em formação);
+`tools/vwapvp_ntsl.py` + `vwapvp-ntsl-equivalencia` (parser pt-BR/
+1AnoMesDia reaproveitado, recálculo das mesmas séries das barras em
+cache, três blocos: exatas ~1e-8 / agressão medida / VWAP negócio×barra
+em pontos por hora; rolagem por pregão; dias parciais no tape);
+`vwapvp-ntsl-niveis` gera indicador com VAH/VAL/POC por data. `ZRolante`
+alinhado ao divisor (J−1) do arquivo de referência (era populacional; ~1%
+no z) **antes** da conferência. +6 testes: dump fabricado das próprias
+séries dá zero diferença (prova parser+junção, não o NTSL), dia parcial
+reportado, recusa de agressão zerada e de formato de outra versão,
+gerador, CLI. Suíte 1.261.
+
+**Próximo:** Diego compila o indicador no M5, exporta o console em duas
+janelas de setembro (buffer ~2.000 linhas = ~17 pregões) e roda a
+equivalência. O bloco 2 (agressão) é o que pode invalidar a absorção do
+replay; o 1 tem que dar ~1e-8 ou há defeito de formula/janela.
+
+**Tags:** entregue-v3.93 (sobre v3.92). Suíte 1.261.

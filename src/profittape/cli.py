@@ -1559,6 +1559,58 @@ def vwapvp_conferir(
                "'agressao' diferem ~4 pts, nao discriminavel na tela.")
 
 
+@app.command(name="vwapvp-ntsl-equivalencia")
+def vwapvp_ntsl_equivalencia(
+    log: Path = typer.Option(..., "--log", help="dump do ConsoleLog com linhas VWAPVP|"),
+    curated: Path = typer.Option(Path("data/curated"), "--curated"),
+    symbol: str = typer.Option("WINFUT", "--symbol"),
+    saida: Path | None = typer.Option(None, "--saida", help="CSV das barras casadas"),
+    log_level: str = typer.Option("WARNING", "--log-level"),
+) -> None:
+    """
+    Confere o replay VWAP+VP contra o grafico: le o dump do
+    ntsl/vwapvp_conferir.ntsl (M5 WINFUT), recalcula as mesmas series das
+    barras em cache e MEDE a diferenca por coluna (exatas ~1e-8; agressao
+    Profit x tape; VWAP por negocio x por barra em pontos).
+    """
+    configurar(log_level)
+    from .tools.vwapvp_ntsl import comparar, formatar
+
+    r = comparar(log, curated, symbol)
+    typer.echo("=" * 72)
+    typer.echo("CONFERENCIA NTSL x PYTHON — VWAP + VP (M5 WINFUT)")
+    typer.echo("=" * 72)
+    for linha in formatar(r):
+        typer.echo(linha)
+    if saida is not None and "_juntos" in r:
+        saida.parent.mkdir(parents=True, exist_ok=True)
+        r["_juntos"].to_csv(saida, index=False)
+        typer.echo(f"\n  barras casadas -> {saida}")
+    if "erro" in r:
+        raise typer.Exit(1)
+
+
+@app.command(name="vwapvp-ntsl-niveis")
+def vwapvp_ntsl_niveis(
+    curated: Path = typer.Option(Path("data/curated"), "--curated"),
+    symbol: str = typer.Option("WINFUT", "--symbol"),
+    saida: Path = typer.Option(Path("ntsl/vwapvp_niveis_gerado.ntsl"), "--saida"),
+    log_level: str = typer.Option("WARNING", "--log-level"),
+) -> None:
+    """
+    Gera um indicador NTSL com VAH/VAL/POC do ultimo dia completo anterior
+    (a referencia do replay) como constantes por data, para plotar no
+    grafico e VER onde as barras c_nivel cairam.
+    """
+    configurar(log_level)
+    from .tools.vwapvp_ntsl import gerar_ntsl_niveis
+
+    texto = gerar_ntsl_niveis(curated, symbol)
+    saida.parent.mkdir(parents=True, exist_ok=True)
+    saida.write_text(texto, encoding="utf-8")
+    typer.echo(f"gerado -> {saida} ({texto.count('if sData')} dias com referencia)")
+
+
 @app.command(name="ea-vwapvp-replay")
 def ea_vwapvp_replay(
     curated: Path = typer.Option(Path("data/curated"), "--curated"),

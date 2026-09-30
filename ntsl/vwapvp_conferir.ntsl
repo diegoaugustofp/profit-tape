@@ -1,0 +1,240 @@
+//=====================================================================
+// vwapvp_conferir — CONFERENCIA DO REPLAY `ea-vwapvp-replay` NO GRAFICO
+//
+// O que este indicador FAZ: loga, barra a barra do grafico de 5 MINUTOS
+// do WINFUT, tudo que o replay usa, calculado do MESMO jeito, para o
+// Python medir a diferenca (`profit-tape vwapvp-ntsl-equivalencia`).
+// E' o mesmo circuito do `absorcao_dir.ntsl` (verificado a 2,4e-08).
+//
+// O que ele NAO faz: nao decide, nao marca sinal validado. A ficha
+// docs/eas/vwap_vp.md foi ABANDONADA POR TAXA em 30/09; isto existe
+// porque os numeros dela foram medidos sem nunca terem sido batidos
+// com o grafico alem do POC e do OHLC, e o Diego esta' cetico com razao.
+//
+// O QUE E' EQUIVALENTE E O QUE E' APROXIMACAO
+// -------------------------------------------
+// Exato (mesma formula dos dois lados, espera-se ~1e-8):
+//   imbalance, desloc_norm, absorcao_comp, absorcao_vend e os z de 50
+//   barras (divisor Janela-1, barra atual FORA, janela atravessa dias).
+//   OHLC e QuantityVol ja' bateram 112/113 em 28/09.
+// Medido, nao suposto:
+//   AgressionVolBuy/Sell x vol_agr_compra/venda do tape (tipos 2/3, sem
+//   RLP). Se o Profit incluir RLP, a diferenca aparece como ~26% do
+//   volume — e' a coluna que mais importa neste dump.
+// Aproximacao declarada:
+//   A VWAP de sessao do replay e' POR NEGOCIO (5,5 M por dia). O grafico
+//   so' tem barras: aqui a VWAP e' POR BARRA, preco tipico (H+L+C)/3
+//   ponderado por QuantityVol, acumulado desde a primeira barra do dia.
+//   O Python calcula esta MESMA aproximacao das suas barras (equivalencia
+//   exata) e reporta, a parte, a distancia entre a VWAP por negocio e a
+//   por barra. O desvio e' ponderado por volume e POPULACIONAL (e' o do
+//   replay; nao ha' janela aqui, e' a sessao inteira).
+//
+// IDIOMAS DO NTSL QUE ESTE ARQUIVO SEGUE (skill de engenharia, 3.1)
+//   - acesso posicional (`X[1]`) so' no TOPO, em atribuicao simples;
+//   - quem guarda historico e' a VARIAVEL declarada, nunca a chamada;
+//   - sem Abs(); Float no ConsoleLog;
+//   - acumulado da sessao NAO e' "s := s + x" (a barra em formacao e'
+//     reprocessada a cada tick e somaria varias vezes): e' "s := s[1] + x",
+//     derivado do valor FINAL da barra anterior. Reprocessar a barra
+//     atual recalcula do mesmo ponto.
+//   - log so' de CurrentBar <= BarCount - 3 (fora da reavaliacao).
+//
+// LICENCA: AgressionVolBuy/Sell exigem Pro, Ultra ou modulo Scalper. Sem
+// isso vem zerado sem erro; o parser Python recusa dump com agressao
+// zerada em todas as barras.
+//
+// SERIE CONTINUA: antes de 12/08/2026 o grafico tem fator de rolagem
+// (k = 1,02048 medido); o comparador estima k por pregao pela razao dos
+// fechamentos e avisa. Prefira LogDataInicio >= 1260812.
+//
+// BUFFER DO CONSOLE: ~2.000 linhas. M5 = 113 barras/pregao -> ~17
+// pregoes por dump. Fatie com LogDataInicio/LogDataFim (formato
+// 1AnoMesDia: 01/09/2026 = 1260901).
+//=====================================================================
+
+input
+  Janela(50);               // barras do z. Igual ao replay (janela_z).
+  LimiarZ(2.0);             // |z_vwap| por barra para pintar (visual)
+  LimiarAbs(0.916);         // estimador >= isto pinta vermelho. E' o p80
+                            // da 2a rodada, DDOF populacional; so' visual.
+  LogAtivo(1);
+  LogSomenteSinal(0);       // 1 = loga so' barras pintadas
+  LogDataInicio(0);         // 0 = sem filtro
+  LogDataFim(0);
+
+var
+  sDataAnt                                   : Float;
+  sPVant, sVant, sPPVant                     : Float;   // acumulados [1]
+  sPV, sV, sPPV                              : Float;   // acumulados da sessao
+  sTip, sVolTotal, sVolSoAgr                 : Float;
+  sVwapBar, sVarBar, sSdBar, sZBar           : Float;
+  sAgrCompra, sAgrVenda, sVolAgr             : Float;
+  sImbalance, sAmplitude, sDeslocNorm        : Float;
+  sAbsComp, sAbsVend                         : Float;
+  sSoma, sSomaQuad, sD                       : Float;
+  sMediaC, sDesvioC, sZComp                  : Float;
+  sMediaV, sDesvioV, sZVend                  : Float;
+  sEstimador, sMedTmp                        : Float;
+  nIndex                                     : Integer;
+  bNovoDia, bPintou, bNaJanela               : Boolean;
+begin
+  //-------------------------------------------------------------------
+  // Acessos posicionais: TODOS aqui, em atribuicao simples.
+  //-------------------------------------------------------------------
+  sDataAnt := Date[1];
+  sPVant   := sPV[1];
+  sVant    := sV[1];
+  sPPVant  := sPPV[1];
+
+  bNovoDia := (Date <> sDataAnt);
+
+  //-------------------------------------------------------------------
+  // VWAP de sessao POR BARRA: preco tipico x volume, acumulado desde a
+  // primeira barra do dia. Desvio ponderado por volume, populacional:
+  //   var = sum(v p^2)/sum(v) - vwap^2
+  // (o Python faz a mesma conta das suas barras; a origem deslocada que
+  // o replay usa por negocio nao e' necessaria aqui: p^2 ~ 3e10 x volume
+  // de sessao ~2e7 = 6e17 cabe em Float com folga para 3 casas.)
+  //-------------------------------------------------------------------
+  sTip      := (High + Low + Close) / 3;
+  sVolTotal := QuantityVol(False, False);
+  sVolSoAgr := QuantityVol(False, True);
+
+  if bNovoDia then
+  begin
+    sPV  := sTip * sVolTotal;
+    sV   := sVolTotal;
+    sPPV := sTip * sTip * sVolTotal;
+  end
+  else
+  begin
+    sPV  := sPVant  + sTip * sVolTotal;
+    sV   := sVant   + sVolTotal;
+    sPPV := sPPVant + sTip * sTip * sVolTotal;
+  end;
+
+  sVwapBar := 0;
+  sSdBar   := 0;
+  sZBar    := 0;
+  if sV > 0 then
+  begin
+    sVwapBar := sPV / sV;
+    sVarBar  := sPPV / sV - sVwapBar * sVwapBar;
+    if sVarBar > 0 then
+      sSdBar := Sqrt(sVarBar);
+    if sSdBar > 0 then
+      sZBar := (Close - sVwapBar) / sSdBar;
+  end;
+
+  //-------------------------------------------------------------------
+  // Absorcao do lado exausto (v3.90 do replay):
+  //   imb = (agrC - agrV)/(agrC + agrV)      des = (C - O)/(H - L)
+  //   comp = max(imb,0) x (1 - des)          vend = max(-imb,0) x (1 + des)
+  //-------------------------------------------------------------------
+  sAgrCompra := AgressionVolBuy;
+  sAgrVenda  := AgressionVolSell;
+  sVolAgr    := sAgrCompra + sAgrVenda;
+
+  if sVolAgr > 0 then
+    sImbalance := (sAgrCompra - sAgrVenda) / sVolAgr
+  else
+    sImbalance := 0;
+
+  sAmplitude := High - Low;
+  if sAmplitude > 0 then
+    sDeslocNorm := (Close - Open) / sAmplitude
+  else
+    sDeslocNorm := 0;
+
+  sAbsComp := 0;
+  sAbsVend := 0;
+  if (sVolAgr > 0) and (sAmplitude > 0) then
+  begin
+    if sImbalance > 0 then
+      sAbsComp := sImbalance * (1 - sDeslocNorm);
+    if sImbalance < 0 then
+      sAbsVend := (0 - sImbalance) * (1 + sDeslocNorm);
+  end;
+
+  //-------------------------------------------------------------------
+  // z anti-lookahead, [1]..[Janela], divisor (Janela-1): identico ao
+  // absorcao_dir.ntsl. A janela ATRAVESSA dias (o grafico e' continuo),
+  // igual ao replay desde v3.89.
+  //-------------------------------------------------------------------
+  sZComp := 0;
+  sZVend := 0;
+  if CurrentBar > Janela then
+  begin
+    sSoma := 0;
+    for nIndex := 1 to Janela do
+      sSoma := sSoma + sAbsComp[nIndex];
+    sMediaC := sSoma / Janela;
+    sSomaQuad := 0;
+    for nIndex := 1 to Janela do
+    begin
+      sD := sAbsComp[nIndex] - sMediaC;
+      sSomaQuad := sSomaQuad + sD * sD;
+    end;
+    sDesvioC := Sqrt(sSomaQuad / (Janela - 1));
+    if sDesvioC > 0 then
+      sZComp := (sAbsComp - sMediaC) / sDesvioC;
+
+    sSoma := 0;
+    for nIndex := 1 to Janela do
+      sSoma := sSoma + sAbsVend[nIndex];
+    sMediaV := sSoma / Janela;
+    sSomaQuad := 0;
+    for nIndex := 1 to Janela do
+    begin
+      sD := sAbsVend[nIndex] - sMediaV;
+      sSomaQuad := sSomaQuad + sD * sD;
+    end;
+    sDesvioV := Sqrt(sSomaQuad / (Janela - 1));
+    if sDesvioV > 0 then
+      sZVend := (sAbsVend - sMediaV) / sDesvioV;
+  end;
+
+  // estimador da barra = z da serie do lado que deveria estar exausto
+  sEstimador := 0;
+  if sZBar > 0 then
+    sEstimador := sZComp;
+  if sZBar < 0 then
+    sEstimador := sZVend;
+
+  //-------------------------------------------------------------------
+  // Plot: VWAP por barra e bandas de LimiarZ desvios, no painel do preco.
+  //-------------------------------------------------------------------
+  Plot(sVwapBar);
+  Plot2(sVwapBar + LimiarZ * sSdBar);
+  Plot3(sVwapBar - LimiarZ * sSdBar);
+
+  bPintou := False;
+  if (sZBar >= LimiarZ) or (sZBar <= 0 - LimiarZ) then
+  begin
+    if sEstimador >= LimiarAbs then
+      PaintBar(clRed)        // banda E absorcao do lado exausto
+    else
+      PaintBar(clYellow);    // so' banda
+    bPintou := True;
+  end;
+
+  //-------------------------------------------------------------------
+  // LOG. Ordem CONGELADA: muda aqui, muda tools/vwapvp_ntsl.py junto.
+  //-------------------------------------------------------------------
+  bNaJanela := ((LogDataInicio = 0) or (Date >= LogDataInicio))
+           and ((LogDataFim    = 0) or (Date <= LogDataFim));
+
+  if (LogAtivo = 1) and bNaJanela and (CurrentBar <= BarCount - 3) then
+  begin
+    if (LogSomenteSinal = 0) or bPintou then
+      ConsoleLog("VWAPVP|" + Date + "|" + Time + "|" + TimeExchange
+        + "|" + Open + "|" + High + "|" + Low + "|" + Close
+        + "|" + sVolTotal + "|" + sVolSoAgr
+        + "|" + sAgrCompra + "|" + sAgrVenda
+        + "|" + sVwapBar + "|" + sSdBar + "|" + sZBar
+        + "|" + sImbalance + "|" + sDeslocNorm
+        + "|" + sAbsComp + "|" + sAbsVend
+        + "|" + sZComp + "|" + sZVend + "|" + sEstimador);
+  end;
+end;

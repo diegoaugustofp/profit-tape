@@ -58,13 +58,15 @@ def test_absorcao_do_lado_exausto_conferida_a_mao() -> None:
     assert vr.absorcao_comp(_barra(100, 100, 100, 100, 30, 10)) is None
 
 
-def test_z_rolante_usa_so_as_anteriores() -> None:
-    """historico [1,2,3]: media 2, var populacional 2/3; x=4 -> z = 2/sqrt(2/3)."""
+def test_z_rolante_usa_so_as_anteriores_com_ddof1() -> None:
+    """historico [1,2,3]: media 2, var com divisor (J-1) = 2/2 = 1; x=4 -> z = 2.
+    E' a convencao do absorcao_dir.ntsl (Sqrt(soma/(Janela-1)))."""
     z = vr.ZRolante(3)
     for x in (1.0, 2.0, 3.0):
         assert z.z(x) is None          # janela ainda nao fechou
         z.empurrar(x)
-    assert z.z(4.0) == pytest.approx(2 / math.sqrt(2 / 3))
+    assert z.z(4.0) == pytest.approx(2.0)
+    assert math.isclose(2.0, 2 / math.sqrt(1.0))
     z2 = vr.ZRolante(2)
     z2.empurrar(5.0)
     z2.empurrar(5.0)

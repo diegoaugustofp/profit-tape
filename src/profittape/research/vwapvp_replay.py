@@ -153,17 +153,22 @@ def absorcao_vend(b: BarraFechada) -> float | None:
 
 
 class ZRolante:
-    """z de x contra as J observacoes ANTERIORES (media[1..J] do NTSL)."""
+    """z de x contra as J observacoes ANTERIORES (media[1..J] do NTSL), com
+    desvio de divisor (J - 1) -- a convencao do `absorcao_dir.ntsl`, que e'
+    o arquivo verificado a 2,4e-08 (skill de engenharia, 3.1). Ate' v3.92
+    era populacional (/J): divergencia de sqrt(50/49) ~ 1% no z, alinhada
+    em v3.93 ANTES da conferencia NTSL. Conferido a mao: historico [1,2,3],
+    x = 4 -> media 2, var 1 -> z = 2."""
 
     def __init__(self, janela: int) -> None:
         self._h: deque[float] = deque(maxlen=janela)
         self.janela = janela
 
     def z(self, x: float) -> float | None:
-        if len(self._h) < self.janela:
+        if len(self._h) < self.janela or self.janela < 2:
             return None
         m = sum(self._h) / self.janela
-        var = sum((v - m) ** 2 for v in self._h) / self.janela
+        var = sum((v - m) ** 2 for v in self._h) / (self.janela - 1)
         if var <= 0:
             return None
         return (x - m) / math.sqrt(var)
@@ -527,7 +532,7 @@ def rodar(curated: Path, symbol: str = "WINFUT", dias: list[str] | None = None,
             sonda[f"{c} ({rot})"] = _resumo_sonda(v["_episodios"][c], p.horizontes_s)
 
     # 4. area de valor: os dois algoritmos
-    va_dif = [{"dia": r.dia, "ref": r.ref["dia"],
+    va_dif = [{"dia": r.dia, "ref": r.ref["dia"], "poc": r.ref["poc"],
                "val_bin": r.ref["val"], "val_pares": r.ref["val_pares"],
                "vah_bin": r.ref["vah"], "vah_pares": r.ref["vah_pares"],
                "dif_val_bins": (r.ref["val"] - r.ref["val_pares"]) / p.bin_pts,

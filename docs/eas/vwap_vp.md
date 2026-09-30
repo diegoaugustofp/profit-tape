@@ -259,6 +259,44 @@ completo) e o subgrupo p90; diferença VAL/VAH bin a bin × pares; largura
 2SD por hora. Nada é escolhido por resultado; os parâmetros são os desta
 ficha.
 
+## Validação NTSL — o circuito que faltava (v3.93)
+
+Tudo até aqui foi pego contra o gráfico ou contra um export, nunca por
+teste. O que restava sem conferência de tela: os `z`, a absorção (e a sua
+entrada, `AgressionVolBuy/Sell`, que **nunca foi batida** com
+`vol_agr_compra/venda` do tape), a VWAP e as bandas. O circuito é o mesmo
+do `absorcao_dir.ntsl` (2,4e-08): o indicador loga uma linha por barra, o
+Python recalcula das suas barras em cache e **mede**.
+
+- `ntsl/vwapvp_conferir.ntsl` (gráfico M5 WINFUT): VWAP de sessão **por
+  barra** ((H+L+C)/3 × QuantityVol acumulado desde a abertura) com bandas,
+  imbalance, desloc, absorção comp/vend, z50 (divisor Janela−1, barra atual
+  fora, janela atravessa dias), estimador. Pinta amarelo em |z| ≥ 2 e
+  vermelho com estimador ≥ 0,916 (só visual). Dump `VWAPVP|…` de 21 campos.
+- `profit-tape vwapvp-ntsl-equivalencia --log <dump>`: três blocos.
+  **1. Exatas** (mesma fórmula; espera-se ~1e-8): OHLC, vol, imbalance,
+  desloc, absorção, z, estimador, VWAP/SD/z por barra. **2. Agressão,
+  medida**: razão Profit/tape em compra e venda — ~1,00 se o Profit exclui
+  RLP, ~1,35 se inclui (26%/74%). É o número que decide se a absorção do
+  replay é a que se vê no gráfico. **3. VWAP por negócio × por barra** em
+  pontos, por hora: quanto vale a aproximação do gráfico.
+- `profit-tape vwapvp-ntsl-niveis`: gera `ntsl/vwapvp_niveis_gerado.ntsl`
+  com VAH/VAL/POC do último dia completo anterior como constantes por
+  data, para **ver** no gráfico onde as barras `c_nivel` caíram e bater o
+  POC com o Volume Profile nativo (leilão desligado).
+
+Alinhamento feito antes da conferência: o `ZRolante` do replay usava
+desvio populacional; o `absorcao_dir.ntsl` usa divisor (Janela−1). Python
+alinhado ao arquivo de referência (skill 3.1); p80/p90 mudam ~1%. Dias em
+que o tape tem menos barras que o gráfico (31/07, 15/09) são listados na
+saída: as 50 barras seguintes têm z diferente pelos dois lados, esperado.
+
+Limites, declarados: a VWAP por negócio do replay **não é reproduzível
+em NTSL** (o gráfico não tem negócios); o que se confere é a aproximação
+por barra, e o bloco 3 mede a distância. A VWAP nativa do Profit é um
+terceiro objeto, com definição não documentada; se as bandas dela não
+baterem com as do indicador, é definição, não erro.
+
 ## Veredito
 
 **Abandonado por taxa (30/09).** Decisão de poder pela regra aceita antes
