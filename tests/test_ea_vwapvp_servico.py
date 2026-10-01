@@ -149,3 +149,19 @@ def test_cli_servico_replay(tmp_path: Path) -> None:
                                  "--dia", "2026-09-25", "--curated", str(cur)])
     assert r.exit_code == 0, r.output
     assert "replay do servico" in r.output and "pnl liquido do dia" in r.output
+
+
+def test_registro_inclui_vwap_vp_com_supervisor_e_bridge() -> None:
+    """O caminho real do record: incluir() monta o servico pelo tipo, calcula
+    a exigencia de capital (ramo default: stop_catastrofico do RiscoConfig)
+    e liga no despachante. Sem --ea-livro-ao-vivo (usa_livro = False)."""
+    from profittape.ea.despachante import DespachanteDeEAs
+    from profittape.ea.registro import RegistroDeEAs
+    from profittape.ea.supervisor import SupervisorDeRisco
+
+    d = DespachanteDeEAs()
+    reg = RegistroDeEAs(d, supervisor=SupervisorDeRisco(capital_em_conta=8000.0))
+    r = reg.incluir(_cfg(nome="ea_vwapvp_continuacao"))
+    assert r.nome == "ea_vwapvp_continuacao" and r.symbol == "WINFUT" and len(d) == 1
+    assert type(r.bridge.ea_service).__name__ == "EAVwapVpService"
+    assert reg.remover("ea_vwapvp_continuacao")

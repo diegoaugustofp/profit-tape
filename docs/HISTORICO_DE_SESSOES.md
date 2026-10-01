@@ -4706,3 +4706,16 @@ ontem). Subgrupos `fina`/`grossa` (15 bins), `dentro`, `abriu_dentro`,
 em demo não é tocado. Suíte 1.272.
 
 **Tags:** entregue-v4.01 (sobre v4.00).
+
+### 2026-10-01h — Inclusão do vwap_vp pelo registro testada de ponta a ponta (v4.02)
+
+Pergunta do Diego: "alguma cláusula nova no record para rodar o EA?"
+Nenhuma: o YAML na pasta `--ea-dir` basta; sem `--ea-livro-ao-vivo`. A
+inclusão real (registro → supervisor → bridge → despachante → remover)
+não tinha teste para o tipo novo — agora tem; a exigência de capital cai
+no ramo default (stop catastrófico do RiscoConfig). Caveat operacional
+registrado na resposta: com `--ea-modo-ticker exclusivo` e outros EAs no
+WINFUT, um sinal que chega com o ticker ocupado é perdido e contado em
+`sinais_sem_vaga` — contamina a taxa medida na demo. Suíte 1.273.
+
+**Tags:** entregue-v4.02 (sobre v4.01).
