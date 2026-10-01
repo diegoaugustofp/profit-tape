@@ -451,3 +451,15 @@ def test_retorno_a_vwap_setup_a_conferido_com_01_10() -> None:
     # sem esticao previa nao ha' retorno: a barra 3 sozinha nao conta
     d2 = vr._marcar_eventos_declarados(pd.DataFrame(rows[2:]), p, p80=0.9)
     assert not d2["v_toque"].any()
+
+
+def test_sonda_aceita_subgrupo_declarado(tmp_path: Path) -> None:
+    cur = _curated_dois_dias(tmp_path)
+    r = vr.sondar_eventos(cur, "WINFUT", cache_dir=tmp_path / "cache",
+                          clausulas={"rejeicao_nivel": "n_dentro", "retorno_vwap": "v_janela"})
+    assert set(r["eventos"]) == {"rejeicao_nivel", "retorno_vwap"}
+    assert r["eventos"]["rejeicao_nivel"]["clausula"] == "n_dentro"
+    with pytest.raises(SystemExit, match="nao existe"):
+        vr.sondar_eventos(cur, "WINFUT", cache_dir=tmp_path / "cache",
+                          clausulas={"rejeicao_nivel": "n_inventada"})
+

@@ -4810,3 +4810,15 @@ sonda para esse evento = o da continuação (a favor para longe da VWAP).
 Suíte 1.288.
 
 **Tags:** entregue-v4.06 (sobre v4.05).
+
+### 2026-10-01m — Taxa do Setup A e dos subgrupos; sonda aceita subgrupo (v4.07)
+
+Setup A: voltar à VWAP depois de esticão é 1,87/dia (84), plano no dia;
+com o POC de ontem a 250 pts, 0,22/dia (10) — o mesmo ~0,2 do B. VP de
+ontem como ponto cai sempre para ~0,2/dia; como regime (`dentro`) fica
+em 1,24 (56). Espessura POC→borda: p25 18, p50 21, p75 43 bins; `fina`
+(≤ 15) é o quinto inferior. Declarados para sonda: `retorno_vwap`/janela
+e `rejeicao_nivel`/dentro. `ea-vwapvp-sonda --clausula evento=coluna`
+(repetível; coluna inexistente falha alto). Suíte 1.289.
+
+**Tags:** entregue-v4.07 (sobre v4.06).

@@ -1655,10 +1655,15 @@ def ea_vwapvp_sonda(
     curated: Path = typer.Option(Path("data/curated"), "--curated"),
     symbol: str = typer.Option("WINFUT", "--symbol"),
     saida: Path | None = typer.Option(None, "--saida", help="pasta para JSON + CSV das barras"),
+    clausula: list[str] = typer.Option(
+        [], "--clausula",
+        help="evento=coluna para sondar um SUBGRUPO declarado, ex. rejeicao_nivel=n_dentro; "
+             "repetivel; omitido = a clausula 'janela' de cada evento"),
     log_level: str = typer.Option("WARNING", "--log-level"),
 ) -> None:
     """
-    Sonda dos tres eventos declarados (clausula 'janela' de cada um), na
+    Sonda dos eventos declarados (clausula 'janela' de cada um, ou os
+    subgrupos pedidos com --clausula evento=coluna), na
     unidade proposta em 01/10: excursao a favor e contra como FRACAO da
     distancia ate' a VWAP no sinal, partida em manha (< 11h) e tarde, por
     horizonte 5/15/30/60 min; continuacao em SD. Primeira rodada reconstroi
@@ -1666,9 +1671,19 @@ def ea_vwapvp_sonda(
     FAST-TRACK: calibracao na amostra queimada, declarada.
     """
     configurar(log_level)
-    from .research.vwapvp_replay import formatar_sonda_eventos, sondar_eventos
+    from .research.vwapvp_replay import CLAUSULA_SONDA, formatar_sonda_eventos, sondar_eventos
 
-    r = sondar_eventos(curated, symbol)
+    escolhidas = None
+    if clausula:
+        escolhidas = {}
+        for item in clausula:
+            if "=" not in item:
+                raise typer.BadParameter(f"{item!r}: use evento=coluna")
+            ev, col = item.split("=", 1)
+            if ev not in CLAUSULA_SONDA:
+                raise typer.BadParameter(f"evento {ev!r}; conhecidos: {sorted(CLAUSULA_SONDA)}")
+            escolhidas[ev] = col
+    r = sondar_eventos(curated, symbol, clausulas=escolhidas)
     typer.echo("=" * 72)
     typer.echo("SONDA DOS EVENTOS DECLARADOS — fracao da distancia a VWAP (M5 WINFUT)")
     typer.echo("=" * 72)

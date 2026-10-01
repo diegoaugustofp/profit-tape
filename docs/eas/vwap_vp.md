@@ -498,6 +498,22 @@ Teste com as barras reais de 01/10 (export do Profit): 10:30 e 10:45
 contam; 10:40 (fechou acima da VWAP) e 11:00 (não tocou) não. Só
 contagem; sonda e regra pelo mesmo caminho dos outros, se houver taxa.
 
+### Taxa dos subgrupos e do Setup A (01/10, 46 dias)
+
+    REJEICAO_NIVEL  fina 0,36 (16)  grossa 2,00 (90)  dentro 1,24 (56)  abriu_dentro 1,22 (55)  fina_dentro 0,13 (6)
+                    espessura POC->borda furada: p25 18  p50 21  p75 43 bins (fina = <= 15 esta' abaixo do p25)
+    RETORNO_VWAP    toque 2,20 (99)  janela 1,87 (84; plano no dia)  poc_perto 0,22 (10)  primeira 0,67 (30)
+
+**O padrão de três dias:** o VP de ontem como **ponto** (VAH/VAL a 25 pts,
+POC a 250 pts) cai sempre para ~0,2/dia — B e A iguais; como **regime**
+(VWAP dentro da área de ontem) fica em ~1,2/dia. É assim que o VP entra
+em qualquer ficha deste projeto, se entrar. O Setup A existe como evento
+(voltar à VWAP depois de esticão, 1,87/dia) e não como confluência.
+
+Declarado para sonda, duas e mais nenhuma: `retorno_vwap` na janela (84)
+e `rejeicao_nivel × dentro` (56) — `ea-vwapvp-sonda --clausula
+rejeicao_nivel=n_dentro --clausula retorno_vwap=v_janela`.
+
 ## Próximo passo
 
 1. Aplicar v4.00; `ea-vwapvp-servico-replay --dia 2026-09-28` e comparar com

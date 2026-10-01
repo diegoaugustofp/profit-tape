@@ -828,6 +828,9 @@ def sondar_eventos(curated: Path, symbol: str = "WINFUT", p: ParametrosReplay | 
     out: dict[str, Any] = {"parametros": asdict(p), "dias": len(prep.dias_ok),
                            "dias_com_referencia": prep.n_dias_ref, "eventos": {}}
     for ev, col in clausulas.items():
+        if col not in d.columns:
+            raise SystemExit(f"{ev}: coluna {col!r} nao existe; colunas do evento: "
+                             f"{sorted(c for c in d.columns if c.startswith(col[:2]))}")
         ep = _episodios(d, col, p.cooldown_s)
         if ep.empty or "dist_vwap_pts" not in ep:
             out["eventos"][ev] = {"clausula": col, "n": 0}
