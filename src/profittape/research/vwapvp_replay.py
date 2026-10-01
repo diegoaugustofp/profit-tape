@@ -118,7 +118,7 @@ class ParametrosReplay:
     variantes: tuple[tuple[float, float], ...] = (
         (2.0, 25.0), (2.0, 50.0), (1.5, 25.0), (1.5, 50.0))
     minimo_por_dia: float = 1.0        # regra de escolha: >= 1 episodio/dia em c_janela
-    z_sonda_minimo: float = 1.5        # sonda cacheada para |z_vwap| >= isto (cobre as variantes)
+    z_sonda_minimo: float = 0.0        # v3.99: sonda cacheada para TODAS as barras (era 1,5)
     # v3.91: dia completo = primeira barra abre as 09:00 e >= minimo_barras (113 e' o dia cheio).
     # 31/07 (comeca 12:35) e 15/09 (10:05) entraram na 1a rodada com VWAP de sessao parcial.
     hhmm_abertura_sessao: int = 900
@@ -200,7 +200,7 @@ def dia_completo(df: pd.DataFrame, p: ParametrosReplay) -> bool:
             and int(df["hhmm_abertura"].iloc[0]) == p.hhmm_abertura_sessao)
 
 
-_VERSAO_CACHE = 2      # v3.90: absorcao_comp/vend + hhmm_abertura
+_VERSAO_CACHE = 3      # v3.99: sonda para TODAS as barras (v2: so' |z| >= 1,5)
 
 
 def _referencia(curated: Path, symbol: str, ref_dia: dt.date | None, p: ParametrosReplay,
@@ -257,14 +257,17 @@ def _construir_barras(t: pd.DataFrame, p: ParametrosReplay) -> pd.DataFrame:
     df = pd.DataFrame(linhas)
     if df.empty:
         return df
-    # sonda por barra, so' onde alguma variante pode disparar
+    # sonda por barra, para TODAS as barras (v3.99): a direcao "a favor" e'
+    # EM DIRECAO A VWAP (venda acima dela, compra abaixo). Para um evento de
+    # continuacao, a favor e' o espelho: usa-se MAE como favor e MFE como
+    # contra. Barras com vwap indefinida ou close == vwap ficam sem sonda.
     sondas: list[dict[str, Any]] = []
     for i, r in df.iterrows():
-        z = r["z_vwap"]
-        if z is None or pd.isna(z) or abs(z) < p.z_sonda_minimo:
+        vw = r["vwap"]
+        if vw is None or pd.isna(vw) or r["close"] == vw:
             continue
-        ep = pd.Series({"ts_close_ns": r["ts_close_ns"], "lado": -1 if z > 0 else 1,
-                        "close": r["close"], "vwap": r["vwap"]})
+        ep = pd.Series({"ts_close_ns": r["ts_close_ns"], "lado": -1 if r["close"] > vw else 1,
+                        "close": r["close"], "vwap": vw})
         sondas.append({"_i": i, **_sonda(ep, ts, px, p.horizontes_s)})
     if sondas:
         sd_df = pd.DataFrame(sondas).set_index("_i")
@@ -715,6 +718,166 @@ def formatar_taxa(r: dict[str, Any]) -> list[str]:
             horas = ", ".join(f"{h}h:{n}" for h, n in x["por_hora"].items())
             ln.append(f"    {c:18s} {x['barras']:7d} {x['episodios']:10d} "
                       f"{x['por_dia']:6.2f}   {horas}")
+    return ln
+
+
+# ------------------------------------------------- sonda dos eventos declarados
+CLAUSULA_SONDA = {"rejeicao": "r_janela", "continuacao": "c_janela",
+                  "rejeicao_nivel": "n_janela"}
+LADO_COL = {"rejeicao": "r_lado", "continuacao": None, "rejeicao_nivel": "n_lado"}
+FRACOES_ALVO = (0.25, 0.50, 0.75, 1.00)
+CORTE_MANHA_HHMM = 1100
+
+
+def sondar_eventos(curated: Path, symbol: str = "WINFUT", p: ParametrosReplay | None = None,
+                   cache_dir: Path | None = None,
+                   clausulas: dict[str, str] | None = None) -> dict[str, Any]:
+    """
+    Sonda dos eventos declarados, na unidade proposta pelo Diego em 01/10:
+    excursao a FAVOR e CONTRA como FRACAO DA DISTANCIA ATE' A VWAP no
+    fechamento da barra de sinal (a distancia varia de 600 a 1.300 pts
+    conforme a hora; a fracao normaliza). Tambem em pontos e em SD.
+
+    Direcao do evento: rejeicao e rejeicao_nivel -> contra o furo, rumo a
+    VWAP (lado do evento). Continuacao -> a favor do estiramento, para
+    LONGE da VWAP: o alvo nao e' a VWAP, entao "a favor" sai em SD e em
+    pontos, e "contra" (volta a VWAP) em fracao da distancia.
+
+    A sonda cacheada por barra tem direcao RUMO A VWAP. Quando o lado do
+    evento coincide, favor = mfe / contra = mae; quando e' o oposto
+    (continuacao sempre; rejeicao no nivel quando o VAH de ontem esta'
+    ABAIXO da VWAP de hoje), favor = mae / contra = mfe, e a fracao da
+    distancia so' faz sentido para o lado que aponta para a VWAP.
+
+    Partido em manha (abertura < 11:00) e tarde: a rejeicao na banda e'
+    45% antes das 11h, quando o desvio tem 200-400 pts (taxa de 01/10).
+    FAST-TRACK: isto e' calibracao na amostra queimada. O que sair daqui
+    vira alvo/stop DECLARADO na ficha, uma vez.
+    """
+    p = p or ParametrosReplay()
+    clausulas = clausulas or CLAUSULA_SONDA
+    prep = preparar(curated, symbol, None, p, cache_dir)
+    if isinstance(prep, dict):
+        return prep
+    d = _marcar_eventos_declarados(prep.barras, p, prep.p80)
+    out: dict[str, Any] = {"parametros": asdict(p), "dias": len(prep.dias_ok),
+                           "dias_com_referencia": prep.n_dias_ref, "eventos": {}}
+    for ev, col in clausulas.items():
+        ep = _episodios(d, col, p.cooldown_s)
+        if ep.empty or "dist_vwap_pts" not in ep:
+            out["eventos"][ev] = {"clausula": col, "n": 0}
+            continue
+        ep = ep[ep["dist_vwap_pts"].notna() & (ep["dist_vwap_pts"] > 0)].copy()
+        col_lado = LADO_COL[ev]
+        lado_ev = (np.sign(ep["z_vwap"].astype(float).to_numpy()) if col_lado is None
+                   else ep[col_lado].astype(float).to_numpy())
+        rumo_vwap = np.where(ep["close"] > ep["vwap"], -1.0, 1.0)
+        coincide = lado_ev == rumo_vwap
+        ep["manha"] = ep["hhmm_abertura"].astype(int) < CORTE_MANHA_HHMM
+        bloco: dict[str, Any] = {"clausula": col, "n": len(ep),
+                                 "n_lado_rumo_vwap": int(coincide.sum()),
+                                 "dist_vwap_mediana_pts": float(ep["dist_vwap_pts"].median()),
+                                 "sd_mediana_pts": float(ep["sd"].median()),
+                                 "por_horizonte": {}}
+        for h in p.horizontes_s:
+            mfe, mae = ep[f"mfe_{h}"].astype(float), ep[f"mae_{h}"].astype(float)
+            favor = np.where(coincide, mfe, mae)
+            contra = np.where(coincide, mae, mfe)
+            dist = ep["dist_vwap_pts"].astype(float).to_numpy()
+            sd = ep["sd"].astype(float).to_numpy()
+            # fracao da distancia so' para o lado que aponta para a VWAP
+            favor_frac = np.where(coincide, favor / dist, np.nan)
+            contra_frac = np.where(~coincide, contra / dist, np.nan)
+            linha: dict[str, Any] = {}
+            for rot, m in (("todos", np.ones(len(ep), dtype=bool)),
+                           ("manha", ep["manha"].to_numpy()),
+                           ("tarde", ~ep["manha"].to_numpy())):
+                if m.sum() == 0:
+                    continue
+                q: dict[str, Any] = {
+                     "n": int(m.sum()),
+                     "favor_pts_p50": float(np.median(favor[m])),
+                     "favor_sd_p50": float(np.median(favor[m] / sd[m])),
+                     "contra_pts_p50": float(np.median(contra[m])),
+                     "contra_pts_p75": float(np.percentile(contra[m], 75))}
+                ff = favor_frac[m]
+                if np.isfinite(ff).any():
+                    ff = ff[np.isfinite(ff)]
+                    q["favor_frac_p25"] = float(np.percentile(ff, 25))
+                    q["favor_frac_p50"] = float(np.median(ff))
+                    q["favor_frac_p75"] = float(np.percentile(ff, 75))
+                    q["alcanca"] = {f"{f:.0%}": float((ff >= f).mean()) for f in FRACOES_ALVO}
+                    ca = contra[m][np.isfinite(favor_frac[m])] / dist[m][np.isfinite(favor_frac[m])]
+                    q["contra_frac_p50"] = float(np.median(ca))
+                    q["contra_frac_p75"] = float(np.percentile(ca, 75))
+                    q["contra_passa"] = {"50%": float((ca >= 0.5).mean()),
+                                         "100%": float((ca >= 1.0).mean())}
+                cf = contra_frac[m]
+                if np.isfinite(cf).any():
+                    cf = cf[np.isfinite(cf)]
+                    q["volta_vwap_frac_p50"] = float(np.median(cf))
+                    q["volta_vwap_passa"] = {"50%": float((cf >= 0.5).mean()),
+                                             "100%": float((cf >= 1.0).mean())}
+                    fv = favor[m][np.isfinite(contra_frac[m])] / sd[m][np.isfinite(contra_frac[m])]
+                    q["favor_sd_p75"] = float(np.percentile(fv, 75))
+                    q["favor_sd_alcanca"] = {"0,5 SD": float((fv >= 0.5).mean()),
+                                             "1 SD": float((fv >= 1.0).mean())}
+                linha[rot] = q
+            bloco["por_horizonte"][h] = linha
+        out["eventos"][ev] = bloco
+    out["_barras"] = d
+    return out
+
+
+def formatar_sonda_eventos(r: dict[str, Any]) -> list[str]:
+    if "erro" in r:
+        return [f"  {r['erro']}"]
+    ln = [f"  {r['dias']} dias completos, {r['dias_com_referencia']} com referencia. "
+          "Unidade: FRACAO da distancia ate' a VWAP no sinal (a favor rumo a VWAP; "
+          "continuacao: a favor em SD, contra = volta a VWAP). FAST-TRACK: amostra queimada."]
+    for ev, b in r["eventos"].items():
+        if b["n"] == 0:
+            ln.append(f"  {ev.upper()} ({b['clausula']}): nenhum episodio")
+            continue
+        ln.append(f"  {ev.upper()} ({b['clausula']}): n={b['n']} "
+                  f"({b['n_lado_rumo_vwap']} com o lado rumo a VWAP); "
+                  f"dist. a VWAP mediana {b['dist_vwap_mediana_pts']:.0f} pts; "
+                  f"SD mediana {b['sd_mediana_pts']:.0f} pts")
+        if ev == "continuacao":
+            ln.append("    horiz  parte     n  favor_pts  favor_SD(p50/p75)  >=0,5SD  >=1SD  "
+                      "| contra_pts(p50/p75)  volta VWAP frac p50  >=50%  >=100%")
+        else:
+            ln.append("    horiz  parte     n  favor_pts  favor_frac(p25/p50/p75)  "
+                      "alcanca 25/50/75/100%  | contra_pts(p50/p75)  contra_frac(p50/p75)  "
+                      "passa 50/100%")
+        for h, linha in b["por_horizonte"].items():
+            for rot, q in linha.items():
+                if ev == "continuacao":
+                    if "favor_sd_alcanca" not in q:
+                        continue
+                    fa = q["favor_sd_alcanca"]
+                    vp = q["volta_vwap_passa"]
+                    ln.append(f"    {h // 60:4d}m  {rot:6s} {q['n']:4d}  "
+                              f"{q['favor_pts_p50']:8.0f}  "
+                              f"{q['favor_sd_p50']:5.2f}/{q['favor_sd_p75']:4.2f}        "
+                              f"{fa['0,5 SD']:5.0%}  {fa['1 SD']:5.0%}  "
+                              f"| {q['contra_pts_p50']:6.0f}/{q['contra_pts_p75']:5.0f}        "
+                              f"{q['volta_vwap_frac_p50']:5.2f}          "
+                              f"{vp['50%']:5.0%}  {vp['100%']:5.0%}")
+                else:
+                    if "alcanca" not in q:
+                        continue
+                    a = q["alcanca"]
+                    cp = q["contra_passa"]
+                    ln.append(f"    {h // 60:4d}m  {rot:6s} {q['n']:4d}  "
+                              f"{q['favor_pts_p50']:8.0f}  "
+                              f"{q['favor_frac_p25']:4.2f}/{q['favor_frac_p50']:4.2f}/"
+                              f"{q['favor_frac_p75']:4.2f}"
+                              f"       {a['25%']:4.0%} {a['50%']:4.0%} {a['75%']:4.0%} "
+                              f"{a['100%']:4.0%}"
+                              f"      | {q['contra_pts_p50']:6.0f}/{q['contra_pts_p75']:5.0f}      "
+                              f"{q['contra_frac_p50']:4.2f}/{q['contra_frac_p75']:4.2f}        "
+                              f"{cp['50%']:4.0%} {cp['100%']:4.0%}")
     return ln
 
 

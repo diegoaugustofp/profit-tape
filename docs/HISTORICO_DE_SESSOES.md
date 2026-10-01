@@ -4635,3 +4635,21 @@ track: **rejeição no nível** (high ≥ VAH_ontem e close < VAH; janela;
 esticado z ≥ 1,5; primeira do dia). Teste com as barras reais de 28/09.
 Suíte 1.263.
 
+
+### 2026-10-01d — Taxa dos três eventos; sonda em fração da distância à VWAP (v3.99)
+
+Taxa (46 dias): rejeição na banda 3,27/dia na janela (147; 45% antes
+das 11h), continuação 2,82 (127; primeira do dia 0,96), rejeição no
+nível 2,31 (104; plana ao longo do dia). Banda e nível de ontem não se
+combinam (1 e 16 episódios): três fichas separadas.
+
+Diego: "com a VWAP muito distante no meio do pregão, não deveríamos
+medir até a VWAP em percentil (50% ou 100%)?" — sim, e a premissa vale
+só para reversão (continuação mira para longe). Sonda nova: excursão a
+favor/contra como fração da distância à VWAP no sinal, fração que
+alcança 25/50/75/100%, contra que passa 50/100%, por horizonte e
+manhã/tarde; continuação em SD. Cache v3: sonda para TODAS as barras
+(rumo à VWAP; v2 era só |z| ≥ 1,5 e a rejeição no nível acontece em z
+qualquer) — uma reconstrução de ~10 min. Suíte 1.264.
+
+**Tags:** entregue-v3.99 (sobre v3.98).

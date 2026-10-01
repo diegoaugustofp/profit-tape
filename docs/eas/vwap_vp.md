@@ -363,9 +363,34 @@ banda∧nível; vermelho Setup B completo; fúcsia banda∧absorção sem
 nível). As barras aqua são os 9 eventos de 45 pregões — é por isso que
 o B morreu.
 
+### Taxa (01/10, 46 dias, cooldown 30 min) — só contagem
+
+    REJEICAO        toque 4,24/dia (191)  janela 3,27 (147; 45% antes das 11h)  nivel 0,02 (1)  janela_abs 0,64 (29)
+    CONTINUACAO     banda 3,47 (156)      janela 2,82 (127)                     primeira_do_dia 0,96 (43)
+    REJEICAO_NIVEL  fura 3,02 (136)       janela 2,31 (104; plana ao longo do dia)  esticado 0,36 (16)  primeira 0,64 (29)
+
+O que a contagem decide: banda e nível de ontem **não se combinam**
+(1 e 16 episódios) — três fichas separadas, nenhuma com as duas
+cláusulas. A rejeição na banda é evento de manhã (SD de 200–400 pts); a
+rejeição no nível é plana ao longo do dia — não depende da largura da
+banda do próprio dia.
+
+### Sonda em fração da distância à VWAP (v3.99) — unidade proposta pelo operador
+
+`ea-vwapvp-sonda`: para a cláusula `janela` de cada evento, excursão a
+favor e contra como **fração da distância até a VWAP no sinal** (a
+distância varia de 600 a 1.300 pts conforme a hora), a fração de
+episódios que alcança 25/50/75/100% dela, e a excursão contra que passa
+de 50/100% — por horizonte (5/15/30/60 min) e partida em manhã (< 11h) e
+tarde. Continuação: a favor em SD (para longe), contra = volta à VWAP.
+Cache v3 grava sonda para todas as barras (rumo à VWAP). FAST-TRACK:
+calibração na amostra queimada, declarada; o que sair vira alvo/stop
+da ficha uma vez.
+
 ## Próximo passo
 
-Operador roda `ea-vwapvp-taxa` e cola a tabela; com a TAXA de cada
+Operador roda `ea-vwapvp-sonda` (primeira rodada reconstrói o cache,
+~10 min) e cola as três tabelas; com a TAXA de cada
 cláusula, escreve-se a ficha de 6 linhas de (1) e de (2) — EFEITO e
 CRITERIO declarados ANTES da sonda — e só então a sonda da ficha
 congelada. Nenhum passo nesta ficha. Qualquer desenho seguinte é **ficha nova, pré-registrada

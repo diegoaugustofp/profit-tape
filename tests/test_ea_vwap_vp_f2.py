@@ -344,3 +344,30 @@ def test_rejeicao_no_nivel_de_ontem_conferida_com_28_09() -> None:
     assert list(d["n_primeira"]) == [True, False, False, False, False]
     # no Setup B (fechamento a 25 pts): nenhuma delas e' c_nivel
     assert not (d["r_nivel"]).any()
+
+
+def test_sonda_dos_eventos_em_fracao_da_distancia(tmp_path: Path) -> None:
+    """Cache v3: sonda para TODAS as barras (rumo a VWAP). A sonda dos eventos
+    devolve fracao da distancia a VWAP, partida em manha/tarde, por horizonte."""
+    cur = _curated_dois_dias(tmp_path)
+    cache = tmp_path / "cache"
+    r = vr.sondar_eventos(cur, "WINFUT", cache_dir=cache)
+    assert "erro" not in r and set(r["eventos"]) == {"rejeicao", "continuacao", "rejeicao_nivel"}
+    b = r["_barras"]
+    # toda barra com vwap definida e close != vwap tem sonda cacheada
+    com = b[b["vwap"].notna() & (b["close"] != b["vwap"])]
+    assert com["dist_vwap_pts"].notna().all()
+    for ev, bloco in r["eventos"].items():
+        if bloco["n"] == 0:
+            continue
+        for linha in bloco["por_horizonte"].values():
+            q = linha["todos"]
+            assert q["n"] == bloco["n"]
+            if ev == "continuacao":
+                assert "favor_sd_alcanca" in q and 0 <= q["volta_vwap_passa"]["100%"] <= 1
+            else:
+                if "alcanca" in q:
+                    a = q["alcanca"]
+                    assert a["25%"] >= a["50%"] >= a["75%"] >= a["100%"]
+                    assert q["favor_frac_p25"] <= q["favor_frac_p50"] <= q["favor_frac_p75"]
+    assert any("FRACAO" in x for x in vr.formatar_sonda_eventos(r))

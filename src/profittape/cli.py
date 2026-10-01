@@ -1648,6 +1648,39 @@ def ea_vwapvp_taxa(
         typer.echo(f"\n  barras -> {saida}")
 
 
+@app.command(name="ea-vwapvp-sonda")
+def ea_vwapvp_sonda(
+    curated: Path = typer.Option(Path("data/curated"), "--curated"),
+    symbol: str = typer.Option("WINFUT", "--symbol"),
+    saida: Path | None = typer.Option(None, "--saida", help="pasta para JSON + CSV das barras"),
+    log_level: str = typer.Option("WARNING", "--log-level"),
+) -> None:
+    """
+    Sonda dos tres eventos declarados (clausula 'janela' de cada um), na
+    unidade proposta em 01/10: excursao a favor e contra como FRACAO da
+    distancia ate' a VWAP no sinal, partida em manha (< 11h) e tarde, por
+    horizonte 5/15/30/60 min; continuacao em SD. Primeira rodada reconstroi
+    o cache (sonda para todas as barras, ~10 min); depois, segundos.
+    FAST-TRACK: calibracao na amostra queimada, declarada.
+    """
+    configurar(log_level)
+    from .research.vwapvp_replay import formatar_sonda_eventos, sondar_eventos
+
+    r = sondar_eventos(curated, symbol)
+    typer.echo("=" * 72)
+    typer.echo("SONDA DOS EVENTOS DECLARADOS — fracao da distancia a VWAP (M5 WINFUT)")
+    typer.echo("=" * 72)
+    for linha in formatar_sonda_eventos(r):
+        typer.echo(linha)
+    if saida is not None and "_barras" in r:
+        saida.mkdir(parents=True, exist_ok=True)
+        publico = {k: v for k, v in r.items() if not k.startswith("_")}
+        (saida / "vwapvp_sonda.json").write_text(
+            json.dumps(publico, indent=2, default=str, ensure_ascii=False), encoding="utf-8")
+        r["_barras"].to_csv(saida / "barras_sonda.csv", index=False)
+        typer.echo(f"\n  saida -> {saida}")
+
+
 @app.command(name="ea-vwapvp-replay")
 def ea_vwapvp_replay(
     curated: Path = typer.Option(Path("data/curated"), "--curated"),

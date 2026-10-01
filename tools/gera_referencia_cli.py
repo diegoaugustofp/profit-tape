@@ -123,6 +123,7 @@ COMANDOS: dict[str, tuple[str, str]] = {
     "vwapvp-conferir": ("ea", "eas/vwap_vp.md F1"),
     "ea-vwapvp-replay": ("ea", "eas/vwap_vp.md F2"),
     "ea-vwapvp-taxa": ("ea", "eas/vwap_vp.md fichas seguintes (taxa)"),
+    "ea-vwapvp-sonda": ("ea", "eas/vwap_vp.md fichas seguintes (sonda em fracao)"),
     "vwapvp-ntsl-equivalencia": ("ea", "eas/vwap_vp.md validacao NTSL"),
     "vwapvp-ntsl-setupb": ("ea", "eas/vwap_vp.md validacao NTSL"),
     "diario": ("ea", "EA_ARQUITETURA.md 6"),
