@@ -4751,3 +4751,31 @@ subida). Tabela §1 do `EA_ARQUITETURA` ganha a linha do VWAP+VP
 (ignição e microprice continuam só nas fichas/índice).
 
 **Tags:** entregue-v4.03 (sobre v4.02). Suíte 1.273.
+
+### 2026-10-01i — Telegram: avisos de "armou" e "encerrou" de cada EA (v4.04)
+
+Pedido do Diego: além do aviso de record ativo, avisar quando o EA arma o
+sinal e quando encerra. Os cinco EAs (fluxo, 123, microprice, ignição,
+vwap_vp) chamam `ea_armou`/`ea_encerrou` (`alertas.py`) nos pontos onde já
+logavam entrada/saída (123: `_armar`/`_fechar_op`, inclusive
+`nao_executou`). Achado de desenho: `enviar()` é HTTP síncrono (timeout
+10 s) e os EAs rodam na thread do bridge — chamar direto seguraria o tape
+com o Telegram lento. Daí `NotificadorAssincrono` (fila limitada, thread
+própria, descarta e conta), ligado só pelo record e drenado no
+encerramento. Descartes não avisam. Testes: notificador não bloqueia,
+exceção não mata a thread, teto no encerramento, formato, e cada EA ponta
+a ponta. Suíte 1.287.
+
+**Tags:** entregue-v4.04 (sobre v4.03). O número v4.03 foi usado por duas
+sessões em paralelo; a do Telegram foi refeita sobre a v4.03 só de docs.
+
+### 2026-10-01j — Backlog: avisos de EA perdidos (registrado na v4.04)
+
+Pergunta do Diego: o alerta de record ativo não lia o log? Resposta: são
+dois mecanismos — ganchos diretos no record (iniciado/caiu/encerrado) e o
+vigia externo, que lê o log (subscrito/heartbeat). Os avisos de EA da
+v4.04 são diretos; aviso que falha no envio se perde e o vigia não cobre.
+Decisão: observar alguns pregões antes; proposta registrada como backlog
+em `OPERACAO.md` (vigia contar `alertas.envio_falhou`/`ea_fila_cheia` e
+avisar uma vez). Sem código.
+

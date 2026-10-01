@@ -45,6 +45,7 @@ from zoneinfo import ZoneInfo
 
 import structlog
 
+from ..alertas import ea_armou, ea_encerrou
 from .gate_fluxo import GateDeFluxo, SemFiltro
 from .sinal import BarraFechada
 from .sinal_123 import Candidato123, SinalPreco123
@@ -325,6 +326,8 @@ class CicloDeOrdens123:
         self._t_limite = time.monotonic() + self.timeout
         self.estado = "entrada_pendente"
         log.info("ea.123.armado", **c.resumo(), valido_ate_ns=c.valido_ate_ns)
+        ea_armou(self.nome or self.symbol, c.lado, c.entrada, dry_run=self.dry_run,
+                 alvo=c.alvo, stop=c.stop, detalhe=f"stop de entrada, D={c.D_pts:.0f} pts")
 
     def on_trade(self, ts_ns: int, price: float) -> None:
         """Validade da entrada, zeragem e (dry_run) fills simulados."""
@@ -541,6 +544,7 @@ class CicloDeOrdens123:
                 self.diario.operacao(op)
             except Exception:
                 log.exception("ea.123.diario_falhou", desfecho=desfecho)
+        ea_encerrou(self.nome or self.symbol, desfecho, op.pnl_pts, dry_run=self.dry_run)
         self.op = None
         self.estado = "livre"
 

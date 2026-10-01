@@ -30,6 +30,7 @@ from typing import Any
 
 import structlog
 
+from ..alertas import ea_armou, ea_encerrou
 from ..domain.events import TinyBook
 from .config_microprice import EAMicropriceConfig
 from .decisao import Acao, Decisao
@@ -126,6 +127,8 @@ class EAMicropriceService:
         log.info("ea.micro.entrada", nome=self.nome, lado=av.lado, preco=preco,
                  preco_topo=av.preco, imbalance=round(av.imbalance, 3),
                  micro=round(av.micro or 0.0, 2), spread=av.spread, **self.carimbo)
+        ea_armou(self.nome, av.lado, preco, dry_run=self.config.dry_run,
+                 detalhe=f"imbalance={av.imbalance:+.2f}")
 
     def _sair(self, preco_topo: float | None, agora_ns: int, motivo: str,
               av: Avaliacao | None = None) -> None:
@@ -144,6 +147,8 @@ class EAMicropriceService:
                                   else None),
                  pnl_dia=round(self.decisor.stats.pnl_liquido, 1),
                  bloqueado=self.decisor.stats.bloqueado, **self.carimbo)
+        ea_encerrou(self.nome, motivo, campos.get("pnl_liquido"), dry_run=self.config.dry_run,
+                    pnl_dia=self.decisor.stats.pnl_liquido)
 
     def encerrar_dia(self) -> None:
         if self.decisor.pendente is not None:

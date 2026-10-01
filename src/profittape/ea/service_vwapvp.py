@@ -36,6 +36,7 @@ from zoneinfo import ZoneInfo
 
 import structlog
 
+from ..alertas import ea_armou, ea_encerrou
 from .barra_tempo import ConstrutorDeBarraDeTempo
 from .config_vwapvp import EAVwapVpConfig
 from .decisao import Acao, Decisao
@@ -157,6 +158,8 @@ class EAVwapVpService:
                  preco_negocio=preco_negocio, alvo_px=p.alvo_px, stop_px=p.stop_px,
                  z=round(p.z_sinal, 3), sd=round(p.sd_sinal, 1), dist=round(p.dist_sinal, 1),
                  **self.carimbo)
+        ea_armou(self.nome, p.lado, preco, dry_run=self.config.dry_run,
+                 alvo=p.alvo_px, stop=p.stop_px, detalhe=f"z={p.z_sinal:+.2f}")
 
     def _sair(self, preco_negocio: float, ts_ns: int, motivo: str) -> None:
         if self.decisor.posicao is None:
@@ -171,6 +174,8 @@ class EAVwapVpService:
         log.info("ea.vwapvp.saida", nome=self.nome, **campos,
                  pnl_dia=round(self.decisor.stats.pnl_liquido, 1),
                  bloqueado=self.decisor.stats.bloqueado, **self.carimbo)
+        ea_encerrou(self.nome, motivo, campos.get("pnl_liquido"), dry_run=self.config.dry_run,
+                    pnl_dia=self.decisor.stats.pnl_liquido)
 
     def encerrar_dia(self) -> None:
         if self.decisor._pendente is not None:

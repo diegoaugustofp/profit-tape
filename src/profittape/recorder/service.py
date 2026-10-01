@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, Any
 
 import structlog
 
-from ..alertas import ConfigAlertas, enviar
+from ..alertas import ConfigAlertas, desligar_avisos_ea, enviar, ligar_avisos_ea
 from ..config import Credenciais, RecorderConfig
 from ..ea.despachante import DespachanteDeEAs
 from ..ea.livro import LivroDePosicoes
@@ -90,6 +90,9 @@ class RecorderService:
         # None e enviar() vira no-op silencioso — o record roda igual, so'
         # sem notificacao remota.
         self.alertas = ConfigAlertas.carregar(Path("config/alertas.yaml"))
+        # v4.04: armou/encerrou de cada EA, por fila+thread proprias (o
+        # envio e' HTTP sincrono; na thread do EA travaria o tape).
+        ligar_avisos_ea(self.alertas)
         self.bus = EventBus(maxsize=cfg.pipeline.fila_maxsize)
         self.sink = ParquetSink(
             raiz=cfg.storage.raiz,
@@ -684,6 +687,9 @@ class RecorderService:
         # aqui nunca pode impedir o restante do encerramento do record
         # (footer, verificacao, alerta), que e' sempre prioridade.
         self.despachante.parar_todos()
+        # Depois de parar os EAs: as zeragens do encerramento ja' estao na
+        # fila e saem antes do "record encerrado". Teto de 15 s.
+        desligar_avisos_ea()
         self.bus.close()  # 2: sentinela
         self.writer.join(timeout=120)  # 3: drena o que sobrou
         if self.writer.is_alive():

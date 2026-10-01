@@ -32,6 +32,7 @@ from typing import Any
 
 import structlog
 
+from ..alertas import ea_armou, ea_encerrou
 from .config_ignicao import EAIgnicaoConfig
 from .decisao import Acao, Decisao
 from .execucao import executar
@@ -151,6 +152,10 @@ class EAIgnicaoService:
                  atraso_s=round(atraso_s, 3), ancora=ign.ancora,
                  alvo=ign.preco + ign.direcao * self.config.alvo_pts,
                  stop=ign.preco - ign.direcao * self.config.stop_pts, **self.carimbo)
+        ea_armou(self.nome, ign.direcao, preco, dry_run=self.config.dry_run,
+                 alvo=ign.preco + ign.direcao * self.config.alvo_pts,
+                 stop=ign.preco - ign.direcao * self.config.stop_pts,
+                 detalhe=f"ignicao {ign.mov_pts:+.0f} pts")
 
     def _sair(self, s: Saida) -> None:
         p = self.decisor.posicao
@@ -165,6 +170,8 @@ class EAIgnicaoService:
             self.vagas.liberar(self.config.symbol, self.nome)
         log.info("ea.ign.saida", nome=self.nome, **campos,
                  pnl_dia=round(self.decisor.stats.pnl_liquido, 1), **self.carimbo)
+        ea_encerrou(self.nome, s.motivo, campos.get("pnl_liquido"), dry_run=self.config.dry_run,
+                    pnl_dia=self.decisor.stats.pnl_liquido)
 
     def encerrar_dia(self) -> None:
         p = self.decisor.posicao

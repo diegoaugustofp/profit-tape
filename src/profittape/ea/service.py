@@ -37,6 +37,7 @@ from typing import Any
 
 import structlog
 
+from ..alertas import ea_armou, ea_encerrou
 from ..config import Credenciais
 from ..domain.enums import AtivacaoResult, ConnState, MarketDataResult
 from .config import EAConfig, RoteamentoConfig
@@ -215,9 +216,11 @@ class EAService:
                 d = Decisao(Acao.ZERAR, motivo, 0.0, "_risco")
                 decisoes.append(d)
                 self._executar_e_simular(d, preco_referencia=barra.close)
-                self.gestor.registrar_fechamento(barra.close, barra.bar_id, motivo)
+                pnl = self.gestor.registrar_fechamento(barra.close, barra.bar_id, motivo)
                 if self.vagas is not None:
                     self.vagas.liberar(self.config.symbol, self.nome)
+                ea_encerrou(self.nome, motivo, pnl, dry_run=self.config.dry_run,
+                            pnl_dia=self.gestor.pnl_dia_pontos)
             return decisoes
 
         # 2. Zerado: circuit breaker primeiro, sinal depois.
@@ -260,6 +263,8 @@ class EAService:
                                            sinal_cfg.horizonte,
                                            sinal_cfg.alvo_pontos,
                                            sinal_cfg.stop_rota_b_pontos)
+            ea_armou(self.nome, lado, barra.close, dry_run=self.config.dry_run,
+                     detalhe=f"{sinal_cfg.agent_id} h={sinal_cfg.horizonte}")
             break   # UMA posicao por vez — o primeiro sinal que disparar leva
         if decisoes:
             log.info("ea.barra_fechada", bar_id=barra.bar_id,
@@ -294,8 +299,10 @@ class EAService:
                     sinal_valor=0.0, feature="_encerramento")
         self._executar_e_simular(d)
         if self.gestor.em_posicao() and self._ultimo_close is not None:
-            self.gestor.registrar_fechamento(self._ultimo_close,
-                                             motivo="encerramento do dia")
+            pnl = self.gestor.registrar_fechamento(self._ultimo_close,
+                                                   motivo="encerramento do dia")
+            ea_encerrou(self.nome, "encerramento do dia", pnl, dry_run=self.config.dry_run,
+                        pnl_dia=self.gestor.pnl_dia_pontos)
         if self.vagas is not None:
             self.vagas.liberar(self.config.symbol, self.nome)
         log.info("ea.encerramento_dia", posicao_zerada=True,

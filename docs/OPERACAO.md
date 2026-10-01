@@ -554,6 +554,36 @@ Opcional — sem config/alertas.yaml, tudo roda normalmente sem notificar.
 - arquivos NAO verificados (footer nao confirmado — o tipo de incidente que
   custou um dia inteiro de recaptura nesta semana)
 
+### Avisos de cada EA (v4.04, 2026-10-01)
+Com o mesmo `config/alertas.yaml`, cada EA incluido no record avisa:
+- **armou** -- `🎯 [SIMULADO|REAL] <nome> armou COMPRA @ 140055 | alvo .. | stop ..`.
+  No 123 e' a stop de entrada enviada (ainda nao executou); nos demais
+  (fluxo, microprice, ignicao, vwap_vp) e' a entrada a mercado.
+- **encerrou** -- `🟢/🔴/⚪ ... encerrou (<motivo>) +12.0 pts | dia +30.0 pts`.
+  Motivo = alvo, stop, tempo, zeragem, encerramento do dia; no 123 tambem
+  `nao_executou` (stop de entrada cancelada no fim de t+1, "sem P&L").
+
+Sinais DESCARTADOS (gate, sem vaga, posicao aberta) NAO avisam -- ficam no
+diario; avisar seria ruido. O P&L do aviso e' o que o EA apurou (fill
+confirmado no real; simulado no dry-run) -- a fonte de verdade continua o
+Profit.
+
+O envio sai por fila + thread propria (`alertas.NotificadorAssincrono`),
+nunca da thread do EA: o HTTP do Telegram tem timeout de 10 s e, na thread
+do bridge, seguraria o tape e a gestao do stop. Fila cheia (100) descarta e
+conta (`alertas.ea_fila_cheia`). No encerramento do record a fila e' drenada
+(teto 15 s) antes do "record encerrado"; resumo em `alertas.ea_resumo`.
+Replay e CLI nao avisam (so' o record liga os avisos).
+
+**Backlog (2026-10-01, decisao do operador: observar antes de mexer).**
+Lacuna conhecida: aviso de EA que falha no envio (Telegram fora na hora,
+`alertas.envio_falhou`) ou que e' descartado (`alertas.ea_fila_cheia`) se
+perde -- o vigia NAO conhece eventos de EA e nada reenvia. Proposta em
+espera: o vigia contar essas linhas no log do dia e mandar UM aviso "N
+avisos de EA se perderam hoje". NAO reenviar o aviso original: com ate' 5
+min de atraso um "armou" chega com a operacao possivelmente encerrada.
+Retomar depois de alguns pregoes observando o comportamento real.
+
 ### O que o vigia cobre (processo EXTERNO, watchdog)
 Os hooks acima so' alertam se o record chegou a RODAR. Se ele nunca iniciar
 (schtasks ausente, notebook desligado, DLL rejeitando login), ninguem alerta
