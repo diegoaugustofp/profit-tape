@@ -4653,3 +4653,20 @@ manhã/tarde; continuação em SD. Cache v3: sonda para TODAS as barras
 qualquer) — uma reconstrução de ~10 min. Suíte 1.264.
 
 **Tags:** entregue-v3.99 (sobre v3.98).
+
+### 2026-10-01e — Sonda lida; regras candidatas simuladas nas barras M5 (v3.100)
+
+Sonda em fração (46 dias): rejeição na banda simétrica em tudo (morta
+como reversão, confirma a linha de base); rejeição no nível morta de
+manhã (VAH de ontem colado na VWAP) e marginal à tarde (VWAP alcançada
+34% × 15% contra em 60 min, n≈40 com lado rumo); **continuação à tarde
+é o único assimétrico com amostra**: 88 episódios, a favor ≥ 0,5 SD em
+60% em 60 min, volta de 50% da distância em 14%.
+
+Sonda não dá a ordem alvo/stop: `ea-vwapvp-regra` simula as regras
+candidatas episódio a episódio nas barras M5 do cache (custo 11, mesma
+barra = stop, tempo ao fechamento), PnL por trade com IC95, saídas,
+pior dia. Quatro regras declaradas (`REGRAS_CANDIDATAS`), uma de
+controle. Conferido à mão em caminhos construídos. Suíte 1.266.
+
+**Tags:** entregue-v3.100 (sobre v3.99).

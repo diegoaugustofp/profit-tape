@@ -1681,6 +1681,36 @@ def ea_vwapvp_sonda(
         typer.echo(f"\n  saida -> {saida}")
 
 
+@app.command(name="ea-vwapvp-regra")
+def ea_vwapvp_regra(
+    curated: Path = typer.Option(Path("data/curated"), "--curated"),
+    symbol: str = typer.Option("WINFUT", "--symbol"),
+    saida: Path | None = typer.Option(None, "--saida", help="pasta para CSV de trades por regra"),
+    log_level: str = typer.Option("WARNING", "--log-level"),
+) -> None:
+    """
+    Simula as regras candidatas (REGRAS_CANDIDATAS) episodio a episodio nas
+    barras M5 do cache: alvo/stop/tempo, custo 11 pts, mesma barra toca os
+    dois = stop. Devolve a distribuicao do PnL por trade com IC95 da media.
+    E' o que separa 'assimetria na sonda' de 'expectativa'. Amostra queimada.
+    """
+    configurar(log_level)
+    from .research.vwapvp_replay import formatar_regras, simular_regras
+
+    r = simular_regras(curated, symbol)
+    typer.echo("=" * 72)
+    typer.echo("SIMULACAO DAS REGRAS CANDIDATAS — barras M5 (WINFUT)")
+    typer.echo("=" * 72)
+    for linha in formatar_regras(r):
+        typer.echo(linha)
+    if saida is not None and "_trades" in r:
+        saida.mkdir(parents=True, exist_ok=True)
+        for nome, t in r["_trades"].items():
+            if len(t):
+                t.to_csv(saida / f"trades_{nome}.csv", index=False)
+        typer.echo(f"\n  saida -> {saida}")
+
+
 @app.command(name="ea-vwapvp-replay")
 def ea_vwapvp_replay(
     curated: Path = typer.Option(Path("data/curated"), "--curated"),

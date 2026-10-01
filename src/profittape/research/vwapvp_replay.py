@@ -881,6 +881,160 @@ def formatar_sonda_eventos(r: dict[str, Any]) -> list[str]:
     return ln
 
 
+# -------------------------------------------- simulacao de regra (barras M5)
+@dataclass(frozen=True)
+class Regra:
+    """Regra de saida simulada sobre as barras M5 do cache. Alvo e stop em
+    uma de duas unidades: 'sd' (multiplos do desvio no sinal) ou 'dist'
+    (fracao da distancia a VWAP no sinal). `lado_evento`: 'rumo' = contra
+    o furo, em direcao a VWAP (rejeicoes); 'longe' = a favor do estirao
+    (continuacao). Mesma barra toca alvo e stop -> conta STOP (conservador).
+    Saida por tempo: ao fechamento da barra que completa `tempo_max_s`."""
+    evento: str
+    clausula: str
+    lado_evento: str                  # 'rumo' | 'longe'
+    alvo: float
+    alvo_unidade: str                 # 'sd' | 'dist'
+    stop: float
+    stop_unidade: str                 # 'sd' | 'dist'
+    tempo_max_s: int = 3600
+    custo_pts: float = 11.0
+    so_tarde: bool = False            # abertura >= CORTE_MANHA_HHMM
+    so_rumo_vwap: bool = False        # rejeicao no nivel: so' quando o lado aponta para a VWAP
+
+
+REGRAS_CANDIDATAS = {
+    # declaradas em 01/10 a partir da sonda em fracao (amostra queimada, fast-track)
+    "continuacao_tarde": Regra("continuacao", "c_janela", "longe", 0.5, "sd", 0.5, "dist",
+                               3600, 11.0, so_tarde=True),
+    "continuacao_tarde_1sd": Regra("continuacao", "c_janela", "longe", 1.0, "sd", 0.5, "dist",
+                                   3600, 11.0, so_tarde=True),
+    "nivel_tarde_vwap": Regra("rejeicao_nivel", "n_janela", "rumo", 1.0, "dist", 1.0, "dist",
+                              3600, 11.0, so_tarde=True, so_rumo_vwap=True),
+    "banda_tarde_meio": Regra("rejeicao", "r_janela", "rumo", 0.5, "dist", 0.5, "dist",
+                              3600, 11.0, so_tarde=True),
+}
+
+
+def _simular_episodio(barras_dia: pd.DataFrame, i0: int, lado: int, alvo_px: float,
+                      stop_px: float, tempo_max_s: int) -> tuple[str, float, int]:
+    """Percorre as barras seguintes a i0 (mesmo dia). Devolve (saida, pnl_pts,
+    barras_usadas). lado +1 = comprado, -1 = vendido. Entrada = close de i0."""
+    entrada = float(barras_dia["close"].iloc[i0])
+    t0 = int(barras_dia["ts_close_ns"].iloc[i0])
+    for j in range(i0 + 1, len(barras_dia)):
+        r = barras_dia.iloc[j]
+        hi, lo = float(r["high"]), float(r["low"])
+        bate_stop = lo <= stop_px if lado == 1 else hi >= stop_px
+        bate_alvo = hi >= alvo_px if lado == 1 else lo <= alvo_px
+        if bate_stop:                                   # conservador: stop antes do alvo
+            return "stop", (stop_px - entrada) * lado, j - i0
+        if bate_alvo:
+            return "alvo", (alvo_px - entrada) * lado, j - i0
+        if int(r["ts_close_ns"]) - t0 >= tempo_max_s * _NS:
+            return "tempo", (float(r["close"]) - entrada) * lado, j - i0
+    ult = float(barras_dia["close"].iloc[-1])
+    return "fim_dia", (ult - entrada) * lado, len(barras_dia) - 1 - i0
+
+
+def simular_regras(curated: Path, symbol: str = "WINFUT", p: ParametrosReplay | None = None,
+                   cache_dir: Path | None = None,
+                   regras: dict[str, Regra] | None = None) -> dict[str, Any]:
+    p = p or ParametrosReplay()
+    regras = regras or REGRAS_CANDIDATAS
+    prep = preparar(curated, symbol, None, p, cache_dir)
+    if isinstance(prep, dict):
+        return prep
+    d = _marcar_eventos_declarados(prep.barras, p, prep.p80)
+    d = d.sort_values(["dia", "ts_close_ns"]).reset_index(drop=True)
+    por_dia = {dia: g.reset_index(drop=True) for dia, g in d.groupby("dia", sort=False)}
+    out: dict[str, Any] = {"dias": len(prep.dias_ok), "regras": {}, "_trades": {}}
+    for nome, rg in regras.items():
+        ep = _episodios(d, rg.clausula, p.cooldown_s)
+        if rg.so_tarde and len(ep):
+            ep = ep[ep["hhmm_abertura"].astype(int) >= CORTE_MANHA_HHMM]
+        trades = []
+        for _, e in ep.iterrows():
+            col_lado = LADO_COL[rg.evento]
+            lado_ev = (int(np.sign(e["z_vwap"])) if col_lado is None else int(e[col_lado]))
+            rumo = -1 if e["close"] > e["vwap"] else 1
+            if rg.so_rumo_vwap and lado_ev != rumo:
+                continue
+            # rejeicao: lado_ev ja' e' contra o furo (venda apos furar o VAH);
+            # continuacao: lado_ev = sinal do z (a favor do estirao). Nos dois
+            # casos o lado operado e' o do evento.
+            lado = lado_ev
+            sd, dist = float(e["sd"]), abs(float(e["close"]) - float(e["vwap"]))
+            if sd <= 0 or dist <= 0:
+                continue
+            u = {"sd": sd, "dist": dist}
+            alvo_px = float(e["close"]) + lado * rg.alvo * u[rg.alvo_unidade]
+            stop_px = float(e["close"]) - lado * rg.stop * u[rg.stop_unidade]
+            g = por_dia[e["dia"]]
+            i0 = int(g.index[g["ts_close_ns"] == e["ts_close_ns"]][0])
+            saida, pnl, nb = _simular_episodio(g, i0, lado, alvo_px, stop_px, rg.tempo_max_s)
+            trades.append({"dia": e["dia"], "hhmm": int(e["hhmm_abertura"]), "lado": lado,
+                           "entrada": float(e["close"]), "alvo_px": alvo_px, "stop_px": stop_px,
+                           "alvo_pts": abs(alvo_px - float(e["close"])),
+                           "stop_pts": abs(stop_px - float(e["close"])),
+                           "saida": saida, "pnl_bruto": pnl, "pnl": pnl - rg.custo_pts,
+                           "barras": nb})
+        t = pd.DataFrame(trades)
+        out["_trades"][nome] = t
+        if t.empty:
+            out["regras"][nome] = {"regra": asdict(rg), "n": 0}
+            continue
+        saidas = t["saida"].value_counts().to_dict()
+        pnls = t["pnl"].astype(float)
+        por_dia_pnl = t.groupby("dia")["pnl"].sum()
+        ep_m = float(pnls.std(ddof=1) / np.sqrt(len(t))) if len(t) > 1 else 0.0
+        out["regras"][nome] = {
+            "regra": asdict(rg), "n": len(t), "por_dia": len(t) / len(prep.dias_ok),
+            "saidas": saidas,
+            "pnl_medio": float(pnls.mean()), "pnl_mediano": float(pnls.median()),
+            "pnl_total": float(pnls.sum()), "frac_positivo": float((pnls > 0).mean()),
+            "pnl_p10": float(pnls.quantile(0.10)), "pnl_p90": float(pnls.quantile(0.90)),
+            "alvo_pts_mediano": float(t["alvo_pts"].median()),
+            "stop_pts_mediano": float(t["stop_pts"].median()),
+            "ic95_media": (float(pnls.mean() - 1.96 * ep_m), float(pnls.mean() + 1.96 * ep_m)),
+            "pior_dia": float(por_dia_pnl.min()),
+            "dias_negativos": int((por_dia_pnl < 0).sum()),
+            "dias_com_trade": int(t["dia"].nunique()),
+        }
+    return out
+
+
+def formatar_regras(r: dict[str, Any]) -> list[str]:
+    if "erro" in r:
+        return [f"  {r['erro']}"]
+    ln = [f"  {r['dias']} dias; custo por trade 11 pts; mesma barra toca alvo e stop = STOP; "
+          "saida por tempo ao fechamento. AMOSTRA QUEIMADA (fast-track)."]
+    for nome, x in r["regras"].items():
+        rg = x["regra"]
+        cab = (f"  {nome}: {rg['evento']}/{rg['clausula']}, "
+               f"alvo {rg['alvo']:g} {rg['alvo_unidade']}, "
+               f"stop {rg['stop']:g} {rg['stop_unidade']}, {rg['tempo_max_s'] // 60} min"
+               f"{', so tarde' if rg['so_tarde'] else ''}"
+               f"{', so rumo VWAP' if rg['so_rumo_vwap'] else ''}")
+        if x["n"] == 0:
+            ln.append(cab + " -> nenhum trade")
+            continue
+        s = x["saidas"]
+        ln.append(cab)
+        ln.append(f"    n={x['n']} ({x['por_dia']:.2f}/dia, {x['dias_com_trade']} dias)  "
+                  f"alvo med {x['alvo_pts_mediano']:.0f} pts  "
+                  f"stop med {x['stop_pts_mediano']:.0f} pts")
+        ln.append(f"    saidas: alvo {s.get('alvo', 0)}  stop {s.get('stop', 0)}  "
+                  f"tempo {s.get('tempo', 0)}  fim_dia {s.get('fim_dia', 0)}")
+        ln.append(f"    pnl/trade: media {x['pnl_medio']:+.0f}  "
+                  f"IC95 [{x['ic95_media'][0]:+.0f}, {x['ic95_media'][1]:+.0f}]  "
+                  f"mediana {x['pnl_mediano']:+.0f}  p10 {x['pnl_p10']:+.0f}  "
+                  f"p90 {x['pnl_p90']:+.0f}  positivos {x['frac_positivo']:.0%}")
+        ln.append(f"    total {x['pnl_total']:+.0f} pts  pior dia {x['pior_dia']:+.0f}  "
+                  f"dias negativos {x['dias_negativos']}/{x['dias_com_trade']}")
+    return ln
+
+
 # ---------------------------------------------------------------- console
 def formatar(r: dict[str, Any]) -> list[str]:
     if "erro" in r:

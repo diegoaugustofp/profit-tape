@@ -371,3 +371,37 @@ def test_sonda_dos_eventos_em_fracao_da_distancia(tmp_path: Path) -> None:
                     assert a["25%"] >= a["50%"] >= a["75%"] >= a["100%"]
                     assert q["favor_frac_p25"] <= q["favor_frac_p50"] <= q["favor_frac_p75"]
     assert any("FRACAO" in x for x in vr.formatar_sonda_eventos(r))
+
+
+def test_simular_episodio_conferido_a_mao() -> None:
+    """Vendido em 100 (lado -1), alvo 90, stop 110, 2 barras de 5 min.
+    Caminho 1: barra seguinte low 92 (nao chega) -> depois low 89 -> alvo, pnl +10.
+    Caminho 2: barra seguinte high 111 e low 89 (toca os dois) -> STOP, pnl -10.
+    Caminho 3: nada toca em 10 min -> tempo, pnl = 100 - close."""
+    def dia(highs: list[float], lows: list[float], closes: list[float]) -> pd.DataFrame:
+        n = len(highs)
+        return pd.DataFrame({"ts_close_ns": [i * 300 * NS for i in range(n)],
+                             "high": highs, "low": lows, "close": closes})
+    g = dia([100, 105, 95], [100, 92, 89], [100, 97, 93])
+    assert vr._simular_episodio(g, 0, -1, 90.0, 110.0, 600) == ("alvo", 10.0, 2)
+    g2 = dia([100, 111, 95], [100, 89, 89], [100, 97, 93])
+    assert vr._simular_episodio(g2, 0, -1, 90.0, 110.0, 600) == ("stop", -10.0, 1)
+    g3 = dia([100, 104, 103, 102], [100, 96, 95, 96], [100, 98, 97, 101])
+    assert vr._simular_episodio(g3, 0, -1, 90.0, 110.0, 600) == ("tempo", 3.0, 2)
+    assert vr._simular_episodio(g3, 2, -1, 90.0, 110.0, 600)[0] == "fim_dia"
+    # comprado: espelho
+    assert vr._simular_episodio(dia([100, 112], [100, 99], [100, 110]), 0, 1, 110.0, 90.0, 600) \
+        == ("alvo", 10.0, 1)
+
+
+def test_simular_regras_roda_no_sintetico(tmp_path: Path) -> None:
+    cur = _curated_dois_dias(tmp_path)
+    r = vr.simular_regras(cur, "WINFUT", cache_dir=tmp_path / "cache")
+    assert "erro" not in r and set(r["regras"]) == set(vr.REGRAS_CANDIDATAS)
+    for nome, x in r["regras"].items():
+        if x["n"]:
+            t = r["_trades"][nome]
+            assert (t["pnl"] == t["pnl_bruto"] - 11.0).all()
+            assert set(t["saida"]) <= {"alvo", "stop", "tempo", "fim_dia"}
+            assert x["ic95_media"][0] <= x["pnl_medio"] <= x["ic95_media"][1]
+    assert any("AMOSTRA QUEIMADA" in x for x in vr.formatar_regras(r))

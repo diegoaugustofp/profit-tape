@@ -387,10 +387,37 @@ Cache v3 grava sonda para todas as barras (rumo à VWAP). FAST-TRACK:
 calibração na amostra queimada, declarada; o que sair vira alvo/stop
 da ficha uma vez.
 
+### Sonda (01/10, 46 dias) — leitura
+
+- **Rejeição na banda: morta como reversão.** A favor e contra simétricas
+  em todo horizonte e metade do dia (tarde 60 min: alcança 50% em 31%,
+  passa 50% contra em 31%; manhã: 100% em 54% a favor e 56% contra — a
+  banda estreita das 10h é atravessada nos dois sentidos).
+- **Rejeição no nível: manhã morta** (VAH de ontem colado na VWAP de hoje,
+  frações explodem; em pontos é contra). **Tarde, marginal:** VWAP (100%)
+  alcançada em 34% em 60 min vs 15% contra do mesmo tamanho; em 50%
+  simétrico. Só 51 de 104 furos têm o lado rumo à VWAP.
+- **Continuação à tarde é o único assimétrico com amostra** (88): em 60
+  min a favor ≥ 0,5 SD em 60%, ≥ 1 SD em 30%; volta de 50% da distância à
+  VWAP em **14%**, 100% em 2%. Mediana 352 pts a favor × 200 contra. De
+  manhã simétrico (49% × 41%).
+
+### Regras candidatas — simuladas episódio a episódio (v3.100)
+
+A sonda dá excursões, não a **ordem** em que alvo e stop acontecem.
+`ea-vwapvp-regra` simula nas barras M5 do cache: alvo/stop/tempo, custo
+11 pts, mesma barra toca os dois = stop (conservador), saída por tempo
+ao fechamento. `REGRAS_CANDIDATAS`, declaradas a partir da sonda:
+`continuacao_tarde` (alvo 0,5 SD, stop 50% da distância à VWAP, 60 min),
+`continuacao_tarde_1sd`, `nivel_tarde_vwap` (alvo e stop = 100% da
+distância, só rumo à VWAP), `banda_tarde_meio` (controle, esperado ≈ 0).
+Devolve PnL por trade com IC95 da média, saídas, pior dia. Amostra
+queimada: o que der positivo com IC acima de zero vai para a demo como
+EA; o que não der, fecha.
+
 ## Próximo passo
 
-Operador roda `ea-vwapvp-sonda` (primeira rodada reconstrói o cache,
-~10 min) e cola as três tabelas; com a TAXA de cada
+Operador roda `ea-vwapvp-regra --saida data/vwapvp_regra` e cola; com a TAXA de cada
 cláusula, escreve-se a ficha de 6 linhas de (1) e de (2) — EFEITO e
 CRITERIO declarados ANTES da sonda — e só então a sonda da ficha
 congelada. Nenhum passo nesta ficha. Qualquer desenho seguinte é **ficha nova, pré-registrada
