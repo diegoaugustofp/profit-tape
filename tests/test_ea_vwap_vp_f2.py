@@ -363,7 +363,8 @@ def test_sonda_dos_eventos_em_fracao_da_distancia(tmp_path: Path) -> None:
     cur = _curated_dois_dias(tmp_path)
     cache = tmp_path / "cache"
     r = vr.sondar_eventos(cur, "WINFUT", cache_dir=cache)
-    assert "erro" not in r and set(r["eventos"]) == {"rejeicao", "continuacao", "rejeicao_nivel"}
+    assert "erro" not in r
+    assert set(r["eventos"]) == {"rejeicao", "continuacao", "rejeicao_nivel", "retorno_vwap"}
     b = r["_barras"]
     # toda barra com vwap definida e close != vwap tem sonda cacheada
     com = b[b["vwap"].notna() & (b["close"] != b["vwap"])]
@@ -374,7 +375,7 @@ def test_sonda_dos_eventos_em_fracao_da_distancia(tmp_path: Path) -> None:
         for linha in bloco["por_horizonte"].values():
             q = linha["todos"]
             assert q["n"] == bloco["n"]
-            if ev == "continuacao":
+            if ev in ("continuacao", "retorno_vwap"):
                 assert "favor_sd_alcanca" in q and 0 <= q["volta_vwap_passa"]["100%"] <= 1
             else:
                 if "alcanca" in q:
@@ -416,3 +417,37 @@ def test_simular_regras_roda_no_sintetico(tmp_path: Path) -> None:
             assert set(t["saida"]) <= {"alvo", "stop", "tempo", "fim_dia"}
             assert x["ic95_media"][0] <= x["pnl_medio"] <= x["ic95_media"][1]
     assert any("AMOSTRA QUEIMADA" in x for x in vr.formatar_regras(r))
+
+
+def test_retorno_a_vwap_setup_a_conferido_com_01_10() -> None:
+    """Setup A visto em 01/10 (candles 18-25, VWAP por barra do export do Profit,
+    POC de 30/09 = 187875). Dia caiu a -3,3 SD as 10:05 (lado s = -1); 10:30 toca
+    a VWAP (187966 em [187200, 188055]) e fecha abaixo -> toque; 10:40 fecha em
+    187905 ACIMA da VWAP 187893 -> nao e' rejeicao; 10:45 toca e fecha abaixo;
+    11:00 nao toca (max 187450 < VWAP 187800). POC a |187966-187875| = 91 pts."""
+    p = vr.ParametrosReplay()
+    base = {"dia": "d", "hhmm": 0, "dist_vah": 0.0, "dist_val": 0.0, "estimador": 0.0,
+            "ref_poc": 187875.0, "ref_vah": 188275.0, "ref_val": 186500.0,
+            "abriu_dentro_va": True, "z_absorcao": 0.0}
+    rows = [
+        {**base, "ts_close_ns": 1 * NS, "hhmm_abertura": 1005, "high": 187460.0, "low": 187015.0,
+         "close": 187145.0, "vwap": 188270.2, "sd": 337.1, "z_vwap": -3.3},
+        {**base, "ts_close_ns": 2 * NS, "hhmm_abertura": 1025, "high": 187630.0, "low": 187225.0,
+         "close": 187320.0, "vwap": 188005.1, "sd": 455.0, "z_vwap": -1.5},
+        {**base, "ts_close_ns": 3 * NS, "hhmm_abertura": 1030, "high": 188055.0, "low": 187200.0,
+         "close": 187825.0, "vwap": 187966.2, "sd": 437.9, "z_vwap": -0.3},
+        {**base, "ts_close_ns": 4 * NS, "hhmm_abertura": 1040, "high": 187915.0, "low": 187115.0,
+         "close": 187905.0, "vwap": 187893.1, "sd": 436.4, "z_vwap": 0.03},
+        {**base, "ts_close_ns": 5 * NS, "hhmm_abertura": 1045, "high": 188285.0, "low": 187660.0,
+         "close": 187705.0, "vwap": 187892.3, "sd": 418.3, "z_vwap": -0.4},
+        {**base, "ts_close_ns": 6 * NS, "hhmm_abertura": 1100, "high": 187450.0, "low": 186520.0,
+         "close": 187015.0, "vwap": 187800.4, "sd": 456.4, "z_vwap": -1.7},
+    ]
+    d = vr._marcar_eventos_declarados(pd.DataFrame(rows), p, p80=0.9)
+    assert list(d["v_lado"]) == [0, 0, -1, 0, -1, 0]
+    assert list(d["v_janela"]) == [False, False, True, False, True, False]
+    assert list(d["v_poc_perto"]) == [False, False, True, False, True, False]
+    assert list(d["v_primeira"]) == [False, False, True, False, False, False]
+    # sem esticao previa nao ha' retorno: a barra 3 sozinha nao conta
+    d2 = vr._marcar_eventos_declarados(pd.DataFrame(rows[2:]), p, p80=0.9)
+    assert not d2["v_toque"].any()

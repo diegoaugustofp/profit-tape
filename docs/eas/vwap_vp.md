@@ -476,6 +476,28 @@ A saída imprime p25/p50/p75 da espessura nos furos para ver onde o 15
 cai. Sonda só depois de contado e declarado qual combinação, se alguma,
 vira ficha. Não toca no EA em demo.
 
+### Setup A — declarado e contado (01/10, v4.06), depois de VISTO no pregão
+
+Eu tinha escrito "não testar A como escrito: exige a coincidência de duas
+referências móveis" — juízo estrutural, [Provável], sem medição. Em 01/10
+o operador viu nos candles 19–23 (10:30–10:50): dia de queda (−3,3 SD às
+10:05), pullback até a VWAP (187966→187886) **sentada no platô do POC de
+30/09 (187825–187900)**, cinco testes em 25 min, o candle 22 furando até
+o VAH de 30/09 (188275, a 10 pts) e fechando abaixo, mínima nova às 11:00.
+O Setup A completo, com as duas referências. O juízo estava errado para
+esse dia; a contagem diz para quantos.
+
+    RETORNO_VWAP  (a favor do lado esticado s)
+      toque      antes nesta sessão |z| >= 2 do lado s; barra toca a VWAP (low <= VWAP <= high)
+                 e fecha do lado s
+      janela     09:30–17:00
+      poc_perto  |VWAP − POC de ontem| <= 250 pts      (a cláusula "VP" do Setup A)
+      primeira   primeiro toque do dia
+
+Teste com as barras reais de 01/10 (export do Profit): 10:30 e 10:45
+contam; 10:40 (fechou acima da VWAP) e 11:00 (não tocou) não. Só
+contagem; sonda e regra pelo mesmo caminho dos outros, se houver taxa.
+
 ## Próximo passo
 
 1. Aplicar v4.00; `ea-vwapvp-servico-replay --dia 2026-09-28` e comparar com

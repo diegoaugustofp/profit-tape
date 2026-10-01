@@ -627,7 +627,13 @@ EVENTOS_DECLARADOS = {
                        # Borda fina preve MOVIMENTO, nao direcao; quem da' a direcao e'
                        # o regime (preco negociando DENTRO da area de ontem). So' contagem.
                        "fina", "grossa", "dentro", "abriu_dentro", "fina_dentro"),
+    # 01/10 (pregao): o Diego viu nos candles 19-23 o Setup A do documento --
+    # dia de queda, pullback ate' a VWAP sentada no POC de ontem (187875, VWAP
+    # 187886-187966), cinco testes, furo ate' o VAH de ontem, rejeicao e minima
+    # nova. Eu tinha dito "coincidencia rara" sem medir. Declarado e contado.
+    "retorno_vwap": ("toque", "janela", "poc_perto", "primeira"),
 }
+POC_PERTO_PTS = 250.0          # |VWAP - POC de ontem| <= isto (platô do POC ~100-150 pts)
 
 
 def _marcar_eventos_declarados(d: pd.DataFrame, p: ParametrosReplay, p80: float) -> pd.DataFrame:
@@ -640,6 +646,12 @@ def _marcar_eventos_declarados(d: pd.DataFrame, p: ParametrosReplay, p80: float)
         janela_abs: janela E estimador >= p80 (sem nivel)
     Barra que toca os dois lados (so' em barra enorme) nao conta.
 
+    RETORNO_VWAP (Setup A; a favor do lado esticado s):
+        toque     : antes nesta sessao |z| >= z_banda do lado s; barra toca a VWAP
+                    (low <= vwap <= high) e fecha do lado s
+        janela    : toque E 09:30 <= abertura < 17:00
+        poc_perto : janela E |VWAP - POC de ontem| <= 250 pts
+        primeira  : janela E primeiro toque do dia
     REJEICAO_NIVEL (venda; compra e' o espelho no VAL de ontem):
         fura     : high >= VAH_ontem  E  close < VAH_ontem
         janela   : fura E 09:30 <= abertura < 17:00
@@ -694,6 +706,22 @@ def _marcar_eventos_declarados(d: pd.DataFrame, p: ParametrosReplay, p80: float)
     d["n_abriu_dentro"] = d["n_janela"] & d["abriu_dentro_va"].astype(bool)
     d["n_fina_dentro"] = d["n_fina"] & d["n_dentro"]
 
+    # RETORNO A VWAP depois de esticao (Setup A): antes nesta sessao houve barra
+    # com |z| >= z_banda (lado s); a barra atual TOCA a VWAP (low <= vwap <=
+    # high) e fecha do lado s (rejeicao a favor do lado esticado).
+    lado_est = pd.Series(np.sign(z.where(z.abs() >= p.z_banda, 0.0)), index=d.index).fillna(0.0)
+    acum = (lado_est.groupby(d["dia"])
+            .transform(lambda x: x.replace(0.0, np.nan).ffill().shift(1)).fillna(0.0))
+    toca = (d["low"] <= vw) & (d["high"] >= vw) & (sd > 0)
+    fecha_lado = np.sign(d["close"] - vw) == acum
+    d["v_lado"] = np.where(toca & (acum != 0) & fecha_lado, acum, 0).astype(int)
+    d["v_toque"] = d["v_lado"] != 0
+    d["v_janela"] = d["v_toque"] & janela
+    d["v_poc_perto"] = d["v_janela"] & ((vw - d["ref_poc"]).abs() <= POC_PERTO_PTS).fillna(False)
+    prim_v = d[d["v_janela"]].groupby("dia")["ts_close_ns"].transform("min")
+    d["v_primeira"] = False
+    d.loc[prim_v.index, "v_primeira"] = d.loc[prim_v.index, "ts_close_ns"] == prim_v
+
     d["c_banda"] = z.abs() >= p.z_banda
     d["c_janela"] = d["c_banda"] & janela
     primeira = d[d["c_janela"]].groupby("dia")["ts_close_ns"].transform("min")
@@ -717,7 +745,8 @@ def contar_taxa(curated: Path, symbol: str = "WINFUT", p: ParametrosReplay | Non
                            "dias_excluidos": prep.excluidos,
                            "p80_congelado": prep.p80, "eventos": {}}
     for ev, clausulas in EVENTOS_DECLARADOS.items():
-        pref = {"rejeicao": "r_", "continuacao": "c_", "rejeicao_nivel": "n_"}[ev]
+        pref = {"rejeicao": "r_", "continuacao": "c_", "rejeicao_nivel": "n_",
+                "retorno_vwap": "v_"}[ev]
         bloco: dict[str, Any] = {}
         for c in clausulas:
             col = pref + c
@@ -758,8 +787,9 @@ def formatar_taxa(r: dict[str, Any]) -> list[str]:
 
 # ------------------------------------------------- sonda dos eventos declarados
 CLAUSULA_SONDA = {"rejeicao": "r_janela", "continuacao": "c_janela",
-                  "rejeicao_nivel": "n_janela"}
-LADO_COL = {"rejeicao": "r_lado", "continuacao": None, "rejeicao_nivel": "n_lado"}
+                  "rejeicao_nivel": "n_janela", "retorno_vwap": "v_janela"}
+LADO_COL = {"rejeicao": "r_lado", "continuacao": None, "rejeicao_nivel": "n_lado",
+            "retorno_vwap": "v_lado"}
 FRACOES_ALVO = (0.25, 0.50, 0.75, 1.00)
 CORTE_MANHA_HHMM = 1100
 
@@ -878,7 +908,7 @@ def formatar_sonda_eventos(r: dict[str, Any]) -> list[str]:
                   f"({b['n_lado_rumo_vwap']} com o lado rumo a VWAP); "
                   f"dist. a VWAP mediana {b['dist_vwap_mediana_pts']:.0f} pts; "
                   f"SD mediana {b['sd_mediana_pts']:.0f} pts")
-        if ev == "continuacao":
+        if ev in ("continuacao", "retorno_vwap"):     # a favor = para LONGE da VWAP
             ln.append("    horiz  parte     n  favor_pts  favor_SD(p50/p75)  >=0,5SD  >=1SD  "
                       "| contra_pts(p50/p75)  volta VWAP frac p50  >=50%  >=100%")
         else:
@@ -887,7 +917,7 @@ def formatar_sonda_eventos(r: dict[str, Any]) -> list[str]:
                       "passa 50/100%")
         for h, linha in b["por_horizonte"].items():
             for rot, q in linha.items():
-                if ev == "continuacao":
+                if ev in ("continuacao", "retorno_vwap"):
                     if "favor_sd_alcanca" not in q:
                         continue
                     fa = q["favor_sd_alcanca"]

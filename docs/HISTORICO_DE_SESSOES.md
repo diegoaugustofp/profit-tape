@@ -4794,3 +4794,19 @@ geração paralela; renumerada para v4.05 sobre a v4.04 dos alertas
 Telegram.) Suíte 1.287.
 
 **Tags:** entregue-v4.05 (sobre v4.04).
+
+### 2026-10-01l — Setup A visto no pregão; declarado e contado (v4.06)
+
+Diego, com o export M5 de 01/10: "o Setup A não é o que aconteceu nos
+candles 19–23? Entendi que era um movimento que não acontecia." Eu
+tinha dito "não recomendo testar como escrito" (coincidência de duas
+referências móveis) — juízo estrutural, não medido. Conferido com o
+`vwapvp-conferir --dia 2026-09-30` dele: POC 187875 (platô 187825–
+187900), VAH 188275; a VWAP de hoje nos cinco testes estava em 187886–
+187966, dentro do platô; o candle 22 furou até 188285 e fechou abaixo.
+Setup A completo. Declarado `retorno_vwap` (toque/janela/poc_perto/
+primeira), só contagem, com teste nas barras reais de 01/10. Formato da
+sonda para esse evento = o da continuação (a favor para longe da VWAP).
+Suíte 1.288.
+
+**Tags:** entregue-v4.06 (sobre v4.05).
