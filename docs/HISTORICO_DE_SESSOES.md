@@ -4822,3 +4822,21 @@ e `rejeicao_nivel`/dentro. `ea-vwapvp-sonda --clausula evento=coluna`
 (repetível; coluna inexistente falha alto). Suíte 1.289.
 
 **Tags:** entregue-v4.07 (sobre v4.06).
+
+### 2026-10-01n — Ficha VWAP+VP fechada; plano forward do pool de seis meses (v4.08, só docs)
+
+Sondas condicionadas: retorno à VWAP à tarde atravessa mais do que
+retoma (contra ≥ a favor em todo horizonte); rejeição no nível × dentro
+idêntica à sem condição. Setup A fecha pelos números; o regime não moveu
+nada. Ficha FECHADA: uma assimetria em 46 dias, já em demo.
+
+Diego: quer um pool de EAs descorrelacionados em seis meses de captura;
+a barreira é "se o desenho não for preciso, encerra"; não tem histórico
+para backtest. Resposta registrada na ficha: a amostra forward das
+hipóteses é o TAPE, não o EA — os eventos largos ficam congelados em
+código e são reavaliados em janeiro sobre ~60 pregões novos (≥ 02/10);
+o que der assimetria roda em dry_run por mais 60; dry_run é o estágio
+normal, E4 é promoção; raridade custa tempo linearmente (0,2/dia = 25
+em seis meses, não valida). Nada novo sobre os 46 dias.
+
+**Tags:** entregue-v4.08 (sobre v4.07). Suíte 1.289.

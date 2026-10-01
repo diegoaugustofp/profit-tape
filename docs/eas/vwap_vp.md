@@ -1,6 +1,6 @@
 # VWAP + Volume Profile (WIN) — fast-track
 
-> **Status:** **F3/F5 — EA `continuacao_tarde` pronto para a demo (v4.00)**: Setup B do documento abandonado por taxa; o que sobreviveu dos dados é a continuação à tarde (+47 pts/trade em 46 dias, IC cruzando zero — fast-track, decisão do operador em 01/10) — **Criado:** 2026-09-29 (v3.86); EA em v4.00 — **Código:** `ea/config_vwapvp.py`, `ea/sinal_vwapvp.py`, `ea/service_vwapvp.py`, `config/ea_vwapvp_continuacao.yaml`, `ea-vwapvp-servico-replay` —
+> **Status:** **FECHADA (01/10, v4.08).** Três setups do documento respondidos pelos dados em 46 dias: A existe como evento (1,87/dia) e não como confluência (0,22/dia com o POC), e como evento é simétrico-a-contra; B morto por taxa; C sem LVN num perfil de 17–20 M contratos. Sobreviveu **uma** assimetria, `continuacao_tarde`, em demo desde 01/10. Eventos congelados em código para reavaliação em dados NOVOS (ver "Plano forward"). — **Criado:** 2026-09-29 (v3.86); fechada em v4.08 —
 
 ## Identidade, fase e estado
 
@@ -513,6 +513,53 @@ em qualquer ficha deste projeto, se entrar. O Setup A existe como evento
 Declarado para sonda, duas e mais nenhuma: `retorno_vwap` na janela (84)
 e `rejeicao_nivel × dentro` (56) — `ea-vwapvp-sonda --clausula
 rejeicao_nivel=n_dentro --clausula retorno_vwap=v_janela`.
+
+### Sondas condicionadas (01/10, fecham A e o regime)
+
+    RETORNO_VWAP tarde (67): contra >= a favor em pontos em todo horizonte (60 min: 330 x 230).
+      Depois do pullback a VWAP o preco ATRAVESSA mais do que retoma: o momento ja' se gastou.
+      Manha (17): 525 a favor x 420 contra aos 30 min -- volatilidade das 10h, nao direcao.
+    REJEICAO_NIVEL x dentro, tarde (43): identica a sem condicao (VWAP alcancada 38% x 34%;
+      contra 50% em 51% x 49%; 310 x 295 pts). O regime nao acrescentou nada. Manha morta.
+
+## Veredito final (01/10)
+
+Cinco eventos, duas sondas condicionadas, quatro regras simuladas sobre
+46 dias: **uma** assimetria com expectativa positiva (`continuacao_tarde`,
++47 pts/trade, IC cruzando zero), já em demo. O VP de ontem sobreviveu só
+como contagem de regime (1,2/dia) e o regime não moveu a sonda. Continuar
+declarando eventos sobre os mesmos 46 dias é olhar a amostra pela quinta
+vez; esta ficha para aqui.
+
+## Plano forward (operador, 01/10): o pool de seis meses
+
+O operador quer um pool de EAs descorrelacionados em seis meses de
+captura, e a barreira nomeada é "se o desenho não for preciso, encerra".
+A saída não é adivinhar melhor: **a amostra forward das hipóteses é o
+tape, não o EA.** O tape é gravado todo pregão; o cache do replay
+reconstrói barras, VWAP, perfil e sondas em segundos. O que fica
+congelado hoje é a **definição dos eventos largos** (já em código,
+`EVENTOS_DECLARADOS`: furo no nível de ontem 3/dia, toque na banda 4,
+retorno à VWAP 2, continuação 3) com espessura, regime, hora, absorção e
+distância gravados por barra.
+
+Declarado agora, para não virar escolha depois:
+
+1. **Janeiro/2027 (≈ 60 pregões a partir de 02/10):** rodar `ea-vwapvp-taxa`,
+   `ea-vwapvp-sonda` e `ea-vwapvp-regra` SÓ sobre os dias ≥ 02/10 (dados
+   que ninguém olhou). As regras candidatas de `REGRAS_CANDIDATAS` são
+   as de 01/10; nenhuma nova antes disso.
+2. O que der assimetria nesses 60 vira regra declarada e roda em
+   `dry_run` por mais 60 (abril): dry_run é o estágio NORMAL de todo
+   candidato; E4 é promoção, não ponto de partida. Cinco candidatos em
+   dry_run custam zero e não ocupam vaga.
+3. Raridade custa tempo linearmente: evento a 0,2/dia dá 25 ocorrências
+   em seis meses e não valida nem a 70% de acerto. Um EA raro pode entrar
+   no pool **pequeno e declarado como não validado**; não pode entrar
+   como validado antes de ~1 ano.
+4. O que a família VP acrescentaria ao pool é reversão em nível com
+   memória de ontem — o oposto da continuação. É a descorrelação que o
+   operador quer; persegue-se pelo caminho 1–2, não na amostra velha.
 
 ## Próximo passo
 
