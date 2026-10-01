@@ -458,6 +458,24 @@ o que o EA chama de sinal, com a ressalva da VWAP por barra); depois
 `dry_run: false` e E4 na demo pelo `RUNBOOK_E4.md`. Inclusão a quente
 pela pasta `--ea-dir`. Não precisa de `--ea-livro-ao-vivo`.
 
+### Subgrupos da rejeição no nível — declarados 01/10 (noite), só contagem (v4.01)
+
+Do que o operador viu no VAH de 25/09 (a 390 pts do POC; 9,8% do volume
+do dia acima dele): a área de valor é assimétrica por construção e a
+borda perto do POC é "fina". Borda fina prevê **movimento**, não direção
+(é também o LVN do Setup C); quem dá a direção é o regime. Subgrupos,
+todos `janela ∧ condição`, contados pelo `ea-vwapvp-taxa`:
+
+    fina          espessura POC→borda furada <= 15 bins (375 pts)
+    grossa        > 15 bins
+    dentro        VWAP de hoje, na barra do furo, dentro de [VAL, VAH] de ontem
+    abriu_dentro  abertura do dia dentro da área de ontem
+    fina_dentro   fina E dentro
+
+A saída imprime p25/p50/p75 da espessura nos furos para ver onde o 15
+cai. Sonda só depois de contado e declarado qual combinação, se alguma,
+vira ficha. Não toca no EA em demo.
+
 ## Próximo passo
 
 1. Aplicar v4.00; `ea-vwapvp-servico-replay --dia 2026-09-28` e comparar com

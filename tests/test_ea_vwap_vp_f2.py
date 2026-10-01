@@ -93,7 +93,8 @@ def test_area_de_valor_por_pares_e_plato_conferidos_a_mao() -> None:
 # ------------------------------------------------------- clausulas/episodios
 def _df(rows: list[dict[str, object]]) -> pd.DataFrame:
     base = {"ts_close_ns": 0, "hhmm": 1000, "close": 100.0, "vwap": 100.0, "sd": 10.0,
-            "z_vwap": 0.0, "z_absorcao": 0.0, "dist_vah": 0.0, "dist_val": 0.0, "dia": "d"}
+            "z_vwap": 0.0, "z_absorcao": 0.0, "dist_vah": 0.0, "dist_val": 0.0, "dia": "d",
+            "ref_poc": 95.0, "ref_vah": 100.0, "ref_val": 90.0, "abriu_dentro_va": True}
     return pd.DataFrame([{**base, **r} for r in rows])
 
 
@@ -299,7 +300,8 @@ def test_eventos_declarados_rejeicao_e_continuacao_conferidos_a_mao() -> None:
     barra E: high 118 close 110 -> nada"""
     p = vr.ParametrosReplay(tolerancia_pts=25, hhmm_inicio=930, hhmm_fim=1700)
     base = {"ts_close_ns": 0, "dia": "d", "hhmm": 1005, "hhmm_abertura": 1000, "vwap": 100.0,
-            "sd": 10.0, "dist_vah": 0.0, "dist_val": 0.0, "estimador": 0.0, "low": 95.0}
+            "sd": 10.0, "dist_vah": 0.0, "dist_val": 0.0, "estimador": 0.0, "low": 95.0,
+            "ref_poc": 95.0, "ref_vah": 100.0, "ref_val": 90.0, "abriu_dentro_va": True}
     rows = [
         {**base, "high": 125.0, "close": 115.0, "z_vwap": 1.5, "ts_close_ns": 1 * NS},
         {**base, "high": 125.0, "close": 122.0, "z_vwap": 2.2, "ts_close_ns": 2 * NS,
@@ -338,8 +340,17 @@ def test_rejeicao_no_nivel_de_ontem_conferida_com_28_09() -> None:
     ]
     df = pd.DataFrame(rows)
     df["dist_vah"] = df["close"] - 184900.0
+    df["ref_poc"], df["ref_vah"], df["ref_val"] = 184575.0, 184900.0, 183775.0
+    df["abriu_dentro_va"] = True
     d = vr._marcar_eventos_declarados(df, p, p80=0.9)
     assert list(d["n_lado"]) == [-1, 0, -1, -1, 0]
+    # v4.01: VAH de 25/09 a (184900-184575)/25 = 13 bins do POC -> FINA; VWAP 183600
+    # esta' ABAIXO do VAL 183775 -> regime "dentro" falso; abriu dentro = True
+    assert d.loc[0, "n_espessura_bins"] == pytest.approx(13.0)
+    assert list(d["n_fina"]) == [True, False, True, True, False]
+    assert not d["n_grossa"].any() and not d["n_dentro"].any()
+    assert list(d["n_abriu_dentro"]) == [True, False, True, True, False]
+    assert not d["n_fina_dentro"].any()
     assert list(d["n_esticado"]) == [True, False, True, True, False]
     assert list(d["n_primeira"]) == [True, False, False, False, False]
     # no Setup B (fechamento a 25 pts): nenhuma delas e' c_nivel

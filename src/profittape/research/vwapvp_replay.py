@@ -504,6 +504,15 @@ def preparar(curated: Path, symbol: str = "WINFUT", dias: list[str] | None = Non
         r.referencia = r.ref.get("dia")
         r.barras["dist_vah"] = (r.barras["close"] - r.ref["vah"]) if r.ref else np.nan
         r.barras["dist_val"] = (r.barras["close"] - r.ref["val"]) if r.ref else np.nan
+        # v4.01: espessura da borda de ontem (POC -> borda, em bins) e regime
+        r.barras["ref_poc"] = r.ref["poc"] if r.ref else np.nan
+        r.barras["ref_vah"] = r.ref["vah"] if r.ref else np.nan
+        r.barras["ref_val"] = r.ref["val"] if r.ref else np.nan
+        if r.ref:
+            abre = float(r.barras["open"].iloc[0])
+            r.barras["abriu_dentro_va"] = bool(r.ref["val"] <= abre <= r.ref["vah"])
+        else:
+            r.barras["abriu_dentro_va"] = False
         if not r.ref:
             log.info("vwapvp.replay.sem_referencia", dia=r.dia,
                      nota="sem dia completo anterior: so' distribuicao")
@@ -601,6 +610,8 @@ def rodar(curated: Path, symbol: str = "WINFUT", dias: list[str] | None = None,
 
 
 # ------------------------------------------------- taxa dos eventos declarados
+ESPESSURA_FINA_BINS = 15      # borda a <= 15 bins (375 pts) do POC de ontem = "fina"
+
 EVENTOS_DECLARADOS = {
     # 01/10/2026, DECLARADOS ANTES DE CONTAR, SEM SONDA. Clausulas acumulativas.
     "rejeicao": ("toque", "janela", "nivel", "janela_abs"),
@@ -609,7 +620,13 @@ EVENTOS_DECLARADOS = {
     # interagiu 6x com o VAH de ontem pela MAXIMA (furou e fechou abaixo) e o
     # Setup B contou 0 porque le o fechamento a 25 pts. Evento visto, nao
     # medido: contagem abaixo, fast-track.
-    "rejeicao_nivel": ("fura", "janela", "esticado", "primeira"),
+    "rejeicao_nivel": ("fura", "janela", "esticado", "primeira",
+                       # 01/10 (noite), subgrupos declarados DEPOIS da sonda e ANTES de
+                       # contar, a partir do que o Diego viu no VAH de 25/09 (a 390 pts
+                       # do POC, 9,8% do volume acima). Cada um e' janela E condicao.
+                       # Borda fina preve MOVIMENTO, nao direcao; quem da' a direcao e'
+                       # o regime (preco negociando DENTRO da area de ontem). So' contagem.
+                       "fina", "grossa", "dentro", "abriu_dentro", "fina_dentro"),
 }
 
 
@@ -665,6 +682,17 @@ def _marcar_eventos_declarados(d: pd.DataFrame, p: ParametrosReplay, p80: float)
     prim_n = d[d["n_janela"]].groupby("dia")["ts_close_ns"].transform("min")
     d["n_primeira"] = False
     d.loc[prim_n.index, "n_primeira"] = d.loc[prim_n.index, "ts_close_ns"] == prim_n
+    # subgrupos (v4.01): espessura da borda FURADA e regime
+    esp_vah = (d["ref_vah"] - d["ref_poc"]) / p.bin_pts
+    esp_val = (d["ref_poc"] - d["ref_val"]) / p.bin_pts
+    d["n_espessura_bins"] = np.where(d["n_lado"] == -1, esp_vah,
+                                     np.where(d["n_lado"] == 1, esp_val, np.nan))
+    d["n_fina"] = d["n_janela"] & (d["n_espessura_bins"] <= ESPESSURA_FINA_BINS)
+    d["n_grossa"] = d["n_janela"] & (d["n_espessura_bins"] > ESPESSURA_FINA_BINS)
+    vwap_dentro = (d["vwap"] >= d["ref_val"]) & (d["vwap"] <= d["ref_vah"])
+    d["n_dentro"] = d["n_janela"] & vwap_dentro.fillna(False)
+    d["n_abriu_dentro"] = d["n_janela"] & d["abriu_dentro_va"].astype(bool)
+    d["n_fina_dentro"] = d["n_fina"] & d["n_dentro"]
 
     d["c_banda"] = z.abs() >= p.z_banda
     d["c_janela"] = d["c_banda"] & janela
@@ -701,6 +729,9 @@ def contar_taxa(curated: Path, symbol: str = "WINFUT", p: ParametrosReplay | Non
                         "lados": (ep[pref + "lado"].value_counts().to_dict()
                                   if (pref + "lado") in ep and len(ep) else {})}
         out["eventos"][ev] = bloco
+    esp = d.loc[d["n_janela"], "n_espessura_bins"].dropna()
+    out["espessura_bins_nos_furos"] = ({q: float(esp.quantile(q)) for q in (0.25, 0.5, 0.75)}
+                                       if len(esp) else {})
     out["_barras"] = d
     return out
 
@@ -718,6 +749,10 @@ def formatar_taxa(r: dict[str, Any]) -> list[str]:
             horas = ", ".join(f"{h}h:{n}" for h, n in x["por_hora"].items())
             ln.append(f"    {c:18s} {x['barras']:7d} {x['episodios']:10d} "
                       f"{x['por_dia']:6.2f}   {horas}")
+    if r.get("espessura_bins_nos_furos"):
+        e = r["espessura_bins_nos_furos"]
+        ln.append(f"  Espessura POC->borda furada (bins de 25): p25 {e[0.25]:.0f}  "
+                  f"p50 {e[0.5]:.0f}  p75 {e[0.75]:.0f}  (fina = <= {ESPESSURA_FINA_BINS})")
     return ln
 
 

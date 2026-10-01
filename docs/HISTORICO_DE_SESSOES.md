@@ -4692,3 +4692,17 @@ de equivalência serviço × simulador no mesmo dia (mesmos sinais, lado e
 barra). Decisor conferido à mão. Suíte 1.272.
 
 **Tags:** entregue-v4.00 (sobre v3.100).
+
+### 2026-10-01g — Subgrupos da rejeição no nível declarados: espessura da borda e regime (v4.01)
+
+Diego, olhando o VAH de 25/09 a 390 pts do POC: "o VAH não ficou muito
+próximo?" — conferido no histograma: VA 70,7%, 9,8% do volume acima do
+VAH em 21 bins, 19,5% abaixo do VAL em 26; a área cresce para o lado
+denso. Borda fina prevê movimento, não direção (é o LVN do Setup C ao
+contrário); a direção vem do regime (negociando dentro da área de
+ontem). Subgrupos `fina`/`grossa` (15 bins), `dentro`, `abriu_dentro`,
+`fina_dentro` na contagem da rejeição no nível; referência por barra
+(`ref_poc/vah/val`, `abriu_dentro_va`) no `preparar`. Só contagem; o EA
+em demo não é tocado. Suíte 1.272.
+
+**Tags:** entregue-v4.01 (sobre v4.00).
