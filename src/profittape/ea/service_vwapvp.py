@@ -37,7 +37,7 @@ from zoneinfo import ZoneInfo
 import structlog
 
 from ..alertas import ea_armou, ea_encerrou
-from .barra_tempo import ConstrutorDeBarraDeTempo
+from .barra_tempo import ConstrutorDeBarraDeTempo, TradeForaDeOrdem
 from .config_vwapvp import EAVwapVpConfig
 from .decisao import Acao, Decisao
 from .execucao import executar
@@ -77,7 +77,9 @@ class EAVwapVpService:
         self.trades = 0
         self.barras = 0
         self.sem_vaga = 0
-        self._ultimo_ts_ns = 0
+        self.fora_de_ordem = 0          # negocios atrasados (ts anterior a barra em formacao)
+        self._ultimo_ts_ns = 0          # ts de EVENTO do ultimo negocio em ordem
+        self._ultimo_recebido_ns = 0    # relogio de PAREDE em que ele chegou
         self._ultimo_preco: float | None = None
         self.operacoes: list[dict[str, Any]] = []     # fechamentos do dia (replay/teste)
         self.carimbo = {"codigo": carimbo or _carimbo_codigo(), "config_sha": config.sha256()}
@@ -91,12 +93,28 @@ class EAVwapVpService:
     def processar_trade_bruto(self, t: Any) -> None:
         self.trades += 1
         ts, price = int(t.ts_ns), float(t.price)
-        self._ultimo_ts_ns = ts
-        self._ultimo_preco = price
+        self._ultimo_recebido_ns = self._relogio()
         # 1. barra: o negocio que abre a barra seguinte FECHA a anterior. A
         #    decisao ve a VWAP ate' o ultimo negocio da barra fechada (este
         #    negocio ainda nao entrou) -- identico ao replay.
-        b = self.construtor.processar_trade(ts, price, int(t.quantidade), int(t.trade_type))
+        try:
+            b = self.construtor.processar_trade(ts, price, int(t.quantidade),
+                                                int(t.trade_type))
+        except TradeForaDeOrdem:
+            # v4.09: negocio que chega com ts anterior a barra em formacao (atraso de
+            # entrega; 01/10: um negocio com 634 s). Antes a excecao subia ao bridge
+            # (log.exception) e deixava _ultimo_ts/_ultimo_preco no valor ANTIGO.
+            # Agora e' contado, avisado (3 primeiros e a cada 100) e IGNORADO inteiro:
+            # nao toca barra, VWAP, ultimo preco nem a avaliacao de alvo/stop.
+            self.fora_de_ordem += 1
+            if self.fora_de_ordem <= 3 or self.fora_de_ordem % 100 == 0:
+                log.warning("ea.vwapvp.trade_fora_de_ordem", nome=self.nome,
+                            atraso_s=round((self._ultimo_recebido_ns - ts) / _NS, 1),
+                            total=self.fora_de_ordem, **self.carimbo)
+            return
+        if ts >= self._ultimo_ts_ns:
+            self._ultimo_ts_ns = ts
+            self._ultimo_preco = price
         if b is not None:
             self._barra(b)
         # 2. pendente de fill: este negocio e' o primeiro apos o fechamento
@@ -124,15 +142,24 @@ class EAVwapVpService:
                       hhmm=hhmm_de(b.ts_open_ns))
 
     def tick(self) -> None:
-        """Saida por tempo/zeragem mesmo sem negocio novo (raro no WIN)."""
+        """Saida por tempo/zeragem mesmo sem negocio novo (raro no WIN).
+
+        v4.09: a referencia de "sem dados" e' o RELOGIO DE PAREDE em que o ultimo
+        negocio CHEGOU, nao o ts do evento. Antes (agora - ts_evento) valia o ATRASO
+        de entrega o tempo todo e o tick comparava relogio de parede com tempo de
+        evento: uma entrega atrasada de L segundos antecipava a saida por tempo em L
+        segundos e a zeragem das 18:00 em L segundos. O tempo de evento e'
+        extrapolado: ts do ultimo negocio + o tempo que passou sem chegar nada."""
         if self.decisor.posicao is None or self._ultimo_preco is None:
             return
         agora = self._relogio()
-        if agora - self._ultimo_ts_ns < 2 * _NS:
+        sem_dados = agora - self._ultimo_recebido_ns
+        if self._ultimo_recebido_ns == 0 or sem_dados < 2 * _NS:
             return
-        av = self.decisor.avaliar_preco(self._ultimo_preco, agora)
+        ts_evento = self._ultimo_ts_ns + sem_dados
+        av = self.decisor.avaliar_preco(self._ultimo_preco, ts_evento)
         if av.acao == Acao.ZERAR and av.motivo in ("tempo", "zeragem"):
-            self._sair(self._ultimo_preco, agora, av.motivo + " (tick)")
+            self._sair(self._ultimo_preco, ts_evento, av.motivo + " (tick)")
 
     # ------------------------------------------------------------ execucao
     def _executar(self, acao: Acao, motivo: str, valor: float,
@@ -189,6 +216,7 @@ class EAVwapVpService:
 
     def _hb(self) -> dict[str, Any]:
         return {"trades": self.trades, "barras": self.barras, "sinais_sem_vaga": self.sem_vaga,
+                "trades_fora_de_ordem": self.fora_de_ordem,
                 "vwap": round(self.vwap.vwap or 0.0, 1), "sd": round(self.vwap.desvio or 0.0, 1),
                 **self.decisor.resumo()}
 

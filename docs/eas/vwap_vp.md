@@ -531,6 +531,38 @@ como contagem de regime (1,2/dia) e o regime não moveu a sonda. Continuar
 declarando eventos sobre os mesmos 46 dias é olhar a amostra pela quinta
 vez; esta ficha para aqui.
 
+## Primeiro pregão de dry_run (01/10) e correção de relógio (v4.09)
+
+    ea.vwapvp.resumo: barras 112  sinais 8  operacoes 1  alvo 1  duracao 386 s
+                      pnl bruto +330  liquido +319  filtrados: fora_da_janela 2, posicionado 1, cooldown 4
+                      codigo entregue-v4.01  config_sha a171e12aa9c0
+
+Contabilidade fecha: 8 = 2 antes das 11h + 1 operado + 1 posicionado + 4
+em cooldown (um único episódio de 6 barras na janela). **n=1: não diz nada
+sobre a regra.** O que o resumo trouxe e importa: `atraso_max_dia_s=634`
+(negócio 55055640, tipo 3, `is_edit=False`, evento 17:22:05 UTC, medido
+17:32:40), `fila_pico_ea=4818`.
+
+Lendo o código por causa disso, dois defeitos MEUS no serviço, latentes
+(não afetaram o resultado de hoje — a posição durou 386 s):
+1. `tick()` comparava relógio de parede com ts de evento: uma entrega
+   atrasada de L s antecipava a saída por TEMPO em L s e a zeragem das
+   18:00 em L s (só age com o bridge sem fila, mas é o caso de um stall a
+   montante). Agora a referência é o relógio de parede em que o último
+   negócio CHEGOU, com o tempo de evento extrapolado.
+2. Negócio atrasado (ts anterior à barra em formação) levantava
+   `TradeForaDeOrdem` até o bridge e deixava `_ultimo_preco`/`_ultimo_ts`
+   no valor antigo. Agora é contado (`trades_fora_de_ordem` no resumo),
+   avisado (3 primeiros e a cada 100) e ignorado inteiro.
+Não muda regra, parâmetro nem o sha do YAML; muda o carimbo de código. O
+processo do record em execução ainda roda o código antigo até a próxima
+subida.
+
+**Mesmo padrão NÃO tocado:** `service_ignicao.tick` passa o relógio de
+parede ao timer de 60 min ("diferença de segundos num timer de 60 min" —
+o pressuposto vale para segundos, não para 634 s). Forward em curso, sha
+congelado: só registrado.
+
 ## Plano forward (operador, 01/10): o pool de seis meses
 
 O operador quer um pool de EAs descorrelacionados em seis meses de

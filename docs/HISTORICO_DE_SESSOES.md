@@ -4840,3 +4840,26 @@ normal, E4 é promoção; raridade custa tempo linearmente (0,2/dia = 25
 em seis meses, não valida). Nada novo sobre os 46 dias.
 
 **Tags:** entregue-v4.08 (sobre v4.07). Suíte 1.289.
+
+### 2026-10-01o — Primeiro pregão do EA vwapvp; relógio do tick e negócio atrasado (v4.09)
+
+Resumo do dia 01/10 (dry_run): 1 operação, alvo, +319 líquido, 8 sinais
+(2 fora da janela, 1 posicionado, 4 cooldown) — n=1. Anomalia no mesmo
+log: `atraso_max_dia_s=634` num negócio (id 55055640, tipo 3,
+`is_edit=False`) às 14:22 BRT, fila de pico 4818. O bridge já documenta
+dois episódios parecidos (22 e 23/09, um negócio atrasado com o fluxo em
+2,3 s; causa: correções, hoje excluídas por `is_edit`); este não é
+correção, e o log não distingue um negócio atrasado de um stall do fluxo.
+
+Lendo o código, dois defeitos meus no `service_vwapvp`: o `tick()` usava
+relógio de parede contra ts de evento (saída por tempo/zeragem
+antecipada em L segundos sob entrega atrasada) e o negócio fora de ordem
+subia como exceção deixando último preço/ts defasados. Corrigidos:
+referência = relógio de parede da última CHEGADA com tempo de evento
+extrapolado; negócio atrasado contado e ignorado. Três testes novos
+(negócio atrasado ignorado inteiro; tick não antecipa com 700 s de
+atraso e sai com 650 s sem dados; tick passivo com dados chegando).
+`service_ignicao.tick` tem o mesmo pressuposto e NÃO foi tocado
+(forward congelado). Suíte 1.292.
+
+**Tags:** entregue-v4.09 (sobre v4.08).

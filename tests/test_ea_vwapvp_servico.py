@@ -165,3 +165,73 @@ def test_registro_inclui_vwap_vp_com_supervisor_e_bridge() -> None:
     assert r.nome == "ea_vwapvp_continuacao" and r.symbol == "WINFUT" and len(d) == 1
     assert type(r.bridge.ea_service).__name__ == "EAVwapVpService"
     assert reg.remover("ea_vwapvp_continuacao")
+
+
+# ----------------------------------------------------------------- v4.09: atraso de entrega
+def _servico(relogio: list[int]):
+    from profittape.ea.service_vwapvp import EAVwapVpService
+
+    return EAVwapVpService(_cfg(), relogio=lambda: relogio[0], carimbo="teste")
+
+
+def _t(ts_ns: int, price: float, qtd: int = 1, tipo: int = 2):
+    from profittape.ea.service import _TradeBruto
+
+    return _TradeBruto(ts_ns, price, qtd, tipo, 0, 0)
+
+
+def test_trade_atrasado_e_contado_e_ignorado_inteiro() -> None:
+    """01/10: um negocio chegou 634 s depois. Ele tem ts anterior a barra em
+    formacao: antes, a excecao subia ao bridge e _ultimo_preco ficava no preco
+    ANTIGO. Agora: contado, nao toca barra, VWAP nem ultimo preco."""
+    relogio = [0]
+    svc = _servico(relogio)
+    t0 = _ts(1200)
+    for dt_s, px in ((0, 100.0), (100, 101.0), (310, 102.0)):    # o 3o abre a barra 2
+        relogio[0] = t0 + (dt_s + 1) * NS
+        svc.processar_trade_bruto(_t(t0 + dt_s * NS, px))
+    vol_antes, preco_antes, ts_antes = svc.vwap.volume, svc._ultimo_preco, svc._ultimo_ts_ns
+    relogio[0] = t0 + 944 * NS                       # chega 634 s depois de ocorrer
+    svc.processar_trade_bruto(_t(t0 + 310 * NS - 634 * NS, 90.0))   # ts da barra 1... anterior
+    svc.processar_trade_bruto(_t(t0 - 400 * NS, 95.0))
+    assert svc.fora_de_ordem >= 1
+    assert svc.vwap.volume == vol_antes
+    assert svc._ultimo_preco == preco_antes and svc._ultimo_ts_ns == ts_antes
+    assert svc._hb()["trades_fora_de_ordem"] == svc.fora_de_ordem
+
+
+def test_tick_nao_antecipa_saida_com_entrega_atrasada() -> None:
+    """Posicao aberta ha' 3000 s de EVENTO; ultimo negocio chegou com 700 s de atraso.
+    Antes: tick usava relogio de parede -> 3703 s >= 3600 -> saia por TEMPO 10 min
+    antes. Agora o tempo de evento e' extrapolado a partir de quando o ultimo
+    negocio CHEGOU: so' sai quando passarem 600 s sem dados."""
+    from profittape.ea.sinal_vwapvp import PosicaoVwapVp
+
+    relogio = [0]
+    svc = _servico(relogio)
+    t0 = _ts(1200)
+    svc.decisor.posicao = PosicaoVwapVp(1, 100.0, t0, 1e9, -1e9, 2.0, 10.0, 20.0, 1100)
+    ev = t0 + 3000 * NS                              # 12:50 de EVENTO
+    relogio[0] = ev + 700 * NS                       # chegou com 700 s de atraso
+    svc.processar_trade_bruto(_t(ev, 100.5))
+    assert svc.decisor.posicao is not None
+    relogio[0] += 3 * NS                             # tick 3 s depois, dados ja' "sem chegar"
+    svc.tick()
+    assert svc.decisor.posicao is not None, "saiu por tempo com 3003 s de evento (< 3600)"
+    relogio[0] = ev + 700 * NS + 650 * NS            # 650 s sem NENHUM dado
+    svc.tick()
+    assert svc.decisor.posicao is None
+    assert svc.operacoes[-1]["motivo"].startswith("tempo")
+
+
+def test_tick_nao_age_enquanto_os_dados_chegam() -> None:
+    from profittape.ea.sinal_vwapvp import PosicaoVwapVp
+
+    relogio = [0]
+    svc = _servico(relogio)
+    t0 = _ts(1200)
+    svc.decisor.posicao = PosicaoVwapVp(1, 100.0, t0, 1e9, -1e9, 2.0, 10.0, 20.0, 1100)
+    ev = t0 + 4000 * NS                              # ja' alem de 3600 s de evento
+    relogio[0] = ev + 1 * NS
+    svc.processar_trade_bruto(_t(ev, 100.5))         # a saida por tempo e' do caminho do negocio
+    assert svc.decisor.posicao is None               # saiu pelo avaliar_preco do proprio trade
