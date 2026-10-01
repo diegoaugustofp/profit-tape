@@ -102,13 +102,27 @@ def test_dump_recusa_agressao_zerada_e_formato_estranho(tmp_path: Path) -> None:
         vn.carregar_dump(curto)
 
 
-def test_gerar_ntsl_niveis_tem_um_if_por_dia_com_referencia(tmp_path: Path) -> None:
+def test_gerar_ntsl_setupb_injeta_niveis_no_arquivo_base(tmp_path: Path) -> None:
+    import re
+
     cur = _curated_dois_dias(tmp_path)
-    texto = vn.gerar_ntsl_niveis(cur, "WINFUT", cache_dir=tmp_path / "cache")
-    assert texto.count("if sData = ") == 1                  # so' 25/09 tem referencia (24/09)
+    texto = vn.gerar_ntsl_setupb(cur, "WINFUT", cache_dir=tmp_path / "cache")
+    assert texto.count("then begin sVAH :=") == 1          # so' 25/09 tem referencia (24/09)
     assert "if sData = 1260925 then begin sVAH := " in texto
     assert "// ref 2026-09-24" in texto
-    assert "sVAHant := sVAH[1];" in texto and "Plot3(sPOC)" in texto
+    base = vn.ARQUIVO_BASE.read_text(encoding="utf-8")
+    assert vn.MARCADOR_INICIO in texto and vn.MARCADOR_FIM in texto
+    assert "PaintBar(clAqua)" in texto and "Plot4(sVAH)" in texto
+    # tudo fora do bloco injetado e' identico ao arquivo-base (sem duplicar formula)
+    assert texto[:texto.index(vn.MARCADOR_INICIO)] == base[:base.index(vn.MARCADOR_INICIO)]
+    assert texto[texto.index(vn.MARCADOR_FIM):] == base[base.index(vn.MARCADOR_FIM):]
+    sem = re.sub(r"//.*", "", texto)
+    assert len(re.findall(r"\bbegin\b", sem)) == len(re.findall(r"\bend\b", sem))
+    # marcador ausente e' erro, nao sucesso silencioso
+    quebrado = tmp_path / "sem_marcador.ntsl"
+    quebrado.write_text(base.replace(vn.MARCADOR_FIM, ""), encoding="utf-8")
+    with pytest.raises(SystemExit, match="marcadores"):
+        vn.gerar_ntsl_setupb(cur, "WINFUT", cache_dir=tmp_path / "cache", base=quebrado)
 
 
 def test_cli_ntsl_equivalencia_e_niveis(tmp_path: Path) -> None:
@@ -124,7 +138,11 @@ def test_cli_ntsl_equivalencia_e_niveis(tmp_path: Path) -> None:
                             "--saida", str(tmp_path / "casadas.csv")])
     assert r.exit_code == 0, r.output
     assert "EXATAS" in r.output and (tmp_path / "casadas.csv").exists()
-    saida = tmp_path / "niveis.ntsl"
-    r = runner.invoke(app, ["vwapvp-ntsl-niveis", "--curated", str(cur), "--saida", str(saida)])
+    saida = tmp_path / "setupb.ntsl"
+    r = runner.invoke(app, ["vwapvp-ntsl-setupb", "--curated", str(cur), "--saida", str(saida)])
     assert r.exit_code == 0, r.output
     assert saida.exists() and "1 dias com referencia" in r.output
+    r = runner.invoke(app, ["ea-vwapvp-taxa", "--curated", str(cur),
+                            "--saida", str(tmp_path / "taxa.csv")])
+    assert r.exit_code == 0, r.output
+    assert "REJEICAO" in r.output and "CONTINUACAO" in r.output and "sem sonda" in r.output

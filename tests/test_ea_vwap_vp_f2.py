@@ -288,3 +288,32 @@ def test_cli_replay_e_conferir_sem_dia(tmp_path: Path) -> None:
     assert "2026-09-24, 2026-09-25" in r.output and "plato" in r.output
     r = runner.invoke(app, ["vwapvp-conferir", "--curated", str(cur), "--dia", "2026-09-26"])
     assert r.exit_code == 1 and "recusado" in r.output and "2026-09-25" in r.output
+
+
+def test_eventos_declarados_rejeicao_e_continuacao_conferidos_a_mao() -> None:
+    """vwap 100, sd 10, z_banda 2 -> banda superior 120, inferior 80.
+    barra A: high 125 close 115 -> toque e fecha dentro (venda); z_close 1,5 -> nao e' banda
+    barra B: high 125 close 122 -> fecha FORA: nao e' rejeicao; e' banda (z 2,2)
+    barra C: low 75 close 85 -> rejeicao de compra
+    barra D: high 125 low 75 close 100 -> toca os dois lados: nao conta
+    barra E: high 118 close 110 -> nada"""
+    p = vr.ParametrosReplay(tolerancia_pts=25, hhmm_inicio=930, hhmm_fim=1700)
+    base = {"ts_close_ns": 0, "dia": "d", "hhmm": 1005, "hhmm_abertura": 1000, "vwap": 100.0,
+            "sd": 10.0, "dist_vah": 0.0, "dist_val": 0.0, "estimador": 0.0, "low": 95.0}
+    rows = [
+        {**base, "high": 125.0, "close": 115.0, "z_vwap": 1.5, "ts_close_ns": 1 * NS},
+        {**base, "high": 125.0, "close": 122.0, "z_vwap": 2.2, "ts_close_ns": 2 * NS,
+         "estimador": 1.0},
+        {**base, "high": 90.0, "low": 75.0, "close": 85.0, "z_vwap": -1.5, "ts_close_ns": 3 * NS,
+         "hhmm_abertura": 1720},
+        {**base, "high": 125.0, "low": 75.0, "close": 100.0, "z_vwap": 0.0, "ts_close_ns": 4 * NS},
+        {**base, "high": 118.0, "close": 110.0, "z_vwap": 1.0, "ts_close_ns": 5 * NS},
+    ]
+    d = vr._marcar_eventos_declarados(pd.DataFrame(rows), p, p80=0.9)
+    assert list(d["r_lado"]) == [-1, 0, 1, 0, 0]
+    assert list(d["r_janela"]) == [True, False, False, False, False]   # C fora da janela
+    assert list(d["r_nivel"]) == [True, False, False, False, False]    # dist 0 <= 25
+    assert list(d["r_janela_abs"]) == [False, False, False, False, False]
+    assert list(d["c_banda"]) == [False, True, False, False, False]
+    assert list(d["c_primeira_do_dia"]) == [False, True, False, False, False]
+

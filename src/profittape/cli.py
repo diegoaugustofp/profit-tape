@@ -1594,25 +1594,58 @@ def vwapvp_ntsl_equivalencia(
         raise typer.Exit(1)
 
 
-@app.command(name="vwapvp-ntsl-niveis")
-def vwapvp_ntsl_niveis(
+@app.command(name="vwapvp-ntsl-setupb")
+def vwapvp_ntsl_setupb(
     curated: Path = typer.Option(Path("data/curated"), "--curated"),
     symbol: str = typer.Option("WINFUT", "--symbol"),
-    saida: Path = typer.Option(Path("ntsl/vwapvp_niveis_gerado.ntsl"), "--saida"),
+    saida: Path = typer.Option(Path("ntsl/vwapvp_setupb_gerado.ntsl"), "--saida"),
+    base: Path | None = typer.Option(
+        None, "--base", help="padrao: ntsl/vwapvp_conferir.ntsl do repo"),
     log_level: str = typer.Option("WARNING", "--log-level"),
 ) -> None:
     """
-    Gera um indicador NTSL com VAH/VAL/POC do ultimo dia completo anterior
-    (a referencia do replay) como constantes por data, para plotar no
-    grafico e VER onde as barras c_nivel cairam.
+    Gera o indicador do Setup B para o grafico: o vwapvp_conferir.ntsl com
+    VAH/VAL/POC do ultimo dia completo anterior injetados por data. Pinta
+    as clausulas acumulativas do replay (amarelo banda, aqua banda+nivel,
+    vermelho Setup B completo, fucsia banda+absorcao sem nivel) e plota
+    VAH/VAL. E' como VER por que o B morreu por taxa.
     """
     configurar(log_level)
-    from .tools.vwapvp_ntsl import gerar_ntsl_niveis
+    from .tools.vwapvp_ntsl import gerar_ntsl_setupb
 
-    texto = gerar_ntsl_niveis(curated, symbol)
+    texto = gerar_ntsl_setupb(curated, symbol, base=base)
     saida.parent.mkdir(parents=True, exist_ok=True)
     saida.write_text(texto, encoding="utf-8")
-    typer.echo(f"gerado -> {saida} ({texto.count('if sData')} dias com referencia)")
+    typer.echo(f"gerado -> {saida} ({texto.count('then begin sVAH :=')} dias com referencia)")
+
+
+@app.command(name="ea-vwapvp-taxa")
+def ea_vwapvp_taxa(
+    curated: Path = typer.Option(Path("data/curated"), "--curated"),
+    symbol: str = typer.Option("WINFUT", "--symbol"),
+    saida: Path | None = typer.Option(None, "--saida", help="CSV das barras marcadas"),
+    log_level: str = typer.Option("WARNING", "--log-level"),
+) -> None:
+    """
+    SO' CONTAGEM dos dois eventos declarados em 01/10 (docs/eas/vwap_vp.md):
+    rejeicao intrabarra (maxima toca +2SD e fecha dentro) e continuacao
+    (fechamento fora da banda). Episodios por dia e por hora, por clausula
+    acumulativa. Nenhuma sonda: e' a linha TAXA das fichas, medida ANTES
+    de escreve-las. Usa o cache do replay (segundos).
+    """
+    configurar(log_level)
+    from .research.vwapvp_replay import contar_taxa, formatar_taxa
+
+    r = contar_taxa(curated, symbol)
+    typer.echo("=" * 72)
+    typer.echo("TAXA DOS EVENTOS DECLARADOS — VWAP banda (M5 WINFUT)")
+    typer.echo("=" * 72)
+    for linha in formatar_taxa(r):
+        typer.echo(linha)
+    if saida is not None and "_barras" in r:
+        saida.parent.mkdir(parents=True, exist_ok=True)
+        r["_barras"].to_csv(saida, index=False)
+        typer.echo(f"\n  barras -> {saida}")
 
 
 @app.command(name="ea-vwapvp-replay")

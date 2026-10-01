@@ -338,9 +338,37 @@ que um perfil liso de 17 M contratos não tem.
 barras M5 batidos no Profit) e o replay com cache — infraestrutura para
 qualquer ficha que use VWAP/bandas/perfil como cláusula ou regime.
 
+## Fichas seguintes — eventos DECLARADOS em 01/10, antes de contar
+
+Aceitos pelo operador: (1) rejeição intrabarra e (2) banda como
+continuação. As cláusulas estão congeladas em
+`EVENTOS_DECLARADOS` (`research/vwapvp_replay.py`) e o
+`ea-vwapvp-taxa` só CONTA (episódios/dia, por hora, por cláusula) —
+nenhuma sonda até cada ficha estar escrita:
+
+    REJEICAO  (venda; compra = espelho; VWAP/SD da barra ao fechar)
+      toque       high >= vwap + 2sd  E  close < vwap + 2sd
+      janela      E 09:30 <= abertura < 17:00
+      nivel       E |close − VAH_ontem| <= 25           (subgrupo de local)
+      janela_abs  janela E estimador >= p80, SEM nivel  (subgrupo de absorção)
+      barra que toca os dois lados não conta
+    CONTINUACAO (a favor do estiramento)
+      banda           |z_close| >= 2   (= c_banda)
+      janela          E 09:30 <= abertura < 17:00
+      primeira_do_dia E primeira barra do dia a satisfazer banda
+
+Para VER no gráfico: `profit-tape vwapvp-ntsl-setupb` gera o indicador
+único com os níveis por data e quatro cores (amarelo banda; aqua
+banda∧nível; vermelho Setup B completo; fúcsia banda∧absorção sem
+nível). As barras aqua são os 9 eventos de 45 pregões — é por isso que
+o B morreu.
+
 ## Próximo passo
 
-Nenhum nesta ficha. Qualquer desenho seguinte é **ficha nova, pré-registrada
+Operador roda `ea-vwapvp-taxa` e cola a tabela; com a TAXA de cada
+cláusula, escreve-se a ficha de 6 linhas de (1) e de (2) — EFEITO e
+CRITERIO declarados ANTES da sonda — e só então a sonda da ficha
+congelada. Nenhum passo nesta ficha. Qualquer desenho seguinte é **ficha nova, pré-registrada
 antes de olhar mais dados**, escolhido entre o que a linha de base mostrou
 ter amostra: a banda ±2SD (3,5/dia; 7/dia a 1,5) — como **continuação**
 (a direção que a linha de base sugere, hipótese invertida à maneira da

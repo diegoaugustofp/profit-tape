@@ -281,57 +281,45 @@ def data_easylanguage(d: dt.date) -> int:
     return (d.year - 1900) * 10000 + d.month * 100 + d.day
 
 
-def gerar_ntsl_niveis(curated: Path, symbol: str = "WINFUT", cache_dir: Path | None = None,
-                      p: ParametrosReplay | None = None) -> str:
-    """Gera um indicador NTSL que plota, em cada dia, VAH/VAL/POC do ultimo
-    dia COMPLETO anterior (a referencia do replay, D2), como constantes por
-    data. O Profit nao marca VAL/VAH; assim o operador VE onde as barras
-    c_nivel do replay caem. So' plota; nao decide nada."""
+MARCADOR_INICIO = "//@@NIVEIS_INICIO@@"
+MARCADOR_FIM = "//@@NIVEIS_FIM@@"
+def _arquivo_base() -> Path:
+    """ntsl/vwapvp_conferir.ntsl na raiz do repositorio (instalacao editavel);
+    cai para o diretorio corrente se o pacote estiver fora do repo."""
+    raiz = Path(__file__).resolve().parents[3] / "ntsl" / "vwapvp_conferir.ntsl"
+    return raiz if raiz.exists() else Path("ntsl/vwapvp_conferir.ntsl")
+
+
+ARQUIVO_BASE = _arquivo_base()
+
+
+def gerar_ntsl_setupb(curated: Path, symbol: str = "WINFUT", cache_dir: Path | None = None,
+                      p: ParametrosReplay | None = None, base: Path | None = None) -> str:
+    """Gera o indicador do Setup B a partir do arquivo-base `vwapvp_conferir.ntsl`:
+    substitui o bloco entre os marcadores por uma linha por dia com VAH/VAL/
+    POC do ultimo dia COMPLETO anterior (a referencia do replay, D2). O
+    resto do arquivo e' o MESMO do conferir -- um unico NTSL, sem duplicar
+    formula. Marcador ausente e' erro, nunca "sucesso sem alterar nada"
+    (skill de engenharia, 3.2)."""
     from ..research.vwapvp_replay import rodar
 
+    base = base or ARQUIVO_BASE
+    texto = base.read_text(encoding="utf-8")
+    if texto.count(MARCADOR_INICIO) != 1 or texto.count(MARCADOR_FIM) != 1:
+        raise SystemExit(f"{base}: marcadores {MARCADOR_INICIO}/{MARCADOR_FIM} ausentes ou "
+                         "duplicados; o gerador nao sabe onde injetar os niveis")
     p = p or ParametrosReplay()
     r = rodar(curated, symbol, None, p, cache_dir)
     if "erro" in r:
         raise SystemExit(r["erro"])
-    linhas = []
+    n_ref = len(r["area_de_valor_dois_algoritmos"])
+    linhas = [f"  // GERADO por `profit-tape vwapvp-ntsl-setupb` em {dt.date.today().isoformat()}: "
+              f"{n_ref} dias com referencia. NAO EDITE: regenere."]
     for x in r["area_de_valor_dois_algoritmos"]:
         d = dt.date.fromisoformat(x["dia"])
-        linhas.append(f"  if sData = {data_easylanguage(d)} then begin sVAH := {x['vah_bin']:.0f}; "
-                      f"sVAL := {x['val_bin']:.0f}; sPOC := {x['poc']:.0f}; end;  "
-                      f"// ref {x['ref']}")
-    corpo = "\n".join(linhas)
-    return f"""//=====================================================================
-// vwapvp_niveis — GERADO por `profit-tape vwapvp-ntsl-niveis` em
-// {dt.date.today().isoformat()}. NAO EDITE A MAO: regenere.
-//
-// Plota, em cada pregao, VAH / VAL / POC (bin de {p.bin_pts:g} pts, area de
-// valor {p.pct:.0%}, bin a bin) do ULTIMO DIA COMPLETO ANTERIOR no tape —
-// exatamente a referencia que o replay `ea-vwapvp-replay` usou para a
-// clausula c_nivel (|close - VAH/VAL| <= tolerancia). Serve para VER no
-// grafico onde as 9 barras c_nivel cairam, e conferir o POC contra o
-// Volume Profile nativo com "negocios de leilao" DESLIGADO.
-//
-// Dias sem referencia (primeiro do curated, dia apos truncado) repetem o
-// nivel anterior para nao deformar a escala.
-//=====================================================================
-
-var
-  sData, sVAH, sVAL, sPOC, sVAHant, sVALant, sPOCant : Float;
-begin
-  sVAHant := sVAH[1];
-  sVALant := sVAL[1];
-  sPOCant := sPOC[1];
-  sData := Date;
-  sVAH := sVAHant;
-  sVAL := sVALant;
-  sPOC := sPOCant;
-{corpo}
-  if sVAH > 0 then
-  begin
-    Plot(sVAH);
-    Plot2(sVAL);
-    Plot3(sPOC);
-  end;
-end;
-"""
-
+        linhas.append(f"  if sData = {data_easylanguage(d)} then begin "
+                      f"sVAH := {x['vah_bin']:.0f}; sVAL := {x['val_bin']:.0f}; "
+                      f"sPOC := {x['poc']:.0f}; end;  // ref {x['ref']}")
+    a = texto.index(MARCADOR_INICIO) + len(MARCADOR_INICIO)
+    b = texto.index(MARCADOR_FIM)
+    return texto[:a] + "\n" + "\n".join(linhas) + "\n  " + texto[b:]

@@ -448,11 +448,24 @@ def escolher_variante(variantes: list[dict[str, Any]], minimo_por_dia: float) ->
     return ok[0][0]
 
 
-def rodar(curated: Path, symbol: str = "WINFUT", dias: list[str] | None = None,
-          p: ParametrosReplay | None = None,
-          cache_dir: Path | None = None) -> dict[str, Any]:
-    from dataclasses import replace
+@dataclass
+class Preparado:
+    """Barras de todos os dias completos com z continuo, estimador, dist a
+    VAH/VAL de ontem, e os percentis do estimador. E' o que `rodar` (Setup
+    B) e `contar_taxa` (eventos declarados em 01/10) compartilham."""
+    barras: pd.DataFrame
+    dias_ok: list[DiaReplay]
+    excluidos: list[dict[str, Any]]
+    percentis: dict[int, float]
+    p80: float
+    p90: float
+    n_dias_ref: int
+    todos: list[dt.date]
 
+
+def preparar(curated: Path, symbol: str = "WINFUT", dias: list[str] | None = None,
+             p: ParametrosReplay | None = None,
+             cache_dir: Path | None = None) -> Preparado | dict[str, Any]:
     p = p or ParametrosReplay()
     todos = dias_disponiveis(curated, symbol)
     escolhidos = [dt.date.fromisoformat(d) for d in dias] if dias else todos
@@ -516,8 +529,24 @@ def rodar(curated: Path, symbol: str = "WINFUT", dias: list[str] | None = None,
         return {"erro": "nenhuma barra com z de absorcao (janela de 50 barras nao fechou)"}
     perc = {q: float(np.percentile(est, q)) for q in (50, 80, 90, 95)}
     p80, p90 = perc[p.percentil_gatilho], perc[p.percentil_subgrupo]
-    n_dias = len(dias_ok)
     n_dias_ref = sum(1 for r in dias_ok if r.ref)
+    return Preparado(barras, dias_ok, excluidos, perc, p80, p90, n_dias_ref, todos)
+
+
+def rodar(curated: Path, symbol: str = "WINFUT", dias: list[str] | None = None,
+          p: ParametrosReplay | None = None,
+          cache_dir: Path | None = None) -> dict[str, Any]:
+    from dataclasses import replace
+
+    p = p or ParametrosReplay()
+    prep = preparar(curated, symbol, dias, p, cache_dir)
+    if isinstance(prep, dict):
+        return prep
+    barras, dias_ok, excluidos = prep.barras, prep.dias_ok, prep.excluidos
+    perc, p80, p90, n_dias_ref = prep.percentis, prep.p80, prep.p90, prep.n_dias_ref
+    n_dias = len(dias_ok)
+    est = barras["estimador"][(barras["z_vwap"].astype("float64").fillna(0.0) != 0)
+                              & barras["estimador"].notna()]
 
     # 2. variantes declaradas: so' TAXA. A primeira e' a principal (2.0, 25).
     variantes = [_avaliar_variante(barras, replace(p, z_banda=z, tolerancia_pts=tol),
@@ -566,6 +595,102 @@ def rodar(curated: Path, symbol: str = "WINFUT", dias: list[str] | None = None,
         "_episodios": principal["_episodios"],
         "_variantes": variantes,
     }
+
+
+# ------------------------------------------------- taxa dos eventos declarados
+EVENTOS_DECLARADOS = {
+    # 01/10/2026, DECLARADOS ANTES DE CONTAR, SEM SONDA. Clausulas acumulativas.
+    "rejeicao": ("toque", "janela", "nivel", "janela_abs"),
+    "continuacao": ("banda", "janela", "primeira_do_dia"),
+}
+
+
+def _marcar_eventos_declarados(d: pd.DataFrame, p: ParametrosReplay, p80: float) -> pd.DataFrame:
+    """
+    REJEICAO INTRABARRA (venda; compra e' o espelho), VWAP/SD da barra ao
+    FECHAR (declarado: a banda no instante da maxima e' um pouco diferente):
+        toque   : high >= vwap + z_banda*sd  E  close < vwap + z_banda*sd
+        janela  : toque E 09:30 <= hhmm_abertura < 17:00
+        nivel   : janela E |close - VAH_ontem| <= tolerancia (VAL para compra)
+        janela_abs: janela E estimador >= p80 (sem nivel)
+    Barra que toca os dois lados (so' em barra enorme) nao conta.
+
+    CONTINUACAO (a favor do estiramento):
+        banda   : |z_close| >= z_banda   (= c_banda do replay)
+        janela  : banda E 09:30 <= hhmm_abertura < 17:00
+        primeira_do_dia: janela E primeira barra do dia a satisfazer banda
+    """
+    d = d.copy()
+    z = d["z_vwap"].astype("float64")
+    vw, sd = d["vwap"].astype("float64"), d["sd"].astype("float64")
+    sup, inf = vw + p.z_banda * sd, vw - p.z_banda * sd
+    ok = sd > 0
+    toque_v = ok & (d["high"] >= sup) & (d["close"] < sup)
+    toque_c = ok & (d["low"] <= inf) & (d["close"] > inf)
+    ambos = toque_v & toque_c
+    d["r_lado"] = np.where(toque_v & ~ambos, -1, np.where(toque_c & ~ambos, 1, 0))
+    d["r_toque"] = d["r_lado"] != 0
+    janela = (d["hhmm_abertura"].astype(int) >= p.hhmm_inicio) & \
+             (d["hhmm_abertura"].astype(int) < p.hhmm_fim)
+    d["r_janela"] = d["r_toque"] & janela
+    perto = np.where(d["r_lado"] == -1, d["dist_vah"].abs() <= p.tolerancia_pts,
+                     np.where(d["r_lado"] == 1, d["dist_val"].abs() <= p.tolerancia_pts, False))
+    d["r_nivel"] = d["r_janela"] & perto & d["dist_vah"].notna()
+    d["r_janela_abs"] = d["r_janela"] & (d["estimador"] >= p80)
+
+    d["c_banda"] = z.abs() >= p.z_banda
+    d["c_janela"] = d["c_banda"] & janela
+    primeira = d[d["c_janela"]].groupby("dia")["ts_close_ns"].transform("min")
+    d["c_primeira_do_dia"] = False
+    d.loc[primeira.index, "c_primeira_do_dia"] = d.loc[primeira.index, "ts_close_ns"] == primeira
+    return d
+
+
+def contar_taxa(curated: Path, symbol: str = "WINFUT", p: ParametrosReplay | None = None,
+                cache_dir: Path | None = None) -> dict[str, Any]:
+    """So' CONTAGEM dos eventos declarados em EVENTOS_DECLARADOS: episodios
+    (cooldown) por dia e por hora, por clausula. Nenhuma sonda, nenhum
+    resultado. E' a linha TAXA das fichas de 'rejeicao' e 'continuacao'."""
+    p = p or ParametrosReplay()
+    prep = preparar(curated, symbol, None, p, cache_dir)
+    if isinstance(prep, dict):
+        return prep
+    d = _marcar_eventos_declarados(prep.barras, p, prep.p80)
+    out: dict[str, Any] = {"parametros": asdict(p), "dias": len(prep.dias_ok),
+                           "dias_com_referencia": prep.n_dias_ref,
+                           "dias_excluidos": prep.excluidos,
+                           "p80_congelado": prep.p80, "eventos": {}}
+    for ev, clausulas in EVENTOS_DECLARADOS.items():
+        pref = "r_" if ev == "rejeicao" else "c_"
+        bloco: dict[str, Any] = {}
+        for c in clausulas:
+            col = pref + c
+            ep = _episodios(d, col, p.cooldown_s)
+            bloco[c] = {"barras": int(d[col].sum()), "episodios": len(ep),
+                        "por_dia": (len(ep) / prep.n_dias_ref if prep.n_dias_ref else 0.0),
+                        "por_hora": ((ep["hhmm_abertura"] // 100).value_counts().sort_index()
+                                     .to_dict() if len(ep) else {}),
+                        "lados": (ep[pref + "lado"].value_counts().to_dict()
+                                  if (pref + "lado") in ep and len(ep) else {})}
+        out["eventos"][ev] = bloco
+    out["_barras"] = d
+    return out
+
+
+def formatar_taxa(r: dict[str, Any]) -> list[str]:
+    if "erro" in r:
+        return [f"  {r['erro']}"]
+    ln = [f"  {r['dias']} dias completos, {r['dias_com_referencia']} com referencia; "
+          f"p80 do estimador = {r['p80_congelado']:.3f}; cooldown "
+          f"{r['parametros']['cooldown_s'] // 60} min; SO' CONTAGEM, sem sonda"]
+    for ev, bloco in r["eventos"].items():
+        ln.append(f"  {ev.upper()} (clausulas acumulativas):")
+        ln.append("    clausula            barras  episodios   /dia   por hora")
+        for c, x in bloco.items():
+            horas = ", ".join(f"{h}h:{n}" for h, n in x["por_hora"].items())
+            ln.append(f"    {c:18s} {x['barras']:7d} {x['episodios']:10d} "
+                      f"{x['por_dia']:6.2f}   {horas}")
+    return ln
 
 
 # ---------------------------------------------------------------- console

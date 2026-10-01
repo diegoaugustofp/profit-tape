@@ -38,6 +38,23 @@ tempo. Foi por isso que o scalp de Bollinger parou em F4.
 execucao (a DLL sabe mandar ordem?), nao a estrategia. A infraestrutura
 E0-E4 esta' pronta e serve a QUALQUER estrategia que chegue em F5.
 
+**Portao entre F1 e F2: conferencia NTSL (desde 2026-10-01).** Nenhuma
+serie que uma ficha vai usar passa de F1 sem (a) um indicador NTSL que a
+loga por barra no grafico do Profit, (b) um comparador Python que a
+RECALCULA das proprias barras e MEDE a diferenca por coluna, e (c) a
+tabela dessa medicao colada na ficha, com as divergencias de DADO
+listadas por nome (call de fechamento, rolagem, dias truncados no tape).
+Formula igual tem que dar ~1e-8; o que nao der e' defeito, nao
+"aproximacao". Motivo: no VWAP+VP (set/2026) tudo que foi pego — leilao
+no POC, mecanismo da absorcao, dias truncados, agressao do Profit sem
+RLP — foi pego contra o grafico, nunca por teste; e a conferencia so'
+veio DEPOIS de duas rodadas de replay. O circuito e' o do
+`absorcao_dir.ntsl` + `ntsl-equivalencia` (2,4e-08) e do
+`vwapvp_conferir.ntsl` + `vwapvp-ntsl-equivalencia` (113/113). Para o
+operador, foi onde ele "conseguiu ver e sintetizar": a tela e' a
+linguagem comum, e a regra existe para que ela chegue antes do numero,
+nao depois.
+
 ---
 
 ## 1. Onde cada EA esta' HOJE (revisado 2026-09-24)

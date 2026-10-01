@@ -67,8 +67,9 @@ input
   Janela(50);               // barras do z. Igual ao replay (janela_z).
   HoraCallFechamento(1820); // barra que abre >= isto: absorcao = 0 (ver bloco)
   LimiarZ(2.0);             // |z_vwap| por barra para pintar (visual)
-  LimiarAbs(0.916);         // estimador >= isto pinta vermelho. E' o p80
-                            // da 2a rodada, DDOF populacional; so' visual.
+  LimiarAbs(0.916);         // estimador >= isto. E' o p80 da 2a rodada
+                            // (populacional, ~1% diferente do atual); so' visual.
+  Tolerancia(25);           // |Close - VAH/VAL de ontem| <= isto = c_nivel
   LogAtivo(1);
   LogSomenteSinal(0);       // 1 = loga so' barras pintadas
   LogDataInicio(0);         // 0 = sem filtro
@@ -87,8 +88,11 @@ var
   sMediaC, sDesvioC, sZComp                  : Float;
   sMediaV, sDesvioV, sZVend                  : Float;
   sEstimador, sMedTmp                        : Float;
+  sData, sVAH, sVAL, sPOC                    : Float;
+  sVAHant, sVALant, sPOCant, sDist           : Float;
   nIndex                                     : Integer;
   bNovoDia, bPintou, bNaJanela, bCalcular    : Boolean;
+  bBanda, bNivel, bAbs                       : Boolean;
 begin
   //-------------------------------------------------------------------
   // Acessos posicionais: TODOS aqui, em atribuicao simples.
@@ -97,6 +101,9 @@ begin
   sPVant   := sPV[1];
   sVant    := sV[1];
   sPPVant  := sPPV[1];
+  sVAHant  := sVAH[1];
+  sVALant  := sVAL[1];
+  sPOCant  := sPOC[1];
 
   bNovoDia := (Date <> sDataAnt);
   bCalcular := (CalcDataInicio = 0) or (Date >= CalcDataInicio);
@@ -110,9 +117,12 @@ begin
     sImbalance := 0; sDeslocNorm := 0;
     sAbsComp := 0; sAbsVend := 0;
     sZComp := 0; sZVend := 0; sEstimador := 0;
+    sVAH := 0; sVAL := 0; sPOC := 0;
     Plot(Close);
     Plot2(Close);
     Plot3(Close);
+    Plot4(Close);
+    Plot5(Close);
   end
   else
   begin
@@ -245,19 +255,75 @@ begin
     sEstimador := sZVend;
 
   //-------------------------------------------------------------------
-  // Plot: VWAP por barra e bandas de LimiarZ desvios, no painel do preco.
+  // NIVEIS DE ONTEM (VAH / VAL / POC do ultimo dia COMPLETO anterior no
+  // tape, bin 25, area de valor 70% bin a bin): a referencia da clausula
+  // c_nivel do replay. Neste arquivo-base nao ha' datas: sVAH fica 0 e a
+  // clausula nunca e' verdadeira. O comando `profit-tape vwapvp-ntsl-setupb`
+  // GERA ntsl/vwapvp_setupb_gerado.ntsl substituindo o bloco entre os
+  // marcadores por uma atribuicao de sVAH/sVAL/sPOC por data (1AnoMesDia).
+  // Dia sem referencia repete o nivel anterior (nao deforma a escala).
+  //-------------------------------------------------------------------
+  sData := Date;
+  sVAH := sVAHant;
+  sVAL := sVALant;
+  sPOC := sPOCant;
+  //@@NIVEIS_INICIO@@
+  //@@NIVEIS_FIM@@
+
+  //-------------------------------------------------------------------
+  // Plot: VWAP por barra e bandas de LimiarZ desvios, no painel do preco;
+  // VAH e VAL de ontem quando existem (senao seguem o Close).
   //-------------------------------------------------------------------
   Plot(sVwapBar);
   Plot2(sVwapBar + LimiarZ * sSdBar);
   Plot3(sVwapBar - LimiarZ * sSdBar);
+  if sVAH > 0 then
+  begin
+    Plot4(sVAH);
+    Plot5(sVAL);
+  end
+  else
+  begin
+    Plot4(Close);
+    Plot5(Close);
+  end;
+
+  //-------------------------------------------------------------------
+  // AS QUATRO CORES — as clausulas do Setup B, acumulativas, como no
+  // replay (`ea-vwapvp-replay`): banda -> nivel -> absorcao.
+  //
+  //   clYellow  so' banda           (|z| >= LimiarZ)              ~3,5/dia
+  //   clAqua    banda E nivel       (a Tolerancia do VAH/VAL)      0,20/dia
+  //   clRed     banda E nivel E absorcao >= LimiarAbs  = SETUP B   0,13/dia
+  //   clFucsia  banda E absorcao, SEM nivel (o que sobraria sem o VP)
+  //
+  // E' isto que o replay contou e que matou o B por taxa: amarelo
+  // acontece todo dia; aqua quase nunca. Olhar as barras aqua e'
+  // olhar os 9 eventos de 45 pregoes.
+  //-------------------------------------------------------------------
+  bBanda := (sZBar >= LimiarZ) or (sZBar <= 0 - LimiarZ);
+  bAbs   := sEstimador >= LimiarAbs;
+  bNivel := False;
+  if bBanda and (sVAH > 0) then
+  begin
+    if sZBar > 0 then
+      sDist := Close - sVAH
+    else
+      sDist := Close - sVAL;
+    bNivel := (sDist <= Tolerancia) and (sDist >= 0 - Tolerancia);
+  end;
 
   bPintou := False;
-  if (sZBar >= LimiarZ) or (sZBar <= 0 - LimiarZ) then
+  if bBanda then
   begin
-    if sEstimador >= LimiarAbs then
-      PaintBar(clRed)        // banda E absorcao do lado exausto
+    if bNivel and bAbs then
+      PaintBar(clRed)
+    else if bNivel then
+      PaintBar(clAqua)
+    else if bAbs then
+      PaintBar(clFucsia)
     else
-      PaintBar(clYellow);    // so' banda
+      PaintBar(clYellow);
     bPintou := True;
   end;
 

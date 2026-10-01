@@ -4581,3 +4581,28 @@ trocam de veredicto a |z| = 2. Toda coluna do replay tem agora um número
 ao lado. Ficha atualizada. Nenhuma ficha nova aberta.
 
 **Tags:** entregue-v3.96 (sobre v3.95). Suíte 1.261.
+
+### 2026-10-01c — Disciplina: portão NTSL entre F1 e F2; Setup B visível; eventos (1) e (2) declarados (v3.97)
+
+Diego: "precisamos incluir a validação com o NTSL na disciplina o quanto
+antes — foi onde consegui ver e sintetizar"; e "não consegui ver no
+gráfico o que o Setup B reproduziu nem por que foi cancelado".
+
+- **Portão F1→F2** escrito em `EA_ARQUITETURA.md §0`: série de ficha só
+  passa de F1 com indicador NTSL que a loga, comparador que recalcula e
+  mede, e a tabela na ficha com as divergências de dado nomeadas. As
+  skills vivem no Project (não no repo): bloco para colar na
+  `profit-tape-disciplina-forward` §3 entregue no INCREMENTO.
+- **Setup B visível:** a cláusula de nível estava num indicador separado
+  do de banda/absorção — os dois nunca se cruzavam na tela. Agora
+  `vwapvp_conferir.ntsl` tem marcadores `//@@NIVEIS_*@@`, plota VAH/VAL e
+  pinta as cláusulas acumulativas em quatro cores; `vwapvp-ntsl-setupb`
+  gera o arquivo com os níveis por data injetados (marcador ausente é
+  erro, não sucesso silencioso; tudo fora do bloco é idêntico ao base —
+  testado). Substitui `vwapvp-ntsl-niveis`.
+- **Eventos (1) rejeição intrabarra e (2) continuação declarados** em
+  `EVENTOS_DECLARADOS` antes de contar; `ea-vwapvp-taxa` só conta
+  (`preparar` extraído de `rodar` sem mudar comportamento). Conferido à
+  mão em 5 barras construídas. Suíte 1.262.
+
+**Tags:** entregue-v3.97 (sobre v3.96).
