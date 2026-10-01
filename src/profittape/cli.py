@@ -1608,7 +1608,9 @@ def vwapvp_ntsl_setupb(
     VAH/VAL/POC do ultimo dia completo anterior injetados por data. Pinta
     as clausulas acumulativas do replay (amarelo banda, aqua banda+nivel,
     vermelho Setup B completo, fucsia banda+absorcao sem nivel) e plota
-    VAH/VAL. E' como VER por que o B morreu por taxa.
+    VAH/VAL. E' como VER por que o B morreu por taxa. Os dias apos o ultimo
+    curado (hoje) recebem os niveis do ultimo dia completo: REGENERE depois
+    do compact de cada noite, senao o grafico de hoje mostra ontem errado.
     """
     configurar(log_level)
     from .tools.vwapvp_ntsl import gerar_ntsl_setupb

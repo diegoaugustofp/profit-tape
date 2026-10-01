@@ -4779,3 +4779,18 @@ Decisão: observar alguns pregões antes; proposta registrada como backlog
 em `OPERACAO.md` (vigia contar `alertas.envio_falhou`/`ea_fila_cheia` e
 avisar uma vez). Sem código.
 
+
+### 2026-10-01k — Gerador do Setup B: hoje mostrava os níveis de anteontem (v4.05)
+
+Pergunta do Diego ("tem dados para o VAH/VAL de 30/09?") expôs: o
+`vwapvp_setupb_gerado.ntsl` só tinha linhas para dias presentes no
+curated; para o dia seguinte (hoje) o carry `sVAH := sVAH[1]` repetia a
+linha do último dia curado — cuja referência é o dia ANTERIOR a ele. Em
+01/10 o gráfico mostrava os níveis de 29/09, não de 30/09. O EA não usa
+VP: nada muda nele. Gerador passa a emitir 5 dias após o último curado
+com o perfil do último dia completo; o comando avisa para regenerar após
+o compact de cada noite. (Esta correção tinha saído como "v4.04" numa
+geração paralela; renumerada para v4.05 sobre a v4.04 dos alertas
+Telegram.) Suíte 1.287.
+
+**Tags:** entregue-v4.05 (sobre v4.04).

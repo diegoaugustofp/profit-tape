@@ -107,9 +107,13 @@ def test_gerar_ntsl_setupb_injeta_niveis_no_arquivo_base(tmp_path: Path) -> None
 
     cur = _curated_dois_dias(tmp_path)
     texto = vn.gerar_ntsl_setupb(cur, "WINFUT", cache_dir=tmp_path / "cache")
-    assert texto.count("then begin sVAH :=") == 1          # so' 25/09 tem referencia (24/09)
+    # 25/09 (ref 24/09) + 5 dias apos o ultimo curado (26/09..30/09, ref 25/09)
+    assert texto.count("then begin sVAH :=") == 6
     assert "if sData = 1260925 then begin sVAH := " in texto
     assert "// ref 2026-09-24" in texto
+    assert "if sData = 1260926 then begin" in texto and "if sData = 1260930 then begin" in texto
+    assert texto.count("// ref 2026-09-25 (dia apos o ultimo curado") == 5
+    assert "if sData = 1261001" not in texto
     base = vn.ARQUIVO_BASE.read_text(encoding="utf-8")
     assert vn.MARCADOR_INICIO in texto and vn.MARCADOR_FIM in texto
     assert "PaintBar(clAqua)" in texto
@@ -147,7 +151,7 @@ def test_cli_ntsl_equivalencia_e_niveis(tmp_path: Path) -> None:
     saida = tmp_path / "setupb.ntsl"
     r = runner.invoke(app, ["vwapvp-ntsl-setupb", "--curated", str(cur), "--saida", str(saida)])
     assert r.exit_code == 0, r.output
-    assert saida.exists() and "1 dias com referencia" in r.output
+    assert saida.exists() and "6 dias com referencia" in r.output
     r = runner.invoke(app, ["ea-vwapvp-taxa", "--curated", str(cur),
                             "--saida", str(tmp_path / "taxa.csv")])
     assert r.exit_code == 0, r.output

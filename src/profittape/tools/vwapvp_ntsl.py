@@ -35,6 +35,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from ..ea.perfil_preco import perfil_do_dia
 from ..research.vwapvp_replay import ParametrosReplay, ZRolante, _barras_do_dia
 from .ntsl_equivalencia import _data_easylanguage, _numero_ptbr
 
@@ -305,7 +306,7 @@ def gerar_ntsl_setupb(curated: Path, symbol: str = "WINFUT", cache_dir: Path | N
     resto do arquivo e' o MESMO do conferir -- um unico NTSL, sem duplicar
     formula. Marcador ausente e' erro, nunca "sucesso sem alterar nada"
     (skill de engenharia, 3.2)."""
-    from ..research.vwapvp_replay import rodar
+    from ..research.vwapvp_replay import preparar, rodar
 
     base = base or ARQUIVO_BASE
     texto = base.read_text(encoding="utf-8")
@@ -317,6 +318,8 @@ def gerar_ntsl_setupb(curated: Path, symbol: str = "WINFUT", cache_dir: Path | N
     r = rodar(curated, symbol, None, p, cache_dir)
     if "erro" in r:
         raise SystemExit(r["erro"])
+    prep = preparar(curated, symbol, None, p, cache_dir)
+    assert not isinstance(prep, dict)
     n_ref = len(r["area_de_valor_dois_algoritmos"])
     linhas = [f"  // GERADO por `profit-tape vwapvp-ntsl-setupb` em {dt.date.today().isoformat()}: "
               f"{n_ref} dias com referencia. NAO EDITE: regenere."]
@@ -325,6 +328,23 @@ def gerar_ntsl_setupb(curated: Path, symbol: str = "WINFUT", cache_dir: Path | N
         linhas.append(f"  if sData = {data_easylanguage(d)} then begin "
                       f"sVAH := {x['vah_bin']:.0f}; sVAL := {x['val_bin']:.0f}; "
                       f"sPOC := {x['poc']:.0f}; end;  // ref {x['ref']}")
+    # v4.05: os dias DEPOIS do ultimo curado (hoje, amanha...) usam o perfil do
+    # ultimo dia completo -- sem isto o grafico de hoje mostrava os niveis de
+    # ANTEONTEM (o carry `sVAH := sVAH[1]` repetia a linha do ultimo dia
+    # curado, cuja referencia e' o dia anterior a ele). Pego em 01/10.
+    ultimo = max((dt.date.fromisoformat(x.dia) for x in prep.dias_ok if x.completo),
+                 default=None)
+    if ultimo is not None:
+        perfil = perfil_do_dia(curated, symbol, ultimo, p.bin_pts, None, cache_dir)
+        va = perfil.area_de_valor(p.pct, "bin")
+        poc = perfil.poc()
+        if va is not None and poc is not None:
+            for k in range(1, 6):
+                d = ultimo + dt.timedelta(days=k)
+                linhas.append(f"  if sData = {data_easylanguage(d)} then begin "
+                              f"sVAH := {va[1]:.0f}; sVAL := {va[0]:.0f}; "
+                              f"sPOC := {poc:.0f}; end;  // ref {ultimo} (dia apos o "
+                              "ultimo curado: REGENERE apos o compact de cada noite)")
     a = texto.index(MARCADOR_INICIO) + len(MARCADOR_INICIO)
     b = texto.index(MARCADOR_FIM)
     gerado = texto[:a] + "\n" + "\n".join(linhas) + "\n  " + texto[b:]
