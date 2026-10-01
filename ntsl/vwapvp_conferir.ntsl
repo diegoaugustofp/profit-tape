@@ -121,8 +121,7 @@ begin
     Plot(Close);
     Plot2(Close);
     Plot3(Close);
-    Plot4(Close);
-    Plot5(Close);
+    //@@PLOT_NIVEIS_SEM_CALCULO@@
   end
   else
   begin
@@ -271,22 +270,15 @@ begin
   //@@NIVEIS_FIM@@
 
   //-------------------------------------------------------------------
-  // Plot: VWAP por barra e bandas de LimiarZ desvios, no painel do preco;
-  // VAH e VAL de ontem quando existem (senao seguem o Close).
+  // Plot: VWAP por barra e bandas de LimiarZ desvios, no painel do preco.
+  // VAH/VAL de ontem (Plot4/Plot5) existem SO' no arquivo gerado pelo
+  // `vwapvp-ntsl-setupb`: neste base sVAH e' sempre 0 e plotar algo no
+  // lugar desenhava uma linha colada no Close (01/10).
   //-------------------------------------------------------------------
   Plot(sVwapBar);
   Plot2(sVwapBar + LimiarZ * sSdBar);
   Plot3(sVwapBar - LimiarZ * sSdBar);
-  if sVAH > 0 then
-  begin
-    Plot4(sVAH);
-    Plot5(sVAL);
-  end
-  else
-  begin
-    Plot4(Close);
-    Plot5(Close);
-  end;
+  //@@PLOT_NIVEIS@@
 
   //-------------------------------------------------------------------
   // AS QUATRO CORES — as clausulas do Setup B, acumulativas, como no

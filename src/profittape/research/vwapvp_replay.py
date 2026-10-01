@@ -602,6 +602,11 @@ EVENTOS_DECLARADOS = {
     # 01/10/2026, DECLARADOS ANTES DE CONTAR, SEM SONDA. Clausulas acumulativas.
     "rejeicao": ("toque", "janela", "nivel", "janela_abs"),
     "continuacao": ("banda", "janela", "primeira_do_dia"),
+    # 01/10 (tarde), depois de olhar 28/09 no grafico com os niveis: o preco
+    # interagiu 6x com o VAH de ontem pela MAXIMA (furou e fechou abaixo) e o
+    # Setup B contou 0 porque le o fechamento a 25 pts. Evento visto, nao
+    # medido: contagem abaixo, fast-track.
+    "rejeicao_nivel": ("fura", "janela", "esticado", "primeira"),
 }
 
 
@@ -615,6 +620,11 @@ def _marcar_eventos_declarados(d: pd.DataFrame, p: ParametrosReplay, p80: float)
         janela_abs: janela E estimador >= p80 (sem nivel)
     Barra que toca os dois lados (so' em barra enorme) nao conta.
 
+    REJEICAO_NIVEL (venda; compra e' o espelho no VAL de ontem):
+        fura     : high >= VAH_ontem  E  close < VAH_ontem
+        janela   : fura E 09:30 <= abertura < 17:00
+        esticado : janela E z_close >= 1,5 (do lado do furo)
+        primeira : janela E primeiro furo do dia
     CONTINUACAO (a favor do estiramento):
         banda   : |z_close| >= z_banda   (= c_banda do replay)
         janela  : banda E 09:30 <= hhmm_abertura < 17:00
@@ -637,6 +647,21 @@ def _marcar_eventos_declarados(d: pd.DataFrame, p: ParametrosReplay, p80: float)
                      np.where(d["r_lado"] == 1, d["dist_val"].abs() <= p.tolerancia_pts, False))
     d["r_nivel"] = d["r_janela"] & perto & d["dist_vah"].notna()
     d["r_janela_abs"] = d["r_janela"] & (d["estimador"] >= p80)
+
+    # REJEICAO NO NIVEL DE ONTEM (venda: fura o VAH pela maxima e fecha abaixo;
+    # compra: espelho no VAL). "esticado" = z_close >= 1,5 do lado do furo.
+    vah = d["close"] - d["dist_vah"]           # recupera o nivel absoluto
+    val = d["close"] - d["dist_val"]
+    tem = d["dist_vah"].notna()
+    fura_v = tem & (d["high"] >= vah) & (d["close"] < vah)
+    fura_c = tem & (d["low"] <= val) & (d["close"] > val)
+    d["n_lado"] = np.where(fura_v & ~fura_c, -1, np.where(fura_c & ~fura_v, 1, 0))
+    d["n_fura"] = d["n_lado"] != 0
+    d["n_janela"] = d["n_fura"] & janela
+    d["n_esticado"] = d["n_janela"] & (z * d["n_lado"] * -1 >= 1.5)
+    prim_n = d[d["n_janela"]].groupby("dia")["ts_close_ns"].transform("min")
+    d["n_primeira"] = False
+    d.loc[prim_n.index, "n_primeira"] = d.loc[prim_n.index, "ts_close_ns"] == prim_n
 
     d["c_banda"] = z.abs() >= p.z_banda
     d["c_janela"] = d["c_banda"] & janela
@@ -661,7 +686,7 @@ def contar_taxa(curated: Path, symbol: str = "WINFUT", p: ParametrosReplay | Non
                            "dias_excluidos": prep.excluidos,
                            "p80_congelado": prep.p80, "eventos": {}}
     for ev, clausulas in EVENTOS_DECLARADOS.items():
-        pref = "r_" if ev == "rejeicao" else "c_"
+        pref = {"rejeicao": "r_", "continuacao": "c_", "rejeicao_nivel": "n_"}[ev]
         bloco: dict[str, Any] = {}
         for c in clausulas:
             col = pref + c

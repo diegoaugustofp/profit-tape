@@ -25,3 +25,5 @@ _inprogress_orfaos/
 config/ea.yaml
 *.inprogress
 src/profittape/_version.py
+# saida de `profit-tape vwapvp-ntsl-setupb`: depende do curated local, nunca versionar
+ntsl/*_gerado.ntsl

@@ -283,6 +283,10 @@ def data_easylanguage(d: dt.date) -> int:
 
 MARCADOR_INICIO = "//@@NIVEIS_INICIO@@"
 MARCADOR_FIM = "//@@NIVEIS_FIM@@"
+MARCADOR_PLOT = "//@@PLOT_NIVEIS@@"
+MARCADOR_PLOT_SEM_CALCULO = "//@@PLOT_NIVEIS_SEM_CALCULO@@"
+_PLOT_NIVEIS = "Plot4(sVAH);\n  Plot5(sVAL);"
+_PLOT_NIVEIS_SEM_CALCULO = "Plot4(Close);\n    Plot5(Close);"
 def _arquivo_base() -> Path:
     """ntsl/vwapvp_conferir.ntsl na raiz do repositorio (instalacao editavel);
     cai para o diretorio corrente se o pacote estiver fora do repo."""
@@ -305,9 +309,10 @@ def gerar_ntsl_setupb(curated: Path, symbol: str = "WINFUT", cache_dir: Path | N
 
     base = base or ARQUIVO_BASE
     texto = base.read_text(encoding="utf-8")
-    if texto.count(MARCADOR_INICIO) != 1 or texto.count(MARCADOR_FIM) != 1:
-        raise SystemExit(f"{base}: marcadores {MARCADOR_INICIO}/{MARCADOR_FIM} ausentes ou "
-                         "duplicados; o gerador nao sabe onde injetar os niveis")
+    for m in (MARCADOR_INICIO, MARCADOR_FIM, MARCADOR_PLOT, MARCADOR_PLOT_SEM_CALCULO):
+        if texto.count(m) != 1:
+            raise SystemExit(f"{base}: marcador {m} ausente ou duplicado; o gerador nao "
+                             "sabe onde injetar os niveis")
     p = p or ParametrosReplay()
     r = rodar(curated, symbol, None, p, cache_dir)
     if "erro" in r:
@@ -322,4 +327,8 @@ def gerar_ntsl_setupb(curated: Path, symbol: str = "WINFUT", cache_dir: Path | N
                       f"sPOC := {x['poc']:.0f}; end;  // ref {x['ref']}")
     a = texto.index(MARCADOR_INICIO) + len(MARCADOR_INICIO)
     b = texto.index(MARCADOR_FIM)
-    return texto[:a] + "\n" + "\n".join(linhas) + "\n  " + texto[b:]
+    gerado = texto[:a] + "\n" + "\n".join(linhas) + "\n  " + texto[b:]
+    # os plots dos niveis so' existem no gerado (no base desenhariam o Close)
+    gerado = gerado.replace(MARCADOR_PLOT, _PLOT_NIVEIS)
+    gerado = gerado.replace(MARCADOR_PLOT_SEM_CALCULO, _PLOT_NIVEIS_SEM_CALCULO)
+    return gerado

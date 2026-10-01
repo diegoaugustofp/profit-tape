@@ -317,3 +317,30 @@ def test_eventos_declarados_rejeicao_e_continuacao_conferidos_a_mao() -> None:
     assert list(d["c_banda"]) == [False, True, False, False, False]
     assert list(d["c_primeira_do_dia"]) == [False, True, False, False, False]
 
+
+
+def test_rejeicao_no_nivel_de_ontem_conferida_com_28_09() -> None:
+    """VAH de ontem 184900 (25/09). Barras reais de 28/09 (dump do Profit):
+    11:35 high 184925 close 184865 z 2,36 -> fura, esticado;
+    13:25 high 185195 close 184915 -> fechou ACIMA: nao e' rejeicao;
+    14:10 high 185150 close 184840 z 1,61 -> fura, esticado;
+    11:40 high 184980 close 184575 z 1,67 -> fura, esticado;
+    15:00 high 184640 -> nao chega ao VAH."""
+    p = vr.ParametrosReplay()
+    base = {"ts_close_ns": 0, "dia": "d", "hhmm": 1005, "hhmm_abertura": 1130, "vwap": 183600.0,
+            "sd": 450.0, "dist_val": -1000.0, "estimador": 0.0, "low": 184400.0, "z_absorcao": 0.0}
+    rows = [
+        {**base, "high": 184925.0, "close": 184865.0, "z_vwap": 2.36, "ts_close_ns": 1 * NS},
+        {**base, "high": 185195.0, "close": 184915.0, "z_vwap": 1.93, "ts_close_ns": 2 * NS},
+        {**base, "high": 185150.0, "close": 184840.0, "z_vwap": 1.61, "ts_close_ns": 3 * NS},
+        {**base, "high": 184980.0, "close": 184575.0, "z_vwap": 1.67, "ts_close_ns": 4 * NS},
+        {**base, "high": 184640.0, "close": 184585.0, "z_vwap": 1.09, "ts_close_ns": 5 * NS},
+    ]
+    df = pd.DataFrame(rows)
+    df["dist_vah"] = df["close"] - 184900.0
+    d = vr._marcar_eventos_declarados(df, p, p80=0.9)
+    assert list(d["n_lado"]) == [-1, 0, -1, -1, 0]
+    assert list(d["n_esticado"]) == [True, False, True, True, False]
+    assert list(d["n_primeira"]) == [True, False, False, False, False]
+    # no Setup B (fechamento a 25 pts): nenhuma delas e' c_nivel
+    assert not (d["r_nivel"]).any()

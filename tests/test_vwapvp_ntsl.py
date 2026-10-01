@@ -112,16 +112,22 @@ def test_gerar_ntsl_setupb_injeta_niveis_no_arquivo_base(tmp_path: Path) -> None
     assert "// ref 2026-09-24" in texto
     base = vn.ARQUIVO_BASE.read_text(encoding="utf-8")
     assert vn.MARCADOR_INICIO in texto and vn.MARCADOR_FIM in texto
-    assert "PaintBar(clAqua)" in texto and "Plot4(sVAH)" in texto
-    # tudo fora do bloco injetado e' identico ao arquivo-base (sem duplicar formula)
-    assert texto[:texto.index(vn.MARCADOR_INICIO)] == base[:base.index(vn.MARCADOR_INICIO)]
-    assert texto[texto.index(vn.MARCADOR_FIM):] == base[base.index(vn.MARCADOR_FIM):]
+    assert "PaintBar(clAqua)" in texto
+    # plots dos niveis: ausentes no base (desenhariam o Close), presentes no gerado
+    assert "Plot4(" not in base and "Plot5(" not in base
+    assert "Plot4(sVAH);" in texto and "Plot5(sVAL);" in texto and "Plot4(Close);" in texto
+    assert vn.MARCADOR_PLOT not in texto and vn.MARCADOR_PLOT_SEM_CALCULO not in texto
+    # fora dos marcadores, o gerado e' o base (sem duplicar formula)
+    volta = (texto.replace(vn._PLOT_NIVEIS, vn.MARCADOR_PLOT)
+             .replace(vn._PLOT_NIVEIS_SEM_CALCULO, vn.MARCADOR_PLOT_SEM_CALCULO))
+    assert volta[:volta.index(vn.MARCADOR_INICIO)] == base[:base.index(vn.MARCADOR_INICIO)]
+    assert volta[volta.index(vn.MARCADOR_FIM):] == base[base.index(vn.MARCADOR_FIM):]
     sem = re.sub(r"//.*", "", texto)
     assert len(re.findall(r"\bbegin\b", sem)) == len(re.findall(r"\bend\b", sem))
     # marcador ausente e' erro, nao sucesso silencioso
     quebrado = tmp_path / "sem_marcador.ntsl"
     quebrado.write_text(base.replace(vn.MARCADOR_FIM, ""), encoding="utf-8")
-    with pytest.raises(SystemExit, match="marcadores"):
+    with pytest.raises(SystemExit, match="marcador"):
         vn.gerar_ntsl_setupb(cur, "WINFUT", cache_dir=tmp_path / "cache", base=quebrado)
 
 

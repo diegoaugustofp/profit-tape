@@ -4606,3 +4606,32 @@ gráfico o que o Setup B reproduziu nem por que foi cancelado".
   mão em 5 barras construídas. Suíte 1.262.
 
 **Tags:** entregue-v3.97 (sobre v3.96).
+
+### 2026-10-01d — vwapvp_conferir.ntsl desenhava uma linha colada no Close (v3.98)
+
+Diego recompilou o base da v3.97 e viu "só uma linha acompanhando o
+fechamento": eram Plot4/Plot5 com `Close` no lugar dos níveis, que no
+arquivo-base são sempre 0. Os plots dos níveis saem do base e entram só
+no gerado (`vwapvp-ntsl-setupb`), por dois marcadores
+(`//@@PLOT_NIVEIS@@`, `//@@PLOT_NIVEIS_SEM_CALCULO@@`). Base volta a
+VWAP + duas bandas. Dump inalterado. Suíte 1.262.
+
+Diego também redefiniu o regime: estamos em fast-track; a disciplina
+do profit-tape não é mandatória sobre ela. Fica o que é correção
+(conferência NTSL, mecanismo); cai a cerimônia estatística
+(pré-registro, regra de variante, proibição de olhar sonda). Registrado.
+
+**Tags:** entregue-v3.98 (sobre v3.97).
+
+**Mesma entrega, mais tarde (01/10):** o Diego compilou o arquivo-base
+porque `vwapvp_setupb_gerado.ntsl` "não existia no repositório" — é
+saída do comando, depende do curated local; `ntsl/*_gerado.ntsl` entra
+no `.gitignore`. Com o gerado aplicado, ele descreveu 28/09: o preço
+interagiu **6 vezes com o VAH de 25/09 (184900) pela máxima** — tocou
+11:25, furou e fechou abaixo 11:35/11:40/14:10, fechou acima 13:25 e
+voltou 13:30 — e o Setup B contou **zero** (fechamento a 25 pts: dist
+−45, −35, +15 com z 1,93). Terceiro evento declarado e contado, fast-
+track: **rejeição no nível** (high ≥ VAH_ontem e close < VAH; janela;
+esticado z ≥ 1,5; primeira do dia). Teste com as barras reais de 28/09.
+Suíte 1.263.
+
