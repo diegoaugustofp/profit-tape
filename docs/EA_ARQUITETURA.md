@@ -57,7 +57,7 @@ nao depois.
 
 ---
 
-## 1. Onde cada EA esta' HOJE (revisado 2026-09-24)
+## 1. Onde cada EA esta' HOJE (revisado 2026-10-01)
 
 > **O estado de cada estrategia vive na FICHA dela, em `docs/eas/`**
 > (indice: `docs/eas/README.md`). Esta tabela e' um resumo apontando
@@ -78,6 +78,7 @@ nao depois.
 | **123 em volume BAIXO** (ficha 12) | **F4 INCONCLUSIVO no WDO; gate do 123 no E4** | WDO 0,534 IC(0,516-0,552); atravessa a quebra de 2020 nos dois instrumentos | [`123_volume_baixo.md`](eas/123_volume_baixo.md) |
 | **GAP de abertura** (ficha 10) | **F4 — congelada; resultado so' no catalogo** | "inconclusivo, por-ano sem padrao" — tabela n/p1/IC nao esta' no repositorio (lacuna) | [`gap_abertura.md`](eas/gap_abertura.md) |
 | **Vespera** (ficha 11) | **F3 — FECHADA sem p1** | estimador nao serve em M15 (78% por tempo; depois 54-74% ambigua) | [`vespera.md`](eas/vespera.md) |
+| **VWAP + Volume Profile** (fast-track) | **Setup B ABANDONADO por taxa; EA `continuacao_tarde` em F5 dry_run desde 01/10** | documento de 3 setups: o B (banda + VAH/VAL de ontem + absorcao) da' 0,20 ep/dia no local; o que sobreviveu dos dados e' continuacao a tarde (+47 pts/trade em 88, IC cruzando zero, decisao fast-track do operador). Series todas batidas no grafico por NTSL (113/113) | [`vwap_vp.md`](eas/vwap_vp.md) |
 
 ### z_agf_3 — o unico vivo em execucao
 

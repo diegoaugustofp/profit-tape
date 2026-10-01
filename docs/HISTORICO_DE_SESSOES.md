@@ -4719,3 +4719,35 @@ WINFUT, um sinal que chega com o ticker ocupado é perdido e contado em
 `sinais_sem_vaga` — contamina a taxa medida na demo. Suíte 1.273.
 
 **Tags:** entregue-v4.02 (sobre v4.01).
+
+### 2026-10-01h — Fechamento da sessão VWAP + VP (29/09–01/10); tabela §1 atualizada (v4.03, só docs)
+
+**O que a sessão produziu.** De um documento com três setups
+(VWAP × Volume Profile), em três dias: (1) infraestrutura batida no
+gráfico — VWAP de sessão por negócio, perfil por preço (POC confere com o
+Profit com "leilão" desligado; POC é platô de ~100–150 pts; RLP uniforme
+por nível), barras M5 (112/113 idênticas), agressão do Profit = tape
+(exclui RLP), absorção redefinida pelo mecanismo (a reaproveitada
+disparava em momento, não em exaustão), z contínuo entre dias, call de
+fechamento como zero nos dois lados, circuito NTSL ↔ Python a 113/113;
+(2) Setup B abandonado por taxa (0,20 ep/dia no local; nenhuma variante
+pré-declarada chega a 1/dia); (3) três eventos declarados e contados
+(rejeição na banda 3,3/dia, continuação 2,8, rejeição no nível 2,3),
+sonda em fração da distância à VWAP, regras simuladas com IC; (4) EA
+`continuacao_tarde` na esteira, dry_run desde 01/10 08:04, critério de
+morte escrito; (5) portão NTSL F1→F2 na disciplina (`EA_ARQUITETURA §0`),
+bloco para a skill no INCREMENTO v3.97; (6) subgrupos da rejeição no
+nível (espessura da borda, regime) declarados, só contagem.
+
+**O que falta.** Pregão de dry_run olhado (sinais do log × barras
+pintadas); `ea-vwapvp-servico-replay --dia 2026-09-28` × simulador; E4
+demo pelo runbook, com tag + sha `a171e12aa9c0` por pregão; avaliação
+offline das variantes (1 SD, stop em SD, hora, VP como regime) nos dados
+do forward; contagem dos subgrupos (`ea-vwapvp-taxa`) e decisão de ficha
+nova; colar o bloco 3.1 na skill `profit-tape-disciplina-forward`;
+microprice/microprice_passiva subiram sem livro hoje (record não
+reiniciado por risco de perda — ligar `--ea-livro-ao-vivo` na próxima
+subida). Tabela §1 do `EA_ARQUITETURA` ganha a linha do VWAP+VP
+(ignição e microprice continuam só nas fichas/índice).
+
+**Tags:** entregue-v4.03 (sobre v4.02). Suíte 1.273.
