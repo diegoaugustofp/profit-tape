@@ -2,7 +2,7 @@
 
 > **Status:** vivo (GERADO) — **Revisado:** pela ultima execucao de `tools/gera_referencia_cli.py` — **Assunto:** todos os comandos de `src/profittape/cli.py`, agrupados por categoria, com a nota de trial e o documento de referencia. NAO EDITE A MAO: rode o script.
 
-83 comandos. Categoria e documento vem do dicionario no script; nome e descricao vem do docstring do proprio comando (`profit-tape <cmd> --help` mostra as opcoes).
+84 comandos. Categoria e documento vem do dicionario no script; nome e descricao vem do docstring do proprio comando (`profit-tape <cmd> --help` mostra as opcoes).
 
 A distincao que mais importa: comandos que **consomem trial** sobem o limiar deflacionado a cada rodada e so' devem rodar com dado NOVO suficiente; os que nao consomem podem rodar quando quiser (skill `profit-tape-disciplina`, 2).
 
@@ -150,6 +150,7 @@ A distincao que mais importa: comandos que **consomem trial** sobem o limiar def
 | `ea-replay-lote` | Roda ea-replay em TODOS os dias ja' capturados (uma instancia NOVA de EAService por dia -- circuit breaker e posicao reiniciam a cada dia, igual rodaria em producao de verdade), agrega o resultado. | EA_ARQUITETURA.md; BOAS_PRATICAS_PROGRESSO.md |
 | `ea-vwapvp-regra` | Simula as regras candidatas (REGRAS_CANDIDATAS) episodio a episodio nas barras M5 do cache: alvo/stop/tempo, custo 11 pts, mesma barra toca os dois = stop. | eas/vwap_vp.md fichas seguintes (regra simulada) |
 | `ea-vwapvp-replay` | F2 do EA vwap_vp (docs/eas/vwap_vp.md): replay do Setup B sobre o tape curado -- distribuicao do estimador de absorcao por barra M5 (p80/p90 congelados como VALOR), episodios por clausula e por hora, sonda de excursao... | eas/vwap_vp.md F2 |
+| `ea-vwapvp-servico-replay` | Roda o SERVICO do EA vwap_vp (o mesmo codigo do vivo, dry_run) sobre um dia do curated e lista as operacoes. | eas/vwap_vp.md F3 (servico do EA num dia) |
 | `ea-vwapvp-sonda` | Sonda dos tres eventos declarados (clausula 'janela' de cada um), na unidade proposta em 01/10: excursao a favor e contra como FRACAO da distancia ate' a VWAP no sinal, partida em manha (< 11h) e tarde, por horizonte... | eas/vwap_vp.md fichas seguintes (sonda em fracao) |
 | `ea-vwapvp-taxa` | SO' CONTAGEM dos dois eventos declarados em 01/10 (docs/eas/vwap_vp.md): rejeicao intrabarra (maxima toca +2SD e fecha dentro) e continuacao (fechamento fora da banda). | eas/vwap_vp.md fichas seguintes (taxa) |
 | `semente-conferir` | Passo 2 do F5 do 123: semente da MME80 (parquet do grafico + ponte pelo tape) e a recursao ao longo do dia, comparada barra a barra com o mme80_ntsl do grafico no mesmo dia. | EAS_DE_PRECO.md 5.4 |

@@ -1,0 +1,43 @@
+# EA VWAP + VP — CONTINUACAO A TARDE (fast-track, 2026-10-01; v4.00)
+#
+# A regra simulada em 46 dias (`ea-vwapvp-regra`, docs/eas/vwap_vp.md):
+#   n=88 (1,9/dia), +47 pts/trade, IC95 [-23, +116], mediana +163,
+#   positivos 70%, pior dia -766, drawdown -3.647.
+# AMOSTRA QUEIMADA. A demo e' a amostra nova. Criterio de morte, escrito
+# ANTES de ligar: drawdown acumulado > 7.000 pts (2x a amostra) OU 40
+# trades com media negativa -> desliga e fecha a ficha.
+#
+# O que fica de FORA de proposito: VP de ontem, absorcao, corte por hora
+# dentro da tarde. Essas variantes sao avaliadas OFFLINE nos dados do
+# forward (o servico loga z, sd, dist e hhmm de cada sinal; o tape segue
+# gravado), sem segundo EA e sem segunda contagem.
+#
+# Sobe com: profit-tape record ... --ea-dir config/  (ou --ea este arquivo)
+# Nao precisa de --ea-livro-ao-vivo (decide por VWAP de negocio e barra M5).
+
+tipo: "vwap_vp"
+nome: ea_vwapvp_continuacao
+symbol: WINFUT
+tick: 5.0
+
+periodo_barra_s: 300          # M5 (decisao 29/09)
+fim_sessao_hhmm: 1830
+z_banda: 2.0                  # |close - VWAP| >= 2 SD no fechamento da barra
+janela_inicio_hhmm: 1100      # SO' TARDE: de manha o evento e' simetrico (sonda 01/10)
+janela_fim_hhmm: 1700
+lado_permitido: ambos
+
+alvo_sd: 0.5                  # entrada +- 0,5 x SD do sinal (~250 pts mediana)
+stop_frac_dist: 0.5           # entrada -+ 50% da distancia a VWAP (~570 pts mediana)
+tempo_max_s: 3600
+zeragem_hhmm: 1800
+
+cooldown_s: 1800              # desde o ultimo sinal operado (= episodio do replay)
+max_operacoes_dia: 6
+max_perdas_seguidas: 3
+perda_max_dia_pontos: 1200    # ~2 stops; pior dia da amostra -766
+
+tamanho_posicao: 1
+custo_pontos_estimado: 11.0
+dry_run: true                 # 1o pregao em dry_run com as barras olhadas; depois E4 demo
+usar_conta_real: false

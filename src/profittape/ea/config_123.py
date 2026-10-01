@@ -101,4 +101,7 @@ def carregar_config_ea(caminho: Path) -> Any:
     if isinstance(dados, dict) and dados.get("tipo") == "ignicao":
         from .config_ignicao import EAIgnicaoConfig
         return EAIgnicaoConfig(**dados)
+    if isinstance(dados, dict) and dados.get("tipo") == "vwap_vp":
+        from .config_vwapvp import EAVwapVpConfig
+        return EAVwapVpConfig(**dados)
     return EAConfig(**dados)

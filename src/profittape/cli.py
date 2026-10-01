@@ -1711,6 +1711,42 @@ def ea_vwapvp_regra(
         typer.echo(f"\n  saida -> {saida}")
 
 
+@app.command(name="ea-vwapvp-servico-replay")
+def ea_vwapvp_servico_replay(
+    config: Path = typer.Option(Path("config/ea_vwapvp_continuacao.yaml"), "--config"),
+    dia: str = typer.Option(..., "--dia", help="YYYY-MM-DD"),
+    curated: Path = typer.Option(Path("data/curated"), "--curated"),
+    log_level: str = typer.Option("WARNING", "--log-level"),
+) -> None:
+    """
+    Roda o SERVICO do EA vwap_vp (o mesmo codigo do vivo, dry_run) sobre um
+    dia do curated e lista as operacoes. Para bater com `ea-vwapvp-regra`
+    no mesmo dia: diferencas esperadas = entrada no 1o negocio apos a barra
+    (nao no close) e saida por negocio (nao por high/low de barra).
+    """
+    import datetime as _d
+
+    configurar(log_level)
+    from .ea.config_123 import carregar_config_ea
+    from .ea.service_vwapvp import replay_servico_do_dia
+
+    cfg = carregar_config_ea(config)
+    svc = replay_servico_do_dia(cfg, _d.date.fromisoformat(dia), curated)
+    typer.echo("=" * 72)
+    typer.echo(f"EA vwap_vp — replay do servico em {dia} ({cfg.sha256()})")
+    typer.echo("=" * 72)
+    r = svc._hb()
+    typer.echo(f"  trades {r['trades']}  barras {r['barras']}  sinais {r['sinais']}  "
+               f"filtrados {r['sinais_filtrados']}")
+    typer.echo("  hhmm_sinal lado   entrada     saida   motivo      pnl_liq   z_sinal  sd   dist")
+    for o in svc.operacoes:
+        typer.echo(f"  {o['hhmm_sinal']:>8d}  {o['lado']:+d}  {o['entrada']:9.0f} {o['saida']:9.0f}"
+                   f"   {o['motivo']:10s} {o['pnl_liquido']:+8.0f}   {o['z_sinal']:+.2f}  "
+                   f"{o['sd_sinal']:.0f}  {o['dist_sinal']:.0f}")
+    typer.echo(f"  pnl liquido do dia: {r['pnl_liquido_pts']:+.0f} pts  "
+               f"saidas {r['saidas']}  bloqueado={r['bloqueado']}")
+
+
 @app.command(name="ea-vwapvp-replay")
 def ea_vwapvp_replay(
     curated: Path = typer.Option(Path("data/curated"), "--curated"),

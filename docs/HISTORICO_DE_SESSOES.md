@@ -4670,3 +4670,25 @@ pior dia. Quatro regras declaradas (`REGRAS_CANDIDATAS`), uma de
 controle. Conferido à mão em caminhos construídos. Suíte 1.266.
 
 **Tags:** entregue-v3.100 (sobre v3.99).
+
+### 2026-10-01f — EA vwap_vp (continuação à tarde) na esteira; renumerado v4.00
+
+Diego decidiu "demo" para a `continuacao_tarde` (+47 pts/trade, IC95
+[−23, +116], 88 trades): a demo é a amostra nova do fast-track; critério
+de morte escrito antes de ligar (DD > 7.000 pts ou 40 trades com média
+negativa). Sem apertar stop nem cortar hora nos 88.
+
+**Entregue (v4.00):** `ea/config_vwapvp.py` (tipo `vwap_vp`, parâmetros =
+a regra simulada, `extra=forbid`), `ea/sinal_vwapvp.py` (decisor: sinal
+no fechamento da barra M5, alvo/stop fixos no close do sinal, saídas por
+negócio — alvo/stop/tempo/zeragem — cooldown desde o último sinal
+operado, limites do dia), `ea/service_vwapvp.py` (bridge duck-typed como
+o microprice; VWAP por negócio O(1); quem fecha barra é o trade; a
+decisão é tomada ANTES de registrar na VWAP o negócio que abre a barra
+seguinte, igual ao replay batido no gráfico; esse negócio é o fill em
+dry_run; `replay_servico_do_dia`), registro por tipo,
+`config/ea_vwapvp_continuacao.yaml`, `ea-vwapvp-servico-replay`. Teste
+de equivalência serviço × simulador no mesmo dia (mesmos sinais, lado e
+barra). Decisor conferido à mão. Suíte 1.272.
+
+**Tags:** entregue-v4.00 (sobre v3.100).

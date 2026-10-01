@@ -36,6 +36,7 @@ from .config import EAConfig
 from .config_123 import EA123Config
 from .config_ignicao import EAIgnicaoConfig
 from .config_microprice import EAMicropriceConfig
+from .config_vwapvp import EAVwapVpConfig
 from .despachante import DespachanteDeEAs
 from .livro import LivroDePosicoes
 from .livro_ao_vivo import EstadoDoLivro
@@ -44,6 +45,8 @@ from .supervisor import ExigenciaDeEA, SupervisorDeRisco, capital_recomendado_pa
 from .vagas import VagasPorTicker
 
 log = structlog.get_logger(__name__)
+
+ConfigDeEA = EAConfig | EA123Config | EAMicropriceConfig | EAIgnicaoConfig | EAVwapVpConfig
 
 
 class InclusaoRecusada(RuntimeError):
@@ -130,8 +133,7 @@ class RegistroDeEAs:
         return None
 
     # ------------------------------------------------------------------
-    def validar(self, cfg: EAConfig | EA123Config | EAMicropriceConfig | EAIgnicaoConfig,
-                nome: str) -> None:
+    def validar(self, cfg: ConfigDeEA, nome: str) -> None:
         """
         Levanta `InclusaoRecusada` se o EA nao puder entrar. Separado de
         `incluir` para dar para checar sem efeito colateral (teste, CLI,
@@ -156,7 +158,7 @@ class RegistroDeEAs:
                 "reconciliacao nao sabe de quem e' a divergencia). Use um "
                 "ativo diferente -- ver EA_ARQUITETURA 4.2.")
 
-    def incluir(self, cfg: EAConfig | EA123Config | EAMicropriceConfig | EAIgnicaoConfig,
+    def incluir(self, cfg: ConfigDeEA,
                nome: str | None = None,
                origem: Path | None = None,
                executor: object | None = None) -> EARegistrado:
@@ -181,6 +183,10 @@ class RegistroDeEAs:
             from .service_ignicao import EAIgnicaoService
             servico = EAIgnicaoService(cfg, executor=executor, vagas=self.vagas,
                                        nome=nome_final, livro=self.livro_ao_vivo)
+        elif isinstance(cfg, EAVwapVpConfig):
+            from .service_vwapvp import EAVwapVpService
+            servico = EAVwapVpService(cfg, executor=executor, vagas=self.vagas,
+                                      nome=nome_final)
         else:
             servico = EAService(cfg, executor=executor,  # type: ignore[arg-type]
                                vagas=self.vagas, nome=nome_final,

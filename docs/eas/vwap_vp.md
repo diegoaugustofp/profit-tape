@@ -1,6 +1,6 @@
 # VWAP + Volume Profile (WIN) — fast-track
 
-> **Status:** **ABANDONADO POR TAXA** (30/09, v3.92) — Setup B com VP de ontem: melhor variante pré-declarada dá 0,11 episódio/dia (mínimo 1). Módulos (VWAP de sessão, perfil por preço, replay com cache) ficam como infraestrutura validada — **Criado:** 2026-09-29 (v3.86); fechado em v3.92 —
+> **Status:** **F3/F5 — EA `continuacao_tarde` pronto para a demo (v4.00)**: Setup B do documento abandonado por taxa; o que sobreviveu dos dados é a continuação à tarde (+47 pts/trade em 46 dias, IC cruzando zero — fast-track, decisão do operador em 01/10) — **Criado:** 2026-09-29 (v3.86); EA em v4.00 — **Código:** `ea/config_vwapvp.py`, `ea/sinal_vwapvp.py`, `ea/service_vwapvp.py`, `config/ea_vwapvp_continuacao.yaml`, `ea-vwapvp-servico-replay` —
 
 ## Identidade, fase e estado
 
@@ -415,9 +415,57 @@ Devolve PnL por trade com IC95 da média, saídas, pior dia. Amostra
 queimada: o que der positivo com IC acima de zero vai para a demo como
 EA; o que não der, fecha.
 
+### Regras simuladas (01/10, 46 dias, custo 11, mesma barra = stop)
+
+    continuacao_tarde      n=88 (1,91/dia)  alvo 52  stop 10  tempo 26  media +47  IC95 [−23, +116]  mediana +163  70% pos  total +4.114  pior dia −766  DD −3.647
+    continuacao_tarde_1sd  n=88             alvo 25  stop 12  tempo 51  media +62  IC95 [−21, +145]  mediana +126  61% pos  total +5.483  mediana diária NEGATIVA
+    nivel_tarde_vwap       n=41 (0,89/dia)  alvo 10  stop 6   tempo 25  media −29  IC95 [−150, +91]   -> fecha
+    banda_tarde_meio       n=81 (controle)  alvo 23  stop 22  tempo 36  media −18  IC95 [−108, +71]   -> ≈ 0 como a sonda previa (simulador sanado)
+
+Decomposição da `continuacao_tarde`: alvo 52 × +241, stop 10 × −587
+(2,4 vitórias por stop), tempo 26 × −98. Nenhuma passa no critério "IC
+inteiro acima de zero" (precisaria de ~190 trades, 100 pregões).
+Decisão do operador em 01/10, fast-track: **vai para a demo como está**;
+a demo é a amostra nova. Não se aperta stop nem se corta hora olhando os
+88 (seria a terceira olhada na mesma amostra).
+
+## EA `ea_vwapvp_continuacao` (v4.00) — ficha de demo
+
+    EVENTO     barra M5 fechada, abertura em [11:00, 17:00), |close − VWAP| >= 2 SD
+               (VWAP de sessão por negócio, SD ponderado por volume, todos os negócios);
+               lado a FAVOR do esticão; cooldown 30 min desde o último sinal operado
+    ENTRADA    a mercado no 1º negócio após o fechamento (dry_run: preço desse negócio)
+    ALVO       entrada ± 0,5 × SD do sinal (~250 pts)     STOP  entrada ∓ 50% da distância à VWAP (~570)
+    TEMPO      60 min       ZERAGEM 18:00       LIMITES 6 op/dia, 3 perdas seguidas, −1.200 pts/dia
+    TAXA       1,9/dia (27 de 46 dias com trade)
+    EFEITO     esperado +47 ± 35 pts/trade (amostra queimada); DD esperado ~3,6 k pts/contrato
+    MORTE      escrita antes de ligar: drawdown acumulado > 7.000 pts OU 40 trades com média
+               negativa -> desliga e fecha esta ficha. Mudou parâmetro = contagem nova (sha).
+    SUBGRUPOS  avaliados OFFLINE nos dados do forward (o serviço loga z, sd, dist, hhmm de
+               cada sinal; o tape segue gravado): alvo 1 SD, stop 1 SD, corte por hora, VP
+               de ontem como regime. Nenhum vira EA sem contagem nova.
+
+Diferenças declaradas entre o EA e o simulador: entrada no 1º negócio
+após a barra (não no close); alvo/stop conferidos negócio a negócio (não
+em high/low de barra); níveis de alvo/stop são os do SINAL (close), não
+do fill. `ea-vwapvp-servico-replay --dia` roda o código do vivo num dia
+do curated para bater com `ea-vwapvp-regra` (mesmos sinais, mesmo lado,
+mesma barra — testado no sintético).
+
+**Subida:** `dry_run: true` no YAML; um pregão em dry_run com as barras
+de sinal olhadas no gráfico (o `vwapvp_setupb_gerado.ntsl` pinta amarelo
+o que o EA chama de sinal, com a ressalva da VWAP por barra); depois
+`dry_run: false` e E4 na demo pelo `RUNBOOK_E4.md`. Inclusão a quente
+pela pasta `--ea-dir`. Não precisa de `--ea-livro-ao-vivo`.
+
 ## Próximo passo
 
-Operador roda `ea-vwapvp-regra --saida data/vwapvp_regra` e cola; com a TAXA de cada
+1. Aplicar v4.00; `ea-vwapvp-servico-replay --dia 2026-09-28` e comparar com
+   `trades_continuacao_tarde.csv` do mesmo dia.
+2. Um pregão em dry_run; olhar as barras de sinal no gráfico.
+3. E4 demo. Registrar aqui cada pregão com tag + sha do YAML.
+
+(Histórico da sonda, abaixo.) Operador roda `ea-vwapvp-regra --saida data/vwapvp_regra` e cola; com a TAXA de cada
 cláusula, escreve-se a ficha de 6 linhas de (1) e de (2) — EFEITO e
 CRITERIO declarados ANTES da sonda — e só então a sonda da ficha
 congelada. Nenhum passo nesta ficha. Qualquer desenho seguinte é **ficha nova, pré-registrada
