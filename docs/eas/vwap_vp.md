@@ -273,6 +273,10 @@ Python recalcula das suas barras em cache e **mede**.
   imbalance, desloc, absorção comp/vend, z50 (divisor Janela−1, barra atual
   fora, janela atravessa dias), estimador. Pinta amarelo em |z| ≥ 2 e
   vermelho com estimador ≥ 0,916 (só visual). Dump `VWAPVP|…` de 21 campos.
+  `CalcDataInicio` desliga o cálculo antes da data (gráfico desde 2021
+  trava com os laços de 50 por barra); deixe ≥ 2 pregões antes de
+  `LogDataInicio`, o aquecimento do z, que é o mesmo do Python
+  (`--aquecimento-dias 2`).
 - `profit-tape vwapvp-ntsl-equivalencia --log <dump>`: três blocos.
   **1. Exatas** (mesma fórmula; espera-se ~1e-8): OHLC, vol, imbalance,
   desloc, absorção, z, estimador, VWAP/SD/z por barra. **2. Agressão,

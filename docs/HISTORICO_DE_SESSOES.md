@@ -4531,3 +4531,14 @@ equivalência. O bloco 2 (agressão) é o que pode invalidar a absorção do
 replay; o 1 tem que dar ~1e-8 ou há defeito de formula/janela.
 
 **Tags:** entregue-v3.93 (sobre v3.92). Suíte 1.261.
+
+### 2026-09-30g — vwapvp_conferir.ntsl trava em gráfico longo: CalcDataInicio (v3.94)
+
+Gráfico do Diego vem desde 2021 (~140 mil barras M5); dois laços de 50
+por barra travam o Profit. `CalcDataInicio` (1AnoMesDia) desliga tudo
+antes da data — séries zeradas, sem laço, plota o Close. Tem que ficar
+≥ 2 pregões antes de `LogDataInicio` (aquecimento do z), casado com
+`--aquecimento-dias` (novo, default 2) do comparador. Só .ntsl, CLI e
+docs. Suíte 1.261.
+
+**Tags:** entregue-v3.94 (sobre v3.93).

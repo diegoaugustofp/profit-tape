@@ -1565,6 +1565,10 @@ def vwapvp_ntsl_equivalencia(
     curated: Path = typer.Option(Path("data/curated"), "--curated"),
     symbol: str = typer.Option("WINFUT", "--symbol"),
     saida: Path | None = typer.Option(None, "--saida", help="CSV das barras casadas"),
+    aquecimento_dias: int = typer.Option(
+        2, "--aquecimento-dias",
+        help="dias ANTES do dump usados so' para a janela do z fechar; o CalcDataInicio do "
+             ".ntsl deve ser >= isto antes de LogDataInicio"),
     log_level: str = typer.Option("WARNING", "--log-level"),
 ) -> None:
     """
@@ -1576,7 +1580,7 @@ def vwapvp_ntsl_equivalencia(
     configurar(log_level)
     from .tools.vwapvp_ntsl import comparar, formatar
 
-    r = comparar(log, curated, symbol)
+    r = comparar(log, curated, symbol, aquecimento_dias=aquecimento_dias)
     typer.echo("=" * 72)
     typer.echo("CONFERENCIA NTSL x PYTHON — VWAP + VP (M5 WINFUT)")
     typer.echo("=" * 72)

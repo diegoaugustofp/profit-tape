@@ -51,9 +51,19 @@
 // BUFFER DO CONSOLE: ~2.000 linhas. M5 = 113 barras/pregao -> ~17
 // pregoes por dump. Fatie com LogDataInicio/LogDataFim (formato
 // 1AnoMesDia: 01/09/2026 = 1260901).
+//
+// CUSTO: dois lacos de 50 por barra. Num grafico desde 2021 (~140 mil
+// barras M5) o Profit trava. `CalcDataInicio` desliga TUDO antes da
+// data: series zeradas, sem laco, plota o proprio Close. O z precisa de
+// 50 barras de aquecimento, entao CalcDataInicio deve ficar >= 2 PREGOES
+// ANTES de LogDataInicio — o mesmo aquecimento (2 dias) que o Python usa
+// em `vwapvp-ntsl-equivalencia`. Comecar o calculo no dia do log faria as
+// primeiras 50 barras divergirem SEM defeito.
 //=====================================================================
 
 input
+  CalcDataInicio(1260828);  // 1AnoMesDia. 0 = calcula tudo (trava em
+                            // grafico longo). >= 2 pregoes antes do log.
   Janela(50);               // barras do z. Igual ao replay (janela_z).
   LimiarZ(2.0);             // |z_vwap| por barra para pintar (visual)
   LimiarAbs(0.916);         // estimador >= isto pinta vermelho. E' o p80
@@ -77,7 +87,7 @@ var
   sMediaV, sDesvioV, sZVend                  : Float;
   sEstimador, sMedTmp                        : Float;
   nIndex                                     : Integer;
-  bNovoDia, bPintou, bNaJanela               : Boolean;
+  bNovoDia, bPintou, bNaJanela, bCalcular    : Boolean;
 begin
   //-------------------------------------------------------------------
   // Acessos posicionais: TODOS aqui, em atribuicao simples.
@@ -88,6 +98,23 @@ begin
   sPPVant  := sPPV[1];
 
   bNovoDia := (Date <> sDataAnt);
+  bCalcular := (CalcDataInicio = 0) or (Date >= CalcDataInicio);
+
+  if not bCalcular then
+  begin
+    // Antes da data de calculo: nada. As series ficam em 0 para a
+    // janela do z nao ler lixo, e o plot segue o preco.
+    sPV := 0; sV := 0; sPPV := 0;
+    sVwapBar := 0; sSdBar := 0; sZBar := 0;
+    sImbalance := 0; sDeslocNorm := 0;
+    sAbsComp := 0; sAbsVend := 0;
+    sZComp := 0; sZVend := 0; sEstimador := 0;
+    Plot(Close);
+    Plot2(Close);
+    Plot3(Close);
+  end
+  else
+  begin
 
   //-------------------------------------------------------------------
   // VWAP de sessao POR BARRA: preco tipico x volume, acumulado desde a
@@ -237,4 +264,6 @@ begin
         + "|" + sAbsComp + "|" + sAbsVend
         + "|" + sZComp + "|" + sZVend + "|" + sEstimador);
   end;
+
+  end;  // bCalcular
 end;
