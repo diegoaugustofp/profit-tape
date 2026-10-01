@@ -295,6 +295,16 @@ alinhado ao arquivo de referência (skill 3.1); p80/p90 mudam ~1%. Dias em
 que o tape tem menos barras que o gráfico (31/07, 15/09) são listados na
 saída: as 50 barras seguintes têm z diferente pelos dois lados, esperado.
 
+**Conferência fechada (01/10, v3.95, dump de 28/09):** com a barra do
+call como zero nos dois lados, `absorcao_comp/vend`, `z_comp`, `z_vend` e
+`estimador` bateram **113/113 a zero**. Restam diferentes só a barra das
+18:20 nas colunas de preço/volume (call de fechamento) e `vwap_bar` a
+2×10⁻⁵ pt (Float). Bloco 3: desvio por barra 3,2% menor na mediana (p05
+−10%), mas `z_bar − z_negócio` mediana −0,007 — a VWAP por barra também se
+desloca e os efeitos se cancelam na média; o que sobra é dispersão: 5
+barras a |z| ≥ 2 por negócio, 7 por barra, **2 trocam de veredicto** (~2%
+das barras do dia). É o tamanho real da aproximação do gráfico.
+
 **Resultado da conferência (30/09, dump de 28/09, 113 barras):** OHLC,
 volume, agressão, imbalance, absorção, desvio e z por barra **exatos** em
 112/113 — a exceção é a barra das 18:20 (call de fechamento, que o

@@ -4569,3 +4569,15 @@ sonda: rejeição intrabarra (máxima toca +2SD, fecha dentro); taxa sai
 do cache em segundos. Suíte 1.261.
 
 **Tags:** entregue-v3.95 (sobre v3.94).
+
+### 2026-10-01b — VWAP + VP: circuito NTSL fechado a zero (v3.96, só docs)
+
+Rerodada com a regra do call: `absorcao_comp/vend`, `z_comp`, `z_vend`,
+`estimador` 113/113 exatos. Só a barra das 18:20 (preço/volume do call) e
+`vwap_bar` (2e-5 pt) diferem. `z_bar − z_negocio` mediana −0,007: o z
+por barra NÃO é sistematicamente maior (corrige o que eu disse em
+30/09); desvio −3,2% e VWAP deslocada se cancelam; 2 de 113 barras
+trocam de veredicto a |z| = 2. Toda coluna do replay tem agora um número
+ao lado. Ficha atualizada. Nenhuma ficha nova aberta.
+
+**Tags:** entregue-v3.96 (sobre v3.95). Suíte 1.261.
