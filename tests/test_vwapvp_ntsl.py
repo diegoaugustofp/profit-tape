@@ -63,6 +63,11 @@ def test_dump_fabricado_das_proprias_series_da_zero_diferenca(tmp_path: Path) ->
     assert not r["rolagem_detectada"] and r["dias_parciais_no_tape"] == {}
     # vwap por negocio x por barra: sao coisas diferentes, o gap tem que existir
     assert r["vwap_negocio_x_barra"]["max_pts"] > 0
+    assert "barras_que_trocam_veredicto_z2" in r["vwap_negocio_x_barra"]
+    # a barra que abre as 18:20 entra como 0 na absorcao (call de fechamento)
+    ult = py[(py["chave_data"] == dias[0]) & (py["chave_hora"] >= 1820)]
+    assert len(ult) == 1 and float(ult["absorcao_comp"].iloc[0]) == 0.0
+    assert float(ult["absorcao_vend"].iloc[0]) == 0.0
     assert any("EXATAS" in x for x in vn.formatar(r))
 
 

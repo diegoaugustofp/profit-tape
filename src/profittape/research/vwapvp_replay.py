@@ -123,6 +123,9 @@ class ParametrosReplay:
     # 31/07 (comeca 12:35) e 15/09 (10:05) entraram na 1a rodada com VWAP de sessao parcial.
     hhmm_abertura_sessao: int = 900
     minimo_barras: int = 110
+    # v3.95: barra que abre >= isto (call de fechamento, que o grafico tem e o
+    # tape nao) entra como ZERO nas series de absorcao, nos dois lados.
+    hhmm_call_fechamento: int = 1820
 
 
 # ---------------------------------------------------------------- utilitarios
@@ -313,6 +316,8 @@ def _barras_do_dia(curated: Path, symbol: str, dia: dt.date, p: ParametrosReplay
         return None
     df = df.copy()
     df["dia"] = dia.isoformat()
+    call = df["hhmm_abertura"].astype(int) >= p.hhmm_call_fechamento
+    df.loc[call, ["absorcao_dir", "absorcao_comp", "absorcao_vend"]] = 0.0
     completo = dia_completo(df, p)
     log.info("vwapvp.replay.dia", dia=dia.isoformat(), barras=len(df), origem=origem,
              completo=completo, primeira=int(df["hhmm_abertura"].iloc[0]))

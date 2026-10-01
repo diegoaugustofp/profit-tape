@@ -295,6 +295,18 @@ alinhado ao arquivo de referência (skill 3.1); p80/p90 mudam ~1%. Dias em
 que o tape tem menos barras que o gráfico (31/07, 15/09) são listados na
 saída: as 50 barras seguintes têm z diferente pelos dois lados, esperado.
 
+**Resultado da conferência (30/09, dump de 28/09, 113 barras):** OHLC,
+volume, agressão, imbalance, absorção, desvio e z por barra **exatos** em
+112/113 — a exceção é a barra das 18:20 (call de fechamento, que o
+gráfico tem e o tape não). `AgressionVolBuy/Sell` = `vol_agr_compra/venda`
+do tape barra a barra (razão 1,000): **o Profit exclui RLP da agressão**, a
+absorção do replay é a do gráfico. `vwap_bar` difere 2×10⁻⁵ pt (precisão
+do Float). VWAP por negócio × por barra: mediana 12 pts, p95 20, máx 33. O
+único vazamento: a absorção da barra das 18:20 difere e entra na janela do
+z das 50 primeiras barras do dia seguinte (50 `z_comp` diferentes, máx
+0,09). Regra v3.95, nos dois lados: **a barra que abre às 18:20 entra como
+zero nas séries de absorção** — fora de qualquer janela de evento.
+
 Limites, declarados: a VWAP por negócio do replay **não é reproduzível
 em NTSL** (o gráfico não tem negócios); o que se confere é a aproximação
 por barra, e o bloco 3 mede a distância. A VWAP nativa do Profit é um

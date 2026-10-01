@@ -4542,3 +4542,30 @@ antes da data — séries zeradas, sem laço, plota o Close. Tem que ficar
 docs. Suíte 1.261.
 
 **Tags:** entregue-v3.94 (sobre v3.93).
+
+### 2026-10-01 — VWAP + VP: conferência NTSL feita; bloco 2 fechado; vazamento do call (v3.95)
+
+Dump de 28/09 (113 barras) pelo `vwapvp-ntsl-equivalencia`: OHLC, vol,
+imbalance, absorção, sd e z por barra exatos em 112/113 (a 113ª é a das
+18:20, call de fechamento). **`AgressionVolBuy/Sell` = `vol_agr` do tape
+barra a barra**: o Profit exclui RLP da agressão — a pergunta que nunca
+tinha sido feita, respondida com razão 1,000. VWAP por barra difere
+2e-5 pt (Float); por negócio x por barra: 12 pts mediana, 33 máx.
+
+Vazamento: a absorção da barra das 18:20 difere entre gráfico e tape e
+entra na janela do z das 50 primeiras barras do dia seguinte (50 z_comp
+diferentes, máx 0,09). Regra nos dois lados: barra que abre >= 18:20
+entra como 0 nas séries de absorção (`HoraCallFechamento` no .ntsl,
+`hhmm_call_fechamento` no replay, aplicada ao ler o cache — sem bump).
+Comparador passa a imprimir desvio por barra vs por negócio (3–10%
+menor, é o que desloca o z) e barras que trocam de veredicto a |z|=2.
+
+Perguntas do Diego sobre candles pintados: 09:05 pinta por sd de 2
+barras (68 pts) — artefato, no replay z 1,20; 09:10 a 0,01 do limiar;
+13:25/14:10 (máxima do dia) não pintam porque o z é no FECHAMENTO (a
+máxima estava a 2,38 SD) e a absorção é ~0 (compradores mal dominaram e
+o preço subiu — momento). Candidata a ficha nova, pré-registro antes de
+sonda: rejeição intrabarra (máxima toca +2SD, fecha dentro); taxa sai
+do cache em segundos. Suíte 1.261.
+
+**Tags:** entregue-v3.95 (sobre v3.94).

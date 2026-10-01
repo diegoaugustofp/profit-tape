@@ -152,6 +152,8 @@ def _series_python(curated: Path, symbol: str, dias: list[dt.date], p: Parametro
     b["chave_data"] = [dt.date.fromisoformat(x) for x in b["dia"]]
     b["chave_hora"] = b["hhmm_abertura"].astype(int)
     b["vwap_negocio"] = b["vwap"]
+    b["sd_negocio"] = b["sd"]
+    b["z_negocio"] = b["z_vwap"]
     return b
 
 
@@ -208,8 +210,19 @@ def comparar(log_ntsl: Path, curated: Path, symbol: str = "WINFUT",
     # vwap por negocio x por barra, em pontos, por hora
     gap = (juntos["vwap_negocio"] - juntos["vwap_bar_py"]).abs()
     por_hora = gap.groupby(juntos["chave_hora"] // 100).median().round(1).to_dict()
+    sd_rel = ((juntos["sd_bar_py"] - juntos["sd_negocio"])
+              / juntos["sd_negocio"].replace(0, np.nan))
+    zn = juntos["z_negocio"].astype(float)
+    zb = juntos["z_bar_py"].astype(float)
+    troca = ((zn.abs() >= 2.0) != (zb.abs() >= 2.0)) & zn.notna()
     vwap_gap = {"mediana_pts": float(gap.median()), "p95_pts": float(gap.quantile(0.95)),
-                "max_pts": float(gap.max()), "por_hora_mediana": por_hora}
+                "max_pts": float(gap.max()), "por_hora_mediana": por_hora,
+                "sd_barra_vs_negocio_rel_mediana": float(sd_rel.median()),
+                "sd_barra_vs_negocio_rel_p05": float(sd_rel.quantile(0.05)),
+                "z_dif_mediana": float((zb - zn).median()),
+                "barras_que_trocam_veredicto_z2": int(troca.sum()),
+                "barras_c_banda_negocio": int((zn.abs() >= 2.0).sum()),
+                "barras_c_banda_barra": int((zb.abs() >= 2.0).sum())}
     return {"meta": meta, "barras_casadas": len(juntos),
             "dias": [d.isoformat() for d in dias], "k_por_dia": k_por_dia,
             "rolagem_detectada": rolagem, "dias_parciais_no_tape": parciais,
@@ -252,6 +265,13 @@ def formatar(r: dict[str, Any]) -> list[str]:
               f"mediana {g['mediana_pts']:.1f}  p95 {g['p95_pts']:.1f}  max {g['max_pts']:.1f}")
     ln.append("     por hora (mediana): "
               + ", ".join(f"{h}h:{v}" for h, v in g["por_hora_mediana"].items()))
+    ln.append("     desvio por barra vs por negocio: mediana "
+              f"{g['sd_barra_vs_negocio_rel_mediana']:+.1%} "
+              f"(p05 {g['sd_barra_vs_negocio_rel_p05']:+.1%}); z_bar - z_negocio mediana "
+              f"{g['z_dif_mediana']:+.3f}")
+    ln.append(f"     |z| >= 2: {g['barras_c_banda_negocio']} barras por negocio, "
+              f"{g['barras_c_banda_barra']} por barra; trocam de veredicto: "
+              f"{g['barras_que_trocam_veredicto_z2']}")
     return ln
 
 

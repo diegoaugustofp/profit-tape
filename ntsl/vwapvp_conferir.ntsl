@@ -65,6 +65,7 @@ input
   CalcDataInicio(1260828);  // 1AnoMesDia. 0 = calcula tudo (trava em
                             // grafico longo). >= 2 pregoes antes do log.
   Janela(50);               // barras do z. Igual ao replay (janela_z).
+  HoraCallFechamento(1820); // barra que abre >= isto: absorcao = 0 (ver bloco)
   LimiarZ(2.0);             // |z_vwap| por barra para pintar (visual)
   LimiarAbs(0.916);         // estimador >= isto pinta vermelho. E' o p80
                             // da 2a rodada, DDOF populacional; so' visual.
@@ -182,6 +183,20 @@ begin
       sAbsComp := sImbalance * (1 - sDeslocNorm);
     if sImbalance < 0 then
       sAbsVend := (0 - sImbalance) * (1 + sDeslocNorm);
+  end;
+
+  //-------------------------------------------------------------------
+  // BARRA DO CALL DE FECHAMENTO (abre 18:20): o grafico tem o call, o
+  // tape nao (28/09: 32.715 x 10.784 contratos, fechamento 183855 x
+  // 183950). A absorcao dela difere entre os lados e VAZA 50 barras para
+  // a manha seguinte pelo z (medido 30/09: 50 z_comp diferentes, max
+  // 0,09). Regra declarada nos dois lados (v3.95): entra como ZERO nas
+  // series de absorcao. Esta' fora da janela de qualquer ficha.
+  //-------------------------------------------------------------------
+  if Time >= HoraCallFechamento then
+  begin
+    sAbsComp := 0;
+    sAbsVend := 0;
   end;
 
   //-------------------------------------------------------------------
