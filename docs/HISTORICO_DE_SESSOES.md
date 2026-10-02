@@ -4934,3 +4934,29 @@ prioridade baixa. 7 testes novos, incluindo um tape sintético com stall de
 atraso custou só aparece com dezenas de operações no `operacoes.csv`.
 
 **Tags:** entregue-v4.12 (sobre v4.11).
+
+### 2026-10-02b — Diário operacional retroativo e custo contrafactual do atraso (v4.13)
+
+Diego: "só a partir de agora, ou construímos retroativo?" — retroativo,
+com limites: o feed (atraso, incidentes, buracos) existe para todo dia
+curado porque só depende de `ts_recv_ns`; as operações só desde que cada
+EA loga (ignição 28/09, vwap_vp 01/10).
+
+**Correção minha.** Eu tinha lido o −659 do episódio de 02/10 como
+"deslizamento da execução simulada além do stop". Com o record sem
+`--ea-livro-ao-vivo` a ignição preenche a saída pelo preço do TAPE no
+gatilho (`fill_origem = tape`; `_topo()` devolve None sem livro): o fill é
+zero por construção e o excesso (~120 pts) é GAP de mercado — e o atraso
+do feed não pode mudá-lo na simulação. Confere pelo campo `fill_origem`
+e `desliz_saida` do `ea.ign.saida`. O custo do atraso só existiria numa
+execução real; por isso o diário passa a trazer um custo CONTRAFACTUAL
+(preço do gatilho − preço do tape na hora do processamento, × lado;
+alvo = ordem limite, não pesa), fora da identidade da decomposição.
+
+Entregue (v4.13): `--de/--ate` (dias úteis, log lido uma vez, dia sem
+dados pulado), `ler_tape` tolerante a dia antigo (sem `price`/`ts_recv_ns`
+→ aviso em vez de erro), `Tape.preco_em`, `custo_atraso`, coluna e aviso
+no HTML, colunas novas no CSV. Testes à mão (mercado 190000→189700 em
+30 s com entrega atrasada 30 s: custo 200 pts). Suíte 1.309.
+
+**Tags:** entregue-v4.13 (sobre v4.12).

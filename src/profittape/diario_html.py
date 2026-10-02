@@ -150,7 +150,8 @@ def renderizar(dados: dict[str, Any]) -> str:
         cab = [("EA", True), ("Saída", True), ("Lado", True), ("Motivo", True), ("Entrada", False),
                ("Saída px", False), ("P&L líq", False), ("Ideal", False), ("Entr.", False),
                ("Gap", False), ("Fill", False), ("Custo", False), ("Stop prog", False),
-               ("Real÷prog", False), ("Atraso entr (s)", False), ("Atraso saída (s)", False)]
+               ("Real÷prog", False), ("Fill de", True), ("Atraso entr (s)", False),
+               ("Atraso saída (s)", False), ("Custo atraso est.", False)]
         linhas = []
         for o in ops:
             hora = dt.datetime.fromtimestamp(o["t_saida"] / 1e9, tz=_TZ).strftime("%H:%M:%S")
@@ -161,16 +162,25 @@ def renderizar(dados: dict[str, Any]) -> str:
                 _n(o.get("ideal"), 0, True), _n(o.get("entrada_slip"), 0),
                 _n(o.get("gap"), 0), _n(o.get("fill"), 0), _n(o.get("custo"), 0),
                 _n(o.get("stop_pts"), 0), _n(o.get("stop_real_sobre_programado"), 2),
+                _e(o.get("fill_origem")),
                 _atraso(o.get("atraso_entrada_s"), tape_ok) if o.get("t_entrada")
                 else '<span class="mudo">—</span>',
-                _atraso(o.get("atraso_saida_s"), tape_ok)])
+                _atraso(o.get("atraso_saida_s"), tape_ok),
+                _n((o.get("custo_atraso_saida_est") or 0) + (o.get("custo_atraso_entrada_est")
+                                                             or 0), 0)
+                if (o.get("custo_atraso_saida_est") is not None
+                    or o.get("custo_atraso_entrada_est") is not None)
+                else '<span class="mudo">—</span>'])
         partes.append(_tab(cab, linhas))
         partes.append("<small>pnl líquido = ideal - gap - fill - entrada - custo (pontos). "
                       "<b>Gap</b>: o primeiro negócio além da barreira já estava longe dela "
                       "(mercado rápido; nenhum stop evita). <b>Fill</b>: deslizamento da "
                       "execução simulada contra o tape (atraso e spread entram aqui). "
                       "Atraso = mediana de ts_recv-ts dos negócios que chegaram a ±1 s da hora "
-                      "em que o EA processou.</small>")
+                      "em que o EA processou. <b>Custo atraso est.</b> é CONTRAFACTUAL e fica fora "
+                      "da identidade: quanto o mercado andou contra, entre o gatilho e o "
+                      "instante em que o EA o processou (saída no alvo = ordem limite: não "
+                      "pesa).</small>")
     else:
         partes.append("<p class='mudo'>Nenhuma operação encerrada neste dia.</p>")
 
@@ -186,11 +196,20 @@ def renderizar(dados: dict[str, Any]) -> str:
                   ["<b>= P&L líquido das operações decompostas</b>",
                    f"<b>{_n(sm['pnl_liquido'], 0, True)}</b>"]]
         partes.append(_tab([("Parcela (pontos)", True), ("Soma", False)], linhas))
+        if a["ops_com_fill_do_tape"]:
+            partes.append(
+                "<div class='aviso'>Em " + _n(a["ops_com_fill_do_tape"]) + " operação(ões) o "
+                "fill de saída é o <b>preço do tape no gatilho</b> (o record não está com o "
+                "livro ao vivo): o <b>fill é zero por construção</b> e o atraso do feed NÃO muda "
+                "o P&amp;L simulado — todo o excesso sobre o stop programado aparece como "
+                "<b>gap</b>. O custo do atraso só existe como estimativa contrafactual (coluna "
+                "ao lado).</div>")
         partes.append(
             f"<p>{a['stops']} stop(s); em {a['ops_com_atraso_na_saida']} operação(ões) a saída "
             f"ocorreu com feed atrasado (&gt; 2 s) ou mudo: gap+fill somam "
             f"{_n(a['gap_mais_fill_com_atraso'], 0, True)} pts ali, contra "
-            f"{_n(a['gap_mais_fill_sem_atraso'], 0, True)} nas demais. Um dia é uma amostra de "
+            f"{_n(a['gap_mais_fill_sem_atraso'], 0, True)} nas demais. Custo contrafactual do "
+            f"atraso no dia: {_n(a['custo_atraso_est'], 0, True)} pts. Um dia é uma amostra de "
             f"{a['operacoes_decompostas']}: o dado acumula em <code>operacoes.csv</code>.</p>")
     else:
         partes.append("<p class='mudo'>Sem operação decomponível (ignição e vwap_vp).</p>")
@@ -255,10 +274,12 @@ def renderizar_indice(pasta: Path) -> str:
         link = f"<a href='{_e(arq)}'>{_e(r.dia)}</a>" if (pasta / arq).exists() else _e(r.dia)
         linhas.append([link, _n(r.operacoes), _n(r.pnl_liquido, 0, True), _n(r.stops),
                        _n(r.stop_real_sobre_programado_mediano, 2), _n(r.gap, 0), _n(r.fill, 0),
+                       _n(getattr(r, "custo_atraso_est", None), 0),
                        _n(r.atraso_p99, 1), _n(r.atraso_max, 1), _n(r.incidentes),
                        _n(r.buracos), _n(r.fila_max)])
     tab = _tab([("Dia", True), ("Ops", False), ("P&L líq", False), ("Stops", False),
-                ("Real÷prog", False), ("Gap", False), ("Fill", False), ("Atraso p99", False),
+                ("Real÷prog", False), ("Gap", False), ("Fill", False), ("Custo atraso", False),
+                ("Atraso p99", False),
                 ("Atraso máx", False), ("Incid.", False), ("Buracos", False),
                 ("Fila máx", False)], linhas)
     return (f"<!doctype html><html lang='pt-BR'><meta charset='utf-8'><title>Diário — índice"

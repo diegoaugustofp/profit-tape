@@ -68,12 +68,13 @@ def _brt(t_ns: int) -> dt.datetime:
     return dt.datetime.fromtimestamp(t_ns / 1e9, tz=_TZ)
 
 
-def ler_log(caminho: Path, dia: dt.date) -> tuple[list[dict[str, Any]], int]:
-    """Eventos do `dia` (data de Brasilia), em ordem. Devolve (eventos,
-    linhas_invalidas). Pre-filtra pela data UTC da linha (dia e dia+1) antes
-    de converter: o log guarda meses."""
-    prefixos = {dia.isoformat(), (dia + dt.timedelta(days=1)).isoformat()}
-    eventos: list[dict[str, Any]] = []
+def ler_log_varios(caminho: Path, dias: set[dt.date]
+                   ) -> tuple[dict[dt.date, list[dict[str, Any]]], int]:
+    """UMA passada no log para varios dias de Brasilia (o log guarda meses; o
+    modo retroativo nao pode reler o arquivo inteiro por dia). Devolve
+    ({dia: eventos em ordem}, linhas_invalidas)."""
+    prefixos = {d.isoformat() for x in dias for d in (x, x + dt.timedelta(days=1))}
+    por_dia: dict[dt.date, list[dict[str, Any]]] = {d: [] for d in dias}
     ruins = 0
     with caminho.open(encoding="utf-8", errors="replace") as f:
         for linha in f:
@@ -89,12 +90,20 @@ def ler_log(caminho: Path, dia: dt.date) -> tuple[list[dict[str, Any]], int]:
             except (json.JSONDecodeError, KeyError, ValueError):
                 ruins += 1
                 continue
-            if _brt(t).date() != dia:
-                continue
-            d["_t"] = t
-            eventos.append(d)
-    eventos.sort(key=lambda e: e["_t"])
-    return eventos, ruins
+            alvo = _brt(t).date()
+            if alvo in por_dia:
+                d["_t"] = t
+                por_dia[alvo].append(d)
+    for ev in por_dia.values():
+        ev.sort(key=lambda e: e["_t"])
+    return por_dia, ruins
+
+
+def ler_log(caminho: Path, dia: dt.date) -> tuple[list[dict[str, Any]], int]:
+    """Eventos do `dia` (data de Brasilia), em ordem. Devolve (eventos,
+    linhas_invalidas)."""
+    por_dia, ruins = ler_log_varios(caminho, {dia})
+    return por_dia[dia], ruins
 
 
 # ------------------------------------------------------------ operacoes
@@ -134,6 +143,8 @@ def _op_ign(s: dict[str, Any], ent: dict[str, Any] | None) -> dict[str, Any]:
                           "motivo": str(s["motivo"]), "t_saida": s["_t"],
                           "t_entrada": ent["_t"] if ent else None,
                           "entrada": _f(s, "entrada"), "saida": _f(s, "saida"),
+                          "saida_tape": _f(s, "saida_tape"),
+                          "preco_ref": _f(s, "preco_deteccao"),
                           "pnl_bruto": _f(s, "pnl_bruto"), "pnl_liquido": _f(s, "pnl_liquido"),
                           "duracao_s": _f(s, "duracao_s"), "fill_origem": s.get("fill_origem"),
                           "atraso_log_entrada_s": _f(ent, "atraso_s") if ent else None,
@@ -155,6 +166,8 @@ def _op_vwapvp(s: dict[str, Any], ent: dict[str, Any] | None,
                           "motivo": str(s["motivo"]), "t_saida": s["_t"],
                           "t_entrada": ent["_t"] if ent else None,
                           "entrada": _f(s, "entrada"), "saida": _f(s, "saida"),
+                          "saida_tape": _f(s, "saida"),
+                          "preco_ref": _f(sin, "close") if sin else None,
                           "pnl_bruto": _f(s, "pnl_bruto"), "pnl_liquido": _f(s, "pnl_liquido"),
                           "duracao_s": _f(s, "duracao_s"), "fill_origem": "tape",
                           "hhmm_sinal": s.get("hhmm_sinal")}
@@ -216,12 +229,27 @@ def extrair_operacoes(eventos: list[dict[str, Any]]) -> list[dict[str, Any]]:
 class Tape:
     """Tape do dia ordenado por chegada, com o atraso de cada negocio."""
 
-    def __init__(self, ts_ns: np.ndarray, recv_ns: np.ndarray) -> None:
+    def __init__(self, ts_ns: np.ndarray, recv_ns: np.ndarray,
+                 preco: np.ndarray | None = None) -> None:
         ordem = np.argsort(recv_ns, kind="stable")
         self.recv = recv_ns[ordem]
         self.ts = ts_ns[ordem]
         self.lag = (self.recv - self.ts) / _NS          # segundos
         self.n = int(self.recv.size)
+        self._ts_orig, self._px = ts_ns, preco
+        self._ev: tuple[np.ndarray, np.ndarray] | None = None   # por hora de EVENTO, sob demanda
+
+    def preco_em(self, t_ns: int) -> float | None:
+        """Preco do ultimo negocio com hora de EVENTO <= t_ns (o mercado naquele
+        instante, como a bolsa o viu). None sem coluna de preco ou antes do 1o."""
+        if self._px is None:
+            return None
+        if self._ev is None:
+            o = np.argsort(self._ts_orig, kind="stable")
+            self._ev = (self._ts_orig[o], self._px[o])
+        ts, px = self._ev
+        i = int(np.searchsorted(ts, t_ns, side="right")) - 1
+        return float(px[i]) if i >= 0 else None
 
     def atraso_na_hora(self, t_ns: int, janela_s: float = 1.0) -> float | None:
         """Mediana de `ts_recv - ts` dos negocios que CHEGARAM a +-janela_s de
@@ -271,14 +299,55 @@ class Tape:
                 for i in np.nonzero(d >= limiar_s)[0]]
 
 
-def carregar_tape(curated: Path, symbol: str, dia: dt.date) -> Tape | None:
+def ler_tape(curated: Path, symbol: str, dia: dt.date) -> tuple[Tape | None, str | None]:
+    """(tape, motivo_se_nao_houver). Dia antigo ou gravacao ruim nao derruba o
+    diario: devolve None e diz por que."""
     pasta = curated / "trade" / f"dt={dia.isoformat()}" / f"sym={symbol}"
     if not pasta.exists():
-        return None
-    df = pd.read_parquet(pasta, columns=["ts_ns", "ts_recv_ns"])
-    if df.empty:
-        return None
-    return Tape(df["ts_ns"].to_numpy(dtype=np.int64), df["ts_recv_ns"].to_numpy(dtype=np.int64))
+        return None, "sem tape curado deste dia (rode depois do compact)"
+    for cols in (["ts_ns", "ts_recv_ns", "price"], ["ts_ns", "ts_recv_ns"]):
+        try:
+            df = pd.read_parquet(pasta, columns=cols)
+        except Exception as exc:   # coluna ausente em dia antigo, parquet corrompido, etc.
+            erro = repr(exc)
+            continue
+        if df.empty:
+            return None, "tape curado vazio"
+        px = df["price"].to_numpy(dtype=np.float64) if "price" in df else None
+        return (Tape(df["ts_ns"].to_numpy(dtype=np.int64),
+                     df["ts_recv_ns"].to_numpy(dtype=np.int64), px), None)
+    return None, f"tape ilegivel ({erro[:80]})"
+
+
+def carregar_tape(curated: Path, symbol: str, dia: dt.date) -> Tape | None:
+    return ler_tape(curated, symbol, dia)[0]
+
+
+def custo_atraso(tape: Tape, o: dict[str, Any]) -> None:
+    """Custo CONTRAFACTUAL do atraso (pontos; positivo = pior). A simulacao em
+    dry_run sem livro ao vivo preenche a saida com o preco do negocio que
+    disparou -- ai' o atraso nao muda o P&L simulado. Numa execucao real o
+    EA so' sabe do gatilho L segundos depois; a ordem a mercado encontra o
+    mercado de AGORA:
+        saida   = (preco do gatilho - preco do tape na hora do processamento) * L
+        entrada = (preco do tape na hora do processamento - preco do tape L antes) * L
+    Saida no alvo = ordem limite ja' no livro: o atraso nao pesa (None)."""
+    lado = o.get("lado")
+    o["custo_atraso_saida_est"] = o["custo_atraso_entrada_est"] = None
+    if lado not in (1, -1):
+        return
+    la = o.get("atraso_saida_s")
+    p_trig = o.get("saida_tape")
+    if la is not None and p_trig is not None and o.get("motivo") != "alvo":
+        p_agora = tape.preco_em(o["t_saida"])
+        if p_agora is not None:
+            o["custo_atraso_saida_est"] = (float(p_trig) - p_agora) * lado
+    le = o.get("atraso_entrada_s")
+    if le is not None and o.get("t_entrada"):
+        p_agora = tape.preco_em(o["t_entrada"])
+        p_antes = tape.preco_em(o["t_entrada"] - int(le * _NS))
+        if p_agora is not None and p_antes is not None:
+            o["custo_atraso_entrada_est"] = (p_agora - p_antes) * lado
 
 
 # ------------------------------------------------------- saude do record
@@ -349,32 +418,41 @@ def atribuicao(ops: list[dict[str, Any]]) -> dict[str, Any]:
             "ops_com_atraso_na_saida": len(com_atraso),
             "gap_mais_fill_com_atraso": float(sum(o["gap"] + o["fill"] for o in com_atraso)),
             "gap_mais_fill_sem_atraso": float(sum(o["gap"] + o["fill"] for o in dec
-                                                  if o not in com_atraso))}
+                                                  if o not in com_atraso)),
+            "custo_atraso_est": float(sum((o.get("custo_atraso_saida_est") or 0)
+                                          + (o.get("custo_atraso_entrada_est") or 0)
+                                          for o in ops)),
+            "ops_com_fill_do_tape": sum(1 for o in dec if o.get("fill_origem") == "tape")}
 
 
 def montar(dia: dt.date, log: Path, curated: Path, symbol: str = "WINFUT",
-           notas: str = "") -> dict[str, Any]:
+           notas: str = "",
+           eventos_pre: tuple[list[dict[str, Any]], int] | None = None) -> dict[str, Any]:
     avisos: list[str] = []
-    if not log.exists():
-        raise SystemExit(f"log nao encontrado: {log}")
-    eventos, ruins = ler_log(log, dia)
+    if eventos_pre is None:
+        if not log.exists():
+            raise SystemExit(f"log nao encontrado: {log}")
+        eventos, ruins = ler_log(log, dia)
+    else:
+        eventos, ruins = eventos_pre
     if ruins:
         avisos.append(f"{ruins} linhas do log ilegiveis foram ignoradas")
     if not eventos:
         avisos.append(f"nenhum evento de {dia} em {log}")
     ops = extrair_operacoes(eventos)
-    tape = carregar_tape(curated, symbol, dia)
+    tape, motivo = ler_tape(curated, symbol, dia)
     if tape is None:
-        avisos.append("sem tape curado deste dia (rode depois do compact): atraso do feed "
-                      "e buracos de chegada nao medidos")
+        avisos.append(f"{motivo}: atraso do feed, buracos de chegada e custo do atraso "
+                      "nao medidos")
     for o in ops:
         o["tape_disponivel"] = tape is not None
         if tape is not None:
             o["atraso_saida_s"] = tape.atraso_na_hora(o["t_saida"])
             o["atraso_entrada_s"] = (tape.atraso_na_hora(o["t_entrada"])
                                      if o.get("t_entrada") else None)
+            custo_atraso(tape, o)
     dados: dict[str, Any] = {
-        "dia": dia.isoformat(), "symbol": symbol,
+        "dia": dia.isoformat(), "symbol": symbol, "n_eventos": len(eventos),
         "gerado_em": dt.datetime.now(tz=_TZ).strftime("%d/%m/%Y %H:%M"),
         "operacoes": ops, "atribuicao": atribuicao(ops), "avisos": avisos,
         "saude": saude_record(eventos), "ocorrencias": ocorrencias(eventos),
@@ -399,7 +477,8 @@ def montar(dia: dt.date, log: Path, curated: Path, symbol: str = "WINFUT",
 _COLUNAS_OPS = ["dia", "ea", "tipo", "lado", "motivo", "hora_saida", "entrada", "saida",
                 "pnl_bruto", "pnl_liquido", "duracao_s", "ideal", "entrada_slip", "gap", "fill",
                 "custo", "residuo", "stop_pts", "alvo_pts", "stop_real_sobre_programado",
-                "atraso_entrada_s", "atraso_saida_s", "fill_origem", "slippage_ordens_pts",
+                "atraso_entrada_s", "atraso_saida_s", "custo_atraso_entrada_est",
+                "custo_atraso_saida_est", "saida_tape", "fill_origem", "slippage_ordens_pts",
                 "latencia_fill_max_ms"]
 
 
@@ -435,6 +514,7 @@ def gravar_csv(dados: dict[str, Any], pasta: Path) -> None:
               "stops": a["stops"],
               "stop_real_sobre_programado_mediano": a["stop_real_sobre_programado_mediano"],
               "gap": a["soma"]["gap"], "fill": a["soma"]["fill"],
+              "custo_atraso_est": a["custo_atraso_est"],
               "atraso_p50": t.get("atraso_p50"), "atraso_p99": t.get("atraso_p99"),
               "atraso_max": t.get("atraso_max"), "incidentes": len(dados["incidentes"]),
               "buracos": len(dados["buracos"]), "fila_max": s.get("fila_max"),

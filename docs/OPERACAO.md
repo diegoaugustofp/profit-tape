@@ -25,6 +25,24 @@ buraco). O diario NAO atribui causa: coloca o atraso ao lado do gap+fill e deixa
 chegada no pregao), mais saude do record (heartbeat, fila, descartados), estados da DLL e avisos/
 erros agrupados por evento.
 
+**RETROATIVO (v4.13):** `profit-tape diario-operacional --de 2026-07-24 [--ate 2026-10-02]` percorre
+os dias uteis do intervalo (o log e' lido uma vez) e pula o dia que nao tem nem evento no log nem
+tape curado. O que existe retroativamente: o **atraso do feed, os incidentes e os buracos de
+chegada** de TODO dia curado (so' dependem de `ts_recv_ns`, nao de EA) -- responde se o stall de
+01/10 foi unico; as **operacoes** so' desde que cada EA loga (ignicao 28/09, vwap_vp 01/10, 123 e
+os demais desde o inicio do forward de cada um). Dias antigos sem a coluna `ts_recv_ns` saem sem
+a parte do feed (com aviso). Antes de 10/09 a gravacao tinha defeitos conhecidos: leia os
+incidentes desses dias com cautela. Custa minutos por dia curado: rode depois das 18:00.
+
+**ATENCAO ao fill (achado de 02/10):** sem `--ea-livro-ao-vivo` o record nao tem livro, e a ignicao
+(e o vwap_vp) preenche a saida com o **preco do negocio que disparou** (`fill_origem = tape`). Entao
+o *fill* e' zero por construcao e **o atraso do feed nao muda o P&L simulado**: todo o excesso
+sobre o stop programado aparece como *gap* (o primeiro negocio alem do stop ja' estava longe).
+Como o atraso so' custaria numa execucao real (ordem a mercado que encontra o mercado de AGORA),
+o diario traz o **custo contrafactual do atraso**, fora da identidade: saida =
+`(preco do gatilho - preco do tape na hora do processamento) x lado`; entrada = quanto o mercado
+andou contra entre a deteccao e o processamento; saida no alvo = ordem limite, nao pesa.
+
 Cobertura hoje: decomposicao para ignicao e vwap_vp; 123, microprice e z_agf entram como operacao
 com o P&L e, no 123, slippage e latencia de fill das ordens. Ainda NAO ha': versao da DLL,
 silencio de trade por simbolo no heartbeat, nem p50/p99 de atraso dentro do log do record (backlog

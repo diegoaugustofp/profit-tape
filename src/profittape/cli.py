@@ -1788,6 +1788,9 @@ def ea_vwapvp_servico_replay(
 @app.command(name="diario-operacional")
 def diario_operacional(
     dia: str | None = typer.Option(None, "--dia", help="YYYY-MM-DD (padrao: hoje, Brasilia)"),
+    de: str | None = typer.Option(
+        None, "--de", help="RETROATIVO: primeiro dia do intervalo (so' dias uteis)"),
+    ate: str | None = typer.Option(None, "--ate", help="RETROATIVO: ultimo dia (padrao: hoje)"),
     log: Path = typer.Option(Path("logs/record_diario.jsonl"), "--log"),
     curated: Path = typer.Option(Path("data/curated"), "--curated"),
     symbol: str = typer.Option("WINFUT", "--symbol"),
@@ -1797,12 +1800,17 @@ def diario_operacional(
 ) -> None:
     """
     Diario OPERACIONAL (nao confundir com `diario <dir>`, o relatorio de sinais
-    decididos do forward): operacoes dos EAs decompostas (ideal, piora de entrada,
-    gap, deslizamento de saida, custo), atraso do feed e buracos de chegada
-    (do tape curado), saude do record e avisos do dia. Gera
-    diario_AAAA-MM-DD.html, acumula operacoes.csv / incidentes.csv / dias.csv e
-    refaz o index.html. Rode DEPOIS do compact (o tape curado e' a fonte do
-    atraso); sem ele sai so' a parte do log. Reexecutar o dia substitui.
+    decididos do forward): operacoes dos EAs decompostas (ideal, piora de
+    entrada, gap, deslizamento de saida, custo), atraso do feed e buracos de
+    chegada (do tape curado), custo contrafactual do atraso, saude do record e
+    avisos do dia. Gera diario_AAAA-MM-DD.html, acumula operacoes.csv /
+    incidentes.csv / dias.csv e refaz o index.html. Rode DEPOIS do compact (o
+    tape curado e' a fonte do atraso); sem ele sai so' a parte do log.
+    Reexecutar o dia substitui.
+
+    RETROATIVO: --de AAAA-MM-DD [--ate AAAA-MM-DD] percorre os dias uteis do
+    intervalo (o log e' lido UMA vez). Dia sem evento no log e sem tape e'
+    pulado. Ocupa a maquina: rode depois das 18:00.
     """
     import datetime as _d
     from zoneinfo import ZoneInfo
@@ -1811,28 +1819,49 @@ def diario_operacional(
     from .prioridade import baixa_prioridade
 
     baixa_prioridade()
-    from .diario import anotar, gravar_csv, ler_notas, montar
+    from .diario import anotar, gravar_csv, ler_log_varios, ler_notas, montar
     from .diario_html import renderizar, renderizar_indice
 
-    d = (_d.date.fromisoformat(dia) if dia
-         else _d.datetime.now(tz=ZoneInfo("America/Sao_Paulo")).date())
+    hoje = _d.datetime.now(tz=ZoneInfo("America/Sao_Paulo")).date()
+    if (de or ate) and (dia or nota):
+        raise typer.BadParameter("--de/--ate nao combinam com --dia nem --nota")
     pasta.mkdir(parents=True, exist_ok=True)
-    if nota:
-        anotar(pasta, d, nota)
-    dados = montar(d, log, curated, symbol, ler_notas(pasta, d))
-    gravar_csv(dados, pasta)
-    saida = pasta / f"diario_{d.isoformat()}.html"
-    saida.write_text(renderizar(dados), encoding="utf-8")
+    if de or ate:
+        d0 = _d.date.fromisoformat(de) if de else _d.date.fromisoformat(str(ate))
+        d1 = _d.date.fromisoformat(ate) if ate else hoje
+        dias = [d0 + _d.timedelta(days=i) for i in range((d1 - d0).days + 1)
+                if (d0 + _d.timedelta(days=i)).weekday() < 5]
+        if not log.exists():
+            raise SystemExit(f"log nao encontrado: {log}")
+        por_dia, ruins = ler_log_varios(log, set(dias))
+        pre = {d: (por_dia[d], ruins if d == dias[0] else 0) for d in dias}
+    else:
+        dias = [_d.date.fromisoformat(dia) if dia else hoje]
+        pre = {}
+        if nota:
+            anotar(pasta, dias[0], nota)
+    gerados = 0
+    for d in dias:
+        dados = montar(d, log, curated, symbol, ler_notas(pasta, d), pre.get(d))
+        if len(dias) > 1 and not dados["n_eventos"] and dados["tape"] is None:
+            typer.echo(f"{d}: sem dados (nem evento no log, nem tape curado)")
+            continue
+        gravar_csv(dados, pasta)
+        (pasta / f"diario_{d.isoformat()}.html").write_text(renderizar(dados), encoding="utf-8")
+        gerados += 1
+        ops = dados["operacoes"]
+        t = dados["tape"]
+        typer.echo(f"diario {d}: {len(ops)} operacao(oes), "
+                   f"P&L liquido {sum((o.get('pnl_liquido') or 0) for o in ops):+.0f} pts, "
+                   f"{len(dados['incidentes'])} incidente(s) de atraso, "
+                   f"{len(dados['buracos'])} buraco(s) de chegada"
+                   + (f", atraso p99 {t['atraso_p99']:.1f} s, max {t['atraso_max']:.0f} s"
+                      if t else ""))
+        if len(dias) == 1:
+            for av in dados["avisos"]:
+                typer.echo(f"  AVISO: {av}")
     (pasta / "index.html").write_text(renderizar_indice(pasta), encoding="utf-8")
-    ops = dados["operacoes"]
-    typer.echo(f"diario {d}: {len(ops)} operacao(oes), "
-               f"P&L liquido {sum((o.get('pnl_liquido') or 0) for o in ops):+.0f} pts, "
-               f"{len(dados['incidentes'])} incidente(s) de atraso, "
-               f"{len(dados['buracos'])} buraco(s) de chegada")
-    for av in dados["avisos"]:
-        typer.echo(f"  AVISO: {av}")
-    typer.echo(f"  -> {saida}")
-    typer.echo(f"  -> {pasta / 'index.html'}")
+    typer.echo(f"  {gerados} dia(s) gerado(s) -> {pasta / 'index.html'}")
 
 
 @app.command(name="ea-vwapvp-replay")
