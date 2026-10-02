@@ -32,7 +32,46 @@ margin:6px 0}
 .nota{background:#eef5ff;border:1px solid #b9d3f5;padding:6px 10px;border-radius:6px;
 white-space:pre-wrap}
 .mudo{color:#9aa3b2}small{color:#5b6577}
+.nav{margin:0 0 14px;font-size:13px}.nav a{margin-right:14px;color:#0b5cad;text-decoration:none}
+.nav a:hover{text-decoration:underline}
+.barra{background:#e9edf4;border-radius:4px;height:8px;min-width:90px;overflow:hidden}
+.barra i{display:block;height:8px;background:#3b82c4}
+.ficha{color:#5b6577;font-size:12px;max-width:430px;white-space:normal;text-align:left}
 """
+
+NAV_INI = "<!--NAV_INI-->"
+NAV_FIM = "<!--NAV_FIM-->"
+
+
+def nav_html(anterior: str | None, proximo: str | None) -> str:
+    """Barra de navegacao: voltar ao indice e dia anterior/proximo. Fica entre marcadores
+    para `atualizar_nav` reescrever as paginas antigas quando entra um dia novo."""
+    partes = ["<a href='index.html'>&larr; indice (todos os dias)</a>"]
+    if anterior:
+        partes.append(f"<a href='{_e(anterior)}'>&lsaquo; dia anterior</a>")
+    if proximo:
+        partes.append(f"<a href='{_e(proximo)}'>proximo dia &rsaquo;</a>")
+    return f"{NAV_INI}<div class='nav'>{''.join(partes)}</div>{NAV_FIM}"
+
+
+def atualizar_nav(pasta: Path) -> int:
+    """Reescreve a barra de navegacao de TODAS as paginas de dia (dia anterior/proximo
+    mudam quando entra um dia novo). Devolve quantas paginas foram atualizadas."""
+    arqs = sorted(pasta.glob("diario_????-??-??.html"))
+    n = 0
+    for i, f in enumerate(arqs):
+        ant = arqs[i - 1].name if i > 0 else None
+        prox = arqs[i + 1].name if i + 1 < len(arqs) else None
+        txt = f.read_text(encoding="utf-8")
+        if NAV_INI not in txt or NAV_FIM not in txt:
+            continue
+        a, b = txt.index(NAV_INI), txt.index(NAV_FIM) + len(NAV_FIM)
+        novo = txt[:a] + nav_html(ant, prox) + txt[b:]
+        if novo != txt:
+            f.write_text(novo, encoding="utf-8")
+            n += 1
+    return n
+
 
 
 def _e(x: Any) -> str:
@@ -132,11 +171,14 @@ def renderizar(dados: dict[str, Any]) -> str:
         ("Stop real ÷ programado (mediana)", _n(razao, 2) if razao else "—"),
         ("Atraso p99 / máx do feed (s)",
          f"{_n(t['atraso_p99'], 1)} / {_n(t['atraso_max'], 1)}" if t else "—"),
+        ("Importado depois (&gt; 1 h)", _n((t or {}).get("pct_recuperado", 0) * 100, 1) + " %"
+         if t else "—"),
         ("Incidentes de atraso", _n(len(dados["incidentes"])) if tape_ok else "—"),
         ("Buracos de chegada", _n(len(dados["buracos"])) if tape_ok else "—"),
         ("Fila máx do record", _n(s.get("fila_max"))),
     ]
-    partes = [f"<h1>Diário operacional — {_e(dados['symbol'])} — "
+    partes = [nav_html(None, None),
+              f"<h1>Diário operacional — {_e(dados['symbol'])} — "
               f"{dt.date.fromisoformat(dados['dia']).strftime('%d/%m/%Y')}</h1>",
               f"<div class='sub'>gerado em {_e(dados['gerado_em'])} · log + tape curado</div>"]
     partes += [f"<div class='aviso'>{_e(x)}</div>" for x in dados["avisos"]]
@@ -246,7 +288,7 @@ def renderizar(dados: dict[str, Any]) -> str:
     if tape_ok:
         partes.append(f"<p>{_n(t['negocios'])} negócios · atraso mediano "
                       f"{_n(t['atraso_p50'], 2)} s · p99 {_n(t['atraso_p99'], 1)} s · "
-                      f"máximo {_n(t['atraso_max'], 1)} s.</p>")
+                      f"máximo {_n(t['atraso_max'], 1)} s (só o que chegou ao vivo).</p>")
         partes.append(_grafico(dados))
         if dados["incidentes"]:
             partes.append(_tab(
@@ -292,11 +334,106 @@ def renderizar(dados: dict[str, Any]) -> str:
             + "".join(partes) + "</body></html>")
 
 
-def renderizar_indice(pasta: Path) -> str:
+def _barra(n: int, alvo: int | None) -> str:
+    if not alvo:
+        return ""
+    pct = max(0.0, min(100.0, 100.0 * n / alvo))
+    return f"<div class='barra'><i style='width:{pct:.0f}%'></i></div>"
+
+
+def _resumo_por_ea(ops: pd.DataFrame, status: dict[str, str]) -> str:
+    if ops.empty:
+        return "<p class='mudo'>Sem operações.</p>"
+    ops = ops.copy()
+    ops["descartado"] = ops["descartado"].fillna(False).astype(bool) if "descartado" in ops \
+        else False
+    ops = ops[ops["pnl_liquido"].notna()]
+    cab = [("EA", True), ("Situação na ficha", True), ("Ops", False), ("Ganhos", False),
+           ("Perdas", False), ("% ganho", False), ("P&L total", False), ("P&L médio", False),
+           ("Pior op", False), ("Saídas", True), ("Desde", True)]
+
+    def linhas(df: pd.DataFrame) -> list[list[str]]:
+        out = []
+        for ea, g in df.groupby("ea", sort=True):
+            p = g["pnl_liquido"].astype(float)
+            mot = " · ".join(f"{k} {v}" for k, v in g["motivo"].value_counts().items())
+            out.append([_e(ea), f"<span class='ficha'>{_e(status.get(str(ea), '—'))}</span>",
+                        _n(len(g)), _n(int((p > 0).sum())), _n(int((p < 0).sum())),
+                        _n(100 * (p > 0).mean(), 0), _n(p.sum(), 0, True),
+                        _n(p.mean(), 1, True), _n(p.min(), 0, True), _e(mot),
+                        _e(str(g["dia"].min()))])
+        return out
+    ativos = ops[~ops["descartado"]]
+    desc = ops[ops["descartado"]]
+    s = _tab(cab, linhas(ativos)) if len(ativos) else "<p class='mudo'>Nenhum EA ativo.</p>"
+    if len(desc):
+        s += ("<h2>EAs descartados que ainda rodaram (fora dos totais)</h2>"
+              + _tab(cab, linhas(desc)))
+    return s
+
+
+def _proxima_avaliacao(prog: list[dict[str, Any]], metas: list[dict[str, Any]],
+                       status: dict[str, str], hrefs: dict[str, str]) -> str:
+    cab = [("EA", True), ("Unidade (ficha)", True), ("Contado", False), ("Próximo marco", True),
+           ("Faltam", False), ("Ritmo obs. (ficha)", False), ("Previsão", False),
+           ("Prazo da ficha", False), ("Acompanhamento", True), ("Critério e status (ficha)", True)]
+    linhas = []
+    for m, p in zip(metas, prog, strict=True):
+        if m["ea"] in ("ea_microprice", "ea_microprice_passiva"):
+            continue                              # descartados: sem meta
+        prox = p["proximo"]
+        marco = (f"n = {prox['n']} — {_e(prox['rotulo'])}" if prox
+                 else ("todas as metas atingidas" if p["metas"] else "sem meta numérica"))
+        acomp = []
+        if p.get("slippage_medio") is not None:
+            acomp.append(f"slippage médio {_n(p['slippage_medio'], 1)} pts (sem veredito)")
+        if p.get("media") is not None:
+            mt = p.get("morte") or {}
+            acomp.append(f"média {_n(p['media'], 0, True)} pts/op · drawdown {_n(p['drawdown'], 0)}"
+                         + (f" de {_n(mt.get('dd_pts'), 0)}" if mt.get("dd_pts") else ""))
+        if m.get("veredito_parcial") is False:
+            acomp.append("sem veredito parcial (regra da ficha)")
+        prazo = (f"{p['prazo'].strftime('%d/%m/%Y')}" if p.get("prazo") else "—")
+        prev = p["previsao"].strftime("%d/%m/%Y") if p.get("previsao") else "—"
+        ritmo = (f"{_n(p['ritmo_obs'], 2)} ({_n(p['ritmo_ficha'], 2)})"
+                 if p.get("ritmo_obs") is not None else "—")
+        crit = (f"{_e(m.get('criterio'))}<br><a href='{_e(hrefs.get(m['ea'], '#'))}'>ficha</a> · "
+                f"<span class='ficha'>{_e(status.get(m['ea'], ''))}</span>")
+        linhas.append([_e(m["ea"]), _e(m.get("unidade")),
+                       f"<b>{_n(p['n'])}</b>" + _barra(p["n"], prox["n"] if prox else None),
+                       marco, _n(p["faltam"]) if p["faltam"] is not None else "—", ritmo, prev,
+                       prazo, " · ".join(acomp) or "—", crit])
+    return _tab(cab, linhas)
+
+
+def renderizar_indice(pasta: Path, metas: list[dict[str, Any]] | None = None,
+                      raiz_fichas: Path | None = None) -> str:
+    from .diario_metas import progresso, status_da_ficha
+
     f = pasta / "dias.csv"
     if not f.exists():
         return "<!doctype html><meta charset='utf-8'><p>Sem dias gerados.</p>"
     df = pd.read_csv(f).sort_values("dia", ascending=False)
+    fops = pasta / "operacoes.csv"
+    ops = pd.read_csv(fops) if fops.exists() else pd.DataFrame()
+    metas = metas or []
+    status: dict[str, str] = {}
+    hrefs: dict[str, str] = {}
+    prog: list[dict[str, Any]] = []
+    if raiz_fichas is not None:
+        import os
+        for m in metas:
+            status[m["ea"]] = status_da_ficha(raiz_fichas, m["ficha"])
+            hrefs[m["ea"]] = os.path.relpath(raiz_fichas / m["ficha"], pasta).replace("\\", "/")
+    if metas and not ops.empty:
+        if "descartado" not in ops:
+            ops["descartado"] = False
+        prog = [progresso(m, ops, df) for m in metas]
+    elif metas:
+        prog = [progresso(m, pd.DataFrame(columns=["ea", "dia", "descartado", "motivo",
+                                                   "hora_saida", "slippage_ordens_pts",
+                                                   "pnl_liquido"]), df) for m in metas]
+
     linhas = []
     for r in df.itertuples():
         arq = f"diario_{r.dia}.html"
@@ -304,14 +441,28 @@ def renderizar_indice(pasta: Path) -> str:
         linhas.append([link, _n(r.operacoes), _n(r.pnl_liquido, 0, True), _n(r.stops),
                        _n(r.stop_real_sobre_programado_mediano, 2), _n(r.gap, 0), _n(r.fill, 0),
                        _n(getattr(r, "custo_atraso_est", None), 0),
+                       _n(getattr(r, "pct_recuperado", 0) * 100
+                          if pd.notna(getattr(r, "pct_recuperado", float("nan"))) else None, 1),
                        _n(r.atraso_p99, 1), _n(r.atraso_max, 1), _n(r.incidentes),
                        _n(r.buracos), _n(r.fila_max)])
     tab = _tab([("Dia", True), ("Ops", False), ("P&L líq", False), ("Stops", False),
                 ("Real÷prog", False), ("Gap", False), ("Fill", False), ("Custo atraso", False),
-                ("Atraso p99", False),
-                ("Atraso máx", False), ("Incid.", False), ("Buracos", False),
-                ("Fila máx", False)], linhas)
+                ("Importado %", False), ("Atraso p99", False), ("Atraso máx", False),
+                ("Incid.", False), ("Buracos", False), ("Fila máx", False)], linhas)
+    corpo = ["<h1>Diário operacional — todos os dias</h1>",
+             "<div class='sub'>resumo por EA, próxima avaliação segundo a ficha, e uma linha "
+             "por dia (abra o dia para a decomposição)</div>",
+             "<h2>Resumo por EA (todos os dias)</h2>", _resumo_por_ea(ops, status)]
+    if metas:
+        corpo += ["<h2>Próxima avaliação (segundo a ficha de cada EA)</h2>",
+                  _proxima_avaliacao(prog, metas, status, hrefs),
+                  "<small>Contagem a partir do primeiro dia de forward de cada EA; o ritmo "
+                  "observado usa os pregões já gerados no diário. Previsão = pregões que faltam "
+                  "no ritmo observado. Metas em <code>docs/eas/metas.yaml</code> (cada número "
+                  "com o trecho da ficha, guardado por teste).</small>"]
+    corpo += ["<h2>Dias</h2>", tab,
+              "<small>Importado %: negócios que chegaram com mais de 1 h de atraso são dado "
+              "recuperado depois (01 a 14/09 foram importados em 15/09), fora das estatísticas "
+              "de atraso. Atraso corrigido pelo desvio do relógio local.</small>"]
     return (f"<!doctype html><html lang='pt-BR'><meta charset='utf-8'><title>Diário — índice"
-            f"</title><style>{_CSS}</style><body><h1>Diário operacional — todos os dias</h1>"
-            f"<div class='sub'>uma linha por dia; abra o dia para a decomposição</div>{tab}"
-            "</body></html>")
+            f"</title><style>{_CSS}</style><body>{''.join(corpo)}</body></html>")

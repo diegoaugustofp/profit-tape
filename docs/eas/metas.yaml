@@ -1,0 +1,86 @@
+# Metas de avaliacao por EA, LIDAS pelo `profit-tape diario-operacional` (indice).
+#
+# Cada numero veio de uma ficha e carrega o `trecho` literal dela: um teste
+# (tests/test_diario_metas.py) falha se a ficha mudar e o trecho sumir -- meta velha
+# nao fica no indice em silencio. Mudou a regra na ficha => mude aqui na mesma entrega.
+#
+# `ea`        nome como aparece na coluna `ea` do operacoes.csv (log do record)
+# `contar`    o que conta como unidade da meta: motivos [..] | com_slippage | (vazio = todas)
+# `desde`     primeiro dia contado (inicio do forward daquele EA)
+# `metas`     marcos em ordem; o indice mostra o proximo ainda nao atingido
+# `ritmo_ficha`  unidades por pregao que a ficha esperava (para comparar com o observado)
+# `prazo_ate` limite de calendario da ficha, se houver
+# `mostrar`   o que o indice pode exibir SEM virar veredito: n | slippage_medio | dd_media
+# `veredito_parcial: false` = a ficha proibe olhar resultado antes da meta (so' contagem)
+
+eas:
+  - ea: ea_ignicao
+    ficha: ignicao.md
+    unidade: decididos (saiu no alvo ou no stop; tempo nao conta)
+    contar: {motivos: [alvo, stop]}
+    desde: 2026-09-28
+    metas:
+      - {n: 68, rotulo: "veredito"}
+    ritmo_ficha: 1.07
+    prazo_ate: 2027-03-28
+    criterio: "Veredito so' com >= 68 decididos OU 6 meses, o que vier antes. Antes disso, olhar so' para defeito; sequencia ruim NAO autoriza parar nem mexer."
+    veredito_parcial: false
+    mostrar: [n]
+    trechos: ["Veredito so' com >= 68 decididos OU 6 meses"]
+
+  - ea: "123 (E4)"
+    ficha: 123_volume_baixo.md
+    unidade: operacoes com ordens reais (demo)
+    contar: {com_slippage: true}
+    desde: 2026-09-14
+    metas:
+      - {n: 50, rotulo: "olhar so' defeito de execucao"}
+      - {n: 100, rotulo: "decisao de slippage (<= 6 paga; > 12 nao paga; entre: ate n = 200)"}
+      - {n: 200, rotulo: "so' se o slippage ficar entre 6 e 12"}
+    ritmo_ficha: 2.0
+    criterio: "Slippage entrada + saida <= 6 pts paga a execucao; > 12 nao paga; entre continua ate n = 200. Olho em n = 50 so' para defeito de execucao; decisao em n = 100."
+    veredito_parcial: false
+    mostrar: [n, slippage_medio]
+    trechos: ["~50 pregões, slippage", "≤ 6 pts em n = 100"]
+
+  - ea: ea_vwapvp_continuacao
+    ficha: vwap_vp.md
+    unidade: operacoes (demo, dry_run)
+    contar: {}
+    desde: 2026-10-01
+    metas:
+      - {n: 40, rotulo: "morte se a media for negativa"}
+    ritmo_ficha: 1.9
+    criterio: "MORTE escrita antes de ligar: drawdown acumulado > 7.000 pts OU 40 trades com media negativa -> desliga e fecha a ficha. Mudou parametro = contagem nova."
+    morte: {dd_pts: 7000, n_media_negativa: 40}
+    veredito_parcial: true
+    mostrar: [n, dd_media]
+    trechos: ["drawdown acumulado > 7.000 pts OU 40 trades com média"]
+
+  - ea: z_agf_win
+    ficha: z_agf_3.md
+    unidade: sem meta numerica na ficha
+    contar: {}
+    desde: 2026-08-01
+    metas: []
+    criterio: "A ficha nao fixa n para avaliacao: forward em dry_run, execucao real ainda nao medida."
+    mostrar: [n]
+    trechos: ["Roda em dry_run dentro do record desde agosto"]
+
+  - ea: ea_microprice
+    ficha: microprice.md
+    unidade: DESCARTADO
+    contar: {}
+    metas: []
+    criterio: "Taker descartado em 25/09; sem meta. Ainda roda se o YAML estiver em data/eas_ativos."
+    mostrar: [n]
+    trechos: ["DESCARTADO como taker"]
+
+  - ea: ea_microprice_passiva
+    ficha: microprice.md
+    unidade: DESCARTADO
+    contar: {}
+    metas: []
+    criterio: "Passiva pendente de modelo de fila: o fill simulado nao e' confiavel."
+    mostrar: [n]
+    trechos: ["passiva pendente de modelo de fila"]

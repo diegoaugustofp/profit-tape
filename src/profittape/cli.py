@@ -1800,6 +1800,9 @@ def diario_operacional(
         "ea_microprice,ea_microprice_passiva", "--descartados",
         help="EAs de veredito 'descartado' que ainda rodam (virgula): ficam no CSV mas "
              "FORA dos totais"),
+    metas_yaml: Path = typer.Option(
+        Path("docs/eas/metas.yaml"), "--metas",
+        help="metas de avaliacao por EA (numeros das fichas); fichas ficam na mesma pasta"),
     log_level: str = typer.Option("WARNING", "--log-level"),
 ) -> None:
     """
@@ -1824,7 +1827,8 @@ def diario_operacional(
 
     baixa_prioridade()
     from .diario import anotar, gravar_csv, ler_log_varios, ler_notas, montar
-    from .diario_html import renderizar, renderizar_indice
+    from .diario_html import atualizar_nav, renderizar, renderizar_indice
+    from .diario_metas import carregar_metas
 
     hoje = _d.datetime.now(tz=ZoneInfo("America/Sao_Paulo")).date()
     if (de or ate) and (dia or nota):
@@ -1878,7 +1882,10 @@ def diario_operacional(
         if len(dias) == 1:
             for av in dados["avisos"]:
                 typer.echo(f"  AVISO: {av}")
-    (pasta / "index.html").write_text(renderizar_indice(pasta), encoding="utf-8")
+    raiz_fichas = metas_yaml.parent
+    (pasta / "index.html").write_text(
+        renderizar_indice(pasta, carregar_metas(metas_yaml), raiz_fichas), encoding="utf-8")
+    atualizar_nav(pasta)
     typer.echo(f"  {gerados} dia(s) gerado(s) -> {pasta / 'index.html'}")
     if falhas:
         typer.echo(f"  {len(falhas)} dia(s) FALHARAM: " + " | ".join(falhas))

@@ -4995,3 +4995,25 @@ Diego rodou o diário (v4.12) em 01/10 e 30/09 e mandou HTML + CSVs:
   o prejuízo vem de a ignição perder, não de execução.
 
 **Tags:** entregue-v4.14 (sobre v4.13).
+
+### 2026-10-02d — Índice com resumo por EA e metas de avaliação; voltar ao índice; dado importado (v4.15)
+
+Diego (rodada retroativa v4.14, 1º a 01/10): faltava "voltar ao índice" no HTML do dia;
+o índice deveria ter resumo por EA e, quando a ficha disser, "o 123 precisa de X execuções
+para a próxima avaliação: quantas já houve e quantas faltam".
+
+- **Temos a informação?** Sim, nas fichas, mas em prosa: ignição "veredito só com ≥ 68
+  decididos OU 6 meses" (desde 28/09, 1,07/pregão); 123 E4 "olho em n = 50 só para defeito,
+  decisão em n = 100 (slippage ≤ 6 paga, > 12 não, entre: até 200)"; vwap_vp "MORTE: DD > 7.000
+  pts OU 40 trades com média negativa"; z_agf_3 sem n numérico; microprice descartado.
+  Extrair prosa seria frágil: `docs/eas/metas.yaml` guarda cada número com o trecho literal da
+  ficha, e um teste falha se a ficha mudar. Regra da ficha respeitada: ignição só mostra
+  contagem (sem veredito parcial).
+- **Achado nos dados:** os atrasos de milhões de segundos de 01–14/09 são `dia + atraso = 15/09`
+  em todos os dias (importação em lote), e 18/09 reapareceu em 21/09. Negócio com > 1 h de
+  atraso agora é "importado depois", fora das estatísticas de atraso.
+- O log do ciclo do 123 não traz `nome`: separado por ter ordens reais (`123 (E4)`).
+- Navegação: marcadores `<!--NAV_INI-->` permitem reescrever dia anterior/próximo nas páginas
+  antigas. Suíte 1.326.
+
+**Tags:** entregue-v4.15 (sobre v4.14).

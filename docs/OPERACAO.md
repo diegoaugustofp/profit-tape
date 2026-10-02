@@ -25,6 +25,24 @@ buraco). O diario NAO atribui causa: coloca o atraso ao lado do gap+fill e deixa
 chegada no pregao), mais saude do record (heartbeat, fila, descartados), estados da DLL e avisos/
 erros agrupados por evento.
 
+**Indice (v4.15).** `data\diario\index.html` traz, em ordem: (1) *Resumo por EA* (todos os dias:
+operacoes, ganhos, perdas, P&L, saidas, situacao lida da ficha; EAs descartados separados);
+(2) *Proxima avaliacao*, que le `docs/eas/metas.yaml`: quantas unidades a ficha pede, quantas ja'
+houve, quantas faltam, ritmo observado contra o esperado, previsao em pregoes e o criterio e o
+status da ficha. Cada numero do `metas.yaml` carrega o **trecho literal da ficha** e um teste
+(`tests/test_diario_metas.py`) falha se o trecho sumir: mudou a regra na ficha => mude o
+`metas.yaml` na mesma entrega. Quando a ficha proibe olhar resultado antes da meta
+(`veredito_parcial: false`, ex.: ignicao) o indice mostra so' a CONTAGEM. (3) *Dias*. Cada pagina
+de dia tem "voltar ao indice" e dia anterior/proximo (reescritos nas paginas antigas a cada rodada).
+
+**Dado importado depois.** Negocio que chega com mais de 1 h de atraso nao e' feed: e' historico
+recuperado. 01 a 14/09 tem `dia + atraso = 15/09` em todos (importados em lote); 18/09 reapareceu
+em 21/09. Ficam fora de atraso/incidentes/buracos e aparecem na coluna "Importado %".
+
+**O 123 nao loga o proprio nome** (dry_run e E4 usam o mesmo `ea.123.operacao_fechada`): o diario o
+separa por ter ordens reais -> `123 (E4)` / `123 (dry_run)`. Backlog: logar `nome` no ciclo
+(exige reiniciar o record e mexe no caminho do E4).
+
 **RETROATIVO (v4.13):** `profit-tape diario-operacional --de 2026-07-24 [--ate 2026-10-02]` percorre
 os dias uteis do intervalo (o log e' lido uma vez) e pula o dia que nao tem nem evento no log nem
 tape curado. O que existe retroativamente: o **atraso do feed, os incidentes e os buracos de

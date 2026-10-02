@@ -454,3 +454,86 @@ def test_cli_uma_falha_nao_derruba_o_intervalo_e_nao_deixa_csv_pela_metade(
     r1 = CliRunner().invoke(app, ["diario-operacional", "--dia", "2026-10-02", "--log", str(log),
                                   "--curated", str(tmp_path / "curated"), "--pasta", str(pasta)])
     assert r1.exit_code != 0 and isinstance(r1.exception, ValueError)
+
+
+# ------------------------------------------- v4.15: voltar, resumo por EA, dado importado
+def test_dado_importado_depois_fica_fora_das_estatisticas_de_atraso(tmp_path: Path) -> None:
+    """01-14/09: dia + atraso = 15/09 em todos (lote unico). Atraso de milhoes de segundos nao e'
+    feed. Dia inteiro importado: sem estatistica de atraso, sem incidente, sem buraco."""
+    ts = _brt_ns(9, 0) + np.arange(0, 2401) * NS
+    _escreve_tape(tmp_path / "curated", ts, ts + 14 * 86400 * NS)
+    log = tmp_path / "log.jsonl"
+    _log_do_dia(log)
+    d = D.montar(DIA, log, tmp_path / "curated")
+    t = d["tape"]
+    assert t["pct_recuperado"] == 1.0 and t["atraso_p99"] is None and t["atraso_max"] is None
+    assert d["incidentes"] == [] and d["buracos"] == []
+    assert any("IMPORTADO depois" in a for a in d["avisos"])
+    html = H.renderizar(d)                                  # nao quebra com estatistica None
+    assert "dado IMPORTADO" in html
+    # importacao parcial (1%): o resto continua medido
+    recv = ts + int(0.05 * NS)
+    recv[:24] += 3 * 86400 * NS
+    _escreve_tape(tmp_path / "c2", ts, recv)
+    d2 = D.montar(DIA, log, tmp_path / "c2")
+    assert d2["tape"]["recuperados"] == 24 and d2["tape"]["atraso_max"] < 1.0
+
+
+def test_123_sem_nome_no_log_e_separado_por_ter_ordens_reais() -> None:
+    """O log do ciclo do 123 nao traz o nome do EA (dry_run e E4 logam igual)."""
+    base = {"_t": 1, "event": "ea.123.operacao_fechada", "pnl_pts": 120.0, "desfecho": "alvo"}
+    e4 = dict(base, ordens={"entrada": {"slippage_pts": 4.0, "latencia_fill_ms": 100.0}})
+    assert D._op_generica(e4)["ea"] == "123 (E4)"
+    assert D._op_generica(dict(base, ordens={}))["ea"] == "123 (dry_run)"
+    assert D._op_generica(dict(base, nome="ea_123_vb"))["ea"] == "ea_123_vb"
+    assert D._op_generica(dict(base, desfecho="nao_executou", ordens={}))["ea"] == "123"
+
+
+def _gera_dias(tmp_path: Path, dias: list[dt.date]) -> Path:
+    """Gera paginas + indice por dentro (como o CLI) para o log/tape sinteticos."""
+    log = tmp_path / "log.jsonl"
+    _log_do_dia(log)
+    _tape_sintetico(tmp_path / "curated")
+    pasta = tmp_path / "diario"
+    pasta.mkdir()
+    for dia in dias:
+        d = D.montar(DIA, log, tmp_path / "curated")
+        d["dia"] = dia.isoformat()
+        D.gravar_csv(d, pasta)
+        (pasta / f"diario_{dia.isoformat()}.html").write_text(H.renderizar(d), encoding="utf-8")
+    return pasta
+
+
+def test_voltar_ao_indice_e_dias_vizinhos_atualizados_nas_paginas_antigas(tmp_path: Path) -> None:
+    pasta = _gera_dias(tmp_path, [dt.date(2026, 10, 1)])
+    p1 = pasta / "diario_2026-10-01.html"
+    assert "href='index.html'" in p1.read_text(encoding="utf-8")
+    assert "proximo dia" not in p1.read_text(encoding="utf-8")
+    # entram dois dias novos: a pagina antiga ganha 'proximo dia'; a do meio, os dois lados
+    for dia in (dt.date(2026, 10, 2), dt.date(2026, 10, 5)):
+        (pasta / f"diario_{dia}.html").write_text(
+            "<body>" + H.nav_html(None, None) + "x</body>", encoding="utf-8")
+    assert H.atualizar_nav(pasta) == 3
+    a = p1.read_text(encoding="utf-8")
+    m = (pasta / "diario_2026-10-02.html").read_text(encoding="utf-8")
+    assert "diario_2026-10-02.html" in a and "dia anterior" not in a
+    assert "diario_2026-10-01.html" in m and "diario_2026-10-05.html" in m
+    assert H.atualizar_nav(pasta) == 0                       # idempotente
+
+
+def test_indice_tem_resumo_por_ea_proxima_avaliacao_e_status_da_ficha(tmp_path: Path) -> None:
+    raiz = Path(__file__).resolve().parents[1] / "docs" / "eas"
+    from profittape.diario_metas import carregar_metas
+
+    pasta = _gera_dias(tmp_path, [dt.date(2026, 10, 1), dt.date(2026, 10, 2)])
+    html = H.renderizar_indice(pasta, carregar_metas(raiz / "metas.yaml"), raiz)
+    assert "Resumo por EA" in html and "Próxima avaliação" in html
+    resumo, resto = html.split("Próxima avaliação")[0], html.split("Próxima avaliação")[1]
+    assert "ea_ignicao" in resumo and "ea_vwapvp" in resumo          # resumo por EA, antes
+    assert "n = 68" in resto and "regra da ficha" in resto           # meta lida do registro
+    assert "Veredito so&#x27; com" in resto                          # criterio da ficha
+    assert "forward em dry_run" in resto                             # status lido da ficha
+    assert "Importado %" in html
+    sem_metas = H.renderizar_indice(pasta)
+    assert "Resumo por EA" in sem_metas and "Próxima avaliação" not in sem_metas
+

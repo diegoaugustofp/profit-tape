@@ -53,6 +53,9 @@ _TZ = ZoneInfo("America/Sao_Paulo")
 _NS = 1_000_000_000
 LIMIAR_ATRASO_S = 10.0           # minuto de EVENTO com atraso maximo >= isto = incidente
 LIMIAR_BURACO_S = 20.0           # intervalo sem NENHUMA chegada dentro do pregao
+# Negocio que chega com mais de 1 h de atraso nao e' feed: e' dado IMPORTADO depois (historico
+# recuperado). 01-14/09: dia + atraso = 15/09 em todos (lote unico); 18/09 reapareceu em 21/09.
+LIMIAR_RECUPERADO_S = 3600.0
 JANELA_ATRASO_S = 2.0            # atraso "relevante" na hora da saida
 SESSAO_HHMM = (900, 1830)
 # EAs com veredito "descartado" que ainda estao na pasta de EAs ativos: seguem
@@ -193,7 +196,13 @@ def _op_generica(e: dict[str, Any]) -> dict[str, Any]:
     slip = [o.get("slippage_pts") for o in ordens.values() if o.get("slippage_pts") is not None]
     lat = [o.get("latencia_fill_ms") for o in ordens.values()
            if o.get("latencia_fill_ms") is not None]
-    return {"ea": e.get("nome") or e["event"].split(".")[1], "tipo": e["event"],
+    nome = e.get("nome")
+    if not nome:
+        nome = e["event"].split(".")[1]
+        if nome == "123" and e.get("desfecho") != "nao_executou":
+            # o log do ciclo do 123 NAO traz o nome do EA: ordens reais => a instancia E4
+            nome = "123 (E4)" if ordens else "123 (dry_run)"
+    return {"ea": nome, "tipo": e["event"],
             "lado": e.get("lado"), "motivo": e.get("motivo") or e.get("desfecho"),
             "t_saida": e["_t"], "t_entrada": None,
             "pnl_liquido": None if pnl is None else float(pnl),
@@ -244,6 +253,9 @@ class Tape:
         # 1o percentil, se negativo, mede o desvio; parada so' ADICIONA atraso, nao o move.
         self.offset = float(min(np.quantile(bruto, 0.01), 0.0)) if bruto.size else 0.0
         self.lag = bruto - self.offset                   # corrigido (>= ~0)
+        self.vivo = self.lag <= LIMIAR_RECUPERADO_S       # False = importado depois (backfill)
+        self.n_recuperados = int((~self.vivo).sum())
+        self.pct_recuperado = self.n_recuperados / bruto.size if bruto.size else 0.0
         self.n = int(self.recv.size)
         self._ts_ord: np.ndarray | None = None
         self._ts_orig, self._px = ts_ns, preco
@@ -270,7 +282,7 @@ class Tape:
 
     def por_minuto(self) -> pd.DataFrame:
         """Atraso por minuto de EVENTO (hora da bolsa), em Brasilia."""
-        df = pd.DataFrame({"m": self.ts // (60 * _NS), "lag": self.lag})
+        df = pd.DataFrame({"m": self.ts // (60 * _NS), "lag": self.lag})[self.vivo]
         g = df.groupby("m")["lag"]
         out = pd.DataFrame({"n": g.size(), "p50": g.median(), "p99": g.quantile(0.99),
                             "max": g.max()})
@@ -301,6 +313,8 @@ class Tape:
             h, m = divmod(hhmm, 100)
             d0 = dt.datetime(dia.year, dia.month, dia.day, h, m, tzinfo=_TZ)
             return int(d0.timestamp()) * _NS
+        if self.pct_recuperado >= 0.5:      # dia gravado por importacao: chegadas em blocos
+            return []
         i0 = int(np.searchsorted(self.recv, ns(SESSAO_HHMM[0])))
         i1 = int(np.searchsorted(self.recv, ns(SESSAO_HHMM[1])))
         r = self.recv[i0:i1]
@@ -495,10 +509,20 @@ def montar(dia: dt.date, log: Path, curated: Path, symbol: str = "WINFUT",
     }
     if tape is not None:
         pm = tape.por_minuto()
+        lv = tape.lag[tape.vivo]
         dados["tape"] = {"negocios": tape.n, "offset_relogio_s": tape.offset,
-                         "atraso_p50": float(np.median(tape.lag)),
-                         "atraso_p99": float(np.quantile(tape.lag, 0.99)),
-                         "atraso_max": float(tape.lag.max())}
+                         "recuperados": tape.n_recuperados,
+                         "pct_recuperado": tape.pct_recuperado,
+                         "atraso_p50": float(np.median(lv)) if lv.size else None,
+                         "atraso_p99": float(np.quantile(lv, 0.99)) if lv.size else None,
+                         "atraso_max": float(lv.max()) if lv.size else None}
+        if tape.pct_recuperado > 0:
+            avisos.append(
+                f"{tape.pct_recuperado:.1%} dos negocios ({tape.n_recuperados:,}) chegaram com "
+                f"mais de {LIMIAR_RECUPERADO_S / 3600:.0f} h de atraso: sao dado IMPORTADO depois "
+                "(historico recuperado), nao feed ao vivo. Ficam fora das estatisticas de "
+                "atraso e dos incidentes" + ("; buracos de chegada nao medidos neste dia."
+                                             if tape.pct_recuperado >= 0.5 else "."))
         dados["incidentes"] = tape.incidentes()
         dados["buracos"] = tape.buracos(dia)
         dados["por_minuto"] = [
@@ -555,6 +579,7 @@ def gravar_csv(dados: dict[str, Any], pasta: Path) -> None:
               "stop_real_sobre_programado_mediano": a["stop_real_sobre_programado_mediano"],
               "gap": a["soma"]["gap"], "fill": a["soma"]["fill"],
               "custo_atraso_est": a["custo_atraso_est"],
+              "pct_recuperado": t.get("pct_recuperado"),
               "atraso_p50": t.get("atraso_p50"), "atraso_p99": t.get("atraso_p99"),
               "atraso_max": t.get("atraso_max"), "incidentes": len(dados["incidentes"]),
               "buracos": len(dados["buracos"]), "fila_max": s.get("fila_max"),
