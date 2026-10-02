@@ -4960,3 +4960,38 @@ no HTML, colunas novas no CSV. Testes à mão (mercado 190000→189700 em
 30 s com entrega atrasada 30 s: custo 200 pts). Suíte 1.309.
 
 **Tags:** entregue-v4.13 (sobre v4.12).
+
+### 2026-10-02c — O diário em dados reais: retratação do fill, crash de 30/09, descartados (v4.14)
+
+Diego rodou o diário (v4.12) em 01/10 e 30/09 e mandou HTML + CSVs:
+
+- **Retratação.** A v4.13 afirmou que, sem `--ea-livro-ao-vivo`, a ignição
+  preenche a saída pelo preço do tape (fill zero por construção) e que o
+  atraso não poderia mudar o P&L simulado. ERRADO: o livro liga sozinho
+  quando entra um EA que o usa (v3.69; `ao_precisar_livro`), a ignição
+  usa o topo do livro (`fill_origem = livro` nas 4 ignições de 01/10) e o
+  atraso entra no fill e na entrada (09:58: atraso 1,44 s, piora de
+  entrada +75 pts). Eu li o aviso de inclusão `ea.micro.sem_livro` (topo
+  vazio PRÉ-ABERTURA) como estado permanente e disse que os microprice
+  "passariam o dia sem operar": também errado — operaram 69 vezes.
+  Contrafactual do atraso passa a valer só para fill do tape.
+- **Crash de 30/09.** `dias.csv` tinha o dia mas não havia página nem
+  índice: a mediana de `ts_recv − ts` foi −1,02 s (relógio local atrás da
+  bolsa) e a escala log do gráfico recebia 1+v ≤ 0 (reproduzido:
+  `math domain error`), DEPOIS de o CSV ser gravado. Corrigido: desvio do
+  relógio estimado e removido, gráfico clampado, HTML renderizado antes
+  do CSV, falha por dia não derruba o intervalo.
+- **Buracos classificados** (entrega atrasada × sem negócios): o buraco de
+  136 s de 30/09 09:30:05 é candidato a leilão (o Diego viu a mensagem de
+  ativo em leilão em 30/09); a ignição fechou +821 às 09:30:02 com
+  `fill −315` (favorável) nesse minuto: P&L suspeito, não "bom dia".
+- **microprice** está DESCARTADO na própria ficha (taker, 25/09; passiva
+  pendente de modelo de fila) mas segue em `data/eas_ativos`: 69 operações
+  em 01/10 (−746 pts) no total. Agora ficam fora dos totais; o YAML precisa
+  sair da pasta. Sinais `nao_executou` do 123 deixam de contar como operação.
+- Nos dados reais de 01/10 a identidade fecha com resíduo 0 em todas as
+  operações decompostas. As 4 ignições de 01/10 foram stops (−2.161);
+  razões stop real/programado 1,12 / 0,96 / 1,02 / 0,94: o stop segura;
+  o prejuízo vem de a ignição perder, não de execução.
+
+**Tags:** entregue-v4.14 (sobre v4.13).

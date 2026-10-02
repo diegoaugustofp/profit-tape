@@ -55,6 +55,10 @@ LIMIAR_ATRASO_S = 10.0           # minuto de EVENTO com atraso maximo >= isto = 
 LIMIAR_BURACO_S = 20.0           # intervalo sem NENHUMA chegada dentro do pregao
 JANELA_ATRASO_S = 2.0            # atraso "relevante" na hora da saida
 SESSAO_HHMM = (900, 1830)
+# EAs com veredito "descartado" que ainda estao na pasta de EAs ativos: seguem
+# registrados (o dado fica no CSV) mas FORA dos totais. microprice: taker descartado em
+# 25/09; passiva pendente de modelo de fila (docs/eas/microprice.md).
+DESCARTADOS = ("ea_microprice", "ea_microprice_passiva")
 _RE_SAIDA_GENERICA = re.compile(r"ea\.[a-z0-9_]+\.(saida|operacao_fechada)")
 
 
@@ -234,8 +238,14 @@ class Tape:
         ordem = np.argsort(recv_ns, kind="stable")
         self.recv = recv_ns[ordem]
         self.ts = ts_ns[ordem]
-        self.lag = (self.recv - self.ts) / _NS          # segundos
+        bruto = (self.recv - self.ts) / _NS              # segundos, com o desvio do relogio
+        # Relogio local ATRASADO em relacao a bolsa => `ts_recv - ts` negativo (visto em
+        # 30/09: mediana -1,02 s; 01/10: -0,11 s). O piso do atraso verdadeiro e' ~0, entao o
+        # 1o percentil, se negativo, mede o desvio; parada so' ADICIONA atraso, nao o move.
+        self.offset = float(min(np.quantile(bruto, 0.01), 0.0)) if bruto.size else 0.0
+        self.lag = bruto - self.offset                   # corrigido (>= ~0)
         self.n = int(self.recv.size)
+        self._ts_ord: np.ndarray | None = None
         self._ts_orig, self._px = ts_ns, preco
         self._ev: tuple[np.ndarray, np.ndarray] | None = None   # por hora de EVENTO, sob demanda
 
@@ -284,7 +294,9 @@ class Tape:
         return out
 
     def buracos(self, dia: dt.date, limiar_s: float = LIMIAR_BURACO_S) -> list[dict[str, Any]]:
-        """Intervalos sem NENHUMA chegada dentro do pregao."""
+        """Intervalos sem NENHUMA chegada dentro do pregao, classificados pela hora de
+        EVENTO: houve negocios na bolsa nesse intervalo (a entrega e' que parou) ou nao
+        (leilao / parada de negociacao)?"""
         def ns(hhmm: int) -> int:
             h, m = divmod(hhmm, 100)
             d0 = dt.datetime(dia.year, dia.month, dia.day, h, m, tzinfo=_TZ)
@@ -294,9 +306,19 @@ class Tape:
         r = self.recv[i0:i1]
         if r.size < 2:
             return []
+        if self._ts_ord is None:
+            self._ts_ord = np.sort(self.ts)
         d = np.diff(r) / _NS
-        return [{"inicio": _brt(int(r[i])).strftime("%H:%M:%S"), "duracao_s": float(d[i])}
-                for i in np.nonzero(d >= limiar_s)[0]]
+        out: list[dict[str, Any]] = []
+        for i in np.nonzero(d >= limiar_s)[0]:
+            a, b = int(r[i]), int(r[i + 1])
+            n_ev = max(0, int(np.searchsorted(self._ts_ord, b - _NS))
+                       - int(np.searchsorted(self._ts_ord, a + _NS)))
+            out.append({"inicio": _brt(a).strftime("%H:%M:%S"), "duracao_s": float(d[i]),
+                        "negocios_no_intervalo": n_ev,
+                        "classe": ("entrega atrasada" if n_ev > 0
+                                   else "sem negocios (leilao/parada)")})
+        return out
 
 
 def ler_tape(curated: Path, symbol: str, dia: dt.date) -> tuple[Tape | None, str | None]:
@@ -324,9 +346,9 @@ def carregar_tape(curated: Path, symbol: str, dia: dt.date) -> Tape | None:
 
 
 def custo_atraso(tape: Tape, o: dict[str, Any]) -> None:
-    """Custo CONTRAFACTUAL do atraso (pontos; positivo = pior). A simulacao em
-    dry_run sem livro ao vivo preenche a saida com o preco do negocio que
-    disparou -- ai' o atraso nao muda o P&L simulado. Numa execucao real o
+    """Custo CONTRAFACTUAL do atraso (pontos; positivo = pior), SO' para operacao cujo
+    fill e' o preco do tape (vwap_vp em dry_run; ignicao sem livro utilizavel) --
+    ai' o atraso nao muda o P&L simulado. Numa execucao real o
     EA so' sabe do gatilho L segundos depois; a ordem a mercado encontra o
     mercado de AGORA:
         saida   = (preco do gatilho - preco do tape na hora do processamento) * L
@@ -334,8 +356,9 @@ def custo_atraso(tape: Tape, o: dict[str, Any]) -> None:
     Saida no alvo = ordem limite ja' no livro: o atraso nao pesa (None)."""
     lado = o.get("lado")
     o["custo_atraso_saida_est"] = o["custo_atraso_entrada_est"] = None
-    if lado not in (1, -1):
-        return
+    if lado not in (1, -1) or o.get("fill_origem") == "livro":
+        return          # fill do livro no instante do processamento: o atraso JA' esta' em
+                        # `fill` e `entrada_slip` (medido); somar aqui seria contar duas vezes
     la = o.get("atraso_saida_s")
     p_trig = o.get("saida_tape")
     if la is not None and p_trig is not None and o.get("motivo") != "alvo":
@@ -427,7 +450,8 @@ def atribuicao(ops: list[dict[str, Any]]) -> dict[str, Any]:
 
 def montar(dia: dt.date, log: Path, curated: Path, symbol: str = "WINFUT",
            notas: str = "",
-           eventos_pre: tuple[list[dict[str, Any]], int] | None = None) -> dict[str, Any]:
+           eventos_pre: tuple[list[dict[str, Any]], int] | None = None,
+           descartados: tuple[str, ...] = DESCARTADOS) -> dict[str, Any]:
     avisos: list[str] = []
     if eventos_pre is None:
         if not log.exists():
@@ -439,12 +463,18 @@ def montar(dia: dt.date, log: Path, curated: Path, symbol: str = "WINFUT",
         avisos.append(f"{ruins} linhas do log ilegiveis foram ignoradas")
     if not eventos:
         avisos.append(f"nenhum evento de {dia} em {log}")
-    ops = extrair_operacoes(eventos)
+    todas = extrair_operacoes(eventos)
+    nao_exec = [o for o in todas if o.get("motivo") == "nao_executou"]
+    ops_all = [o for o in todas if o.get("motivo") != "nao_executou"]
+    for o in ops_all:
+        o["descartado"] = o.get("ea") in descartados
+    ops = [o for o in ops_all if not o["descartado"]]
+    desc = [o for o in ops_all if o["descartado"]]
     tape, motivo = ler_tape(curated, symbol, dia)
     if tape is None:
         avisos.append(f"{motivo}: atraso do feed, buracos de chegada e custo do atraso "
                       "nao medidos")
-    for o in ops:
+    for o in ops_all:
         o["tape_disponivel"] = tape is not None
         if tape is not None:
             o["atraso_saida_s"] = tape.atraso_na_hora(o["t_saida"])
@@ -454,14 +484,19 @@ def montar(dia: dt.date, log: Path, curated: Path, symbol: str = "WINFUT",
     dados: dict[str, Any] = {
         "dia": dia.isoformat(), "symbol": symbol, "n_eventos": len(eventos),
         "gerado_em": dt.datetime.now(tz=_TZ).strftime("%d/%m/%Y %H:%M"),
-        "operacoes": ops, "atribuicao": atribuicao(ops), "avisos": avisos,
+        "operacoes": ops, "ops_descartadas": desc,
+        "nao_executadas": [
+            {"ea": o.get("ea"), "hora": _brt(o["t_saida"]).strftime("%H:%M:%S")}
+            for o in nao_exec],
+        "atribuicao": atribuicao(ops), "avisos": avisos,
         "saude": saude_record(eventos), "ocorrencias": ocorrencias(eventos),
         "estados_dll": estados_dll(eventos), "notas": notas,
         "tape": None, "incidentes": [], "buracos": [], "por_minuto": [],
     }
     if tape is not None:
         pm = tape.por_minuto()
-        dados["tape"] = {"negocios": tape.n, "atraso_p50": float(np.median(tape.lag)),
+        dados["tape"] = {"negocios": tape.n, "offset_relogio_s": tape.offset,
+                         "atraso_p50": float(np.median(tape.lag)),
                          "atraso_p99": float(np.quantile(tape.lag, 0.99)),
                          "atraso_max": float(tape.lag.max())}
         dados["incidentes"] = tape.incidentes()
@@ -474,12 +509,12 @@ def montar(dia: dt.date, log: Path, curated: Path, symbol: str = "WINFUT",
 
 
 # -------------------------------------------------------------------- CSV
-_COLUNAS_OPS = ["dia", "ea", "tipo", "lado", "motivo", "hora_saida", "entrada", "saida",
-                "pnl_bruto", "pnl_liquido", "duracao_s", "ideal", "entrada_slip", "gap", "fill",
-                "custo", "residuo", "stop_pts", "alvo_pts", "stop_real_sobre_programado",
-                "atraso_entrada_s", "atraso_saida_s", "custo_atraso_entrada_est",
-                "custo_atraso_saida_est", "saida_tape", "fill_origem", "slippage_ordens_pts",
-                "latencia_fill_max_ms"]
+_COLUNAS_OPS = [
+    "dia", "ea", "descartado", "tipo", "lado", "motivo", "hora_saida", "entrada", "saida",
+    "pnl_bruto", "pnl_liquido", "duracao_s", "ideal", "entrada_slip", "gap", "fill", "custo",
+    "residuo", "stop_pts", "alvo_pts", "stop_real_sobre_programado", "atraso_entrada_s",
+    "atraso_saida_s", "custo_atraso_entrada_est", "custo_atraso_saida_est", "saida_tape",
+    "fill_origem", "slippage_ordens_pts", "latencia_fill_max_ms"]
 
 
 def _atualiza_csv(caminho: Path, novas: pd.DataFrame, dia: str) -> None:
@@ -495,22 +530,27 @@ def gravar_csv(dados: dict[str, Any], pasta: Path) -> None:
     pasta.mkdir(parents=True, exist_ok=True)
     dia = dados["dia"]
     linhas = []
-    for o in dados["operacoes"]:
+    for o in dados["operacoes"] + dados["ops_descartadas"]:
         r: dict[str, Any] = {k: o.get(k) for k in _COLUNAS_OPS}
         r.update({"dia": dia, "hora_saida": _brt(o["t_saida"]).strftime("%H:%M:%S")})
         linhas.append(r)
     _atualiza_csv(pasta / "operacoes.csv",
                   pd.DataFrame(linhas, columns=_COLUNAS_OPS), dia)
     inc = [{"dia": dia, **i} for i in dados["incidentes"]]
-    bur = [{"dia": dia, "tipo": "buraco", "inicio": b["inicio"], "duracao_s": b["duracao_s"]}
-           for b in dados["buracos"]]
+    bur = [{"dia": dia, "tipo": f"buraco: {b['classe']}", "inicio": b["inicio"],
+            "duracao_s": b["duracao_s"]} for b in dados["buracos"]]
     _atualiza_csv(pasta / "incidentes.csv",
                   pd.DataFrame(inc + bur, columns=["dia", "inicio", "fim", "minutos", "pico_s",
                                                    "negocios", "tipo", "duracao_s"]), dia)
     a, t, s = dados["atribuicao"], dados["tape"] or {}, dados["saude"]
     ops = dados["operacoes"]
+    desc = dados["ops_descartadas"]
     resumo = {"dia": dia, "operacoes": len(ops),
               "pnl_liquido": float(sum(o["pnl_liquido"] or 0 for o in ops)),
+              "n_descartados": len(desc),
+              "pnl_descartados": float(sum(o["pnl_liquido"] or 0 for o in desc)),
+              "sinais_sem_execucao": len(dados["nao_executadas"]),
+              "offset_relogio_s": t.get("offset_relogio_s"),
               "stops": a["stops"],
               "stop_real_sobre_programado_mediano": a["stop_real_sobre_programado_mediano"],
               "gap": a["soma"]["gap"], "fill": a["soma"]["fill"],

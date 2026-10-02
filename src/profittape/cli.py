@@ -1796,6 +1796,10 @@ def diario_operacional(
     symbol: str = typer.Option("WINFUT", "--symbol"),
     pasta: Path = typer.Option(Path("data/diario"), "--pasta"),
     nota: str | None = typer.Option(None, "--nota", help="anota uma linha no diario do dia"),
+    descartados: str = typer.Option(
+        "ea_microprice,ea_microprice_passiva", "--descartados",
+        help="EAs de veredito 'descartado' que ainda rodam (virgula): ficam no CSV mas "
+             "FORA dos totais"),
     log_level: str = typer.Option("WARNING", "--log-level"),
 ) -> None:
     """
@@ -1841,13 +1845,25 @@ def diario_operacional(
         if nota:
             anotar(pasta, dias[0], nota)
     gerados = 0
+    falhas: list[str] = []
+    excl = tuple(x.strip() for x in descartados.split(",") if x.strip())
     for d in dias:
-        dados = montar(d, log, curated, symbol, ler_notas(pasta, d), pre.get(d))
-        if len(dias) > 1 and not dados["n_eventos"] and dados["tape"] is None:
-            typer.echo(f"{d}: sem dados (nem evento no log, nem tape curado)")
+        try:
+            dados = montar(d, log, curated, symbol, ler_notas(pasta, d), pre.get(d), excl)
+            if len(dias) > 1 and not dados["n_eventos"] and dados["tape"] is None:
+                typer.echo(f"{d}: sem dados (nem evento no log, nem tape curado)")
+                continue
+            # HTML ANTES do CSV: se a renderizacao falhar, o dia nao fica pela metade
+            # (em 30/09 o CSV foi gravado e o HTML quebrou: dias.csv sem pagina nem indice)
+            html_dia = renderizar(dados)
+            gravar_csv(dados, pasta)
+            (pasta / f"diario_{d.isoformat()}.html").write_text(html_dia, encoding="utf-8")
+        except Exception as exc:
+            if len(dias) == 1:
+                raise
+            falhas.append(f"{d}: {type(exc).__name__}: {exc}")
+            typer.echo(f"{d}: FALHOU ({type(exc).__name__}: {exc})")
             continue
-        gravar_csv(dados, pasta)
-        (pasta / f"diario_{d.isoformat()}.html").write_text(renderizar(dados), encoding="utf-8")
         gerados += 1
         ops = dados["operacoes"]
         t = dados["tape"]
@@ -1856,12 +1872,17 @@ def diario_operacional(
                    f"{len(dados['incidentes'])} incidente(s) de atraso, "
                    f"{len(dados['buracos'])} buraco(s) de chegada"
                    + (f", atraso p99 {t['atraso_p99']:.1f} s, max {t['atraso_max']:.0f} s"
-                      if t else ""))
+                      if t else "")
+                   + (f" [+{len(dados['ops_descartadas'])} de EA descartado fora do total]"
+                      if dados["ops_descartadas"] else ""))
         if len(dias) == 1:
             for av in dados["avisos"]:
                 typer.echo(f"  AVISO: {av}")
     (pasta / "index.html").write_text(renderizar_indice(pasta), encoding="utf-8")
     typer.echo(f"  {gerados} dia(s) gerado(s) -> {pasta / 'index.html'}")
+    if falhas:
+        typer.echo(f"  {len(falhas)} dia(s) FALHARAM: " + " | ".join(falhas))
+        raise typer.Exit(1)
 
 
 @app.command(name="ea-vwapvp-replay")

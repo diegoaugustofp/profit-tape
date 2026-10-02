@@ -34,14 +34,30 @@ os demais desde o inicio do forward de cada um). Dias antigos sem a coluna `ts_r
 a parte do feed (com aviso). Antes de 10/09 a gravacao tinha defeitos conhecidos: leia os
 incidentes desses dias com cautela. Custa minutos por dia curado: rode depois das 18:00.
 
-**ATENCAO ao fill (achado de 02/10):** sem `--ea-livro-ao-vivo` o record nao tem livro, e a ignicao
-(e o vwap_vp) preenche a saida com o **preco do negocio que disparou** (`fill_origem = tape`). Entao
-o *fill* e' zero por construcao e **o atraso do feed nao muda o P&L simulado**: todo o excesso
-sobre o stop programado aparece como *gap* (o primeiro negocio alem do stop ja' estava longe).
-Como o atraso so' custaria numa execucao real (ordem a mercado que encontra o mercado de AGORA),
-o diario traz o **custo contrafactual do atraso**, fora da identidade: saida =
-`(preco do gatilho - preco do tape na hora do processamento) x lado`; entrada = quanto o mercado
-andou contra entre a deteccao e o processamento; saida no alvo = ordem limite, nao pesa.
+**De onde vem o fill (CORRIGIDO na v4.14; a v4.13 afirmou o contrario e estava errada).** O livro
+liga SOZINHO quando entra um EA que o usa (ignicao, microprice) -- `--ea-livro-ao-vivo` e'
+desnecessario desde a v3.69 -- entao a ignicao preenche entrada e saida pelo **topo do livro no
+instante em que processa** (`fill_origem = livro`; confirmado nas 4 ignicoes de 01/10). Nelas o
+atraso do feed **ja' esta' dentro** de `Fill` e `Entr.` e e' MEDIDO: 01/10 09:58, atraso 1,44 s,
+piora de entrada de +75 pts. So' ficam com fill do **tape** o vwap_vp (dry_run: o preco do
+negocio) e a ignicao quando o livro esta' indisponivel/velho; nelas o atraso nao muda o P&L
+simulado e o diario traz o **custo contrafactual do atraso** (saida = `(preco do gatilho - preco do
+tape na hora do processamento) x lado`; entrada = quanto o mercado andou contra entre a deteccao e
+o processamento; alvo = ordem limite, nao pesa). Para ops com fill do livro o contrafactual NAO e'
+calculado (contaria o atraso duas vezes).
+
+**Desvio do relogio local.** `ts_recv - ts` negativo = relogio da maquina atras da bolsa (30/09:
+mediana -1,02 s; 01/10: -0,11 s). O diario estima o desvio (1o percentil, so' se negativo) e
+mostra os atrasos ja' corrigidos; parada so' soma atraso, nao desloca esse piso.
+
+**Buraco de chegada: entrega atrasada ou leilao?** Cada buraco e' classificado pela hora de
+EVENTO: houve negocios na bolsa naquele intervalo (a entrega parou) ou nao (leilao/parada).
+01/10 14:22:02, 587 s -> entrega atrasada; 30/09 09:30:05, 136 s -> candidato a leilao.
+
+**EAs descartados** (`--descartados`, padrao `ea_microprice,ea_microprice_passiva`: taker
+descartado em 25/09, passiva pendente de modelo de fila) ainda rodam se o YAML esta' em
+`data\eas_ativos`: ficam no CSV mas FORA dos totais. Para para-los sem reiniciar o record, tire o
+YAML da pasta (remocao a quente). Sinais do 123 com desfecho `nao_executou` nao sao operacao.
 
 Cobertura hoje: decomposicao para ignicao e vwap_vp; 123, microprice e z_agf entram como operacao
 com o P&L e, no 123, slippage e latencia de fill das ordens. Ainda NAO ha': versao da DLL,

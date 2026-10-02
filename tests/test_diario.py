@@ -326,3 +326,131 @@ def test_retroativo_pula_fim_de_semana_e_dia_sem_dados(tmp_path: Path) -> None:
     assert r2.exit_code != 0
     assert "feed mudo" in (pasta / "diario_2026-10-02.html").read_text(encoding="utf-8")
 
+
+
+# ------------------------------- v4.14: o que os dados reais de 30/09 e 01/10 mostraram
+def _escreve_tape(curated: Path, ts: np.ndarray, recv: np.ndarray, px: float = 190440.0) -> None:
+    pasta = curated / "trade" / f"dt={DIA.isoformat()}" / "sym=WINFUT"
+    pasta.mkdir(parents=True, exist_ok=True)
+    pq.write_table(pa.table({"ts_ns": ts.astype("int64"), "ts_recv_ns": recv.astype("int64"),
+                             "price": np.full(ts.size, px)}), pasta / "a.parquet")
+
+
+def test_regressao_30_09_relogio_local_atrasado_nao_derruba_o_html(tmp_path: Path) -> None:
+    """30/09: mediana de ts_recv-ts = -1,02 s (relogio local atras da bolsa). A escala log do
+    grafico recebia 1+v <= 0 e o HTML quebrava DEPOIS de o CSV ser gravado (dias.csv com o
+    dia, sem pagina e sem indice). Agora: o desvio e' estimado, o atraso sai corrigido, e o
+    grafico nunca recebe valor negativo."""
+    ts = _brt_ns(9, 0) + np.arange(0, 2401) * NS
+    _escreve_tape(tmp_path / "curated", ts, ts - int(1.02 * NS))
+    log = tmp_path / "log.jsonl"
+    _log_do_dia(log)
+    d = D.montar(DIA, log, tmp_path / "curated")
+    t = d["tape"]
+    assert t["offset_relogio_s"] == pytest.approx(-1.02, abs=1e-6)
+    assert t["atraso_p50"] == pytest.approx(0.0, abs=1e-6) and t["atraso_max"] < 0.01
+    assert d["incidentes"] == []
+    html = H.renderizar(d)                       # nao pode levantar ValueError: math domain error
+    assert "Relógio local atrasado" in html and "<svg" in html
+    assert all(o.get("atraso_saida_s") is None or o["atraso_saida_s"] >= -1e-6
+               for o in d["operacoes"])
+
+
+def test_offset_so_corrige_relogio_atrasado_e_nao_esconde_parada(tmp_path: Path) -> None:
+    tape = _tape_com_atraso_uniforme()                 # piso 0,05 s positivo + 30 s de atraso
+    assert tape.offset == 0.0 and tape.lag.max() == pytest.approx(30.0)
+    ts = _brt_ns(9, 0) + np.arange(0, 600) * NS
+    recv = ts - int(0.3 * NS)
+    recv[300:] += 120 * NS                            # parada de 120 s depois do desvio
+    t2 = D.Tape(ts.astype("int64"), recv.astype("int64"))
+    assert t2.offset == pytest.approx(-0.3, abs=1e-6) and t2.lag.max() == pytest.approx(120.0)
+
+
+def test_buraco_e_classificado_entrega_atrasada_ou_sem_negocios(tmp_path: Path) -> None:
+    """Dois buracos de chegada de 100 s: (1) o mercado negociou e a entrega parou; (2) nao
+    houve negocio nenhum na bolsa (leilao, como 30/09 09:30:05, 136 s)."""
+    s0 = _brt_ns(9, 0)
+    ts = np.concatenate([s0 + np.arange(0, 100) * NS,          # 09:00:00-09:01:39
+                         s0 + np.arange(100, 200) * NS,        # (1) negociou 09:01:40-09:03:19
+                         s0 + np.arange(400, 500) * NS])       # (2) volta 09:06:40
+    recv = ts.copy()
+    recv[100:200] = s0 + 200 * NS + np.arange(0, 100) * int(0.01 * NS)   # (1) chegam 09:03:20
+    t = D.Tape(ts.astype("int64"), (recv + int(0.05 * NS)).astype("int64"))
+    classes = {b["inicio"]: b["classe"] for b in t.buracos(DIA)}
+    assert classes["09:01:39"] == "entrega atrasada"
+    assert classes["09:03:21"] == "sem negocios (leilao/parada)"
+    assert [b["negocios_no_intervalo"] for b in t.buracos(DIA)][1] == 0
+
+
+def test_custo_contrafactual_nao_conta_duas_vezes_o_atraso_do_fill_do_livro() -> None:
+    """Fill do LIVRO no instante do processamento: o atraso ja' esta' em `fill`/`entrada_slip`
+    (medido). So' fill do tape recebe a estimativa contrafactual."""
+    tape = _tape_com_atraso_uniforme()
+    base = {"lado": 1, "motivo": "stop", "saida_tape": 189900.0, "t_saida": _brt_ns(9, 20, 40),
+            "t_entrada": None, "atraso_saida_s": 30.0}
+    livro = dict(base, fill_origem="livro")
+    D.custo_atraso(tape, livro)
+    assert livro["custo_atraso_saida_est"] is None and livro["custo_atraso_entrada_est"] is None
+    d_tape = dict(base, fill_origem="tape")
+    D.custo_atraso(tape, d_tape)
+    assert d_tape["custo_atraso_saida_est"] == pytest.approx(200.0)
+
+
+def test_nao_executou_e_descartados_ficam_fora_dos_totais(tmp_path: Path) -> None:
+    log = tmp_path / "log.jsonl"
+    _log_do_dia(log)
+    extra = [
+        _linha(_brt_ns(10, 44, 59), "ea.123.operacao_fechada", nome="123", desfecho="nao_executou",
+               pnl_pts=None, ordens={}),
+        _linha(_brt_ns(9, 15, 9), "ea.micro.saida", nome="ea_microprice", lado=1, motivo="alvo",
+               entrada=190000.0, saida=190020.0, pnl_bruto=20.0, pnl_liquido=11.0, duracao_s=3.1),
+        _linha(_brt_ns(9, 15, 26), "ea.micro.saida", nome="ea_microprice_passiva", lado=1,
+               motivo="stop", pnl_bruto=-8.0, pnl_liquido=-19.0),
+    ]
+    with log.open("a", encoding="utf-8") as fh:
+        fh.write("\n".join(extra) + "\n")
+    d = D.montar(DIA, log, tmp_path / "sem_tape")
+    assert {o["ea"] for o in d["operacoes"]} == {"ea_ignicao", "ea_vwapvp", "ea_123_vb"}
+    assert {o["ea"] for o in d["ops_descartadas"]} == {"ea_microprice", "ea_microprice_passiva"}
+    assert [x["ea"] for x in d["nao_executadas"]] == ["123"]
+    html = H.renderizar(d)
+    assert "EAs descartados ainda em execução" in html and "ea_microprice: 1 ops, +11 pts" in html
+    assert "Sinais sem execução" in html
+    pasta = tmp_path / "diario"
+    D.gravar_csv(d, pasta)
+    ops = pd.read_csv(pasta / "operacoes.csv")
+    assert len(ops) == 5 and int(ops["descartado"].sum()) == 2          # 3 ativas + 2 descartadas
+    dia = pd.read_csv(pasta / "dias.csv").iloc[0]
+    assert dia["operacoes"] == 3 and dia["n_descartados"] == 2 and dia["sinais_sem_execucao"] == 1
+    assert dia["pnl_descartados"] == pytest.approx(11 - 19)
+    # opcao do operador: descartar so' um
+    d2 = D.montar(DIA, log, tmp_path / "sem_tape", descartados=("ea_microprice",))
+    assert {o["ea"] for o in d2["ops_descartadas"]} == {"ea_microprice"}
+
+
+def test_cli_uma_falha_nao_derruba_o_intervalo_e_nao_deixa_csv_pela_metade(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from profittape import diario_html
+    from profittape.cli import app
+
+    log = tmp_path / "log.jsonl"
+    _log_do_dia(log)
+    _tape_sintetico(tmp_path / "curated")
+
+    def quebra(dados: dict) -> str:                 # simula o crash de 30/09 na renderizacao
+        raise ValueError("math domain error")
+    monkeypatch.setattr(diario_html, "renderizar", quebra)
+    pasta = tmp_path / "diario"
+    r = CliRunner().invoke(app, ["diario-operacional", "--de", "2026-10-02", "--ate", "2026-10-05",
+                                 "--log", str(log), "--curated", str(tmp_path / "curated"),
+                                 "--pasta", str(pasta)])
+    assert r.exit_code == 1
+    assert "2026-10-02: FALHOU (ValueError: math domain error)" in r.output
+    assert "2026-10-05: sem dados" in r.output and "1 dia(s) FALHARAM" in r.output
+    # nada pela metade: sem CSV do dia que falhou e sem pagina
+    assert not (pasta / "operacoes.csv").exists() and not (pasta / "dias.csv").exists()
+    assert not (pasta / "diario_2026-10-02.html").exists()
+    # um dia so': a excecao aparece inteira (traceback), nao e' engolida
+    r1 = CliRunner().invoke(app, ["diario-operacional", "--dia", "2026-10-02", "--log", str(log),
+                                  "--curated", str(tmp_path / "curated"), "--pasta", str(pasta)])
+    assert r1.exit_code != 0 and isinstance(r1.exception, ValueError)

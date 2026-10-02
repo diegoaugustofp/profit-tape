@@ -71,7 +71,7 @@ def _lado(v: Any) -> str:
 def _atraso(v: float | None, tape_ok: bool) -> str:
     if v is None:
         return '<span class="neg">feed mudo</span>' if tape_ok else '<span class="mudo">—</span>'
-    return _n(v, 1)
+    return _n(max(v, 0.0), 1)
 
 
 def _grafico(dados: dict[str, Any]) -> str:
@@ -86,10 +86,11 @@ def _grafico(dados: dict[str, Any]) -> str:
         hh, mm = hhmm.split(":")
         return ml + (int(hh) * 60 + int(mm) - x0) / span * (w - ml - 8)
 
-    topo = max(1.0, math.log10(1 + max(float(p["max"]) for p in pm)))
+    topo = max(1.0, math.log10(1 + max(0.0, max(float(p["max"]) for p in pm))))
 
     def Y(v: float) -> float:
-        return 8 + (1 - math.log10(1 + v) / topo) * (h - mb - 14)
+        # v pode vir levemente negativo (jitter do relogio): escala log so' de 0 para cima
+        return 8 + (1 - math.log10(1 + max(v, 0.0)) / topo) * (h - mb - 14)
 
     def linha(chave: str, cor: str) -> str:
         pts = " ".join(f"{X(p['hhmm']):.1f},{Y(float(p[chave])):.1f}" for p in pm)
@@ -139,6 +140,29 @@ def renderizar(dados: dict[str, Any]) -> str:
               f"{dt.date.fromisoformat(dados['dia']).strftime('%d/%m/%Y')}</h1>",
               f"<div class='sub'>gerado em {_e(dados['gerado_em'])} · log + tape curado</div>"]
     partes += [f"<div class='aviso'>{_e(x)}</div>" for x in dados["avisos"]]
+    desc = dados.get("ops_descartadas") or []
+    if desc:
+        por_ea: dict[str, list[float]] = {}
+        for o in desc:
+            por_ea.setdefault(str(o.get("ea")), []).append(float(o.get("pnl_liquido") or 0))
+        resumo_desc = "; ".join(f"{k}: {len(v)} ops, {sum(v):+.0f} pts"
+                                for k, v in por_ea.items())
+        partes.append(
+            "<div class='aviso'><b>EAs descartados ainda em execução</b> (fora dos totais "
+            f"abaixo; ficam no CSV): {_e(resumo_desc)}. Para parar sem reiniciar o record, tire "
+            "o YAML de <code>data\\eas_ativos</code>.</div>")
+    if dados.get("nao_executadas"):
+        c: dict[str, int] = {}
+        for x in dados["nao_executadas"]:
+            c[str(x["ea"])] = c.get(str(x["ea"]), 0) + 1
+        partes.append("<div class='aviso'>Sinais sem execução (não contam como operação): "
+                      + _e(", ".join(f"{k}: {v}" for k, v in c.items())) + ".</div>")
+    if t is not None and t.get("offset_relogio_s"):
+        partes.append(
+            "<div class='aviso'>Relógio local "
+            f"{'atrasado' if t['offset_relogio_s'] < 0 else 'adiantado'} em relação à bolsa por "
+            f"~{abs(t['offset_relogio_s']):.2f} s (mediana bruta de ts_recv-ts negativa): os "
+            "atrasos abaixo já estão corrigidos por esse desvio.</div>")
     if dados["notas"]:
         partes.append(f"<h2>Anotações do operador</h2><div class='nota'>{_e(dados['notas'])}</div>")
     partes.append("<div class='cards'>" + "".join(
@@ -148,8 +172,9 @@ def renderizar(dados: dict[str, Any]) -> str:
     partes.append("<h2>Operações e decomposição do resultado</h2>")
     if ops:
         cab = [("EA", True), ("Saída", True), ("Lado", True), ("Motivo", True), ("Entrada", False),
-               ("Saída px", False), ("P&L líq", False), ("Ideal", False), ("Entr.", False),
-               ("Gap", False), ("Fill", False), ("Custo", False), ("Stop prog", False),
+               ("Saída px", False), ("P&L líq", False), ("Ideal", False), ("Entr. (+pior)", False),
+               ("Gap (+pior)", False), ("Fill (+pior)", False), ("Custo", False),
+               ("Stop prog", False),
                ("Real÷prog", False), ("Fill de", True), ("Atraso entr (s)", False),
                ("Atraso saída (s)", False), ("Custo atraso est.", False)]
         linhas = []
@@ -199,11 +224,13 @@ def renderizar(dados: dict[str, Any]) -> str:
         if a["ops_com_fill_do_tape"]:
             partes.append(
                 "<div class='aviso'>Em " + _n(a["ops_com_fill_do_tape"]) + " operação(ões) o "
-                "fill de saída é o <b>preço do tape no gatilho</b> (o record não está com o "
-                "livro ao vivo): o <b>fill é zero por construção</b> e o atraso do feed NÃO muda "
-                "o P&amp;L simulado — todo o excesso sobre o stop programado aparece como "
-                "<b>gap</b>. O custo do atraso só existe como estimativa contrafactual (coluna "
-                "ao lado).</div>")
+                "fill é o <b>preço do tape no gatilho</b> (vwap_vp em dry_run; ignição só quando "
+                "o livro está indisponível ou velho): ali o <b>fill é zero por construção</b> e "
+                "o atraso do feed não muda o P&amp;L simulado — o excesso sobre o stop aparece "
+                "como <b>gap</b>; o custo do atraso é a estimativa contrafactual da coluna "
+                "ao lado. Nas operações com fill do <b>livro</b> (ignição normalmente) o "
+                "atraso JÁ está dentro de <i>Fill</i> e <i>Entr.</i>: é medido, não "
+                "estimado.</div>")
         partes.append(
             f"<p>{a['stops']} stop(s); em {a['ops_com_atraso_na_saida']} operação(ões) a saída "
             f"ocorreu com feed atrasado (&gt; 2 s) ou mudo: gap+fill somam "
@@ -229,8 +256,10 @@ def renderizar(dados: dict[str, Any]) -> str:
                   _n(i["negocios"])] for i in dados["incidentes"]]))
         if dados["buracos"]:
             partes.append(_tab(
-                [("Buraco de chegada (início)", True), ("Duração (s)", False)],
-                [[_e(b["inicio"]), _n(b["duracao_s"], 1)] for b in dados["buracos"]]))
+                [("Buraco de chegada (início)", True), ("Duração (s)", False),
+                 ("Negócios na bolsa nesse intervalo", False), ("Classe", True)],
+                [[_e(b["inicio"]), _n(b["duracao_s"], 1), _n(b["negocios_no_intervalo"]),
+                  _e(b["classe"])] for b in dados["buracos"]]))
         if not dados["incidentes"] and not dados["buracos"]:
             partes.append("<p>Sem incidentes (&ge; 10 s de atraso) nem buracos (&ge; 20 s).</p>")
     else:
