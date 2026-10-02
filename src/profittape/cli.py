@@ -1519,6 +1519,9 @@ def vwapvp_conferir(
     agressao) para medir, nao assumir, o efeito do RLP e do leilao.
     """
     configurar(log_level)
+    from .prioridade import baixa_prioridade
+
+    baixa_prioridade()
     from .ea.perfil_preco import dias_disponiveis
     from .research.vwapvp_conferir import conferir, formatar
 
@@ -1578,6 +1581,9 @@ def vwapvp_ntsl_equivalencia(
     Profit x tape; VWAP por negocio x por barra em pontos).
     """
     configurar(log_level)
+    from .prioridade import baixa_prioridade
+
+    baixa_prioridade()
     from .tools.vwapvp_ntsl import comparar, formatar
 
     r = comparar(log, curated, symbol, aquecimento_dias=aquecimento_dias)
@@ -1613,6 +1619,9 @@ def vwapvp_ntsl_setupb(
     do compact de cada noite, senao o grafico de hoje mostra ontem errado.
     """
     configurar(log_level)
+    from .prioridade import baixa_prioridade
+
+    baixa_prioridade()
     from .tools.vwapvp_ntsl import gerar_ntsl_setupb
 
     texto = gerar_ntsl_setupb(curated, symbol, base=base)
@@ -1636,6 +1645,9 @@ def ea_vwapvp_taxa(
     de escreve-las. Usa o cache do replay (segundos).
     """
     configurar(log_level)
+    from .prioridade import baixa_prioridade
+
+    baixa_prioridade()
     from .research.vwapvp_replay import contar_taxa, formatar_taxa
 
     r = contar_taxa(curated, symbol)
@@ -1671,6 +1683,9 @@ def ea_vwapvp_sonda(
     FAST-TRACK: calibracao na amostra queimada, declarada.
     """
     configurar(log_level)
+    from .prioridade import baixa_prioridade
+
+    baixa_prioridade()
     from .research.vwapvp_replay import CLAUSULA_SONDA, formatar_sonda_eventos, sondar_eventos
 
     escolhidas = None
@@ -1712,6 +1727,9 @@ def ea_vwapvp_regra(
     E' o que separa 'assimetria na sonda' de 'expectativa'. Amostra queimada.
     """
     configurar(log_level)
+    from .prioridade import baixa_prioridade
+
+    baixa_prioridade()
     from .research.vwapvp_replay import formatar_regras, simular_regras
 
     r = simular_regras(curated, symbol)
@@ -1744,6 +1762,9 @@ def ea_vwapvp_servico_replay(
     import datetime as _d
 
     configurar(log_level)
+    from .prioridade import baixa_prioridade
+
+    baixa_prioridade()
     from .ea.config_123 import carregar_config_ea
     from .ea.service_vwapvp import replay_servico_do_dia
 
@@ -1795,6 +1816,9 @@ def ea_vwapvp_replay(
     primeira rodada custa ~1 min/dia, as seguintes segundos.
     """
     configurar(log_level)
+    from .prioridade import baixa_prioridade
+
+    baixa_prioridade()
     from .research.vwapvp_replay import ParametrosReplay, formatar, rodar
 
     p = ParametrosReplay(bin_pts=bin_pts, pct=pct, periodo_s=periodo_s, janela_z=janela_z,

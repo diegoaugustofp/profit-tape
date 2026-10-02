@@ -1,5 +1,39 @@
 # Operacao
 
+## ACHADO 2026-10-01: 634 s de atraso na entrega de trades, com o processo vivo e conectado
+
+**Fatos medidos.**
+- Negocio WINFUT id 55055640 (evento 14:22:05 BRT): `ts_recv_ns - ts_ns` = 634,57 s. Entre
+  14:23 e 14:30 BRT chegaram ZERO trades WINFUT (149 no minuto 14:22, 174 as 14:31); depois
+  uma rajada a ~3x o ritmo normal ate' 14:41; o atraso desce em linha reta de 634 s a 4,5 s
+  (backlog drenado em ordem).
+- Tape por hora de EVENTO denso o tempo todo, sem `trade_type` 4: nao foi leilao nem parada de
+  negociacao. Volume M5 do Profit x tape: 5 de 7 barras identicas, as outras duas com +-2
+  contratos que se anulam. Nada perdido -- so' atrasado.
+- Heartbeat continuo (30 s), `login_ok` e `corretora_pronta` verdadeiros, `sem_evento_ha_s` <= 6 s,
+  `descartados` 0. Fila interna de 23 mil a 124 mil itens (25% do teto de 500 mil); linhas
+  escritas por 30 s: 13-23 mil (normal 35-70 mil) e, depois, 110-250 mil.
+- `ts_recv_ns` e' carimbado na primeira linha do callback de trade (`profitdll/client.py`): foi
+  a DLL que chamou o nosso callback atrasada. Nao e' a fila nem o writer.
+
+**Nao e' nenhuma das assinaturas ja conhecidas.** Modern Standby (18/09): o heartbeat PARA.
+Queda de rede (E1): `corretora_pronta` CAI. Aqui os dois continuaram.
+
+**Causa provavel -- A CONFIRMAR.** O operador, perto das 14:22, rodou `vwapvp-ntsl-setupb`
+(na 1a execucao apos um dia novo curado reconstroi o cache desse dia num laco Python sobre ~6,7 M
+de trades e le o parquet) e compilou o indicador no Profit. Os dois disputam CPU e disco com o
+record num notebook. Conferir: `LastWriteTime` de `data\cache\vwapvp_barras\WINFUT_2026-09-30_*` e
+de `ntsl\vwapvp_setupb_gerado.ntsl` contra 14:22. Segue sem explicacao por que so' os TRADES
+pararam; `profitdll.estado` (tipo 2, valor 5 ou 6) mostra se a DLL sinalizou a parada de entrega.
+
+**Regra criada (v4.10).** Todo comando de pesquisa/ferramenta que roda na maquina do record
+baixa a propria prioridade ao iniciar (`prioridade.baixa_prioridade()`: Windows
+`PROCESS_MODE_BACKGROUND_BEGIN`, i.e. CPU + I/O + memoria; POSIX nice 10). O `record` NUNCA
+faz isso (teste estrutural). Comando pesado de verdade (reconstruir cache de varios dias,
+compact, replay longo) so' depois das 18:00 ou com o record parado.
+
+---
+
 ## INCIDENTE 2026-09-25: posicao VENDIDA lida como COMPRADA (grave)
 
 **O que aconteceu.** Duas vezes (13:40 e 15:40 BRT), logo apos uma

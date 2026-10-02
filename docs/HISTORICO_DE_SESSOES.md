@@ -4863,3 +4863,29 @@ atraso e sai com 650 s sem dados; tick passivo com dados chegando).
 (forward congelado). Suíte 1.292.
 
 **Tags:** entregue-v4.09 (sobre v4.08).
+
+### 2026-10-01p — O atraso de 634 s: tape completo, causa provável é carga local (v4.10)
+
+Com o curated de 01/10: o negócio 55055640 tem `ts_recv − ts` = 634,57 s;
+por hora de evento o tape é denso (sem leilão); por hora de chegada,
+zero trades WINFUT de 14:23 a 14:30 e rajada até 14:41. Volume M5
+Profit × tape idêntico em 5 de 7 barras e ±2 contratos nas outras duas
+(anulam): nada perdido. Heartbeat contínuo, `corretora_pronta` verdadeiro,
+`sem_evento_ha_s` ≤ 6 s, fila 23 mil → 124 mil, linhas/30 s 13–23 mil
+(normal 35–70 mil) e depois 110–250 mil. `ts_recv_ns` é carimbado na
+entrada do callback: atraso da DLL → callback.
+
+Diego: "nesse horário subi o novo NTSL que corrigia VAL/VAH e rodei o
+script". O gerador reconstrói o cache do dia novo (laço Python sobre
+~6,7 M de trades) e lê o parquet; o Profit recompila. Hipótese principal,
+A CONFIRMAR por mtime do cache de 30/09 e do `.ntsl` gerado. Corrige o
+meu palpite anterior (bateria/suspensão): o heartbeat contínuo excluiu
+suspensão. Meu critério "sem_evento_ha_s subindo" estava errado — o
+contador é de qualquer evento.
+
+Entregue (v4.10): `prioridade.baixa_prioridade()` nos 8 comandos de
+pesquisa (nunca no `record`, com teste estrutural), entrada
+"ACHADO 2026-10-01" no `OPERACAO.md` com as assinaturas comparadas e a
+regra. Suíte 1.297.
+
+**Tags:** entregue-v4.10 (sobre v4.09).
