@@ -4907,3 +4907,30 @@ Backlog (exige reinício do record): `sem_trade_ha_s` por símbolo,
 p50/p99 de `ts_recv − ts`, versão da DLL no arranque.
 
 **Tags:** entregue-v4.11 (sobre v4.10).
+
+### 2026-10-02 — Diário operacional: decomposição do resultado e atraso do feed (v4.12)
+
+Pedido do Diego, depois do alarme falso da ignição (a operação durou ≤ 30 s
+no gráfico de 15 s; o stop saiu ~120 pts além do programado): "consolidar
+todos esses eventos num diário/dashboard — o atraso do record e o custo
+dele, o stop maior que o programado — para saber quanto cada variável
+impactou o resultado".
+
+Entregue (v4.12): `diario.py` + `diario_html.py` + `profit-tape
+diario-operacional` (o nome `diario` já existia: relatório de sinais
+decididos do forward; meu primeiro registro colidiu e foi renomeado antes
+de entregar). Duas fontes que já existem: o log do record (entradas e
+saídas dos EAs, heartbeat, estados da DLL, avisos) e o tape curado
+(`ts_recv − ts`, buracos de chegada). Decomposição exata por operação
+(ideal − gap − fill − entrada − custo) para ignição e vwap_vp, testada
+com os números do episódio de 02/10 (−652 = −530 −5 −108 −5 −4); atraso
+na hora da saída medido pelos negócios que chegaram a ±1 s ("feed mudo"
+quando nada chegou); incidentes (≥ 10 s) e buracos (≥ 20 s); saúde do
+record; notas do operador; CSV acumulado por dia e `index.html`. Roda em
+prioridade baixa. 7 testes novos, incluindo um tape sintético com stall de
+240 s. Suíte 1.305.
+
+**Limite declarado:** o diário mede e mostra; não atribui causa. O que o
+atraso custou só aparece com dezenas de operações no `operacoes.csv`.
+
+**Tags:** entregue-v4.12 (sobre v4.11).

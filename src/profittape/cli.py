@@ -1785,6 +1785,56 @@ def ea_vwapvp_servico_replay(
                f"saidas {r['saidas']}  bloqueado={r['bloqueado']}")
 
 
+@app.command(name="diario-operacional")
+def diario_operacional(
+    dia: str | None = typer.Option(None, "--dia", help="YYYY-MM-DD (padrao: hoje, Brasilia)"),
+    log: Path = typer.Option(Path("logs/record_diario.jsonl"), "--log"),
+    curated: Path = typer.Option(Path("data/curated"), "--curated"),
+    symbol: str = typer.Option("WINFUT", "--symbol"),
+    pasta: Path = typer.Option(Path("data/diario"), "--pasta"),
+    nota: str | None = typer.Option(None, "--nota", help="anota uma linha no diario do dia"),
+    log_level: str = typer.Option("WARNING", "--log-level"),
+) -> None:
+    """
+    Diario OPERACIONAL (nao confundir com `diario <dir>`, o relatorio de sinais
+    decididos do forward): operacoes dos EAs decompostas (ideal, piora de entrada,
+    gap, deslizamento de saida, custo), atraso do feed e buracos de chegada
+    (do tape curado), saude do record e avisos do dia. Gera
+    diario_AAAA-MM-DD.html, acumula operacoes.csv / incidentes.csv / dias.csv e
+    refaz o index.html. Rode DEPOIS do compact (o tape curado e' a fonte do
+    atraso); sem ele sai so' a parte do log. Reexecutar o dia substitui.
+    """
+    import datetime as _d
+    from zoneinfo import ZoneInfo
+
+    configurar(log_level)
+    from .prioridade import baixa_prioridade
+
+    baixa_prioridade()
+    from .diario import anotar, gravar_csv, ler_notas, montar
+    from .diario_html import renderizar, renderizar_indice
+
+    d = (_d.date.fromisoformat(dia) if dia
+         else _d.datetime.now(tz=ZoneInfo("America/Sao_Paulo")).date())
+    pasta.mkdir(parents=True, exist_ok=True)
+    if nota:
+        anotar(pasta, d, nota)
+    dados = montar(d, log, curated, symbol, ler_notas(pasta, d))
+    gravar_csv(dados, pasta)
+    saida = pasta / f"diario_{d.isoformat()}.html"
+    saida.write_text(renderizar(dados), encoding="utf-8")
+    (pasta / "index.html").write_text(renderizar_indice(pasta), encoding="utf-8")
+    ops = dados["operacoes"]
+    typer.echo(f"diario {d}: {len(ops)} operacao(oes), "
+               f"P&L liquido {sum((o.get('pnl_liquido') or 0) for o in ops):+.0f} pts, "
+               f"{len(dados['incidentes'])} incidente(s) de atraso, "
+               f"{len(dados['buracos'])} buraco(s) de chegada")
+    for av in dados["avisos"]:
+        typer.echo(f"  AVISO: {av}")
+    typer.echo(f"  -> {saida}")
+    typer.echo(f"  -> {pasta / 'index.html'}")
+
+
 @app.command(name="ea-vwapvp-replay")
 def ea_vwapvp_replay(
     curated: Path = typer.Option(Path("data/curated"), "--curated"),

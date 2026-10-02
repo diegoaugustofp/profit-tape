@@ -93,6 +93,7 @@ def test_idempotente_e_nunca_levanta(monkeypatch: pytest.MonkeyPatch) -> None:
 COMANDOS_DE_PESQUISA = {
     "vwapvp-conferir", "vwapvp-ntsl-equivalencia", "vwapvp-ntsl-setupb", "ea-vwapvp-taxa",
     "ea-vwapvp-sonda", "ea-vwapvp-regra", "ea-vwapvp-servico-replay", "ea-vwapvp-replay",
+    "diario-operacional",
 }
 
 

@@ -85,6 +85,7 @@ profit-tape ea-replay-lote ...      # replay do EA sobre todos os dias curados (
 profit-tape record --ea-dir data/eas_ativos --ea-modo-ticker exclusivo \
     --login-completo --ea-ticker-ordem WINV26 --capital-em-conta 20000   # F5: dry_run ou demo
 profit-tape diario ...              # o que foi DECIDIDO, sinal a sinal (o Profit só sabe o que executou)
+profit-tape diario-operacional      # o que os EAs FIZERAM e o que o atraso/gap/fill custaram (HTML + CSV por dia)
 profit-tape e4-comparar ...         # ordem real na demo x gêmeo simulado = custo de execução
 ```
 

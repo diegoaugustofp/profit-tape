@@ -2,7 +2,7 @@
 
 > **Status:** vivo (GERADO) — **Revisado:** pela ultima execucao de `tools/gera_referencia_cli.py` — **Assunto:** todos os comandos de `src/profittape/cli.py`, agrupados por categoria, com a nota de trial e o documento de referencia. NAO EDITE A MAO: rode o script.
 
-84 comandos. Categoria e documento vem do dicionario no script; nome e descricao vem do docstring do proprio comando (`profit-tape <cmd> --help` mostra as opcoes).
+85 comandos. Categoria e documento vem do dicionario no script; nome e descricao vem do docstring do proprio comando (`profit-tape <cmd> --help` mostra as opcoes).
 
 A distincao que mais importa: comandos que **consomem trial** sobem o limiar deflacionado a cada rodada e so' devem rodar com dado NOVO suficiente; os que nao consomem podem rodar quando quiser (skill `profit-tape-disciplina`, 2).
 
@@ -139,6 +139,7 @@ A distincao que mais importa: comandos que **consomem trial** sobem o limiar def
 |---|---|---|
 | `barra-tempo-conferir` | Passo 1 do F5 do 123: barras M15 que o EA constroi do TAPE (trade a trade) contra as barras do GRAFICO do Profit (dump), barra a barra. | EAS_DE_PRECO.md 5.4 |
 | `diario` | Relatorio do DIARIO de sinais: uma linha por sinal, inclusive os que NAO viraram ordem. | EA_ARQUITETURA.md 6 |
+| `diario-operacional` | Diario OPERACIONAL (nao confundir com `diario <dir>`, o relatorio de sinais decididos do forward): operacoes dos EAs decompostas (ideal, piora de entrada, gap, deslizamento de saida, custo), atraso do feed e buracos d... | OPERACAO.md: diario operacional |
 | `e4-comparar` | Compara o E4 (ordem real na demo) com o gemeo SIMULADO, ordem a ordem, e responde se o simulador preenche no IDEAL -- o que decide se o E4 em demo consegue medir slippage. | RUNBOOK_E4.md |
 | `ea` | FORWARD-TEST do EA (dry_run por default no config): conecta com login completo, assina o simbolo, constroi barras ao vivo e LOGA cada decisao que o EA teria tomado. | EA_ARQUITETURA.md |
 | `ea-123-replay` | REPLAY do EA 123 sobre um dia curado: semente, perfil de volume, gate, sinal, ciclo em dry_run e DIARIO, com barras reais e sem esperar pregao. | eas/123_m15.md |

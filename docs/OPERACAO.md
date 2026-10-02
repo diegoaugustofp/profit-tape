@@ -1,5 +1,37 @@
 # Operacao
 
+## Diario operacional (v4.12): o que os EAs fizeram E o que a infraestrutura fez com eles
+
+`profit-tape diario-operacional [--dia AAAA-MM-DD] [--nota "texto"]` (o `diario <dir>` antigo
+continua sendo o relatorio de sinais decididos do forward). Rode DEPOIS do compact: o atraso vem
+do tape curado (`ts_recv - ts`). Sem o tape sai so' a parte do log e avisa. Roda em prioridade baixa.
+
+Gera em `data\diario\`: `diario_AAAA-MM-DD.html` (abre offline), `index.html` (uma linha por dia),
+e acumula `operacoes.csv`, `incidentes.csv`, `dias.csv` (reexecutar o dia substitui; e' o dado dos
+seis meses). `--nota` acrescenta uma linha datada em `notas\AAAA-MM-DD.md`, que aparece no topo.
+
+**Decomposicao de cada operacao (ignicao e vwap_vp)**, identidade exata e testada:
+`pnl liquido = ideal - gap - fill - entrada - custo`. *Ideal*: o movimento ate' a barreira que o
+EA tinha programado (+alvo, -stop, ou o proprio movimento numa saida por tempo). *Gap*: o primeiro
+negocio alem da barreira ja' estava longe dela (mercado rapido; nenhum stop evita). *Fill*:
+deslizamento da execucao simulada contra o tape (atraso e spread entram aqui). *Entrada*: piora
+entre o preco do sinal e o fill. Mostra tambem `stop real / stop programado`.
+
+**Atraso na hora da saida:** mediana de `ts_recv - ts` dos negocios que chegaram a +-1 s do instante
+em que o EA processou. "feed mudo" = nada chegou a +-1 s (a operacao foi processada no meio de um
+buraco). O diario NAO atribui causa: coloca o atraso ao lado do gap+fill e deixa a amostra crescer.
+
+**Incidentes** (minuto de evento com atraso maximo >= 10 s) e **buracos** (>= 20 s sem NENHUMA
+chegada no pregao), mais saude do record (heartbeat, fila, descartados), estados da DLL e avisos/
+erros agrupados por evento.
+
+Cobertura hoje: decomposicao para ignicao e vwap_vp; 123, microprice e z_agf entram como operacao
+com o P&L e, no 123, slippage e latencia de fill das ordens. Ainda NAO ha': versao da DLL,
+silencio de trade por simbolo no heartbeat, nem p50/p99 de atraso dentro do log do record (backlog
+do ACHADO 2026-10-01).
+
+---
+
 ## ACHADO 2026-10-01: 634 s de atraso na entrega de trades, com o processo vivo e conectado
 
 **Fatos medidos.**
