@@ -2,14 +2,13 @@
 Prioridade BAIXA para comandos de pesquisa/ferramentas que rodam NA MESMA
 maquina do `record` (2026-10-01, v4.10).
 
-Motivo (docs/OPERACAO.md, ACHADO 2026-10-01): as 14:22 BRT a entrega de
+Contexto (docs/OPERACAO.md, ACHADO 2026-10-01): as 14:22 BRT a entrega de
 trades da DLL parou ~9,5 min e voltou em rajada (atraso medido 634 s) com o
-processo vivo, `login_ok` e `corretora_pronta` verdadeiros -- exatamente
-quando o operador rodou `vwapvp-ntsl-setupb` (reconstroi o cache do dia novo
-num laco Python sobre ~6,7 M de trades e le o parquet) e compilou o
-indicador no Profit. Causa provavel, a confirmar: disputa de CPU/disco num
-notebook. Nada foi perdido (volume M5 do tape = Profit), mas as EAs ficaram
-cegas 10 min.
+processo vivo, `login_ok` e `corretora_pronta` verdadeiros. A causa esta' EM
+ABERTO (a hipotese do gerador de niveis foi enfraquecida pelas datas dos
+arquivos). Isto NAO e' a correcao desse incidente: e' higiene barata -- um
+comando de pesquisa nao deve disputar CPU/disco com o record. Nada foi
+perdido (volume M5 do tape = Profit), mas as EAs ficaram cegas 10 min.
 
 O `record` NUNCA chama isto: so' os comandos de pesquisa. Teste estrutural
 garante as duas coisas (tests/test_prioridade.py).

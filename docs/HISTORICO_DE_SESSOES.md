@@ -4889,3 +4889,21 @@ pesquisa (nunca no `record`, com teste estrutural), entrada
 regra. Suíte 1.297.
 
 **Tags:** entregue-v4.10 (sobre v4.09).
+
+### 2026-10-02 — A hipótese do gerador enfraquece; causa do atraso de 634 s em aberto (v4.11, docs)
+
+A conferência por data de arquivo que eu pedi voltou assim: o cache de
+30/09 foi gravado em 01/10 01:17 (13 h antes da parada, então o gerador
+às 14:22 só leria cache) e o `.ntsl` gerado foi sobrescrito às 19:23 (o
+horário dele não responde). Fraqueza do meu teste: pedi o mtime de um
+arquivo que o próprio Diego regenera. Além disso a versão do gerador que
+corrige os níveis de 01/10 só foi entregue depois (v4.04 ~14:55, v4.05
+~16:16 BRT; os relógios do sandbox e do log do record batem em minutos
+nas rodadas de 17:24 e 17:36 BRT): o que se aplicou perto de 14:22 foi
+saída de versão anterior, ou o horário é aproximado. OPERACAO.md e o
+docstring de `prioridade.py` passam de "causa provável: gerador" para
+"causa em aberto"; a prioridade baixa fica como higiene, não correção.
+Backlog (exige reinício do record): `sem_trade_ha_s` por símbolo,
+p50/p99 de `ts_recv − ts`, versão da DLL no arranque.
+
+**Tags:** entregue-v4.11 (sobre v4.10).

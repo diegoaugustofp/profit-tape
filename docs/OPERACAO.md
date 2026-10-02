@@ -19,18 +19,29 @@
 **Nao e' nenhuma das assinaturas ja conhecidas.** Modern Standby (18/09): o heartbeat PARA.
 Queda de rede (E1): `corretora_pronta` CAI. Aqui os dois continuaram.
 
-**Causa provavel -- A CONFIRMAR.** O operador, perto das 14:22, rodou `vwapvp-ntsl-setupb`
-(na 1a execucao apos um dia novo curado reconstroi o cache desse dia num laco Python sobre ~6,7 M
-de trades e le o parquet) e compilou o indicador no Profit. Os dois disputam CPU e disco com o
-record num notebook. Conferir: `LastWriteTime` de `data\cache\vwapvp_barras\WINFUT_2026-09-30_*` e
-de `ntsl\vwapvp_setupb_gerado.ntsl` contra 14:22. Segue sem explicacao por que so' os TRADES
-pararam; `profitdll.estado` (tipo 2, valor 5 ou 6) mostra se a DLL sinalizou a parada de entrega.
+**Causa: EM ABERTO (revisado na v4.11).** A hipotese inicial era o gerador de niveis do NTSL
+reconstruindo o cache do dia no mesmo notebook. A conferencia por data de arquivo a enfraqueceu:
+o cache de 30/09 foi gravado em 01/10 01:17, 13 h ANTES da parada, entao o gerador as 14:22 so'
+leria cache (segundos); e o `.ntsl` gerado foi sobrescrito as 19:23, entao o horario dele nao
+responde nada. Alem disso, a versao do gerador que corrige os niveis de 01/10 so' foi entregue
+depois (14:55 e 16:16 BRT): o que foi aplicado perto de 14:22 era saida de uma versao anterior,
+ou o horario lembrado e' aproximado. Candidata ainda nao medida: o Profit recompilando um
+indicador numa serie longa. Segue sem explicacao por que so' os TRADES pararam.
 
-**Regra criada (v4.10).** Todo comando de pesquisa/ferramenta que roda na maquina do record
-baixa a propria prioridade ao iniciar (`prioridade.baixa_prioridade()`: Windows
-`PROCESS_MODE_BACKGROUND_BEGIN`, i.e. CPU + I/O + memoria; POSIX nice 10). O `record` NUNCA
-faz isso (teste estrutural). Comando pesado de verdade (reconstruir cache de varios dias,
-compact, replay longo) so' depois das 18:00 ou com o record parado.
+**Discriminadores baratos que ja' existem:** `profitdll.estado` no log (tipo 2, valor 5 ou 6 = a
+propria DLL sinalizou a parada de entrega) e a versao do `ProfitDLL64.dll` (o manual registra
+correcoes de entrega a partir da 4.0.0.39; a 4.0.0.42 corrige atraso em callbacks de ORDEM).
+
+**Regra v4.10 (prioridade baixa dos comandos de pesquisa):** mantida como HIGIENE -- comando de
+pesquisa nao deve disputar a maquina com o record --, mas NAO e' a correcao deste incidente.
+`prioridade.baixa_prioridade()`: Windows `PROCESS_MODE_BACKGROUND_BEGIN` (CPU + I/O + memoria),
+POSIX nice 10; o `record` nunca a chama (teste estrutural). Comando pesado de verdade (cache de
+varios dias, compact, replay longo) so' depois das 18:00 ou com o record parado.
+
+**Backlog para a proxima ocorrencia ter dado** (cada item exige reinicio do record):
+`sem_trade_ha_s` por simbolo no heartbeat (o `sem_evento_ha_s` conta eventos de qualquer tipo e
+nao viu 9,5 min de silencio de trade); p50/p99 de `ts_recv - ts` por janela de 30 s; versao da
+DLL no arranque.
 
 ---
 
