@@ -151,6 +151,11 @@ def _log_do_dia(f: Path) -> None:
     for k in range(3):
         ev.append(_linha(_brt_ns(9, 1, k), "ea.cancel_todas_recusado", level="error"))
     ev.append(_linha(_brt_ns(9, 2), "profitdll.estado", tipo=2, valor=6))
+    ev.append(_linha(_brt_ns(9, 20, 40), "profitdll.estado", tipo=2, valor=6))   # dentro do stall
+    ev.append(_linha(_brt_ns(9, 24, 20), "profitdll.estado", tipo=2, valor=4))   # recuperou
+    for k in range(3):                                   # writer lento ANTES do stall
+        ev.append(_linha(_brt_ns(9, 19, 30 + k), "writer.lote_lento", level="warning",
+                         linhas=50000, segundos=1.8))
     f.write_text("\n".join(ev) + "\n", encoding="utf-8")
 
 
@@ -176,8 +181,14 @@ def test_montar_gravar_e_renderizar_ponta_a_ponta(tmp_path: Path) -> None:
     assert d["saude"]["intervalos_acima_45s"] >= 1 and d["saude"]["descartados"] == 0
     assert d["ocorrencias"][0] == {"nivel": "error", "evento": "ea.cancel_todas_recusado",
                                    "n": 3, "primeiro": "09:01:00", "ultimo": "09:01:02"}
-    assert d["estados_dll"] == [{"hora": "09:02:00", "tipo": 2, "valor": 6}]
+    assert [(e["hora"], e["nome"], e["grave"]) for e in d["estados_dll"]] == [
+        ("09:02:00", "MARKET_PARTIAL_CONNECTED", True),
+        ("09:20:40", "MARKET_PARTIAL_CONNECTED", True), ("09:24:20", "MARKET_CONNECTED", False)]
     assert len(d["incidentes"]) == 1 and len(d["buracos"]) == 1
+    # contexto do incidente (associacao, nao causa): so' o estado grave DENTRO do periodo e o
+    # aviso do writer dos 10 min antes; o ruido conhecido (cancel_todas) nao entra
+    assert d["incidentes"][0]["dll"] == ["09:20:40 MARKET_PARTIAL_CONNECTED"]
+    assert d["incidentes"][0]["avisos_antes"] == ["writer.lote_lento x3"]
 
     pasta = tmp_path / "diario"
     for _ in range(2):                                            # idempotente por dia
@@ -189,6 +200,10 @@ def test_montar_gravar_e_renderizar_ponta_a_ponta(tmp_path: Path) -> None:
     html = H.renderizar(d)
     assert "Diário operacional" in html and "feed mudo" in html and "ea_ignicao" in html
     assert "1,22" in html and "09:21 grafico 15s ok" in html and "<svg" in html
+    # v4.16 mostrava "&gt;" literal na tela (rotulo ja' escapado e escapado de novo)
+    assert "Importado depois (&gt; 1 h)" in html and "&amp;gt;" not in html
+    assert "Descrição (manual da DLL)" in html and "MARKET_PARTIAL_CONNECTED" in html
+    assert "writer.lote_lento x3" in html
     assert "zero por construção" in html                   # ignição simulada com fill do tape
     assert a["ops_com_fill_do_tape"] == 2 and a["custo_atraso_est"] == pytest.approx(0.0)
     assert vv["custo_atraso_saida_est"] == pytest.approx(0.0)
@@ -588,4 +603,46 @@ def test_linha_resumo_tolera_atraso_none() -> None:
     assert "atraso p99 2.0 s, max 5 s" in D.linha_resumo_dia(
         DIA, dict(base, tape={"atraso_p99": 2.0, "atraso_max": 5.0, "pct_recuperado": 0.0}))
     assert D.linha_resumo_dia(DIA, dict(base, tape=None)).endswith("0 buraco(s) de chegada")
+
+
+# ----------------------------------------------- v4.17: observacoes do operador sobre a pagina
+def test_entrada_vem_antes_da_saida_nas_colunas_e_na_ordem_das_linhas(tmp_path: Path) -> None:
+    log = tmp_path / "log.jsonl"
+    _log_do_dia(log)
+    d = D.montar(DIA, log, tmp_path / "sem_tape")
+    html = H.renderizar(d)
+    assert (html.index("Entrada (hora)") < html.index("Saída (hora)")
+            < html.index("Entrada (preço)") < html.index("Saída (preço)"))
+    # a ignicao entra ANTES do vwap_vp mas sai DEPOIS: a linha segue a hora de ENTRADA
+    ig = next(o for o in d["operacoes"] if o["ea"] == "ea_ignicao")
+    ig["t_entrada"] = _brt_ns(8, 59)
+    html = H.renderizar(d)
+    assert html.index('<td class="l">ea_ignicao') < html.index('<td class="l">ea_vwapvp')
+    # sem hora de entrada (123, micro): mostra traco e cai pela hora de saida
+    assert '<span class="mudo">—</span></td><td class="l">09:30:00' in html
+
+
+def test_estados_da_dll_com_descricao_e_rajada_agrupada() -> None:
+    base = {"event": "profitdll.estado"}
+    ev = [dict(base, _t=_brt_ns(8, 1, 17), tipo=1, valor=5) for _ in range(4)]
+    ev += [dict(base, _t=_brt_ns(14, 22, 36), tipo=2, valor=6),
+           dict(base, _t=_brt_ns(14, 31, 12), tipo=2, valor=4),
+           dict(base, _t=_brt_ns(14, 31, 13), tipo=9, valor=9)]
+    out = D.estados_dll(ev)
+    assert [(e["nome"], e["vezes"]) for e in out[:3]] == [
+        ("ROTEAMENTO_BROKER_CONNECTED", 4), ("MARKET_PARTIAL_CONNECTED", 1),
+        ("MARKET_CONNECTED", 1)]
+    assert out[1]["grave"] and "ENTREGA LOCAL" in out[1]["descricao"] and not out[0]["grave"]
+    assert out[3]["nome"] == "valor 9" and out[3]["descricao"] == "valor fora do manual"
+
+
+def test_saude_do_record_so_olha_o_pregao() -> None:
+    def hb(h: int, m: int, s: int, **kw: float) -> dict:
+        return {"event": "recorder.heartbeat", "_t": _brt_ns(h, m, s), "linhas": 0, "fila": 0,
+                "fila_pico": 0, "descartados": 0, "sem_evento_ha_s": 0.1, **kw}
+    ev = [hb(7, 0, 0, sem_evento_ha_s=10.0), hb(9, 0, 0, linhas=0), hb(9, 0, 30, linhas=60000),
+          hb(9, 1, 0, linhas=120000), hb(19, 0, 0, sem_evento_ha_s=3512.7, linhas=120000)]
+    s = D.saude_record(ev)
+    assert s["heartbeats"] == 3 and s["sem_evento_max_s"] == pytest.approx(0.1)
+    assert s["linhas_s_min"] == pytest.approx(2000.0) and s["maior_intervalo_s"] == 30.0
 

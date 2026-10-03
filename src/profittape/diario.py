@@ -388,8 +388,16 @@ def custo_atraso(tape: Tape, o: dict[str, Any]) -> None:
 
 
 # ------------------------------------------------------- saude do record
+def _no_pregao(t_ns: int) -> bool:
+    d = _brt(t_ns)
+    return SESSAO_HHMM[0] <= d.hour * 100 + d.minute < SESSAO_HHMM[1]
+
+
 def saude_record(eventos: list[dict[str, Any]]) -> dict[str, Any]:
-    hb = [e for e in eventos if e.get("event") == "recorder.heartbeat"]
+    """So' o PREGAO (09:00-18:30 BRT): fora dele nao chega evento e `sem_evento_ha_s` cresce
+    sem que nada esteja errado (v4.16 mostrava 3.198 s e linhas/s minimo 0 por isso)."""
+    hb = [e for e in eventos
+          if e.get("event") == "recorder.heartbeat" and _no_pregao(e["_t"])]
     out: dict[str, Any] = {"heartbeats": len(hb)}
     if len(hb) >= 2:
         t = np.array([e["_t"] for e in hb], dtype=np.int64)
@@ -429,8 +437,48 @@ def ocorrencias(eventos: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def estados_dll(eventos: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [{"hora": _brt(e["_t"]).strftime("%H:%M:%S"), "tipo": e.get("tipo"),
-             "valor": e.get("valor")} for e in eventos if e.get("event") == "profitdll.estado"]
+    """Estados da DLL com nome e descricao do manual; repeticoes consecutivas iguais no
+    mesmo segundo (rajada da subida) viram uma linha com `vezes`."""
+    from .dll_estados import descrever
+
+    out: list[dict[str, Any]] = []
+    for e in eventos:
+        if e.get("event") != "profitdll.estado":
+            continue
+        hora = _brt(e["_t"]).strftime("%H:%M:%S")
+        tipo_txt, nome, desc, grave = descrever(e.get("tipo"), e.get("valor"))
+        chave = (hora, tipo_txt, nome)
+        if out and (out[-1]["hora"], out[-1]["tipo_txt"], out[-1]["nome"]) == chave:
+            out[-1]["vezes"] += 1
+            continue
+        out.append({"hora": hora, "t": e["_t"], "tipo": e.get("tipo"), "valor": e.get("valor"),
+                    "tipo_txt": tipo_txt, "nome": nome, "descricao": desc, "grave": grave,
+                    "vezes": 1})
+    return out
+
+
+RUIDO_CONHECIDO = {"ea.cancel_todas_recusado", "ea.123.limpeza_na_subida",
+                   "ea.123.limpeza_na_subida_desistiu"}
+
+
+def contexto_incidente(dia: dt.date, inc: dict[str, Any], eventos: list[dict[str, Any]],
+                       estados: list[dict[str, Any]], antes_min: int = 10) -> dict[str, Any]:
+    """O que o log diz em volta de um incidente de atraso: estados GRAVES da DLL (de 2 min
+    antes ao fim) e avisos/erros dos `antes_min` minutos que o precedem (sem o ruido ja'
+    conhecido). Mostra a associacao; nao a declara causa."""
+    def ns(hhmm: str, extra_s: int = 0) -> int:
+        h, m = (int(x) for x in hhmm.split(":"))
+        d0 = dt.datetime(dia.year, dia.month, dia.day, h, m, tzinfo=_TZ)
+        return int(d0.timestamp()) * _NS + extra_s * _NS
+    ini, fim = ns(inc["inicio"]), ns(inc["fim"], 60)
+    dll = [f"{x['hora']} {x['nome']}" for x in estados
+           if x.get("grave") and ini - 120 * _NS <= x["t"] <= fim + 120 * _NS]
+    c: Counter[str] = Counter()
+    for e in eventos:
+        if (str(e.get("level")) in ("warning", "error") and ini - antes_min * 60 * _NS <= e["_t"]
+                <= ini + 60 * _NS and str(e.get("event")) not in RUIDO_CONHECIDO):
+            c[str(e.get("event"))] += 1
+    return {"dll": dll, "avisos_antes": [f"{k} x{v}" for k, v in c.most_common(3)]}
 
 
 # ----------------------------------------------------------------- montar
@@ -524,6 +572,8 @@ def montar(dia: dt.date, log: Path, curated: Path, symbol: str = "WINFUT",
                 "atraso e dos incidentes" + ("; buracos de chegada nao medidos neste dia."
                                              if tape.pct_recuperado >= 0.5 else "."))
         dados["incidentes"] = tape.incidentes()
+        for i in dados["incidentes"]:
+            i.update(contexto_incidente(dia, i, eventos, dados["estados_dll"]))
         dados["buracos"] = tape.buracos(dia)
         dados["por_minuto"] = [
             {"hhmm": str(h), "p50": float(a), "max": float(b)}

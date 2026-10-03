@@ -5034,3 +5034,26 @@ dia da rodada real (importado inteiro, importado em parte, normal com stall e op
 sem nada, fim de semana): exit 0, índice, `dias.csv` e navegação completos. Suíte 1.328.
 
 **Tags:** entregue-v4.16 (sobre v4.15).
+
+### 2026-10-03b — Observações do operador sobre as páginas; a DLL declarou os atrasos (v4.17)
+
+Diego, depois de ver as páginas: erro "0,0 %Importado depois (&gt; 1 h)"; melhorias: estado da DLL com
+descrição; entrada antes da saída. Avaliadas as três (todas implementadas, são pequenas e diretas) e
+mais dois ajustes que apareceram na leitura das páginas:
+
+- **Bug:** o rótulo do card já vinha escapado e era escapado de novo (`&gt;` literal). Rótulo em texto puro.
+- **Estado da DLL:** nome e descrição do manual (`dll_estados.py`), alerta em vermelho para 5 e 6,
+  rajada da subida agrupada (×N).
+- **Ordem:** colunas Entrada (hora) → Saída (hora) → … → Entrada (preço) → Saída (preço); linhas
+  pela hora de entrada.
+- **Saúde do record só no pregão** (09:00–18:30): `sem_evento_ha_s` mostrava 3.198 s e linhas/s
+  mínimo 0 por causa do fora de horário.
+- **Contexto do incidente:** estados graves da DLL no período e avisos dos 10 min antes, na própria
+  tabela de incidentes.
+
+**Achado que as páginas permitiram:** `MARKET_PARTIAL_CONNECTED` aparece nos dois dias com atraso
+grande (28/09 09:00:59; 01/10 14:22:36) e em nenhum dos outros; `writer.lote_lento` precede os dois.
+Ver o ACHADO 2026-10-01 do `OPERACAO.md`. Também a ignição de 02/10 09:29: `Fill` +120 e `Gap` 0
+com fill do livro e atraso de 1,0 s — o −659 foi execução simulada contra o livro, não gap.
+
+**Tags:** entregue-v4.17 (sobre v4.16).

@@ -160,7 +160,8 @@ def _grafico(dados: dict[str, Any]) -> str:
 
 
 def renderizar(dados: dict[str, Any]) -> str:
-    ops: list[dict[str, Any]] = sorted(dados["operacoes"], key=lambda o: o["t_saida"])
+    ops: list[dict[str, Any]] = sorted(
+        dados["operacoes"], key=lambda o: (o.get("t_entrada") or o["t_saida"], o["t_saida"]))
     a, t, s = dados["atribuicao"], dados["tape"], dados["saude"]
     tape_ok = t is not None
     pnl = sum((o.get("pnl_liquido") or 0) for o in ops)
@@ -171,7 +172,7 @@ def renderizar(dados: dict[str, Any]) -> str:
         ("Stop real ÷ programado (mediana)", _n(razao, 2) if razao else "—"),
         ("Atraso p99 / máx do feed (s)",
          f"{_n(t['atraso_p99'], 1)} / {_n(t['atraso_max'], 1)}" if t else "—"),
-        ("Importado depois (&gt; 1 h)", _n((t or {}).get("pct_recuperado", 0) * 100, 1) + " %"
+        ("Importado depois (> 1 h)", _n((t or {}).get("pct_recuperado", 0) * 100, 1) + " %"
          if t else "—"),
         ("Incidentes de atraso", _n(len(dados["incidentes"])) if tape_ok else "—"),
         ("Buracos de chegada", _n(len(dados["buracos"])) if tape_ok else "—"),
@@ -213,8 +214,10 @@ def renderizar(dados: dict[str, Any]) -> str:
     # ---- operacoes
     partes.append("<h2>Operações e decomposição do resultado</h2>")
     if ops:
-        cab = [("EA", True), ("Saída", True), ("Lado", True), ("Motivo", True), ("Entrada", False),
-               ("Saída px", False), ("P&L líq", False), ("Ideal", False), ("Entr. (+pior)", False),
+        cab = [("EA", True), ("Entrada (hora)", True), ("Saída (hora)", True), ("Lado", True),
+               ("Motivo", True), ("Entrada (preço)", False),
+               ("Saída (preço)", False), ("P&L líq", False), ("Ideal", False),
+               ("Entr. (+pior)", False),
                ("Gap (+pior)", False), ("Fill (+pior)", False), ("Custo", False),
                ("Stop prog", False),
                ("Real÷prog", False), ("Fill de", True), ("Atraso entr (s)", False),
@@ -222,9 +225,11 @@ def renderizar(dados: dict[str, Any]) -> str:
         linhas = []
         for o in ops:
             hora = dt.datetime.fromtimestamp(o["t_saida"] / 1e9, tz=_TZ).strftime("%H:%M:%S")
+            hora_ent = (dt.datetime.fromtimestamp(o["t_entrada"] / 1e9, tz=_TZ).strftime("%H:%M:%S")
+                        if o.get("t_entrada") else '<span class="mudo">—</span>')
             lado = _lado(o.get("lado"))
             linhas.append([
-                _e(o.get("ea")), hora, lado, _e(o.get("motivo")), _n(o.get("entrada")),
+                _e(o.get("ea")), hora_ent, hora, lado, _e(o.get("motivo")), _n(o.get("entrada")),
                 _n(o.get("saida")), _n(o.get("pnl_liquido"), 0, True),
                 _n(o.get("ideal"), 0, True), _n(o.get("entrada_slip"), 0),
                 _n(o.get("gap"), 0), _n(o.get("fill"), 0), _n(o.get("custo"), 0),
@@ -293,9 +298,14 @@ def renderizar(dados: dict[str, Any]) -> str:
         if dados["incidentes"]:
             partes.append(_tab(
                 [("Início", True), ("Fim", True), ("Minutos", False), ("Pico (s)", False),
-                 ("Negócios", False)],
+                 ("Negócios", False), ("DLL em alerta no período", True),
+                 ("Avisos do log nos 10 min antes", True)],
                 [[_e(i["inicio"]), _e(i["fim"]), _n(i["minutos"]), _n(i["pico_s"], 1),
-                  _n(i["negocios"])] for i in dados["incidentes"]]))
+                  _n(i["negocios"]), _e("; ".join(i.get("dll") or []) or "—"),
+                  _e("; ".join(i.get("avisos_antes") or []) or "—")]
+                 for i in dados["incidentes"]]))
+            partes.append("<small>Associação, não causa: mostra o que o log registrou em volta "
+                          "do incidente.</small>")
         if dados["buracos"]:
             partes.append(_tab(
                 [("Buraco de chegada (início)", True), ("Duração (s)", False),
@@ -320,9 +330,17 @@ def renderizar(dados: dict[str, Any]) -> str:
     else:
         partes.append("<p class='mudo'>Sem heartbeats suficientes no log do dia.</p>")
     if dados["estados_dll"]:
-        partes.append(_tab([("Hora", True), ("Estado DLL (tipo)", False), ("Valor", False)],
-                           [[_e(x["hora"]), _e(x["tipo"]), _e(x["valor"])]
-                            for x in dados["estados_dll"]]))
+        partes.append("<h2>Estados da DLL</h2>")
+        partes.append(_tab(
+            [("Hora", True), ("Tipo", True), ("Estado", True), ("Descrição (manual da DLL)", True)],
+            [[_e(x["hora"]), _e(x["tipo_txt"]),
+              (f"<span class='neg'><b>{_e(x['nome'])}</b></span>" if x["grave"]
+               else _e(x["nome"])) + (f" x{x['vezes']}" if x["vezes"] > 1 else ""),
+              (f"<span class='neg'>{_e(x['descricao'])}</span>" if x["grave"]
+               else _e(x["descricao"]))] for x in dados["estados_dll"]]))
+        partes.append("<small>Vermelho = estado de alerta da DLL (entrega local parada ou "
+                      "degradação). Na subida, a rajada de conexão aparece agrupada; ao "
+                      "encerrar (18:30) a DLL emite a sequência de desconexão.</small>")
     if dados["ocorrencias"]:
         partes.append(_tab(
             [("Nível", True), ("Evento", True), ("Vezes", False), ("Primeiro", False),

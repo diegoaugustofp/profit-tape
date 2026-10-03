@@ -112,6 +112,20 @@ depois (14:55 e 16:16 BRT): o que foi aplicado perto de 14:22 era saida de uma v
 ou o horario lembrado e' aproximado. Candidata ainda nao medida: o Profit recompilando um
 indicador numa serie longa. Segue sem explicacao por que so' os TRADES pararam.
 
+**Evidencia de 03/10 (diario retroativo, 5 dias): a PROPRIA DLL declarou os dois atrasos grandes.**
+`profitdll.estado` (2, 6) = `MARKET_PARTIAL_CONNECTED` ("feed do servidor OK, entrega local dos
+callbacks PARADA; o cliente nao esta' consumindo") apareceu em 28/09 as 09:00:59 (incidente
+09:02-09:57, pico 2.105 s) e em 01/10 as 14:22:36 (incidente 14:22-14:40, pico 635 s; voltou ao
+estado 4 as 14:31:12). Nos tres dias sem incidente (29/09, 30/09, 02/10) nao ha estado 6. Nos dois
+dias com incidente, `writer.lote_lento` (lote de escrita > 1 s, sem criacao de arquivo) comecou ANTES:
+28/09 08:55:31 (5,5 min antes) e 01/10 14:21:33 (1,5 min antes); nao ocorreu em 29/09 nem 02/10.
+Isto descarta: processo suspenso (heartbeat seguiu), queda de rede (`corretora_pronta` seguiu),
+leilao (tape denso por hora de evento) e o gerador de NTSL como causa unica. `publish()` do bus
+e' `put_nowait`: um writer lento NAO bloqueia o callback por ali; o mecanismo que liga escrita
+lenta a parada de entrega segue desconhecido. Amostra: 2 eventos, 5 dias -- associacao, nao causa.
+Proximo dado barato: os campos `segundos` e `linhas` dos `writer.lote_lento` de 01/10 14:21-14:23
+e em que disco esta' `storage.raiz`.
+
 **Discriminadores baratos que ja' existem:** `profitdll.estado` no log (tipo 2, valor 5 ou 6 = a
 propria DLL sinalizou a parada de entrega) e a versao do `ProfitDLL64.dll` (o manual registra
 correcoes de entrega a partir da 4.0.0.39; a 4.0.0.42 corrige atraso em callbacks de ORDEM).
