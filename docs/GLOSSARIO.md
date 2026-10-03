@@ -21,6 +21,8 @@ ficha em `docs/eas/`.
 ## B
 
 - **backfill** — `profit-tape backfill`: puxa o histórico de TRADES pela DLL. Book não tem backfill. Cura a pesquisa, não a execução. `OPERACAO.md`.
+- **coleta** — dado reunido com prazo para uma hipótese que ainda não tem ficha (sem EA, sem operação): WDOV26/WDOX26 para a rolagem, as séries de opção de PETR4 de outubro. Registro: `docs/coletas.yaml`. Não aparece no diário de operações nem em `eas/`.
+- **inventário de dados** — `profit-tape inventario-dados`, sob demanda (não diário): por ativo, o período e as linhas do `trade` (tape), se há book, se o dia foi ao vivo ou importado, onde há lacunas; gera `docs/INVENTARIO_DADOS.md`. Consultar **antes** de formular uma hipótese.
 - **barra de tempo** — barra M15 que o EA constrói do tape, alinhada em hh:00/15/30/45; fecha pelo primeiro trade que cruza a fronteira ou pelo relógio. `ea/barra_tempo.py`; `EAS_DE_PRECO §5.4`.
 - **barra de volume** — barra que fecha quando o volume de AGRESSÃO acumulado cruza o threshold (120.000 no WIN); RLP e leilão entram na barra mas não a fecham. Não atravessa dia. `FEATURES.md`.
 - **book_offer / book_price / tiny_book** — os três streams de livro gravados (deltas do offer book por ordem; book por preço; topo do livro). `tiny_book` é ~1 M eventos/pregão e é o usado como feature no Bollinger. `domain/enums.py`; `INTEGRIDADE_DOS_DADOS.md`.

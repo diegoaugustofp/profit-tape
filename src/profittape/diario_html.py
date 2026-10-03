@@ -468,10 +468,35 @@ def _todas_as_fichas(metas: list[dict[str, Any]], sem_ea: list[dict[str, Any]],
     return _tab([("Ficha", True), ("Situação (da ficha)", True), ("No diário", True)], linhas)
 
 
+def _coletas(coletas: list[dict[str, Any]], hoje: dt.date, href_inventario: str) -> str:
+    from .coletas import frase_de_situacao, situacao
+
+    linhas = []
+    for c in coletas:
+        s = situacao(c, hoje)
+        marco = c.get("marco") or {}
+        ativos = (f"{len(c['ativos'])} séries" if len(c["ativos"]) > 3
+                  else ", ".join(c["ativos"]))
+        linhas.append([f"<b>{_e(c['titulo'])}</b><br><span class='ficha'>{_e(c.get('hipotese'))}"
+                       "</span>", _e(ativos), _e(" + ".join(c.get("streams") or [])),
+                       _e(s["desde"].strftime("%d/%m/%Y") if s["desde"] else "—"),
+                       _e(f"{marco['data']:%d/%m/%Y} — {marco['rotulo']}" if marco.get("data")
+                          else "—"),
+                       _e(frase_de_situacao(s)), _e(c.get("proximo_passo")),
+                       f"<span class='ficha'>{_e(c.get('leitura_declarada') or c.get('estado'))}"
+                       "</span>"])
+    return (_tab([("Coleta (sem EA, sem operação)", True), ("Ativos", True), ("Streams", True),
+                  ("Desde", True), ("Marco", True), ("Situação", True), ("Próximo passo", True),
+                  ("Leitura declarada antes / estado", True)], linhas)
+            + f"<small>Dado reunido para hipóteses ainda sem ficha. O que existe em disco, por "
+              f"ativo e período: <a href='{_e(href_inventario)}'>INVENTARIO_DADOS.md</a> "
+              "(gerado sob demanda por <code>profit-tape inventario-dados</code>).</small>")
+
+
 def renderizar_indice(pasta: Path, metas: list[dict[str, Any]] | None = None,
                       raiz_fichas: Path | None = None,
                       paginas_ea: dict[str, str] | None = None,
-                      raiz_repo: Path | None = None) -> str:
+                      raiz_repo: Path | None = None, hoje: dt.date | None = None) -> str:
     from .diario_metas import progresso, status_da_ficha
 
     f = pasta / "dias.csv"
@@ -531,6 +556,15 @@ def renderizar_indice(pasta: Path, metas: list[dict[str, Any]] | None = None,
                   "observado usa os pregões já gerados no diário. Previsão = pregões que faltam "
                   "no ritmo observado. Metas em <code>docs/eas/metas.yaml</code> (cada número "
                   "com o trecho da ficha, guardado por teste).</small>"]
+    if raiz_fichas is not None and (raiz_fichas.parent / "coletas.yaml").exists():
+        import os
+
+        from .coletas import carregar_coletas
+        href_inv = os.path.relpath(raiz_fichas.parent / "INVENTARIO_DADOS.md", pasta).replace(
+            "\\", "/")
+        corpo += ["<h2>Coletas em andamento (dado sem EA)</h2>",
+                  _coletas(carregar_coletas(raiz_fichas.parent / "coletas.yaml"),
+                           hoje or dt.date.today(), href_inv)]
     if raiz_fichas is not None and (raiz_fichas / "metas.yaml").exists():
         import os
 

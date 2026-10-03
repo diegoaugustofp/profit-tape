@@ -5136,3 +5136,24 @@ Diego: "ficou algum EA de fora, mesmo que com a ficha fechada?". Auditoria cruza
   deepscalper, esquecido de v4.15 a v4.19); seção "Todas as fichas" no índice. Conferido por mutação.
 
 **Tags:** entregue-v4.21 (sobre v4.20). Suíte 1.354.
+
+### 2026-10-03g — Coletas em curso e inventário de dados (v4.22)
+
+Diego, sobre o documento que mais organizou o histórico: faltavam nos resumos as **duas séries do WDO**
+(hipótese da rolagem) e as **séries de opção** (à espera da mensal de outubro); e, como evolução, um
+**inventário de dados por ativo** — quais ativos, por quanto tempo, quais só `trade`, quais com tape — que
+não precisa rodar todo dia e fique em `docs/`.
+
+Os fatos já estavam no plano de pesquisa (`WDOV26`/`WDOX26` no record desde 22/09, só trades, virada
+em 01/10; 14 séries de PETR4 de 22/09 a 16/10, vencimento 16/10, nulo pesa contra), mas dentro de um
+arquivo de 7 mil linhas; o `ESTADO_E_CAMINHOS.md` (24/09) não os listava, e o diário só enxerga EAs. A
+mesma classe de omissão do deepscalper: coleta sem ficha não tem destino em lugar nenhum.
+
+Entregue: `docs/coletas.yaml` (fonte única, cada fato com trecho literal e teste de deriva; inclui o WIN
+como "não confirmado", com prazo ~07/10), seção "Coletas em andamento" no índice do diário com contagem
+regressiva, seção 1b no `ESTADO_E_CAMINHOS.md`; `profit-tape inventario-dados` (rodapé dos parquet; origem
+ao vivo × importado × misto; só trade × trade + book; lacunas; camadas raw/curated/backup; dumps em
+melhor esforço; cruzamento com as coletas) que gera `docs/INVENTARIO_DADOS.md` + CSV. O inventário real
+**depende dos discos do operador**: o repositório traz um marcador, não dado.
+
+**Tags:** entregue-v4.22 (sobre v4.21). Suíte 1.365.

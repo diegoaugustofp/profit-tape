@@ -77,6 +77,18 @@ CSV no `metas.yaml` (n = eventos unicos por `dia` + `ts_open`, desde 28/08; marc
 manda NAO olhar o placar antes de n = 150: o diario le do CSV **so' as colunas dia/ts_open** e nunca
 acerto nem pontos (um teste espia o `usecols`). Quem olha o placar e' o `fase2-score`, em n = 150.
 
+**Inventario de dados e coletas (v4.22).** `profit-tape inventario-dados [--backup D:\\backup_raw\\data\\raw]
+[--dumps <pasta>]` escreve `docs/INVENTARIO_DADOS.md` e `docs/inventario_dados.csv`: por ativo, periodo e
+linhas do `trade` (o *tape*), se ha' book (`so' trade` x `trade + book`), se cada dia foi **ao vivo**,
+**importado** (`ts_recv_ns` posterior ao dia: 01 a 14/09 foram importados em 15/09) ou **misto**, em que camada
+esta' (raw, curated, backup) e as lacunas. **Nao e' diario**: rode antes de formular uma hipotese e quando uma
+coleta terminar; depois do commit do `.md` e do CSV o documento fica disponivel sem rodar nada. Le so' o
+rodape dos parquet, em prioridade baixa; rode depois das 18:00. Limites: a lacuna conta dia da semana sem dado
+e pode incluir feriado; a letra do disco de backup muda; `--dumps` e' melhor esforco (datas da primeira e
+da ultima linha). As **coletas com prazo** (WDOV26/WDOX26 para a rolagem; opcoes de PETR4 de outubro; WINV26/
+WINZ26, ainda nao confirmada) vivem em `docs/coletas.yaml`, aparecem no indice do diario com contagem
+regressiva, e o inventario as cruza com o disco (ex.: em quantos dias os DOIS contratos do WDO negociaram).
+
 **Pagina por EA, ajustes da v4.19.** (1) O link da ficha agora e' relativo ate' `docs/eas/` (em v4.18
 era `ignicao.md` solto, relativo a `data\diario`, e quebrava; o teste verifica que o `href` resolve
 para o arquivo). (2) O Status da ficha aparece quase inteiro na pagina (700 caracteres) e o do vwap_vp

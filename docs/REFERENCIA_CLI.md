@@ -2,7 +2,7 @@
 
 > **Status:** vivo (GERADO) — **Revisado:** pela ultima execucao de `tools/gera_referencia_cli.py` — **Assunto:** todos os comandos de `src/profittape/cli.py`, agrupados por categoria, com a nota de trial e o documento de referencia. NAO EDITE A MAO: rode o script.
 
-85 comandos. Categoria e documento vem do dicionario no script; nome e descricao vem do docstring do proprio comando (`profit-tape <cmd> --help` mostra as opcoes).
+86 comandos. Categoria e documento vem do dicionario no script; nome e descricao vem do docstring do proprio comando (`profit-tape <cmd> --help` mostra as opcoes).
 
 A distincao que mais importa: comandos que **consomem trial** sobem o limiar deflacionado a cada rodada e so' devem rodar com dado NOVO suficiente; os que nao consomem podem rodar quando quiser (skill `profit-tape-disciplina`, 2).
 
@@ -154,6 +154,7 @@ A distincao que mais importa: comandos que **consomem trial** sobem o limiar def
 | `ea-vwapvp-servico-replay` | Roda o SERVICO do EA vwap_vp (o mesmo codigo do vivo, dry_run) sobre um dia do curated e lista as operacoes. | eas/vwap_vp.md F3 (servico do EA num dia) |
 | `ea-vwapvp-sonda` | Sonda dos eventos declarados (clausula 'janela' de cada um, ou os subgrupos pedidos com --clausula evento=coluna), na unidade proposta em 01/10: excursao a favor e contra como FRACAO da distancia ate' a VWAP no sinal,... | eas/vwap_vp.md fichas seguintes (sonda em fracao) |
 | `ea-vwapvp-taxa` | SO' CONTAGEM dos dois eventos declarados em 01/10 (docs/eas/vwap_vp.md): rejeicao intrabarra (maxima toca +2SD e fecha dentro) e continuacao (fechamento fora da banda). | eas/vwap_vp.md fichas seguintes (taxa) |
+| `inventario-dados` | INVENTARIO DE DADOS, sob demanda (NAO diario): quais ativos existem em disco, de que dia a que dia, quantas linhas, se sao so' trade (tape: negocios com agente) ou tambem book, se o dia foi capturado ao vivo ou import... | OPERACAO.md: inventario de dados |
 | `semente-conferir` | Passo 2 do F5 do 123: semente da MME80 (parquet do grafico + ponte pelo tape) e a recursao ao longo do dia, comparada barra a barra com o mme80_ntsl do grafico no mesmo dia. | EAS_DE_PRECO.md 5.4 |
 | `vwapvp-conferir` | F1 do EA vwap_vp (docs/eas/vwap_vp.md): VWAP de sessao com bandas e perfil de volume POR PRECO (POC, VAL, VAH, HVN/LVN) recalculados do TAPE curado, para bater contra o grafico do Profit antes de qualquer replay. | eas/vwap_vp.md F1 |
 | `vwapvp-ntsl-equivalencia` | Confere o replay VWAP+VP contra o grafico: le o dump do ntsl/vwapvp_conferir.ntsl (M5 WINFUT), recalcula as mesmas series das barras em cache e MEDE a diferenca por coluna (exatas ~1e-8; agressao Profit x tape; VWAP p... | eas/vwap_vp.md validacao NTSL |

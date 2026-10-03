@@ -1785,6 +1785,67 @@ def ea_vwapvp_servico_replay(
                f"saidas {r['saidas']}  bloqueado={r['bloqueado']}")
 
 
+@app.command(name="inventario-dados")
+def inventario_dados(
+    raw: Path = typer.Option(Path("data/raw"), "--raw", help="raiz local (record)"),
+    curated: Path = typer.Option(Path("data/curated"), "--curated"),
+    backup: Path | None = typer.Option(
+        None, "--backup", help="raiz do disco de backup (ex.: D:\\backup_raw\\data\\raw)"),
+    dumps: Path | None = typer.Option(
+        None, "--dumps", help="pasta com historicos de preco (CSV/TXT) baixados do grafico"),
+    coletas_yaml: Path = typer.Option(Path("docs/coletas.yaml"), "--coletas"),
+    saida: Path = typer.Option(Path("docs/INVENTARIO_DADOS.md"), "--saida"),
+    csv: Path | None = typer.Option(
+        Path("docs/inventario_dados.csv"), "--csv", help="uma linha por camada/stream/ativo/dia"),
+    sem_linhas: bool = typer.Option(False, "--sem-linhas", help="so' arquivos e MB (mais rapido)"),
+    log_level: str = typer.Option("WARNING", "--log-level"),
+) -> None:
+    """
+    INVENTARIO DE DADOS, sob demanda (NAO diario): quais ativos existem em disco, de que dia a que
+    dia, quantas linhas, se sao so' trade (tape: negocios com agente) ou tambem book, se o dia foi
+    capturado ao vivo ou importado depois, onde ha' lacunas -- e o cruzamento com as coletas
+    declaradas em docs/coletas.yaml. Escreve docs/INVENTARIO_DADOS.md e um CSV para consulta ao
+    formular hipoteses. Le so' o rodape dos parquet. Roda em prioridade baixa; rode apos as 18:00.
+    """
+    import datetime as _d
+    import platform
+    from zoneinfo import ZoneInfo
+
+    configurar(log_level)
+    from .prioridade import baixa_prioridade
+
+    baixa_prioridade()
+    from .coletas import carregar_coletas
+    from .inventario import escanear, escanear_dumps, relatorio_md
+
+    raizes = {"raw": raw, "curated": curated}
+    if backup is not None:
+        raizes["backup"] = backup
+    agora = _d.datetime.now(tz=ZoneInfo("America/Sao_Paulo"))
+    df = escanear(raizes, contar_linhas=not sem_linhas)
+    lista_dumps = escanear_dumps(dumps) if dumps is not None and dumps.exists() else (
+        None if dumps is None else [])
+    try:
+        from importlib.metadata import version
+        ver = version("profit-tape")
+    except Exception:
+        ver = "?"
+    carimbo = f"{agora:%d/%m/%Y %H:%M} ({platform.node()}, profit-tape {ver})"
+    md = relatorio_md(df, carregar_coletas(coletas_yaml), agora.date(), raizes, carimbo,
+                      lista_dumps)
+    saida.parent.mkdir(parents=True, exist_ok=True)
+    saida.write_text(md, encoding="utf-8")
+    if csv is not None and len(df):
+        csv.parent.mkdir(parents=True, exist_ok=True)
+        df.assign(dia=df["dia"].astype(str)).to_csv(csv, index=False)
+    n_ativos = df["ativo"].nunique() if len(df) else 0
+    typer.echo(f"inventario: {len(df)} linha(s), {n_ativos} ativo(s) -> {saida}"
+               + (f" e {csv}" if csv is not None and len(df) else ""))
+    for nome, r in raizes.items():
+        if not r.exists():
+            typer.echo(f"  AVISO: raiz '{nome}' nao existe: {r}")
+
+
 @app.command(name="diario-operacional")
 def diario_operacional(
     dia: str | None = typer.Option(None, "--dia", help="YYYY-MM-DD (padrao: hoje, Brasilia)"),

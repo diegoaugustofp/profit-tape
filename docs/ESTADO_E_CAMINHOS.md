@@ -15,7 +15,24 @@
 | **Pesquisa de preço (M15)** | fechada; o único efeito vivo (123 volume baixo) atravessa a quebra de 2020 |
 | **Pesquisa por contraparte** | rolagem, fechamento e defasagem descritos; opção sobre ação em captura |
 | **Book (livro de ofertas)** | reconstrução validada; hipótese de nível defendido = **teste sem poder**; linha **estacionada** até o E4 |
-| **Captura** | 9 ativos + 14 séries de opção; book agora gravado **sem duplicata**; record mantém a máquina acordada |
+| **Captura** | 9 ativos + 14 séries de opção (contagem de 21/09; o que há em disco, por ativo e período, está em [`INVENTARIO_DADOS.md`](INVENTARIO_DADOS.md)); book gravado **sem duplicata**; record mantém a máquina acordada. **Coletas com prazo: ver 1b** |
+
+## 1b. Coletas em andamento (seção acrescentada em 2026-10-03)
+
+> O resto deste documento segue na revisão de 24/09. Fonte desta seção: [`coletas.yaml`](coletas.yaml)
+> (cada fato com o trecho do plano de pesquisa); o diário (`index.html`) mostra a contagem regressiva.
+
+Dado reunido para hipóteses que **ainda não têm ficha** (não há EA nem operação, por isso não aparecem
+no diário de operações nem em `eas/`):
+
+| coleta | o que grava | prazo | próximo passo |
+|---|---|---|---|
+| **Rolagem do WDO** (par casado) | `WDOV26` e `WDOX26`, só `trade`, desde 22/09 | virada em **01/10** (já passou) | `profit-tape rolagem-par` com os dias em volta da virada; só valem os dias em que **os dois** negociaram |
+| **Rolagem do WIN** (mesma hipótese) | `WINV26` e `WINZ26` — **não confirmado** | WIN vence em **14/10**; assinar antes de ~07/10 | decisão do operador; o inventário mostra se já há dado |
+| **Opções de PETR4, outubro** (pinning) | 14 séries, só `trade`, mês inteiro desde 22/09 | vencimento **16/10** | depois do fechamento e do compact, `profit-tape opcoes-vencimento` (o placebo de strikes falsos decide) |
+
+Expectativa declarada **antes** (opções): o OI está colado no spot, então um resultado **nulo pesa
+contra** a hipótese. Detalhes, limites e leitura declarada: `coletas.yaml` e `RESEARCH_PLANO.md`.
 
 ## 2. O que a sessão estabeleceu
 
