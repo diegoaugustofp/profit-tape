@@ -498,9 +498,21 @@ def test_dado_importado_depois_fica_fora_das_estatisticas_de_atraso(tmp_path: Pa
 def test_123_sem_nome_no_log_e_separado_por_ter_ordens_reais() -> None:
     """O log do ciclo do 123 nao traz o nome do EA (dry_run e E4 logam igual)."""
     base = {"_t": 1, "event": "ea.123.operacao_fechada", "pnl_pts": 120.0, "desfecho": "alvo"}
-    e4 = dict(base, ordens={"entrada": {"slippage_pts": 4.0, "latencia_fill_ms": 100.0}})
-    assert D._op_generica(e4)["ea"] == "123 (E4)"
-    assert D._op_generica(dict(base, ordens={}))["ea"] == "123 (dry_run)"
+    # ordem com id REAL (profit_id > 0, cl_ord_id do broker) = a instancia E4
+    real = {"entrada": {"profit_id": 5550001, "cl_ord_id": "20261001-1", "slippage_pts": 4.0,
+                        "latencia_fill_ms": 100.0}}
+    assert D._op_generica(dict(base, ordens=real))["ea"] == "123 (E4)"
+    # dry_run: ciclo_123._enviar marca a ordem simulada com profit_id = -1 e cl_ord_id = "dry".
+    # Em v4.15 "tem ordens" valia como E4 e a instancia simulada entrava na contagem do E4.
+    simulada = {"entrada": {"profit_id": -1, "cl_ord_id": "dry", "slippage_pts": 0.0},
+                "alvo": {"profit_id": -1, "cl_ord_id": "dry", "slippage_pts": 0.0}}
+    assert D._op_generica(dict(base, ordens=simulada))["ea"] == "123 (dry_run)"
+    # ordem que existe mas nunca recebeu id: so' nasce no modo real (E4); mistura = real
+    sem_id = {"entrada": {"profit_id": None, "cl_ord_id": ""}}
+    assert D._op_generica(dict(base, ordens=sem_id))["ea"] == "123 (E4)"
+    mista = dict(simulada, stop={"profit_id": 77, "cl_ord_id": "x"})
+    assert D._op_generica(dict(base, ordens=mista))["ea"] == "123 (E4)"
+    assert D._op_generica(dict(base, ordens={}))["ea"] == "123"
     assert D._op_generica(dict(base, nome="ea_123_vb"))["ea"] == "ea_123_vb"
     assert D._op_generica(dict(base, desfecho="nao_executou", ordens={}))["ea"] == "123"
 
@@ -711,8 +723,9 @@ def test_carimbo_do_123_vem_do_ea_123_iniciado_pela_flag_dry_run(tmp_path: Path)
         _linha(_brt_ns(8, 0, 1), "ea.123.iniciado", level="warning", nome="ea_123_vb_e4",
                dry_run=False, yaml_sha256="d0b03b1e38e8", codigo="entregue-v4.01"),
         _linha(_brt_ns(13, 0), "ea.123.operacao_fechada", desfecho="alvo", pnl_pts=10.0,
-               ordens={"entrada": {"slippage_pts": 1.0}}),
-        _linha(_brt_ns(14, 0), "ea.123.operacao_fechada", desfecho="alvo", pnl_pts=5.0, ordens={}),
+               ordens={"entrada": {"profit_id": 9001, "cl_ord_id": "c1", "slippage_pts": 1.0}}),
+        _linha(_brt_ns(14, 0), "ea.123.operacao_fechada", desfecho="alvo", pnl_pts=5.0,
+               ordens={"entrada": {"profit_id": -1, "cl_ord_id": "dry", "slippage_pts": 0.0}}),
     ]
     log = tmp_path / "log.jsonl"
     log.write_text("\n".join(ev) + "\n", encoding="utf-8")
@@ -749,4 +762,49 @@ def test_indice_mostra_o_deepscalper_so_com_contagem_e_avisa_quando_falta_o_livr
     html2 = H.renderizar_indice(pasta, carregar_metas(raiz / "metas.yaml"), raiz, None,
                                 tmp_path / "nada")
     assert "livro nao encontrado" in html2 and "deepscalper (Fase 2, offline)" in html2
+
+
+def test_as_duas_instancias_do_123_ficam_separadas_na_contagem_e_no_slippage(
+        tmp_path: Path) -> None:
+    """Mesma barra de sinal, as duas instancias logam `operacao_fechada` sem nome. Antes, as duas
+    caiam em "123 (E4)": contagem dobrada e slippage misturado com fills simulados."""
+    sim = {"entrada": {"profit_id": -1, "cl_ord_id": "dry", "slippage_pts": 0.0}}
+    real = {"entrada": {"profit_id": 4412, "cl_ord_id": "r1", "slippage_pts": 14.0}}
+    ev = [_linha(_brt_ns(10, 30), "ea.123.operacao_fechada", desfecho="alvo", pnl_pts=100.0,
+                 ordens=sim),
+          _linha(_brt_ns(10, 30, 0.5), "ea.123.operacao_fechada", desfecho="alvo", pnl_pts=96.0,
+                 ordens=real),
+          _linha(_brt_ns(11, 30), "ea.123.operacao_fechada", desfecho="nao_executou", ordens=sim),
+          _linha(_brt_ns(11, 30, 0.5), "ea.123.operacao_fechada", desfecho="nao_executou",
+                 ordens=real)]
+    log = tmp_path / "log.jsonl"
+    log.write_text("\n".join(ev) + "\n", encoding="utf-8")
+    d = D.montar(DIA, log, tmp_path / "sem_tape")
+    por = {o["ea"]: o for o in d["operacoes"]}
+    assert set(por) == {"123 (E4)", "123 (dry_run)"}
+    assert por["123 (E4)"]["slippage_ordens_pts"] == 14.0         # so' o real
+    assert por["123 (dry_run)"]["slippage_ordens_pts"] == 0.0
+    assert sorted(x["ea"] for x in d["nao_executadas"]) == ["123 (E4)", "123 (dry_run)"]
+
+
+def test_eas_sem_leitura_aponta_o_ea_de_fluxo_e_nao_os_que_o_diario_le() -> None:
+    inc = [{"event": "ea_registro.incluido", "nome": n, "_t": 1}
+           for n in ("ea_ignicao", "ea_123_vb", "z_agf_win", "ea_vwapvp_continuacao",
+                     "ea_microprice")]
+    lidos = [{"event": "ea.ign.iniciado", "nome": "ea_ignicao", "_t": 2},
+             {"event": "ea.123.iniciado", "nome": "ea_123_vb", "_t": 2},
+             {"event": "ea.vwapvp.iniciado", "nome": "ea_vwapvp_continuacao", "_t": 2},
+             {"event": "ea.micro.sem_livro", "nome": "ea_microprice", "_t": 2},
+             {"event": "ea.iniciado", "symbol": "WINFUT", "_t": 2}]       # EA padrao: sem nome
+    assert D.eas_sem_leitura(inc + lidos) == ["z_agf_win"]
+    assert D.eas_sem_leitura(lidos) == []
+    d = {"eas_sem_leitura": ["z_agf_win"]}
+    base = {"operacoes": [], "ops_descartadas": [], "nao_executadas": [], "avisos": [],
+            "atribuicao": D.atribuicao([]), "saude": {}, "ocorrencias": [], "estados_dll": [],
+            "tape": None, "incidentes": [], "buracos": [], "por_minuto": [], "notas": "",
+            "dia": "2026-10-02", "symbol": "WINFUT", "gerado_em": "x"}
+    html = H.renderizar(dict(base, **d))
+    assert "EAs no record que este diário não lê" in html and "z_agf_win" in html
+    assert "NÃO significa que não operaram" in html
+    assert "não lê" not in H.renderizar(dict(base, eas_sem_leitura=[]))
 

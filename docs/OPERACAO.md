@@ -55,6 +55,21 @@ tabela de `config_sha` x tag de codigo; `config_sha` novo = contagem nova pela r
 O supervisor calcula o capital de EAs fora de 123/microprice/ignicao a partir do stop generico do bloco
 `risco`, nao do stop programado do EA: a pagina mostra os dois e avisa quando divergem.
 
+**Auditoria de cobertura (v4.21): o que o diario le e o que nao le.** Le por evento do log:
+ignicao (`ea.ign.saida`), vwap_vp (`ea.vwapvp.saida`), microprice (`ea.micro.saida`) e 123
+(`ea.123.operacao_fechada`). **Nao le o EA de fluxo (`z_agf_win`)**: ele nao emite `ea.*.saida`
+(emite `ea.decisao_dry_run`, `ea.ordem_*`) e registra pelo diario de sinais (`data/forward/<ea>/`,
+comando `profit-tape diario <dir>`). Agora a pagina do dia AVISA, pelos EAs de `ea_registro.incluido`
+sem nenhum evento lido, e o indice nao mostra 0 para ele: mostra "nao lido". O deepscalper entra por
+CSV (v4.20). Pesquisas fechadas sem EA ficam em `fichas_sem_ea:` do `metas.yaml`, e o indice tem a
+secao "Todas as fichas"; um teste falha se surgir ficha em `docs/eas` sem destino.
+
+**123: duas instancias no mesmo log.** `ea_123_vb` (dry_run) e `ea_123_vb_e4` (real) emitem
+`ea.123.operacao_fechada` iguais e sem nome. O diario as separa pelo id da ordem: dry_run nasce com
+`profit_id = -1` e `cl_ord_id = "dry"` (`ciclo_123._enviar`); so' o E4 tem id real. Em v4.15-v4.20 o
+critério era "tem ordens", que juntava as duas: contagem e slippage do "123 (E4)" estavam misturados
+com fills simulados. Rode o diario de novo para corrigir os CSVs.
+
 **Deepscalper Fase 2 no indice (v4.20).** Ele NAO e' EA do record: roda como score diario OFFLINE
 (`fase2-score`) e o livro fica em `data/research/fase2/forward_eventos.csv`; por isso nao tem linha em
 "Resumo por EA" (esse resumo vem das operacoes do log). Entra em "Proxima avaliacao" por uma `fonte`

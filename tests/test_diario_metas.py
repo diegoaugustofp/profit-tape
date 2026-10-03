@@ -172,3 +172,28 @@ def test_deepscalper_respeita_o_desde_e_nao_quebra_sem_o_livro(tmp_path: Path) -
         "coluna_qualquer\n1\n", encoding="utf-8")
     assert "ilegivel" in M.progresso(ent, pd.DataFrame(), pd.DataFrame(), ruim)["fonte_problema"]
 
+
+def test_toda_ficha_de_docs_eas_tem_destino_no_diario() -> None:
+    """Guarda de omissao: o deepscalper ficou fora do diario da v4.15 a v4.19 por nao estar no
+    metas.yaml. Agora toda ficha ou tem EA em `eas:` ou esta' em `fichas_sem_ea:` com o motivo."""
+    metas = M.carregar_metas(RAIZ / "metas.yaml")
+    sem_ea = M.carregar_fichas_sem_ea(RAIZ / "metas.yaml")
+    com_ea = {m["ficha"] for m in metas}
+    sem = {x["ficha"] for x in sem_ea}
+    todas = set(M.todas_as_fichas(RAIZ))
+    assert len(todas) >= 12
+    orfas = todas - com_ea - sem
+    assert not orfas, f"fichas sem destino no diario (metas.yaml): {sorted(orfas)}"
+    assert not (com_ea & sem), f"ficha em `eas` E em `fichas_sem_ea`: {sorted(com_ea & sem)}"
+    fantasmas = (com_ea | sem) - todas
+    assert not fantasmas, f"metas.yaml cita ficha que nao existe: {sorted(fantasmas)}"
+    assert all(x.get("motivo") for x in sem_ea)
+
+
+def test_o_123_simulado_e_o_real_tem_entradas_separadas_no_registro() -> None:
+    metas = {m["ea"]: m for m in M.carregar_metas(RAIZ / "metas.yaml")}
+    assert "123 (E4)" in metas and "123 (dry_run)" in metas
+    assert metas["123 (dry_run)"]["metas"] == []                    # a meta de slippage e' do E4
+    assert metas["123 (E4)"]["metas"][0]["n"] == 50
+    assert metas["z_agf_win"].get("captura")                         # nao finge que conta zero
+

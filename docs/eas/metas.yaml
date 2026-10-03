@@ -54,6 +54,19 @@ eas:
     mostrar: [n, slippage_medio]
     trechos: ["~50 pregões, slippage", "≤ 6 pts em n = 100"]
 
+  # Instancia SIMULADA do 123 em volume baixo (ea_123_vb): ordens com profit_id -1 / cl_ord_id "dry".
+  # Sem meta numerica propria: a de slippage (n = 50 / 100) e' do E4, onde ha' ordem real.
+  - ea: "123 (dry_run)"
+    nome_supervisor: ea_123_vb
+    ficha: 123_volume_baixo.md
+    unidade: operacoes simuladas (dry_run; fills nao medem execucao)
+    contar: {}
+    desde: 2026-09-14
+    metas: []
+    criterio: "Instancia dry_run do 123 em volume baixo: olha barras e ordens antes do E4. Os fills simulados NAO medem slippage; a meta de slippage (n = 50 / 100) e' so' do E4."
+    mostrar: [n]
+    trechos: ["~50 pregões, slippage"]
+
   - ea: ea_vwapvp_continuacao
     nome_supervisor: ea_vwapvp_continuacao
     ficha: vwap_vp.md
@@ -77,6 +90,7 @@ eas:
     desde: 2026-08-01
     metas: []
     criterio: "A ficha nao fixa n para avaliacao: forward em dry_run, execucao real ainda nao medida."
+    captura: "Este diario NAO le o z_agf_win: ele registra pelo diario de sinais (data/forward/z_agf_win, comando `profit-tape diario`), nao por ea.*.saida. Um 0 aqui seria falso."
     mostrar: [n]
     trechos: ["Roda em dry_run dentro do record desde agosto"]
 
@@ -116,3 +130,14 @@ eas:
     veredito_parcial: false
     mostrar: [n]
     trechos: ["Olha em n = 50 (sanidade) e n = 150 (veredito)", "placar fechado até n=150"]
+
+# Toda ficha de docs/eas precisa ter destino no diario: ou aparece em `eas:` acima, ou aqui, com o
+# motivo. tests/test_diario_metas.py falha se aparecer ficha nova sem classificacao.
+fichas_sem_ea:
+  - {ficha: 123_gate_volume_alto.md, motivo: "pesquisa fechada (hipotese falsa); nenhum EA na esteira"}
+  - {ficha: bollinger_scalp.md, motivo: "pesquisa fechada (suspensa); replay pelo tape, nenhum EA na esteira"}
+  - {ficha: gap_abertura.md, motivo: "pesquisa fechada (a confirmar); nenhum EA na esteira"}
+  - {ficha: ifr2_m15.md, motivo: "pesquisa fechada (CONTRA); nenhum EA na esteira"}
+  - {ficha: orb_m15.md, motivo: "pesquisa fechada; nenhum EA na esteira"}
+  - {ficha: vespera.md, motivo: "pesquisa fechada sem nunca ter tido p1; nenhum EA na esteira"}
+  - {ficha: 123_m15.md, motivo: "ficha viva, mas o EA ea_123 (config/ea_123.yaml) nao estava entre os EAs do record em 01/10; o que roda e' o 123 em volume baixo"}

@@ -183,6 +183,13 @@ def renderizar(dados: dict[str, Any]) -> str:
               f"{dt.date.fromisoformat(dados['dia']).strftime('%d/%m/%Y')}</h1>",
               f"<div class='sub'>gerado em {_e(dados['gerado_em'])} · log + tape curado</div>"]
     partes += [f"<div class='aviso'>{_e(x)}</div>" for x in dados["avisos"]]
+    if dados.get("eas_sem_leitura"):
+        partes.append(
+            "<div class='aviso'><b>EAs no record que este diário não lê:</b> "
+            + _e(", ".join(dados["eas_sem_leitura"]))
+            + ". Eles registram pelo diário de sinais "
+              "(<code>profit-tape diario &lt;dir&gt;</code>), não por <code>ea.*.saida</code>: "
+              "a ausência deles nas tabelas abaixo NÃO significa que não operaram.</div>")
     desc = dados.get("ops_descartadas") or []
     if desc:
         por_ea: dict[str, list[float]] = {}
@@ -406,6 +413,8 @@ def _proxima_avaliacao(prog: list[dict[str, Any]], metas: list[dict[str, Any]],
         marco = (f"n = {prox['n']} — {_e(prox['rotulo'])}" if prox
                  else ("todas as metas atingidas" if p["metas"] else "sem meta numérica"))
         acomp = []
+        if m.get("captura"):
+            acomp.append(f"<b class='neg'>{_e(m['captura'])}</b>")
         if p.get("fonte_csv"):
             acomp.append(f"fonte: {p['fonte_csv']} (só a contagem; o diário não lê acerto nem "
                          "pontos do livro)")
@@ -426,10 +435,37 @@ def _proxima_avaliacao(prog: list[dict[str, Any]], metas: list[dict[str, Any]],
         crit = (f"{_e(m.get('criterio'))}<br><a href='{_e(hrefs.get(m['ea'], '#'))}'>ficha</a> · "
                 f"<span class='ficha'>{_e(status.get(m['ea'], ''))}</span>")
         linhas.append([_e(m["ea"]), _e(m.get("unidade")),
-                       f"<b>{_n(p['n'])}</b>" + _barra(p["n"], prox["n"] if prox else None),
+                       ('<span class="mudo">— (não lido)</span>' if m.get("captura")
+                        else f"<b>{_n(p['n'])}</b>" + _barra(p["n"], prox["n"] if prox else None)),
                        marco, _n(p["faltam"]) if p["faltam"] is not None else "—", ritmo, prev,
                        prazo, " · ".join(acomp) or "—", crit])
     return _tab(cab, linhas)
+
+
+def _todas_as_fichas(metas: list[dict[str, Any]], sem_ea: list[dict[str, Any]],
+                     raiz_fichas: Path, paginas_ea: dict[str, str] | None,
+                     hrefs_fichas: dict[str, str]) -> str:
+    from .diario_metas import status_da_ficha, todas_as_fichas
+
+    eas_da_ficha: dict[str, list[str]] = {}
+    for m in metas:
+        eas_da_ficha.setdefault(m["ficha"], []).append(m["ea"])
+    motivo = {x["ficha"]: x["motivo"] for x in sem_ea}
+    linhas = []
+    for ficha in todas_as_fichas(raiz_fichas):
+        nomes = eas_da_ficha.get(ficha, [])
+        if nomes:
+            no_diario = "; ".join(
+                (f"<a href='{_e(paginas_ea[n])}'>{_e(n)}</a>" if paginas_ea and n in paginas_ea
+                 else _e(n)) for n in nomes)
+        elif ficha in motivo:
+            no_diario = f"<span class='mudo'>sem EA no record</span> — {_e(motivo[ficha])}"
+        else:
+            no_diario = "<b class='neg'>SEM DESTINO NO DIÁRIO</b>"
+        linhas.append([f"<a href='{_e(hrefs_fichas.get(ficha, ficha))}'>{_e(ficha)}</a>",
+                       f"<span class='ficha'>{_e(status_da_ficha(raiz_fichas, ficha, 200))}</span>",
+                       no_diario])
+    return _tab([("Ficha", True), ("Situação (da ficha)", True), ("No diário", True)], linhas)
 
 
 def renderizar_indice(pasta: Path, metas: list[dict[str, Any]] | None = None,
@@ -495,6 +531,18 @@ def renderizar_indice(pasta: Path, metas: list[dict[str, Any]] | None = None,
                   "observado usa os pregões já gerados no diário. Previsão = pregões que faltam "
                   "no ritmo observado. Metas em <code>docs/eas/metas.yaml</code> (cada número "
                   "com o trecho da ficha, guardado por teste).</small>"]
+    if raiz_fichas is not None and (raiz_fichas / "metas.yaml").exists():
+        import os
+
+        from .diario_metas import carregar_fichas_sem_ea, todas_as_fichas
+        hrefs_f = {f: os.path.relpath(raiz_fichas / f, pasta).replace("\\", "/")
+                   for f in todas_as_fichas(raiz_fichas)}
+        corpo += ["<h2>Todas as fichas (nenhuma fica de fora)</h2>",
+                  _todas_as_fichas(metas, carregar_fichas_sem_ea(raiz_fichas / "metas.yaml"),
+                                   raiz_fichas, paginas_ea, hrefs_f),
+                  "<small>Cada ficha de <code>docs/eas</code> aparece aqui: com o EA que a "
+                  "executa ou com o motivo de não ter EA no record. Um teste falha se surgir "
+                  "ficha sem destino.</small>"]
     corpo += ["<h2>Dias</h2>", tab,
               "<small>Importado %: negócios que chegaram com mais de 1 h de atraso são dado "
               "recuperado depois (01 a 14/09 foram importados em 15/09), fora das estatísticas "

@@ -24,6 +24,20 @@ def carregar_metas(caminho: Path) -> list[dict[str, Any]]:
     return list(dados.get("eas") or [])
 
 
+def carregar_fichas_sem_ea(caminho: Path) -> list[dict[str, Any]]:
+    """Fichas que NAO tem EA no record (pesquisa fechada, ou EA que existe mas nao roda).
+    Existem para que toda ficha de docs/eas tenha destino explicito no diario."""
+    if not caminho.exists():
+        return []
+    return list((yaml.safe_load(caminho.read_text(encoding="utf-8")) or {}).get("fichas_sem_ea")
+                or [])
+
+
+def todas_as_fichas(raiz_fichas: Path) -> list[str]:
+    """Todas as fichas de estrategia (docs/eas/*.md, menos o README)."""
+    return sorted(f.name for f in raiz_fichas.glob("*.md") if f.name.lower() != "readme.md")
+
+
 CONTA_PADRAO: dict[str, Any] = {"capital_inicial": 20000.0, "valor_ponto": 0.20,
                                 "risco_max_pct": 0.02, "margem_por_contrato": None,
                                 "contratos": 1}

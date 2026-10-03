@@ -140,6 +140,13 @@ def decompor(*, lado: int, d: float, entrada: float, saida: float, saida_tape: f
             "stop_real_sobre_programado": razao}
 
 
+def _ordens_simuladas(ordens: dict[str, Any]) -> bool:
+    """True se TODAS as ordens da operacao sao as simuladas do dry_run do 123."""
+    return bool(ordens) and all(
+        isinstance(o, dict) and (o.get("cl_ord_id") == "dry" or o.get("profit_id") == -1)
+        for o in ordens.values())
+
+
 def _carimbo(e: dict[str, Any]) -> dict[str, Any]:
     """sha do YAML e tag de codigo que o EA carimba no log (ignicao/vwap_vp: config_sha; 123:
     yaml_sha256). Sem eles a pagina do EA nao sabe sob qual configuracao rodou."""
@@ -206,9 +213,12 @@ def _op_generica(e: dict[str, Any]) -> dict[str, Any]:
     nome = e.get("nome")
     if not nome:
         nome = e["event"].split(".")[1]
-        if nome == "123" and e.get("desfecho") != "nao_executou":
-            # o log do ciclo do 123 NAO traz o nome do EA: ordens reais => a instancia E4
-            nome = "123 (E4)" if ordens else "123 (dry_run)"
+        if nome == "123" and ordens:
+            # o log do ciclo do 123 NAO traz o nome do EA e as DUAS instancias logam igual. Em
+            # dry_run a ordem simulada nasce com profit_id = -1 e cl_ord_id = "dry"
+            # (ciclo_123._enviar); so' a instancia E4 tem ordem com id real. (v4.15 tratava
+            # "tem ordens" como E4 e misturava a instancia simulada na contagem e no slippage.)
+            nome = "123 (dry_run)" if _ordens_simuladas(ordens) else "123 (E4)"
     return {"ea": nome, "tipo": e["event"],
             "lado": e.get("lado"), "motivo": e.get("motivo") or e.get("desfecho"),
             "t_saida": e["_t"], "t_entrada": None,
@@ -480,6 +490,21 @@ def _carimbo_do_123(ops: list[dict[str, Any]], eventos: list[dict[str, Any]]) ->
             o["codigo"] = candidatos[-1].get("codigo")
 
 
+_FAMILIAS_LIDAS = ("ea.ign.", "ea.micro.", "ea.vwapvp.", "ea.123.")
+
+
+def eas_sem_leitura(eventos: list[dict[str, Any]]) -> list[str]:
+    """EAs incluidos no record no dia (`ea_registro.incluido`) dos quais este diario NAO le nada:
+    nenhum evento das familias que ele sabe interpretar (ignicao, microprice, vwap_vp, 123)
+    carrega o nome deles. Hoje: o EA de fluxo (z_agf), que registra pelo diario de sinais
+    (`profit-tape diario <dir>`). Evita o EA "ficar de fora" em silencio."""
+    incluidos = {str(e["nome"]) for e in eventos
+                 if e.get("event") == "ea_registro.incluido" and e.get("nome")}
+    lidos = {str(e["nome"]) for e in eventos
+             if e.get("nome") and str(e.get("event", "")).startswith(_FAMILIAS_LIDAS)}
+    return sorted(incluidos - lidos)
+
+
 def supervisor_do_dia(eventos: list[dict[str, Any]]) -> dict[str, Any]:
     """Capital em conta e capital recomendado por EA, do ULTIMO `ea.supervisor.resumo` do dia."""
     ult = [e for e in eventos if e.get("event") == "ea.supervisor.resumo"]
@@ -589,6 +614,7 @@ def montar(dia: dt.date, log: Path, curated: Path, symbol: str = "WINFUT",
         "saude": saude_record(eventos), "ocorrencias": ocorrencias(eventos),
         "estados_dll": estados_dll(eventos), "notas": notas,
         "supervisor": supervisor_do_dia(eventos),
+        "eas_sem_leitura": eas_sem_leitura(eventos),
         "tape": None, "incidentes": [], "buracos": [], "por_minuto": [],
     }
     if tape is not None:

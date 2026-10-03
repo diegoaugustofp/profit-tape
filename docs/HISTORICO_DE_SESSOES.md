@@ -5115,3 +5115,24 @@ que nunca é carregado não pode vazar para a tela; teste espia o `usecols` e co
 explica por que ele não tem linha lá. Suíte 1.350.
 
 **Tags:** entregue-v4.20 (sobre v4.19).
+
+### 2026-10-03f — "Ficou algum EA de fora?": auditoria de cobertura do diário (v4.21)
+
+Diego: "ficou algum EA de fora, mesmo que com a ficha fechada?". Auditoria cruzando as 13 fichas de
+`docs/eas`, os YAMLs de `config/`, o `metas.yaml` e os eventos que o diário sabe ler.
+
+- **Defeito meu, mais grave:** o "123 (E4)" juntava as DUAS instâncias do 123. A v4.15 tratava "tem
+  ordens" como E4, mas em dry_run a ordem simulada existe (`profit_id = -1`, `cl_ord_id = "dry"`,
+  `ciclo_123._enviar`), e as duas instâncias logam `operacao_fechada` sem nome. Contagem do E4 (35
+  contra n = 50 da ficha) e slippage médio (13,0 pts, contra o limite de 12) estavam misturados com
+  fills simulados. Separado pelo id da ordem; `123 (dry_run)` ganha entrada própria no `metas.yaml`.
+- **Fora de verdade:** `z_agf_win` (ficha viva) não emite `ea.*.saida` (emite `ea.decisao_dry_run`,
+  `ea.ordem_*`) e registra pelo diário de sinais. O índice mostrava "contado 0", que era falso.
+  Agora mostra "não lido" e a página do dia avisa os EAs incluídos sem nenhum evento lido.
+- **Sem EA, fichas fechadas:** 123_gate_volume_alto, bollinger_scalp, gap_abertura, ifr2_m15, orb_m15,
+  vespera — pesquisa, nenhum YAML na esteira; 123_m15 é ficha viva sem EA no record (`ea_123` existe
+  em `config/`). Entram em `fichas_sem_ea:` com o motivo.
+- **Guarda estrutural:** teste falha se existir ficha em `docs/eas` sem destino (era a classe do
+  deepscalper, esquecido de v4.15 a v4.19); seção "Todas as fichas" no índice. Conferido por mutação.
+
+**Tags:** entregue-v4.21 (sobre v4.20). Suíte 1.354.
