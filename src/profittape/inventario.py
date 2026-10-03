@@ -13,9 +13,15 @@ book. Origem do dia: AO VIVO (capturado no pregao), IMPORTADO (historico recuper
 
 from __future__ import annotations
 
+import contextlib
 import datetime as dt
+import os
 import re
+import threading
+import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -64,55 +70,186 @@ def _dia_de(pasta: Path) -> dt.date | None:
     return dt.date.fromisoformat(m.group(1)) if m else None
 
 
-def _dia_ativo(args: tuple[str, str, str, dt.date, Path, bool]) -> dict[str, Any]:
-    camada, stream, ativo, dia, pasta, linhas = args
-    arqs = sorted(pasta.glob("part-*.parquet"))            # ignora .inprogress e lixo
-    row: dict[str, Any] = {"camada": camada, "stream": stream, "ativo": ativo, "dia": dia,
-                           "arquivos": len(arqs), "bytes": sum(a.stat().st_size for a in arqs),
-                           "linhas": None, "recv_min": None, "recv_max": None,
-                           "origem": "desconhecido", "ilegiveis": 0}
-    if not linhas:
-        return row
-    n, lo, hi, ok_stats = 0, None, None, True
-    for a in arqs:
-        try:
-            nn, l1, h1 = _rodape(a)
-        except Exception:                    # parquet sem footer / corrompido
-            row["ilegiveis"] += 1
-            continue
-        n += nn
-        if l1 is None or h1 is None:
-            ok_stats = False
-        else:
-            lo = l1 if lo is None else min(lo, l1)
-            hi = h1 if hi is None else max(hi, h1)
-    row["linhas"] = n
-    if ok_stats and lo is not None:
-        row["recv_min"], row["recv_max"] = lo, hi
-        row["origem"] = classificar_origem(dia, lo, hi)
-    return row
+# ------------------------------------------------------------ varredura com ORCAMENTO de I/O
+# v4.23 abria TODOS os parquet de TODOS os streams (book e' o grosso do raw), 8 ao mesmo tempo, e
+# so' devolvia no fim: no disco do operador (milhares de partes, backup em USB, antivirus lendo
+# cada arquivo) travou a maquina inteira, e sem uma linha de progresso. Agora:
+#   1. LISTAR (so' diretorios; nenhum parquet aberto) -> plano;
+#   2. ABRIR rodapes apenas do que o `nivel` pede, com teto de arquivos, poucas threads, pausa
+#      opcional e progresso continuo.
+NIVEIS = ("listar", "leve", "trade", "completo")
+NIVEL_AJUDA = {
+    "listar": "nenhum parquet aberto: so' pastas, arquivos e MB (linhas e origem ficam em branco)",
+    "leve": "padrao: abre rodapes so' de curated/trade (poucos arquivos, um por dia e ativo)",
+    "trade": "leve + raw/trade (milhares de partes: so' com o record parado)",
+    "completo": "tudo, inclusive book e backup (centenas de milhares de arquivos: so' com teto)",
+}
+LIMITE_PADRAO = 20_000
 
 
-def escanear(raizes: dict[str, Path], contar_linhas: bool = True, threads: int = 8) -> pd.DataFrame:
-    """Uma linha por (camada, stream, ativo, dia). Camada ausente e' ignorada."""
-    tarefas: list[tuple[str, str, str, dt.date, Path, bool]] = []
+class LimiteExcedido(RuntimeError):
+    """O nivel pedido abriria mais arquivos do que o teto: nada foi aberto."""
+
+    def __init__(self, a_abrir: int, teto: int, nivel: str) -> None:
+        super().__init__(f"nivel '{nivel}' abriria {a_abrir:,} arquivos (teto {teto:,})"
+                         .replace(",", "."))
+        self.a_abrir, self.teto, self.nivel = a_abrir, teto, nivel
+
+
+@dataclass
+class Folha:
+    """Uma pasta `<camada>/<stream>/dt=<dia>/sym=<ativo>` (so' metadados de diretorio)."""
+
+    camada: str
+    stream: str
+    ativo: str
+    dia: dt.date
+    pasta: Path
+    n_arquivos: int
+    bytes: int
+
+
+def _entradas(p: Path) -> list[os.DirEntry[str]]:
+    try:
+        with os.scandir(p) as it:
+            return list(it)
+    except OSError:
+        return []
+
+
+def _partes(pasta: Path) -> list[os.DirEntry[str]]:
+    """`part-*.parquet` prontos (ignora `.inprogress` e lixo). `DirEntry.stat()` vem da propria
+    listagem no Windows: nao e' uma leitura a mais de disco."""
+    return sorted((e for e in _entradas(pasta) if e.is_file() and e.name.startswith("part-")
+                   and e.name.endswith(".parquet")), key=lambda e: e.name)
+
+
+def listar(raizes: dict[str, Path],
+           progresso: Callable[[str, int, int | None], None] | None = None) -> list[Folha]:
+    """ETAPA 1: percorre so' diretorios. Nenhum parquet e' aberto aqui."""
+    folhas: list[Folha] = []
+    ultimo = time.monotonic()
+    def por_nome(es: list[os.DirEntry[str]]) -> list[os.DirEntry[str]]:
+        return sorted(es, key=lambda e: e.name)
+
     for camada, raiz in raizes.items():
         if not raiz.exists():
             continue
-        streams = [p for p in raiz.iterdir() if p.is_dir() and not p.name.startswith("_")]
-        for stream in sorted(streams):
-            for pdia in sorted(stream.glob("dt=*")):
-                dia = _dia_de(pdia)
+        for st in por_nome([e for e in _entradas(raiz)
+                            if e.is_dir() and not e.name.startswith("_")]):
+            for edia in por_nome([e for e in _entradas(Path(st.path)) if e.is_dir()]):
+                dia = _dia_de(Path(edia.path))
                 if dia is None:
                     continue
-                for pativo in sorted(pdia.glob("sym=*")):
-                    tarefas.append((camada, stream.name, pativo.name[4:], dia, pativo,
-                                    contar_linhas))
-    if not tarefas:
-        return pd.DataFrame(columns=COLUNAS)
-    with ThreadPoolExecutor(max_workers=max(1, threads)) as ex:
-        linhas = list(ex.map(_dia_ativo, tarefas))
-    return pd.DataFrame(linhas, columns=COLUNAS)
+                for esym in por_nome([e for e in _entradas(Path(edia.path))
+                                      if e.is_dir() and e.name.startswith("sym=")]):
+                    arqs = _partes(Path(esym.path))
+                    tamanho = 0
+                    for a in arqs:
+                        with contextlib.suppress(OSError):
+                            tamanho += a.stat().st_size
+                    folhas.append(Folha(camada, st.name, esym.name[4:], dia, Path(esym.path),
+                                        len(arqs), tamanho))
+                    if progresso and time.monotonic() - ultimo >= 2.0:
+                        progresso("listando", len(folhas), None)
+                        ultimo = time.monotonic()
+    return folhas
+
+
+def escolher(folhas: list[Folha], nivel: str) -> list[Folha]:
+    """Folhas cujos rodapes o `nivel` autoriza abrir."""
+    if nivel not in NIVEIS:
+        raise ValueError(f"nivel invalido: {nivel!r} (use {', '.join(NIVEIS)})")
+    if nivel == "listar":
+        return []
+    if nivel == "leve":
+        return [f for f in folhas if f.camada == "curated" and f.stream == "trade"]
+    if nivel == "trade":
+        return [f for f in folhas if f.stream == "trade" and f.camada in ("curated", "raw")]
+    return list(folhas)
+
+
+def plano(folhas: list[Folha], nivel: str) -> dict[str, Any]:
+    """O que a varredura vai fazer, ANTES de abrir qualquer arquivo."""
+    sel = escolher(folhas, nivel)
+    por: dict[tuple[str, str], list[int]] = {}
+    for f in folhas:
+        x = por.setdefault((f.camada, f.stream), [0, 0, 0])
+        x[0] += 1
+        x[1] += f.n_arquivos
+        x[2] += f.bytes
+    return {"nivel": nivel, "pastas": len(folhas), "arquivos": sum(f.n_arquivos for f in folhas),
+            "bytes": sum(f.bytes for f in folhas), "a_abrir": sum(f.n_arquivos for f in sel),
+            "por_stream": [{"camada": c, "stream": st, "pastas": v[0], "arquivos": v[1],
+                            "bytes": v[2]} for (c, st), v in sorted(por.items())]}
+
+
+def _linha_vazia(f: Folha) -> dict[str, Any]:
+    return {"camada": f.camada, "stream": f.stream, "ativo": f.ativo, "dia": f.dia,
+            "arquivos": f.n_arquivos, "bytes": f.bytes, "linhas": None, "recv_min": None,
+            "recv_max": None, "origem": "desconhecido", "ilegiveis": 0}
+
+
+def abrir(folhas: list[Folha], nivel: str, threads: int = 2, pausa_ms: int = 0,
+          teto: int = LIMITE_PADRAO,
+          progresso: Callable[[str, int, int | None], None] | None = None) -> pd.DataFrame:
+    """ETAPA 2: abre so' os rodapes que o nivel autoriza, no maximo `teto` arquivos."""
+    sel = escolher(folhas, nivel)
+    total = sum(f.n_arquivos for f in sel)
+    if total > teto:
+        raise LimiteExcedido(total, teto, nivel)
+    selecionadas = {id(f) for f in sel}
+    feitos, trava, ultimo = [0], threading.Lock(), [time.monotonic()]
+
+    def uma(f: Folha) -> dict[str, Any]:
+        row = _linha_vazia(f)
+        n, lo, hi, ok = 0, None, None, True
+        for e in _partes(f.pasta):
+            try:
+                nn, l1, h1 = _rodape(Path(e.path))
+            except Exception:                    # parquet sem footer / corrompido
+                row["ilegiveis"] += 1
+                nn, l1, h1 = 0, None, None
+                ok = ok and True
+            n += nn
+            if l1 is None or h1 is None:
+                ok = False if nn else ok
+            else:
+                lo = l1 if lo is None else min(lo, l1)
+                hi = h1 if hi is None else max(hi, h1)
+            if pausa_ms:
+                time.sleep(pausa_ms / 1000)
+            with trava:
+                feitos[0] += 1
+                agora = time.monotonic()
+                if progresso and (feitos[0] % 250 == 0 or agora - ultimo[0] >= 3.0):
+                    progresso("abrindo rodapes", feitos[0], total)
+                    ultimo[0] = agora
+        row["linhas"] = n
+        if ok and lo is not None and hi is not None:
+            row["recv_min"], row["recv_max"] = lo, hi
+            row["origem"] = classificar_origem(f.dia, lo, hi)
+        return row
+
+    linhas: list[dict[str, Any]] = []
+    com_rodape = [f for f in folhas if id(f) in selecionadas]
+    if com_rodape:
+        with ThreadPoolExecutor(max_workers=max(1, threads)) as ex:
+            feitas = dict(zip((id(f) for f in com_rodape), ex.map(uma, com_rodape), strict=True))
+    else:
+        feitas = {}
+    for f in folhas:
+        linhas.append(feitas.get(id(f)) or _linha_vazia(f))
+    if progresso and total:
+        progresso("abrindo rodapes", total, total)
+    return pd.DataFrame(linhas, columns=COLUNAS) if linhas else pd.DataFrame(columns=COLUNAS)
+
+
+def escanear(raizes: dict[str, Path], nivel: str = "leve", threads: int = 2, pausa_ms: int = 0,
+             teto: int = LIMITE_PADRAO,
+             progresso: Callable[[str, int, int | None], None] | None = None) -> pd.DataFrame:
+    """Listar + abrir, em uma chamada (a CLI usa as duas etapas para mostrar o plano antes)."""
+    return abrir(listar(raizes, progresso), nivel, threads, pausa_ms, teto, progresso)
 
 
 # ------------------------------------------------------------------ agregados
@@ -216,7 +353,8 @@ def _mb(v: float) -> str:
 
 
 def relatorio_md(df: pd.DataFrame, coletas: list[dict[str, Any]], hoje: dt.date,
-                 raizes: dict[str, Path], carimbo: str, dumps: list[dict[str, Any]] | None) -> str:
+                 raizes: dict[str, Path], carimbo: str, dumps: list[dict[str, Any]] | None,
+                 plan: dict[str, Any] | None = None) -> str:
     from .coletas import frase_de_situacao, situacao
 
     raizes_txt = "; ".join(
@@ -229,6 +367,10 @@ def relatorio_md(df: pd.DataFrame, coletas: list[dict[str, Any]], hoje: dt.date,
          f"- **Gerado em:** {carimbo}",
          f"- **Raízes varridas:** {raizes_txt}",
          f"- **Linhas de inventário:** {n_linhas} (camada x stream x ativo x dia)",
+         *( [f"- **Nível de varredura:** `{plan['nivel']}` — {NIVEL_AJUDA[plan['nivel']]}. "
+             f"Listados {plan['arquivos']:,} arquivos em {plan['pastas']:,} pastas "
+             f"({plan['bytes'] / 1e9:,.1f} GB); rodapés abertos: {plan['a_abrir']:,}.".replace(
+                 ",", ".")] if plan else []),
          "", "**Vocabulário.** *tape* = negócios com agente agressor e passivo (stream `trade`; "
          "`docs/GLOSSARIO.md`). *Book* = `book_offer`, `book_price`, `tiny_book`. "
          "\"Só trade\" = o ativo tem `trade` e nenhum stream de book. **Origem do dia:** *ao vivo* "
@@ -279,9 +421,11 @@ def relatorio_md(df: pd.DataFrame, coletas: list[dict[str, Any]], hoje: dt.date,
             L.append(f"| `{r.ativo}` | {r.familia} | {r.tipo} | {per} | {r.trade_dias} | "
                      f"{_n(r.trade_linhas)} | {r.ao_vivo} / {r.importado} / {r.misto} | "
                      f"{r.book_dias} | {r.camadas} | {r.lacunas} | {r.streams} |")
-        L += ["", "*Linhas*: do `trade`, por dia, a maior entre as camadas (elas guardam o mesmo "
-              "dia). *Lacunas*: dias da semana sem dado entre o primeiro e o último dia; pode "
-              "incluir feriado da B3.", ""]
+        L += ["", "*Linhas* e *origem* (ao vivo/importado) só existem onde o rodapé foi lido: no "
+              "nível padrão (`leve`) são os dias do `curated`; dia só no raw aparece como "
+              "desconhecido (`--nivel trade`, com o record parado, lê o raw). *Linhas*: do "
+              "`trade`, por dia, a maior entre as camadas. *Lacunas*: dias da semana sem dado "
+              "entre o primeiro e o último dia; pode incluir feriado da B3.", ""]
     if len(df):
         L += ["## Por camada e stream", "",
               "| Camada | Stream | Ativos | Dias (de-até) | Arquivos | MB | Linhas |",
@@ -383,53 +527,95 @@ def _ativo_provavel(nome: str, closes: list[float]) -> str:
     return "nao consta"
 
 
-def escanear_dumps(destino: Path) -> list[dict[str, Any]]:
+LIMITE_DUMP_BYTES = 300 * 1024 * 1024
+LIMITE_DUMP_ARQUIVOS = 300
+_PODAR = {".git", ".venv", "venv", "node_modules", "__pycache__", "raw", "curated", "_quarentena"}
+_RE_PREFIXO = re.compile(r"(PRCBARRA|ABSBARRA|VWAPVP|BBSBARRA|ABSDIR)\|")
+_MAX_CHAVES = 2_000_000
+
+
+def _candidatos_dump(destino: Path) -> tuple[list[Path], bool]:
+    """Arquivos .txt/.log/.dump/.csv sob `destino` (sem entrar em .git, .venv, raw, curated...).
+    Arquivo SEM extensao nao entra (v4.23 lia ate' os objetos do .git). Teto de arquivos."""
+    if destino.is_file():
+        return [destino], False
+    achados: list[Path] = []
+    for raiz, dirs, nomes in os.walk(destino):
+        dirs[:] = sorted(d for d in dirs if d not in _PODAR)
+        for n in sorted(nomes):
+            if Path(n).suffix.lower() in (".txt", ".log", ".csv", ".dump"):
+                achados.append(Path(raiz) / n)
+                if len(achados) > LIMITE_DUMP_ARQUIVOS:
+                    return achados[:LIMITE_DUMP_ARQUIVOS], True
+    return achados, False
+
+
+def escanear_dumps(destino: Path, limite_bytes: int = LIMITE_DUMP_BYTES) -> list[dict[str, Any]]:
     """Inventaria os dumps de `destino` (pasta ou arquivo): por arquivo e por TIPO de linha, o
     numero de linhas, dias, primeiro e ultimo dia, barras por dia (mediana) e barras REPETIDAS
     (dumps sobrepostos inflam o n sem informacao nova). O console pode por texto antes do
-    prefixo."""
-    arquivos = ([destino] if destino.is_file() else sorted(
-        f for f in destino.rglob("*") if f.is_file()
-        and f.suffix.lower() in (".txt", ".log", ".csv", ".dump", "")))
+    prefixo. Le em STREAMING, uma passada (a v4.23 lia o arquivo inteiro e o percorria uma vez por
+    prefixo). Arquivo acima de `limite_bytes` e' pulado e dito; pasta acima de 300 arquivos e'
+    cortada e dita."""
+    arquivos, cortado = _candidatos_dump(destino)
     out: list[dict[str, Any]] = []
+    if cortado:
+        out.append({"arquivo": "(pasta com arquivos demais)", "bytes": 0, "tipo": (
+            f"CORTADO: so' os primeiros {LIMITE_DUMP_ARQUIVOS} arquivos foram lidos; aponte "
+            "--dumps para a pasta certa"), "prefixo": "", "linhas": None, "dias": None,
+            "primeira": None, "ultima": None, "por_dia_mediana": None, "repetidas": 0,
+            "ativo": "—"})
     for f in arquivos:
+        nome = f.name if destino.is_file() else str(f.relative_to(destino))
         try:
-            texto = f.read_text(encoding="utf-8", errors="replace")
+            tamanho = f.stat().st_size
+        except OSError:
+            continue
+        if tamanho > limite_bytes:
+            out.append({"arquivo": nome, "bytes": tamanho, "tipo": (
+                f"PULADO: arquivo de {tamanho / 1e6:,.0f} MB (limite {limite_bytes / 1e6:,.0f} MB)"
+                .replace(",", ".")), "prefixo": "", "linhas": None, "dias": None,
+                "primeira": None, "ultima": None, "por_dia_mediana": None, "repetidas": 0,
+                "ativo": "—"})
+            continue
+        est: dict[str, dict[str, Any]] = {}
+        try:
+            with f.open("r", encoding="utf-8", errors="replace") as fh:
+                for linha in fh:
+                    m = _RE_PREFIXO.search(linha)
+                    if m is None:
+                        continue
+                    prefixo = m.group(1) + "|"
+                    e = est.setdefault(prefixo, {"n": 0, "dias": {}, "chaves": set(), "rep": 0,
+                                                 "closes": []})
+                    e["n"] += 1
+                    campos = linha[m.end():].strip().split("|")
+                    dia = _data_ntsl(campos[0])
+                    if dia is not None:
+                        e["dias"][dia] = e["dias"].get(dia, 0) + 1
+                    if prefixo in _BARRAS and len(campos) > 1 and len(e["chaves"]) < _MAX_CHAVES:
+                        chave = (campos[0], campos[1])
+                        e["rep"] += chave in e["chaves"]
+                        e["chaves"].add(chave)
+                    if prefixo == "PRCBARRA|" and len(campos) > 7 and len(e["closes"]) < 5000:
+                        c = _numero(campos[7])
+                        if c is not None:
+                            e["closes"].append(c)
         except OSError:
             continue
         for prefixo, rotulo in PREFIXOS_DUMP.items():
-            if prefixo not in texto:
+            achado = est.get(prefixo)
+            if achado is None:
                 continue
-            por_dia: dict[dt.date, int] = {}
-            chaves: set[tuple[str, str]] = set()
-            repetidas, n = 0, 0
-            closes: list[float] = []
-            for linha in texto.splitlines():
-                if prefixo not in linha:
-                    continue
-                n += 1
-                campos = linha.split(prefixo, 1)[1].strip().split("|")
-                dia = _data_ntsl(campos[0])
-                if dia is not None:
-                    por_dia[dia] = por_dia.get(dia, 0) + 1
-                if prefixo in _BARRAS and len(campos) > 1:
-                    chave = (campos[0], campos[1])
-                    repetidas += chave in chaves
-                    chaves.add(chave)
-                if prefixo == "PRCBARRA|" and len(campos) > 7 and len(closes) < 5000:
-                    c = _numero(campos[7])
-                    if c is not None:
-                        closes.append(c)
+            por_dia: dict[dt.date, int] = achado["dias"]
             cont = sorted(por_dia.values())
+            closes = achado["closes"] if prefixo == "PRCBARRA|" else []
             out.append({
-                "arquivo": f.name if destino.is_file() else str(f.relative_to(destino)),
-                "bytes": f.stat().st_size, "tipo": rotulo, "prefixo": prefixo.rstrip("|"),
-                "linhas": n, "dias": len(por_dia),
+                "arquivo": nome, "bytes": tamanho, "tipo": rotulo, "prefixo": prefixo.rstrip("|"),
+                "linhas": achado["n"], "dias": len(por_dia),
                 "primeira": min(por_dia) if por_dia else None,
                 "ultima": max(por_dia) if por_dia else None,
                 "por_dia_mediana": cont[len(cont) // 2] if cont else None,
-                "repetidas": repetidas,
-                "ativo": _ativo_provavel(f.name, closes) if prefixo == "PRCBARRA|" else (
-                    _ativo_provavel(f.name, [])),
+                "repetidas": achado["rep"], "ativo": _ativo_provavel(f.name, closes),
             })
     return out

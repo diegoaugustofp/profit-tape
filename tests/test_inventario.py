@@ -79,7 +79,7 @@ def test_escanear_le_so_o_rodape_e_ignora_arquivo_em_escrita_e_corrompido(tmp_pa
     raizes = _arvore(tmp_path)
     ruim = _parte(raizes["raw"], "trade", "WDOV26", dt.date(2026, 9, 23), 10, seq=7)
     ruim.write_bytes(b"isto nao e' parquet")                                # footer inexistente
-    df = I.escanear(raizes)
+    df = I.escanear(raizes, nivel="completo")
     v26 = df[(df["ativo"] == "WDOV26") & (df["stream"] == "trade")].set_index("dia")
     assert v26.loc[dt.date(2026, 9, 22), "linhas"] == 100                    # .inprogress fora
     assert v26.loc[dt.date(2026, 9, 22), "arquivos"] == 1
@@ -87,12 +87,12 @@ def test_escanear_le_so_o_rodape_e_ignora_arquivo_em_escrita_e_corrompido(tmp_pa
     assert d23["linhas"] == 100 and d23["ilegiveis"] == 1
     assert set(df["camada"]) == {"raw", "curated", "backup"}
     assert I.escanear({"raw": tmp_path / "nao_existe"}).empty
-    sem = I.escanear(raizes, contar_linhas=False)
+    sem = I.escanear(raizes, nivel="listar")
     assert sem["linhas"].isna().all() and (sem["bytes"] > 0).all()
 
 
 def test_por_ativo_tipo_origem_periodo_lacuna_e_uniao_das_camadas(tmp_path: Path) -> None:
-    df = I.escanear(_arvore(tmp_path))
+    df = I.escanear(_arvore(tmp_path), nivel="completo")
     a = I.por_ativo(df).set_index("ativo")
     # WINFUT: trade + book; dias do trade = uniao das camadas (22/09 em raw e curated conta 1 vez)
     w = a.loc["WINFUT"]
@@ -117,7 +117,7 @@ def test_por_ativo_tipo_origem_periodo_lacuna_e_uniao_das_camadas(tmp_path: Path
 
 
 def test_cruzamento_da_coleta_conta_o_par_de_contratos_e_os_ausentes(tmp_path: Path) -> None:
-    df = I.escanear(_arvore(tmp_path))
+    df = I.escanear(_arvore(tmp_path), nivel="completo")
     coletas = {c["id"]: c for c in C.carregar_coletas(RAIZ / "docs" / "coletas.yaml")}
     r = I.cruzar_coleta(coletas["rolagem_wdo"], df, dt.date(2026, 10, 3))
     assert r["ativos"]["WDOV26"]["dias"] == 3 and r["ativos"]["WDOX26"]["dias"] == 4
@@ -134,9 +134,11 @@ def test_cruzamento_da_coleta_conta_o_par_de_contratos_e_os_ausentes(tmp_path: P
 
 def test_relatorio_md_traz_coletas_resumo_lacunas_e_o_aviso_de_nao_diario(tmp_path: Path) -> None:
     raizes = _arvore(tmp_path)
-    df = I.escanear(raizes)
+    df = I.escanear(raizes, nivel="completo")
     md = I.relatorio_md(df, C.carregar_coletas(RAIZ / "docs" / "coletas.yaml"),
-                        dt.date(2026, 10, 3), raizes, "03/10/2026 18:30 (teste)", None)
+                        dt.date(2026, 10, 3), raizes, "03/10/2026 18:30 (teste)", None,
+                        I.plano(I.listar(raizes), "completo"))
+    assert "Nível de varredura:** `completo`" in md and "rodapés abertos:" in md
     assert "NÃO é diário" in md and "03/10/2026 18:30 (teste)" in md
     assert "## Coletas em andamento (declaradas x em disco)" in md
     assert "dias com os dois (o par): 3" in md
@@ -232,9 +234,11 @@ def test_cli_inventario_escreve_md_e_csv_e_avisa_raiz_ausente(tmp_path: Path) ->
     r = CliRunner().invoke(app, [
         "inventario-dados", "--raw", str(raizes["raw"]), "--curated", str(raizes["curated"]),
         "--backup", str(raizes["backup"]), "--coletas", str(RAIZ / "docs" / "coletas.yaml"),
+        "--nivel", "completo", "--log-record", str(tmp_path / "sem_log.jsonl"),
         "--saida", str(saida), "--csv", str(csv)])
     assert r.exit_code == 0, r.output
     assert "ativo(s) ->" in r.output and saida.exists() and csv.exists()
+    assert "ETAPA 1 - listando pastas" in r.output and "vai abrir o rodape de" in r.output
     inv = pd.read_csv(csv)
     assert {"camada", "stream", "ativo", "dia", "linhas", "origem"} <= set(inv.columns)
     dump = tmp_path / "meu_dump.txt"
@@ -242,16 +246,19 @@ def test_cli_inventario_escreve_md_e_csv_e_avisa_raiz_ausente(tmp_path: Path) ->
     r3 = CliRunner().invoke(app, [
         "inventario-dados", "--raw", str(raizes["raw"]), "--curated", str(raizes["curated"]),
         "--coletas", str(RAIZ / "docs" / "coletas.yaml"), "--dumps", str(dump),
+        "--log-record", str(tmp_path / "sem_log.jsonl"),
         "--saida", str(tmp_path / "d.md"), "--csv", str(tmp_path / "d.csv")])
     assert r3.exit_code == 0 and "preco M15 (barras)" in (tmp_path / "d.md").read_text(
         encoding="utf-8")
     r4 = CliRunner().invoke(app, [
         "inventario-dados", "--raw", str(raizes["raw"]), "--curated", str(raizes["curated"]),
-        "--dumps", str(tmp_path / "nao_existe_dump"), "--saida", str(tmp_path / "e.md"),
+        "--dumps", str(tmp_path / "nao_existe_dump"), "--log-record", str(tmp_path / "x.jsonl"),
+        "--saida", str(tmp_path / "e.md"),
         "--csv", str(tmp_path / "e.csv")])
     assert r4.exit_code == 0 and "AVISO: --dumps nao existe" in r4.output
     r2 = CliRunner().invoke(app, [
         "inventario-dados", "--raw", str(tmp_path / "nada"), "--curated", str(tmp_path / "nada2"),
+        "--log-record", str(tmp_path / "x.jsonl"),
         "--saida", str(tmp_path / "x.md"), "--csv", str(tmp_path / "x.csv")])
     assert r2.exit_code == 0 and "AVISO: raiz 'raw' nao existe" in r2.output
     assert "Nenhum dado encontrado" in (tmp_path / "x.md").read_text(encoding="utf-8")
@@ -317,3 +324,174 @@ def test_indice_do_diario_mostra_as_coletas_com_contagem_regressiva(tmp_path: Pa
 
 def test_pytest_garante_que_a_pasta_de_testes_nao_depende_do_cwd() -> None:
     assert (RAIZ / "docs" / "coletas.yaml").exists() and pytest is not None
+
+
+# ------------------------------------------------ v4.24: o inventario nao pode travar a maquina
+def _conta_aberturas(monkeypatch: pytest.MonkeyPatch) -> list[Path]:
+    abertos: list[Path] = []
+    original = I._rodape
+
+    def espiao(arq: Path) -> tuple[int, int | None, int | None]:
+        abertos.append(arq)
+        return original(arq)
+    monkeypatch.setattr(I, "_rodape", espiao)
+    return abertos
+
+
+def _arvore_grande(tmp: Path, partes_book: int = 30) -> dict[str, Path]:
+    raw, cur = tmp / "raw", tmp / "curated"
+    for d in range(3):
+        dia = dt.date(2026, 9, 22) + dt.timedelta(days=d)
+        for a in ("WINFUT", "WDOV26"):
+            for k in range(3):
+                _parte(raw, "trade", a, dia, 10, seq=k)
+            for k in range(partes_book):
+                _parte(raw, "book_offer", a, dia, 10, seq=k)
+                _parte(raw, "tiny_book", a, dia, 10, seq=k)
+            _parte(cur, "trade", a, dia, 30)
+    return {"raw": raw, "curated": cur}
+
+
+def test_nivel_padrao_nunca_abre_book_nem_raw_e_listar_nao_abre_nada(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A v4.23 abria TODOS os parquet de todos os streams (o book e' o grosso do raw), 8 ao mesmo
+    tempo: travou a maquina do operador. Padrao agora: so' o rodape de curated/trade."""
+    raizes = _arvore_grande(tmp_path)
+    abertos = _conta_aberturas(monkeypatch)
+    df = I.escanear(raizes, nivel="listar")
+    assert abertos == [] and df["linhas"].isna().all() and len(df) == 3 * 2 * 4
+    df = I.escanear(raizes)                                    # padrao = leve
+    assert len(abertos) == 6 and all("curated" in str(a) for a in abertos)
+    assert not any("book" in str(a) or "tiny" in str(a) or "raw" in str(a) for a in abertos)
+    cur = df[(df["camada"] == "curated")]
+    assert (cur["linhas"] == 30).all() and (cur["origem"] == "ao_vivo").all()
+    raw = df[df["camada"] == "raw"]
+    assert raw["linhas"].isna().all() and (raw["origem"] == "desconhecido").all()
+    assert raw["arquivos"].sum() == 3 * 2 * (3 + 30 + 30)      # listado, nao aberto
+    abertos.clear()
+    I.escanear(raizes, nivel="trade")
+    assert len(abertos) == 6 + 3 * 2 * 3 and not any("book" in str(a) for a in abertos)
+    abertos.clear()
+    I.escanear(raizes, nivel="completo", teto=10**6)
+    assert len(abertos) == 6 + 3 * 2 * (3 + 30 + 30)
+
+
+def test_teto_de_arquivos_recusa_ANTES_de_abrir_e_o_plano_diz_quanto_abriria(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    raizes = _arvore_grande(tmp_path)
+    abertos = _conta_aberturas(monkeypatch)
+    folhas = I.listar(raizes)
+    pl = I.plano(folhas, "completo")
+    assert pl["pastas"] == 3 * 2 * 4 and pl["a_abrir"] == pl["arquivos"] == 6 + 3 * 2 * 63
+    assert I.plano(folhas, "leve")["a_abrir"] == 6 and I.plano(folhas, "listar")["a_abrir"] == 0
+    streams = {(x["camada"], x["stream"]): x for x in pl["por_stream"]}
+    assert streams[("raw", "tiny_book")]["arquivos"] == 3 * 2 * 30 and streams[
+        ("raw", "tiny_book")]["bytes"] > 0
+    with pytest.raises(I.LimiteExcedido) as e:
+        I.abrir(folhas, "completo", teto=100)
+    assert e.value.a_abrir == pl["a_abrir"] and e.value.teto == 100 and abertos == []
+    with pytest.raises(ValueError, match="nivel invalido"):
+        I.escolher(folhas, "tudo")
+
+
+def test_progresso_e_pausa_e_poucas_threads_por_padrao(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import inspect
+    import threading
+
+    raizes = _arvore_grande(tmp_path, partes_book=2)
+    eventos: list[tuple[str, int, int | None]] = []
+    I.escanear(raizes, nivel="completo", teto=10**6, progresso=lambda f, a, t: eventos.append(
+        (f, a, t)))
+    total = sum(f.n_arquivos for f in I.listar(raizes))
+    assert eventos[-1] == ("abrindo rodapes", total, total)       # sempre termina em 100%
+    assert any(e[0] == "abrindo rodapes" and e[1] % 250 == 0 for e in eventos) or total < 250
+    assert inspect.signature(I.escanear).parameters["threads"].default == 2
+    pausas: list[float] = []
+    monkeypatch.setattr(I.time, "sleep", lambda s: pausas.append(s))
+    I.escanear(raizes, nivel="leve", pausa_ms=7)
+    assert pausas == [0.007] * 6
+    pico, ativos, trava = [0], [0], threading.Lock()
+    original = I._rodape
+
+    def conta(arq: Path) -> tuple[int, int | None, int | None]:
+        with trava:
+            ativos[0] += 1
+            pico[0] = max(pico[0], ativos[0])
+        try:
+            return original(arq)
+        finally:
+            with trava:
+                ativos[0] -= 1
+    monkeypatch.setattr(I, "_rodape", conta)
+    I.escanear(raizes, nivel="completo", teto=10**6)
+    assert pico[0] <= 2
+
+
+def test_cli_recusa_com_o_record_escrevendo_e_com_o_teto_estourado(tmp_path: Path) -> None:
+    import os
+    import time
+
+    from profittape.cli import app
+
+    raizes = _arvore_grande(tmp_path)
+    log = tmp_path / "record_diario.jsonl"
+    log.write_text("{}\n", encoding="utf-8")                      # mtime = agora: record vivo
+    base = ["inventario-dados", "--raw", str(raizes["raw"]), "--curated", str(raizes["curated"]),
+            "--log-record", str(log), "--coletas", str(RAIZ / "docs" / "coletas.yaml"),
+            "--saida", str(tmp_path / "i.md"), "--csv", str(tmp_path / "i.csv")]
+    r = CliRunner().invoke(app, base)
+    assert r.exit_code == 2 and "RECUSADO: o record parece estar rodando" in r.output
+    assert not (tmp_path / "i.md").exists()                        # nem listou
+    velho = time.time() - 3600
+    os.utime(log, (velho, velho))                                  # parado ha' 1 h
+    r2 = CliRunner().invoke(app, base)
+    assert r2.exit_code == 0 and (tmp_path / "i.md").exists()
+    saida_leve = r2.output
+    assert "vai abrir o rodape de 6 arquivos" in saida_leve and "(teto 20.000; 2 thread(s))" in (
+        saida_leve)
+    assert "24 pastas, 384 arquivos," in saida_leve                # separadores nao viram ponto
+    assert saida_leve.index("ETAPA 1") < saida_leve.index("vai abrir") < saida_leve.index(
+        "linha(s)")
+    os.utime(log, None)                                            # record vivo de novo
+    r3 = CliRunner().invoke(app, [*base, "--forcar", "--nivel", "listar"])
+    assert r3.exit_code == 0 and "vai abrir o rodape de 0 arquivos" in r3.output
+    os.utime(log, (velho, velho))
+    r4 = CliRunner().invoke(app, [*base, "--nivel", "completo", "--max-arquivos", "50"])
+    assert r4.exit_code == 2 and "RECUSADO, nada foi aberto" in r4.output
+    assert "abriria 384 arquivos (teto 50)" in r4.output
+    r5 = CliRunner().invoke(app, [*base, "--nivel", "inexistente"])
+    assert r5.exit_code != 0
+
+
+def test_dumps_streaming_tetos_e_podas(tmp_path: Path) -> None:
+    (tmp_path / ".git" / "objects").mkdir(parents=True)
+    (tmp_path / ".git" / "objects" / "ab12cd").write_text(_prc(1150102, 900, 1), encoding="utf-8")
+    (tmp_path / "raw").mkdir()
+    (tmp_path / "raw" / "dentro_do_raw.txt").write_text(_prc(1150102, 900, 1), encoding="utf-8")
+    (tmp_path / "sem_extensao").write_text(_prc(1150102, 900, 1), encoding="utf-8")
+    (tmp_path / "ok.txt").write_text("\n".join(_prc(1150102 + k, 900, 1) for k in range(4)),
+                                     encoding="utf-8")
+    nomes = [d["arquivo"] for d in I.escanear_dumps(tmp_path)]
+    assert nomes == ["ok.txt"]                       # .git, raw/ e arquivo sem extensao: fora
+    grande = tmp_path / "enorme.log"
+    grande.write_text(_prc(1150102, 900, 1), encoding="utf-8")
+    todos = I.escanear_dumps(tmp_path, limite_bytes=10)
+    pulados = [d for d in todos if d["arquivo"] == "enorme.log"]
+    assert len(pulados) == 1 and pulados[0]["tipo"].startswith("PULADO") and pulados[0][
+        "linhas"] is None
+    # pasta com arquivos demais: corta e diz
+    muitos = tmp_path / "muitos"
+    muitos.mkdir()
+    for k in range(I.LIMITE_DUMP_ARQUIVOS + 5):
+        (muitos / f"d{k:04d}.txt").write_text("x", encoding="utf-8")
+    cortado = I.escanear_dumps(muitos)
+    assert cortado[0]["tipo"].startswith("CORTADO")
+    # uma passada so': arquivo grande de verdade, linhas de 3 tipos misturadas
+    misto = tmp_path / "misto.txt"
+    misto.write_text("\n".join(_prc(1150102 + (k % 50), 900 + k, k + 1) if k % 2 else
+                              f"ABSBARRA|1260930|{900 + k}|{k}|1|2|3|4|5|6" for k in range(20000)),
+                     encoding="utf-8")
+    por = {d["prefixo"]: d for d in I.escanear_dumps(misto)}
+    assert por["PRCBARRA"]["linhas"] == 10000 and por["ABSBARRA"]["linhas"] == 10000
+

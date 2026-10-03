@@ -5173,3 +5173,18 @@ arquivo. Prova cruzada em teste: o parser das fichas (`carregar_log`) e o invent
 dão o mesmo período. O projeto não fixa onde os dumps ficam.
 
 **Tags:** entregue-v4.23 (sobre v4.22). Suíte 1.367.
+
+### 2026-10-03i — `inventario-dados` travou a máquina; reescrito com orçamento de I/O (v4.24)
+
+Diego: "o comando está falhando silenciosamente e travando o computador todo; mesmo com INFO ele grava a
+primeira mensagem e depois trava tudo". Assumido: `inventario-dados` (o único que abre milhares de arquivos;
+a primeira mensagem INFO é a `prioridade.baixa`). Reproduzido na medida: numa árvore sintética parecida com o
+raw, a v4.23 abriu **todos** os 4.920 parquets (inclusive book), 8 simultâneos, sem progresso. Causa de design,
+minha: não limitei o I/O, e escrevi "rode depois das 18:00" no texto em vez de impor.
+
+v4.24: listar (só diretórios) → imprimir o plano → abrir só o que o `--nivel` autoriza (`leve` = curated/trade,
+10 de 4.930 arquivos), teto de arquivos que recusa antes de abrir, 2 threads, `--pausa-ms`, progresso contínuo,
+recusa com o record escrevendo, `--dumps` em streaming com tetos e podas. Quatro mutações confirmam que cada
+trava é guardada por teste. Regra geral registrada no `OPERACAO.md`.
+
+**Tags:** entregue-v4.24 (sobre v4.23). Suíte 1.372.

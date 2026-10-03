@@ -1795,22 +1795,37 @@ def inventario_dados(
         None, "--dumps",
         help="pasta OU arquivo com os DUMPS do console do Profit (texto com linhas PRCBARRA|, "
              "ABSBARRA|, VWAPVP|...); o projeto nao fixa onde ficam"),
+    nivel: str = typer.Option(
+        "leve", "--nivel",
+        help="listar (nenhum parquet aberto) | leve (padrao: rodapes so' de curated/trade) | "
+             "trade (+ raw/trade; so' com o record PARADO) | completo (tudo, com teto)"),
+    threads: int = typer.Option(2, "--threads", help="aberturas simultaneas (padrao 2)"),
+    max_arquivos: int = typer.Option(
+        20_000, "--max-arquivos", help="teto de parquets abertos; acima disso NADA e' aberto"),
+    pausa_ms: int = typer.Option(0, "--pausa-ms", help="pausa por arquivo aberto (alivia o disco)"),
+    log_record: Path = typer.Option(Path("logs/record_diario.jsonl"), "--log-record"),
+    forcar: bool = typer.Option(False, "--forcar", help="roda mesmo com o record escrevendo"),
     coletas_yaml: Path = typer.Option(Path("docs/coletas.yaml"), "--coletas"),
     saida: Path = typer.Option(Path("docs/INVENTARIO_DADOS.md"), "--saida"),
     csv: Path | None = typer.Option(
         Path("docs/inventario_dados.csv"), "--csv", help="uma linha por camada/stream/ativo/dia"),
-    sem_linhas: bool = typer.Option(False, "--sem-linhas", help="so' arquivos e MB (mais rapido)"),
-    log_level: str = typer.Option("WARNING", "--log-level"),
+    log_level: str = typer.Option("INFO", "--log-level"),
 ) -> None:
     """
     INVENTARIO DE DADOS, sob demanda (NAO diario): quais ativos existem em disco, de que dia a que
-    dia, quantas linhas, se sao so' trade (tape: negocios com agente) ou tambem book, se o dia foi
-    capturado ao vivo ou importado depois, onde ha' lacunas -- e o cruzamento com as coletas
-    declaradas em docs/coletas.yaml. Escreve docs/INVENTARIO_DADOS.md e um CSV para consulta ao
-    formular hipoteses. Le so' o rodape dos parquet. Roda em prioridade baixa; rode apos as 18:00.
+    dia, se sao so' trade (tape: negocios com agente) ou tambem book, se o dia foi capturado ao vivo
+    ou importado, onde ha' lacunas -- e o cruzamento com as coletas de docs/coletas.yaml. Escreve
+    docs/INVENTARIO_DADOS.md e um CSV.
+
+    SEGURANCA DE DISCO (a v4.23 travou a maquina abrindo todos os parquet de todos os streams):
+    1) lista so' DIRETORIOS e IMPRIME O PLANO antes de abrir qualquer parquet; 2) por padrao abre
+    so' os rodapes de curated/trade; 3) teto de arquivos (--max-arquivos), 2 threads e progresso
+    continuo; 4) RECUSA rodar com o record escrevendo (use --forcar por sua conta). Prioridade
+    baixa.
     """
     import datetime as _d
     import platform
+    import time
     from zoneinfo import ZoneInfo
 
     configurar(log_level)
@@ -1818,13 +1833,56 @@ def inventario_dados(
 
     baixa_prioridade()
     from .coletas import carregar_coletas
-    from .inventario import escanear, escanear_dumps, relatorio_md
+    from .inventario import (
+        NIVEIS,
+        LimiteExcedido,
+        abrir,
+        escanear_dumps,
+        listar,
+        plano,
+        relatorio_md,
+    )
+
+    if nivel not in NIVEIS:
+        raise typer.BadParameter(f"--nivel deve ser um de: {', '.join(NIVEIS)}")
+    if log_record.exists() and not forcar:
+        idade = time.time() - log_record.stat().st_mtime
+        if idade < 120:
+            typer.echo(f"RECUSADO: o record parece estar rodando ({log_record} foi escrito ha' "
+                       f"{idade:.0f} s). Varrer o disco agora disputa I/O com a captura. Rode "
+                       "depois que ele parar (apos 18:30) ou use --forcar.", err=True)
+            raise typer.Exit(2)
+
+    def eco(fase: str, feito: int, total: int | None) -> None:
+        typer.echo(f"  [{fase}] {feito:,}".replace(",", ".")
+                   + (f" de {total:,} ({100 * feito / total:.0f}%)".replace(",", ".")
+                      if total else ""))
 
     raizes = {"raw": raw, "curated": curated}
     if backup is not None:
         raizes["backup"] = backup
+    for nome, r in raizes.items():
+        if not r.exists():
+            typer.echo(f"  AVISO: raiz '{nome}' nao existe: {r}")
+    typer.echo("inventario: ETAPA 1 - listando pastas (nenhum parquet e' aberto)...")
+    folhas = listar(raizes, eco)
+    pl = plano(folhas, nivel)
+    def milhar(v: int) -> str:
+        return f"{v:,}".replace(",", ".")
+    typer.echo(f"  {milhar(pl['pastas'])} pastas, {milhar(pl['arquivos'])} arquivos, "
+               f"{pl['bytes'] / 1e9:.1f} GB".replace(".", ",", 0))
+    for x in pl["por_stream"]:
+        typer.echo(f"    {x['camada']:<8} {x['stream']:<11} {x['pastas']:>7} pastas "
+                   f"{x['arquivos']:>9} arquivos {x['bytes'] / 1e6:>10,.0f} MB".replace(",", "."))
+    typer.echo(f"  nivel '{nivel}': vai abrir o rodape de {pl['a_abrir']:,} arquivos "
+               f"(teto {max_arquivos:,}; {threads} thread(s)).".replace(",", "."))
+    try:
+        df = abrir(folhas, nivel, threads, pausa_ms, max_arquivos, eco)
+    except LimiteExcedido as exc:
+        typer.echo(f"RECUSADO, nada foi aberto: {exc}. Use --nivel leve|listar, ou suba "
+                   "--max-arquivos conscientemente, com o record parado.", err=True)
+        raise typer.Exit(2) from exc
     agora = _d.datetime.now(tz=ZoneInfo("America/Sao_Paulo"))
-    df = escanear(raizes, contar_linhas=not sem_linhas)
     lista_dumps = (None if dumps is None
                    else escanear_dumps(dumps) if dumps.exists() else [])
     if dumps is not None and not dumps.exists():
@@ -1836,7 +1894,7 @@ def inventario_dados(
         ver = "?"
     carimbo = f"{agora:%d/%m/%Y %H:%M} ({platform.node()}, profit-tape {ver})"
     md = relatorio_md(df, carregar_coletas(coletas_yaml), agora.date(), raizes, carimbo,
-                      lista_dumps)
+                      lista_dumps, pl)
     saida.parent.mkdir(parents=True, exist_ok=True)
     saida.write_text(md, encoding="utf-8")
     if csv is not None and len(df):
@@ -1845,9 +1903,6 @@ def inventario_dados(
     n_ativos = df["ativo"].nunique() if len(df) else 0
     typer.echo(f"inventario: {len(df)} linha(s), {n_ativos} ativo(s) -> {saida}"
                + (f" e {csv}" if csv is not None and len(df) else ""))
-    for nome, r in raizes.items():
-        if not r.exists():
-            typer.echo(f"  AVISO: raiz '{nome}' nao existe: {r}")
 
 
 @app.command(name="diario-operacional")

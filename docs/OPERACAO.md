@@ -1,5 +1,36 @@
 # Operacao
 
+## INCIDENTE 2026-10-03: `inventario-dados` (v4.22/v4.23) travou a maquina inteira
+
+**O que aconteceu.** O operador rodou o comando, ele imprimiu a primeira mensagem (`prioridade.baixa`) e o
+computador todo travou, sem outra linha de log.
+
+**Causa (medida, nao suposta).** A v4.23 abria o rodape de **todo** parquet de **todos** os streams
+(`book_offer` e `tiny_book` sao o grosso do raw: milhares de partes por dia), **8 ao mesmo tempo**, e so'
+devolvia o resultado no fim, sem uma linha de progresso. Numa arvore sintetica de 4.920 arquivos a v4.23
+abriu os 4.920, com 8 aberturas simultaneas. Num disco com centenas de milhares de partes, backup em USB e
+antivirus lendo cada arquivo aberto, isso satura o disco do sistema inteiro -- e disputa I/O com o `record`,
+que escreve no mesmo disco. O aviso "rode depois das 18:00" estava no texto, mas nada o impunha.
+
+**Correcao (v4.24), todas as travas guardadas por teste de mutacao.**
+1. **Duas etapas.** Primeiro LISTA so' diretorios (nenhum parquet aberto) e IMPRIME O PLANO (pastas, arquivos
+   e MB por camada e stream, e quantos rodapes vai abrir). So' depois abre.
+2. **`--nivel`**: `listar` (zero parquets abertos), `leve` (**padrao**: so' curated/trade, um arquivo por
+   dia e ativo), `trade` (+ raw/trade: so' com o record parado), `completo` (tudo, inclusive book e backup).
+   Mesma arvore sintetica: `leve` abre 10 arquivos de 4.930; `trade`, 130.
+3. **`--max-arquivos`** (padrao 20.000): se o nivel abriria mais, **nada** e' aberto e o comando diz quanto.
+4. **2 threads** (antes 8), `--pausa-ms` opcional e **progresso continuo** (a cada 250 arquivos ou 3 s).
+5. **Recusa rodar com o record escrevendo** (`--log-record`, padrao `logs/record_diario.jsonl`, escrito ha'
+   menos de 120 s); `--forcar` e' por conta do operador.
+6. **`--dumps`**: leitura em streaming, uma passada; pula arquivo acima de 300 MB; corta pasta com mais de 300
+   arquivos; nao entra em `.git`, `.venv`, `raw`, `curated`; arquivo sem extensao nao e' lido.
+
+**Efeito de um padrao leve:** linhas e origem (ao vivo x importado) so' existem onde o rodape foi lido
+(curated); dia so' no raw aparece como "desconhecido". Quem quiser o raw usa `--nivel trade` com o record parado.
+
+**Regra geral registrada:** todo comando que varre disco (1) lista antes e mostra o plano, (2) tem teto, (3)
+nao roda com o `record` escrevendo, (4) imprime progresso. "Rode depois das 18:00" no texto nao e' trava.
+
 ## Diario operacional (v4.12): o que os EAs fizeram E o que a infraestrutura fez com eles
 
 `profit-tape diario-operacional [--dia AAAA-MM-DD] [--nota "texto"]` (o `diario <dir>` antigo
@@ -77,7 +108,7 @@ CSV no `metas.yaml` (n = eventos unicos por `dia` + `ts_open`, desde 28/08; marc
 manda NAO olhar o placar antes de n = 150: o diario le do CSV **so' as colunas dia/ts_open** e nunca
 acerto nem pontos (um teste espia o `usecols`). Quem olha o placar e' o `fase2-score`, em n = 150.
 
-**Inventario de dados e coletas (v4.22).** `profit-tape inventario-dados [--backup D:\\backup_raw\\data\\raw]
+**Inventario de dados e coletas (v4.22; com travas desde a v4.24, ver o INCIDENTE de 03/10).** `profit-tape inventario-dados [--nivel listar|leve|trade|completo] [--backup D:\\backup_raw\\data\\raw]
 [--dumps <pasta>]` escreve `docs/INVENTARIO_DADOS.md` e `docs/inventario_dados.csv`: por ativo, periodo e
 linhas do `trade` (o *tape*), se ha' book (`so' trade` x `trade + book`), se cada dia foi **ao vivo**,
 **importado** (`ts_recv_ns` posterior ao dia: 01 a 14/09 foram importados em 15/09) ou **misto**, em que camada
