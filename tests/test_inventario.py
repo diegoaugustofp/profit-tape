@@ -653,3 +653,131 @@ def test_dumps_de_15s_nao_acusam_repetidas_falsas_e_batem_com_o_parser_da_ficha(
                         dt.date(2026, 10, 3), {}, "c", I.escanear_dumps(vw))
     assert "| n/d |" in md and "dia + `current_bar` em PRCBARRA e BBSBARRA" in md
 
+
+# --------------------------- v4.26: o que o segundo inventario real mostrou (sobreposicao e ativo)
+def _prc_br(data: int, hora: int, barra: int, close: str) -> str:
+    """PRCBARRA com preco no formato pt-BR do Profit (milhar com ponto, decimal com virgula)."""
+    campos = [data, hora, hora, barra, "1,0", "1,0", "1,0", close, 1234, "45,0", "1,0", "1,0",
+              "1,0", "1,0"]
+    return "PRCBARRA|" + "|".join(str(c) for c in campos)
+
+
+def _dump(caminho: Path, linhas: list[str]) -> Path:
+    caminho.write_text("\n".join(linhas), encoding="utf-8")
+    return caminho
+
+
+def _dias_prc(inicio: int, n: int, close: str, barras: int = 3) -> list[str]:
+    """n dias a partir de 1AAMMDD `inicio` (dias fictícios de 1 a 28), `barras` barras por dia."""
+    out = []
+    for d in range(n):
+        data = inicio + d
+        for b in range(barras):
+            out.append(_prc_br(data, 900 + 15 * b, b + 1, close))
+    return out
+
+
+def test_ativo_provavel_le_preco_em_pt_br_como_o_parser_das_fichas(tmp_path: Path) -> None:
+    """v4.25 so' trocava a virgula e falhava em "125.450,00": todo `dump_*` (sem o ticker no nome)
+    saiu 'nao consta'."""
+    from profittape.research.absorcao_grafico import _numero as numero_do_parser
+
+    for txt in ("125.450,00", "5.432,5", "98765", "1.234.567,89", "0,5"):
+        assert I._numero(txt) == numero_do_parser(txt)
+    assert I._numero("") is None and I._numero("abc") is None
+    win = _dump(tmp_path / "dump_15_22.txt", _dias_prc(1150102, 3, "125.450,00"))
+    wdo = _dump(tmp_path / "preco_semana.txt", _dias_prc(1150102, 3, "5.432,50"))
+    assert I.escanear_dumps(win)[0]["ativo"] == "WIN (estimado pelo preco)"
+    assert I.escanear_dumps(wdo)[0]["ativo"] == "WDO (estimado pelo preco)"
+    nome = _dump(tmp_path / "wdo_2026.txt", _dias_prc(1260102, 2, "125.450,00"))
+    assert I.escanear_dumps(nome)[0]["ativo"] == "WDO (pelo nome do arquivo)"      # o nome vence
+    abs_ = _dump(tmp_path / "absorcao_barra_2025.txt", [
+        "ABSBARRA|1250102|905|905|130.100,0|130.200,0|130.000,0|130.150,0|10|5|1|1|1|1|1|1"])
+    assert I.escanear_dumps(abs_)[0]["ativo"] == "WIN (estimado pelo preco)"       # close = campo 6
+
+
+def test_dump_grande_que_e_a_concatenacao_de_tres_e_apontado_nao_somado(tmp_path: Path) -> None:
+    """O caso real: dump_15_22 tinha EXATAMENTE as linhas e os dias de dump_2015_19 + dump_2020 +
+    dump_2021_22, e a coluna 'repetidas' (so' dentro do arquivo) dizia 0."""
+    a = _dias_prc(1150101, 6, "125.450,00")                  # "2015-19"
+    b = _dias_prc(1200101, 3, "125.450,00")                  # "2020"
+    c = _dias_prc(1210101, 4, "125.450,00")                  # "2021-22"
+    _dump(tmp_path / "dump_2015_19.txt", a)
+    _dump(tmp_path / "dump_2020.txt", b)
+    _dump(tmp_path / "dump_2021_22.txt", c)
+    _dump(tmp_path / "dump_15_22.txt", a + b + c)
+    entradas, _ = I.escanear_dumps_varios([tmp_path])
+    assert all(e["repetidas"] == 0 for e in entradas)          # "repetidas" nao ve isso
+    res = I.resumo_dumps(entradas)
+    u = res["unicos"][0]
+    assert (u["arquivos"], u["dias_unicos"], u["soma_dias"], u["repetidos"]) == (4, 13, 26, 13)
+    assert u["ativo"] == "WIN"
+    grande = [p for p in res["pares"] if "dump_15_22.txt" in (p["a"], p["b"])]
+    assert len(grande) == 3                                     # contra cada um dos tres
+    assert {p["comuns"] for p in grande} == {6, 3, 4}
+    assert all(p["relacao"] in ("A esta' dentro de B", "B esta' dentro de A") for p in grande)
+    assert sum(1 for p in res["pares"]) == 3                    # as partes nao se sobrepoem
+    md = I.relatorio_md(pd.DataFrame(columns=I.COLUNAS), [], dt.date(2026, 10, 3), {}, "c",
+                        entradas)
+    assert "### Dias únicos por tipo e ativo" in md and "| 4 | **13** |" in md
+    assert "### Sobreposição entre arquivos" in md and "dump_15_22.txt" in md
+    assert "Mesmos dias não provam mesmas barras" in md
+
+
+def test_arquivo_de_2026_que_contem_o_outro_e_arquivo_complementar_sem_sobreposicao(
+        tmp_path: Path) -> None:
+    """ABSBARRA 2026: jan_a_abril (81 dias) esta' DENTRO de jan_a_abril_jun_jul (119); maio fica em
+    outro arquivo, sem sobreposicao. Soma ingenua = 220 dias; unicos = 139."""
+    def abs_(dias: list[int]) -> list[str]:
+        return [f"ABSBARRA|{d}|{905 + 5 * b}|{905 + 5 * b}|130.100,0|130.200,0|130.000,0|130.150,0"
+                f"|10|5|1|1|1|1|1|1" for d in dias for b in range(3)]
+    jan_abr, maio, jun_jul = list(range(1260101, 1260109)), [1260201, 1260202], [
+        1260301, 1260302, 1260303]
+    _dump(tmp_path / "jan_a_abril.txt", abs_(jan_abr))
+    _dump(tmp_path / "jan_a_abril_jun_jul.txt", abs_(jan_abr + jun_jul))
+    _dump(tmp_path / "maio.txt", abs_(maio))
+    res = I.resumo_dumps(I.escanear_dumps_varios([tmp_path])[0])
+    assert len(res["pares"]) == 1
+    p = res["pares"][0]
+    assert p["comuns"] == 8 and p["relacao"] == "A esta' dentro de B"
+    assert {p["a"], p["b"]} == {"jan_a_abril.txt", "jan_a_abril_jun_jul.txt"}   # maio: sem par
+    u = res["unicos"][0]
+    assert (u["soma_dias"], u["dias_unicos"], u["repetidos"]) == (8 + 11 + 2, 8 + 3 + 2, 8)
+
+
+def test_win_e_wdo_no_mesmo_periodo_nao_sao_acusados_de_duplicata(tmp_path: Path) -> None:
+    """dump_15_22 (WIN) e wdo_2015_22 cobrem os mesmos dias, mas sao ativos diferentes."""
+    _dump(tmp_path / "dump_15_22.txt", _dias_prc(1150101, 5, "125.450,00"))
+    _dump(tmp_path / "wdo_2015_22.txt", _dias_prc(1150101, 5, "3.250,00"))
+    res = I.resumo_dumps(I.escanear_dumps_varios([tmp_path])[0])
+    assert res["pares"] == []
+    assert {(u["ativo"], u["dias_unicos"]) for u in res["unicos"]} == {("WIN", 5), ("WDO", 5)}
+    # ativo NAO identificado: compara com todos e avisa que e' ambiguo
+    _dump(tmp_path / "mistério.txt", _dias_prc(1150101, 5, "x"))
+    pares = I.resumo_dumps(I.escanear_dumps_varios([tmp_path])[0])["pares"]
+    assert len(pares) == 2 and all(p["ambiguo"] for p in pares)
+    md = I.relatorio_md(pd.DataFrame(columns=I.COLUNAS), [], dt.date(2026, 10, 3), {}, "c",
+                        I.escanear_dumps_varios([tmp_path])[0])
+    assert "sem ativo identificado: confirme" in md and "não identificado" in md
+
+
+def test_resolucao_diferente_nos_mesmos_dias_mostra_barras_por_dia(tmp_path: Path) -> None:
+    """Mesmos dias nao provam mesmas barras: o relatorio mostra barras/dia lado a lado."""
+    def bbs(dias: list[int], por_dia: int) -> list[str]:
+        return [f"BBSBARRA|{d}|{900 + k}|{900 + k}|{k + 1}|1,0|1,0|1,0|125.000,0|10|1|1|1|1|1"
+                for d in dias for k in range(por_dia)]
+    _dump(tmp_path / "dump_15s_dia.txt", bbs([1260901], 40))
+    _dump(tmp_path / "dump_6m.txt", bbs([1260901], 4))
+    p = I.resumo_dumps(I.escanear_dumps_varios([tmp_path])[0])["pares"][0]
+    assert p["comuns"] == 1 and {p["barras_dia_a"], p["barras_dia_b"]} == {40, 4}
+    md = I.relatorio_md(pd.DataFrame(columns=I.COLUNAS), [], dt.date(2026, 10, 3), {}, "c",
+                        I.escanear_dumps_varios([tmp_path])[0])
+    assert "(1; 40)" in md and "(1; 4)" in md
+
+
+def test_vocabulario_do_relatorio_nao_crava_datas_de_importacao(tmp_path: Path) -> None:
+    """A frase 'foram importados em 15/09' estava fixa no gerador e envelheceu (a v4.25 mostrou 28
+    dias importados, nao 14)."""
+    md = I.relatorio_md(pd.DataFrame(columns=I.COLUNAS), [], dt.date(2026, 10, 3), {}, "c", None)
+    assert "15/09" not in md and "por backfill" in md
+

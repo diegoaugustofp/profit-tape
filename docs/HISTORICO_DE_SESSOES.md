@@ -5217,3 +5217,21 @@ dado (assinar na segunda 05/10 para ter par antes do vencimento de 14/10); as 14
 pregões esperados, mas as mais finas negociam 20 a 30 vezes por dia; o offer book só existe em 6 ativos.
 
 **Tags:** entregue-v4.25 (sobre v4.24). Suíte 1.378.
+
+### 2026-10-03k — Segundo inventário real: sobreposição entre dumps e ativo estimado (v4.26)
+
+Diego esclareceu: "outro comando" era o próprio `inventario-dados`, que agora roda rápido e faz o que foi
+proposto (o travamento era da v4.23; fechado). Enviou o relatório da v4.25, onde os quatro erros anteriores
+tinham sumido (origem preenchida; só topo separado de book de ofertas; 0 repetidas nos dumps de 15 s).
+
+Sobraram dois erros meus, vistos na aritmética do próprio relatório: (1) **a sobreposição entre arquivos de
+dump não era detectada** — `dump_15_22.txt` é exatamente a soma de três outros, `wdo_2026` = `wdo_rep` +
+`wdo_dep`, o ABSBARRA jan-abr está dentro do jan-abr-jun-jul — e "Repetidas 0" (só dentro do arquivo) dava falsa
+tranquilidade; (2) **ativo provável "nao consta" em todos os `dump_*`**: preço pt-BR lido só trocando a vírgula.
+
+v4.26: dias únicos por tipo e ativo, sobreposição entre arquivos (com barras/dia; WIN x WDO não comparados),
+preço pt-BR pela regra do parser das fichas, e sem data de importação fixa no gerador. Quatro mutações guardadas
+por teste. O relatório da v4.25 também mostrou 28 dias de ações importados (só 15 ao vivo) e 24 dias de livro:
+registrado como pendência de conferência, não como conclusão.
+
+**Tags:** entregue-v4.26 (sobre v4.25). Suíte 1.384.

@@ -395,8 +395,9 @@ def relatorio_md(df: pd.DataFrame, coletas: list[dict[str, Any]], hoje: dt.date,
          "", "**Vocabulário.** *tape* = negócios com agente agressor e passivo (stream `trade`; "
          "`docs/GLOSSARIO.md`). *Book* = `book_offer`, `book_price`, `tiny_book`. "
          "\"Só trade\" = o ativo tem `trade` e nenhum stream de book. **Origem do dia:** *ao vivo* "
-         "(capturado no pregão), *importado* (histórico recuperado depois; 01 a 14/09 foram "
-         "importados em 15/09) ou *misto*, pelo `ts_recv_ns` no rodapé do parquet.", ""]
+         "(capturado no pregão), *importado* (histórico recuperado depois, por backfill: não tem "
+         "latência de chegada real nem book) ou *misto*, pelo `ts_recv_ns` no rodapé do "
+         "parquet.", ""]
     if coletas:
         L += ["## Coletas em andamento (declaradas x em disco)", "",
               "| Coleta | Situação | Ativos | O que o disco mostra |", "|---|---|---|---|"]
@@ -492,7 +493,37 @@ def relatorio_md(df: pd.DataFrame, coletas: list[dict[str, Any]], hoje: dt.date,
             L.append(f"| `{d['arquivo']}` | {d['tipo']} | {_n(d['linhas'])} | {d['dias']} | "
                      f"{_d(d['primeira'])} | {_d(d['ultima'])} | {_n(d['por_dia_mediana'])} | "
                      f"{d['ativo']} | {rep} |")
-        L += ["", "*Repetidas*: barras com a mesma identidade do parser da ficha (dia + "
+        res = resumo_dumps(dumps)
+        if res["unicos"]:
+            L += ["", "### Dias únicos por tipo e ativo (sem contar a sobreposição)", "",
+                  "| Tipo | Ativo provável | Arquivos | Dias únicos | Período | Soma dos dias dos "
+                  "arquivos | Contados em duplicidade |", "|---|---|---|---|---|---|---|"]
+            for u in res["unicos"]:
+                ativo_u = u["ativo"] if u["ativo"] != "?" else "não identificado"
+                dup = f"**{u['repetidos']}**" if u["repetidos"] else "0"
+                periodo_u = f"{_d(u['primeiro'])} a {_d(u['ultimo'])}"
+                L.append(f"| {u['tipo']} | {ativo_u} | {u['arquivos']} | "
+                         f"**{_n(u['dias_unicos'])}** | {periodo_u} | {_n(u['soma_dias'])} | "
+                         f"{dup} |")
+        if res["pares"]:
+            L += ["", "### Sobreposição entre arquivos (mesmo tipo e ativo)", "",
+                  "Somar as linhas destes arquivos conta de novo os dias em comum. **Mesmos dias "
+                  "não provam mesmas barras**: confira as barras por dia (resolução ou janela de "
+                  "horário podem diferir).", "",
+                  "| Tipo | Ativo | Arquivo A (dias; barras/dia) | Arquivo B (dias; barras/dia) | "
+                  "Dias em comum | Relação |", "|---|---|---|---|---|---|"]
+            for x in res["pares"][:60]:
+                ativo_p = x["ativo"] if x["ativo"] != "?" else "não identificado"
+                if x["ambiguo"]:
+                    ativo_p += " (um dos arquivos sem ativo identificado: confirme)"
+                L.append(f"| {x['tipo']} | {ativo_p} | `{x['a']}` ({_n(x['dias_a'])}; "
+                         f"{_n(x['barras_dia_a'])}) | `{x['b']}` ({_n(x['dias_b'])}; "
+                         f"{_n(x['barras_dia_b'])}) | **{_n(x['comuns'])}** "
+                         f"({_d(x['primeiro'])} a {_d(x['ultimo'])}) | {x['relacao']} |")
+            if len(res["pares"]) > 60:
+                L.append(f"\n_(+{len(res['pares']) - 60} pares com menos dias em comum)_")
+        L += ["", "*Repetidas*: dentro do mesmo arquivo; a sobreposição ENTRE arquivos está nos "
+              "blocos acima. Barras com a mesma identidade do parser da ficha (dia + "
               "`current_bar` em PRCBARRA e BBSBARRA; dia + hora em ABSBARRA) no mesmo arquivo: "
               "dumps sobrepostos inflam o n sem informação nova. `n/d` = o tipo não tem "
               "identidade de barra. *Ativo "
@@ -539,10 +570,22 @@ def _data_ntsl(campo: str) -> dt.date | None:
 
 
 def _numero(v: str) -> float | None:
+    """pt-BR do Profit: milhar com ponto, decimal com virgula (a regra de
+    `absorcao_grafico._numero`, que aqui devolve None em vez de levantar). v4.25 trocava so' a
+    virgula e falhava em "125.450,00": nenhum `dump_*` tinha o ativo estimado."""
+    t = v.strip()
+    if not t:
+        return None
+    if "," in t:
+        t = t.replace(".", "").replace(",", ".")
     try:
-        return float(v.strip().replace(",", "."))
+        return float(t)
     except ValueError:
         return None
+
+
+# posicao do `close` depois do prefixo, pelos CAMPOS dos parsers das fichas
+_IDX_CLOSE = {"PRCBARRA|": 7, "BBSBARRA|": 7, "ABSBARRA|": 6}
 
 
 def _ativo_provavel(nome: str, closes: list[float]) -> str:
@@ -632,8 +675,9 @@ def escanear_dumps(destino: Path, limite_bytes: int = LIMITE_DUMP_BYTES) -> list
                         chave = tuple(campos[i] for i in idx)
                         e["rep"] += chave in e["chaves"]
                         e["chaves"].add(chave)
-                    if prefixo == "PRCBARRA|" and len(campos) > 7 and len(e["closes"]) < 5000:
-                        c = _numero(campos[7])
+                    ic = _IDX_CLOSE.get(prefixo)
+                    if ic is not None and len(campos) > ic and len(e["closes"]) < 5000:
+                        c = _numero(campos[ic])
                         if c is not None:
                             e["closes"].append(c)
         except OSError:
@@ -644,7 +688,7 @@ def escanear_dumps(destino: Path, limite_bytes: int = LIMITE_DUMP_BYTES) -> list
                 continue
             por_dia: dict[dt.date, int] = achado["dias"]
             cont = sorted(por_dia.values())
-            closes = achado["closes"] if prefixo == "PRCBARRA|" else []
+            closes = achado["closes"]
             out.append({
                 "arquivo": nome, "caminho": str(f.resolve()), "bytes": tamanho, "tipo": rotulo,
                 "prefixo": prefixo.rstrip("|"),
@@ -653,7 +697,7 @@ def escanear_dumps(destino: Path, limite_bytes: int = LIMITE_DUMP_BYTES) -> list
                 "ultima": max(por_dia) if por_dia else None,
                 "por_dia_mediana": cont[len(cont) // 2] if cont else None,
                 "repetidas": achado["rep"] if prefixo in _IDENTIDADE else None,
-                "ativo": _ativo_provavel(f.name, closes),
+                "ativo": _ativo_provavel(f.name, closes), "_dias": frozenset(por_dia),
             })
     return out
 
@@ -678,3 +722,63 @@ def escanear_dumps_varios(destinos: list[Path]) -> tuple[list[dict[str, Any]], l
                 e = {**e, "arquivo": f"{d.name}/{e['arquivo']}".replace("\\", "/")}
             out.append(e)
     return out, avisos
+
+
+_TICKERS_RESUMO = ("WINFUT", "WDOFUT", "WIN", "WDO", "PETR4", "VALE3", "ITUB4")
+
+
+def _token_ativo(texto: str) -> str:
+    t = texto.split(" ")[0]
+    return t if t in _TICKERS_RESUMO else "?"
+
+
+def resumo_dumps(entradas: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    """Dias UNICOS por (tipo, ativo) e sobreposicao ENTRE arquivos.
+
+    O erro que isto evita: somar os arquivos conta duas vezes o mesmo dia. No disco do operador,
+    `dump_15_22.txt` tinha exatamente as linhas e os dias de `dump_2015_19` + `dump_2020` +
+    `dump_2021_22`; e a coluna "repetidas" (so' DENTRO do arquivo) dizia 0. Mesmos dias NAO provam
+    mesmas barras (resolucao ou janela de horario podem diferir: veja barras/dia): e' um aviso,
+    nao um veredito. Arquivos de ativos diferentes (WIN x WDO) nao sao comparados; arquivo com ativo
+    nao identificado ("?") e' comparado com todos e marcado como ambiguo."""
+    com_dias = [e for e in entradas if e.get("_dias")]
+    grupos: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for e in com_dias:
+        grupos.setdefault((e["prefixo"], _token_ativo(e["ativo"])), []).append(e)
+    unicos: list[dict[str, Any]] = []
+    for (pref, tok), es in sorted(grupos.items()):
+        uniao: set[dt.date] = set().union(*(e["_dias"] for e in es))
+        soma = sum(len(e["_dias"]) for e in es)
+        unicos.append({"prefixo": pref, "tipo": es[0]["tipo"], "ativo": tok, "arquivos": len(es),
+                       "dias_unicos": len(uniao), "primeiro": min(uniao), "ultimo": max(uniao),
+                       "soma_dias": soma, "repetidos": soma - len(uniao)})
+    pares: list[dict[str, Any]] = []
+    por_prefixo: dict[str, list[dict[str, Any]]] = {}
+    for e in com_dias:
+        por_prefixo.setdefault(e["prefixo"], []).append(e)
+    for pref, es in sorted(por_prefixo.items()):
+        es = sorted(es, key=lambda e: e["arquivo"])
+        for i, a in enumerate(es):
+            for b in es[i + 1:]:
+                ta, tb = _token_ativo(a["ativo"]), _token_ativo(b["ativo"])
+                if ta != tb and "?" not in (ta, tb):
+                    continue                                   # ativos diferentes: nao e' duplicata
+                comuns = a["_dias"] & b["_dias"]
+                if not comuns:
+                    continue
+                if a["_dias"] == b["_dias"]:
+                    rel = "mesmos dias"
+                elif b["_dias"] <= a["_dias"]:
+                    rel = "B esta' dentro de A"
+                elif a["_dias"] <= b["_dias"]:
+                    rel = "A esta' dentro de B"
+                else:
+                    rel = "parcial"
+                pares.append({"prefixo": pref, "tipo": a["tipo"], "a": a["arquivo"],
+                              "b": b["arquivo"], "ativo": ta if ta != "?" else tb,
+                              "ambiguo": ta != tb, "comuns": len(comuns), "dias_a": len(a["_dias"]),
+                              "dias_b": len(b["_dias"]), "barras_dia_a": a["por_dia_mediana"],
+                              "barras_dia_b": b["por_dia_mediana"], "relacao": rel,
+                              "primeiro": min(comuns), "ultimo": max(comuns)})
+    pares.sort(key=lambda x: -x["comuns"])
+    return {"unicos": unicos, "pares": pares}

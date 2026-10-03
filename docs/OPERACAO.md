@@ -44,6 +44,23 @@ preco e so' topo; (4) **"0 linhas" onde o rodape nao foi aberto** (backup e raw 
 `--dumps` pode ser repetido (antes o Typer guardava so' o ultimo, em silencio) e o comando imprime quantos
 arquivos de dump reconheceu. Os quatro erros estao guardados por teste de mutacao.
 
+### Inventario de dumps: sobreposicao ENTRE arquivos e ativo estimado (v4.26)
+
+O segundo relatorio real (03/10) mostrou que "repetidas 0" -- que so' olha DENTRO do arquivo -- dava falsa
+tranquilidade: `dump_15_22.txt` tinha EXATAMENTE as linhas e os dias de `dump_2015_19` + `dump_2020` +
+`dump_2021_22` (37.590 + 9.079 + 18.200 = 64.869 linhas; 1.036 + 249 + 497 = 1.782 dias); `wdo_2026.txt` =
+`wdo_rep` + `wdo_dep` (5.822 + 798 = 6.620); `absorcao_barra_jan_a_abril_jun_jul_2026.txt` contem o
+`jan_a_abril_2026` (13.399 - 9.105 = 4.294 = 38 dias x 113 barras). Somar os arquivos conta duas vezes o mesmo
+dia. O relatorio agora traz **dias unicos por tipo e ativo** (com quantos foram contados em duplicidade) e a
+**sobreposicao entre arquivos** do mesmo tipo e ativo, com as barras por dia lado a lado (mesmos dias nao
+provam mesmas barras: resolucao ou janela de horario podem diferir; e' aviso, nao veredito). WIN x WDO nao sao
+comparados; arquivo sem ativo identificado e' comparado com todos e marcado como ambiguo.
+
+O ativo estimado falhava nos `dump_*` (sem ticker no nome) porque o preco pt-BR ("125.450,00") era lido so'
+trocando a virgula; agora segue a regra do parser das fichas (milhar com ponto, decimal com virgula), tambem
+para BBSBARRA e ABSBARRA. A frase fixa "01 a 14/09 foram importados em 15/09" saiu do gerador: o relatorio
+mostrou 28 dias importados nas acoes, nao 14.
+
 ## Diario operacional (v4.12): o que os EAs fizeram E o que a infraestrutura fez com eles
 
 `profit-tape diario-operacional [--dia AAAA-MM-DD] [--nota "texto"]` (o `diario <dir>` antigo
