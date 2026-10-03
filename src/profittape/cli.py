@@ -1826,7 +1826,7 @@ def diario_operacional(
     from .prioridade import baixa_prioridade
 
     baixa_prioridade()
-    from .diario import anotar, gravar_csv, ler_log_varios, ler_notas, montar
+    from .diario import anotar, gravar_csv, ler_log_varios, ler_notas, linha_resumo_dia, montar
     from .diario_html import atualizar_nav, renderizar, renderizar_indice
     from .diario_metas import carregar_metas
 
@@ -1860,7 +1860,8 @@ def diario_operacional(
             # HTML ANTES do CSV: se a renderizacao falhar, o dia nao fica pela metade
             # (em 30/09 o CSV foi gravado e o HTML quebrou: dias.csv sem pagina nem indice)
             html_dia = renderizar(dados)
-            gravar_csv(dados, pasta)
+            linha = linha_resumo_dia(d, dados)       # montada ANTES de gravar: erro aqui nao
+            gravar_csv(dados, pasta)                 # deixa o dia pela metade
             (pasta / f"diario_{d.isoformat()}.html").write_text(html_dia, encoding="utf-8")
         except Exception as exc:
             if len(dias) == 1:
@@ -1869,16 +1870,7 @@ def diario_operacional(
             typer.echo(f"{d}: FALHOU ({type(exc).__name__}: {exc})")
             continue
         gerados += 1
-        ops = dados["operacoes"]
-        t = dados["tape"]
-        typer.echo(f"diario {d}: {len(ops)} operacao(oes), "
-                   f"P&L liquido {sum((o.get('pnl_liquido') or 0) for o in ops):+.0f} pts, "
-                   f"{len(dados['incidentes'])} incidente(s) de atraso, "
-                   f"{len(dados['buracos'])} buraco(s) de chegada"
-                   + (f", atraso p99 {t['atraso_p99']:.1f} s, max {t['atraso_max']:.0f} s"
-                      if t else "")
-                   + (f" [+{len(dados['ops_descartadas'])} de EA descartado fora do total]"
-                      if dados["ops_descartadas"] else ""))
+        typer.echo(linha)
         if len(dias) == 1:
             for av in dados["avisos"]:
                 typer.echo(f"  AVISO: {av}")

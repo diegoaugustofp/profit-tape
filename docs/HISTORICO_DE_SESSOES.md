@@ -5017,3 +5017,20 @@ para a próxima avaliação: quantas já houve e quantas faltam".
   antigas. Suíte 1.326.
 
 **Tags:** entregue-v4.15 (sobre v4.14).
+
+### 2026-10-03 — Rodada retroativa caiu no 1º dia importado (v4.16)
+
+Diego aplicou a v4.15 e rodou `diario-operacional --de 2026-09-01 --ate 2026-10-02`:
+`TypeError: unsupported format string passed to NoneType.__format__` na linha-resumo.
+Causa (minha, v4.15): dia inteiro importado depois não tem negócio ao vivo, então
+`atraso_p99`/`atraso_max` são `None`; o `:.1f` direto os formatava. Os testes da v4.15 cobriam o
+HTML com atraso `None`, não o console. Pior: a exceção ocorria DEPOIS de gravar HTML e CSV do
+dia e FORA do bloco que isola falhas, então abortava a rodada no primeiro dia (01/09) sem
+índice nem navegação — o mesmo "pela metade" do crash de 30/09.
+
+Corrigido: `linha_resumo_dia` (tolera `None`, diz "N% importado depois"), montada ANTES de
+qualquer escrita e dentro do bloco por dia. Teste de integração via CLI com todos os tipos de
+dia da rodada real (importado inteiro, importado em parte, normal com stall e operações, só log,
+sem nada, fim de semana): exit 0, índice, `dias.csv` e navegação completos. Suíte 1.328.
+
+**Tags:** entregue-v4.16 (sobre v4.15).

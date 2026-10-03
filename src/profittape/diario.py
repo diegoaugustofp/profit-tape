@@ -599,3 +599,22 @@ def anotar(pasta: Path, dia: dt.date, texto: str) -> None:
     hora = dt.datetime.now(tz=_TZ).strftime("%H:%M")
     with f.open("a", encoding="utf-8") as fh:
         fh.write(f"- {hora} {texto.strip()}\n")
+
+
+def linha_resumo_dia(dia: dt.date, dados: dict[str, Any]) -> str:
+    """Linha de console do dia. Atraso pode ser None (dia importado depois, sem negocio ao
+    vivo): em v4.15 o `:.1f` direto derrubou a rodada retroativa no 1o dia importado."""
+    ops = dados["operacoes"]
+    t = dados["tape"]
+    s = (f"diario {dia}: {len(ops)} operacao(oes), "
+         f"P&L liquido {sum((o.get('pnl_liquido') or 0) for o in ops):+.0f} pts, "
+         f"{len(dados['incidentes'])} incidente(s) de atraso, "
+         f"{len(dados['buracos'])} buraco(s) de chegada")
+    if t and t.get("atraso_p99") is not None and t.get("atraso_max") is not None:
+        s += f", atraso p99 {t['atraso_p99']:.1f} s, max {t['atraso_max']:.0f} s"
+    elif t:
+        s += f", {t.get('pct_recuperado', 0):.0%} importado depois (sem atraso ao vivo)"
+    if dados["ops_descartadas"]:
+        s += f" [+{len(dados['ops_descartadas'])} de EA descartado fora do total]"
+    return s
+

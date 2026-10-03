@@ -329,8 +329,9 @@ def test_retroativo_pula_fim_de_semana_e_dia_sem_dados(tmp_path: Path) -> None:
 
 
 # ------------------------------- v4.14: o que os dados reais de 30/09 e 01/10 mostraram
-def _escreve_tape(curated: Path, ts: np.ndarray, recv: np.ndarray, px: float = 190440.0) -> None:
-    pasta = curated / "trade" / f"dt={DIA.isoformat()}" / "sym=WINFUT"
+def _escreve_tape(curated: Path, ts: np.ndarray, recv: np.ndarray, px: float = 190440.0,
+                  dia: dt.date = DIA) -> None:
+    pasta = curated / "trade" / f"dt={dia.isoformat()}" / "sym=WINFUT"
     pasta.mkdir(parents=True, exist_ok=True)
     pq.write_table(pa.table({"ts_ns": ts.astype("int64"), "ts_recv_ns": recv.astype("int64"),
                              "price": np.full(ts.size, px)}), pasta / "a.parquet")
@@ -536,4 +537,55 @@ def test_indice_tem_resumo_por_ea_proxima_avaliacao_e_status_da_ficha(tmp_path: 
     assert "Importado %" in html
     sem_metas = H.renderizar_indice(pasta)
     assert "Resumo por EA" in sem_metas and "Próxima avaliação" not in sem_metas
+
+
+def test_cli_retroativo_atravessa_dias_de_todos_os_tipos(tmp_path: Path) -> None:
+    """Regressao do crash de 02/10 (v4.15): `atraso_p99` None num dia importado derrubou a
+    rodada retroativa no primeiro dia, DEPOIS de gravar o HTML e ANTES de indice e navegacao.
+    A rodada real mistura: dia importado inteiro, importado em parte, normal com operacoes e
+    stall, so' com log, sem nada, e fins de semana."""
+    from profittape.cli import app
+
+    cur, log = tmp_path / "curated", tmp_path / "log.jsonl"
+    d_imp, d_parc, d_log = dt.date(2026, 9, 1), dt.date(2026, 9, 2), dt.date(2026, 10, 5)
+    for dia, extra in ((d_imp, 14 * 86400 * NS), (d_parc, 0)):
+        ts = _brt_ns(9, 0, 0, dia) + np.arange(0, 2401) * NS
+        recv = ts + int(0.05 * NS) + extra
+        if extra == 0:
+            recv[:24] += 3 * 86400 * NS                      # 1% importado depois
+        _escreve_tape(cur, ts, recv, dia=dia)
+    _tape_sintetico(cur)                                     # 02/10: operacoes + stall de 240 s
+    _log_do_dia(log)
+    with log.open("a", encoding="utf-8") as fh:              # 05/10: so' heartbeat, sem tape
+        for k in range(3):
+            fh.write(_linha(_brt_ns(10, 0, 30 * k, d_log), "recorder.heartbeat", linhas=1000 * k,
+                            fila=0, fila_pico=0, descartados=0, sem_evento_ha_s=0.1) + "\n")
+    pasta = tmp_path / "diario"
+    r = CliRunner().invoke(app, ["diario-operacional", "--de", "2026-09-01", "--ate", "2026-10-06",
+                                 "--log", str(log), "--curated", str(cur), "--pasta", str(pasta)])
+    assert r.exit_code == 0, r.output
+    assert "diario 2026-09-01:" in r.output and "100% importado depois" in r.output
+    assert "diario 2026-09-02:" in r.output and "atraso p99" in r.output
+    assert "diario 2026-10-02: 3 operacao(oes)" in r.output
+    assert "diario 2026-10-05:" in r.output and "2026-10-06: sem dados" in r.output
+    assert "2026-09-05: sem dados" not in r.output and "2026-09-06" not in r.output  # sab/dom
+    assert "4 dia(s) gerado(s)" in r.output
+    # indice e navegacao saem completos, inclusive nas paginas antigas
+    assert (pasta / "index.html").exists()
+    assert len(pd.read_csv(pasta / "dias.csv")) == 4
+    p1 = (pasta / "diario_2026-09-01.html").read_text(encoding="utf-8")
+    assert "diario_2026-09-02.html" in p1 and "dado IMPORTADO" in p1
+    idx = (pasta / "index.html").read_text(encoding="utf-8")
+    assert all(f"diario_{d}.html" in idx for d in ("2026-09-01", "2026-09-02", "2026-10-02",
+                                                    "2026-10-05"))
+
+
+def test_linha_resumo_tolera_atraso_none() -> None:
+    base = {"operacoes": [], "incidentes": [], "buracos": [], "ops_descartadas": []}
+    s = D.linha_resumo_dia(DIA, dict(base, tape={"atraso_p99": None, "atraso_max": None,
+                                                 "pct_recuperado": 1.0}))
+    assert "100% importado depois" in s and "atraso p99" not in s
+    assert "atraso p99 2.0 s, max 5 s" in D.linha_resumo_dia(
+        DIA, dict(base, tape={"atraso_p99": 2.0, "atraso_max": 5.0, "pct_recuperado": 0.0}))
+    assert D.linha_resumo_dia(DIA, dict(base, tape=None)).endswith("0 buraco(s) de chegada")
 
