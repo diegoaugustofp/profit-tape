@@ -66,7 +66,8 @@ mostrou 28 dias importados nas acoes, nao 14.
 O terceiro relatorio real (03/10, v4.26) acertou a sobreposicao entre arquivos, mas somou **resolucoes
 diferentes** como se fossem o mesmo dado: `dump_20260901_20260923_6m.txt` (16 dias, 95 barras/dia) entrou no
 mesmo grupo dos dumps de 15 s (2.249 barras/dia) e o relatorio dizia "16 dias unicos de bollinger scalp" e
-listava 18 "sobreposicoes" que nao eram duplicata. Os dumps de 15 s cobrem 5 dias distintos (01 a 04 e 08/09).
+listava 7 "sobreposicoes" que nao eram duplicata (21 pares na v4.26, 14 na v4.27; a primeira versao
+desta nota dizia 18, por contagem errada minha). Os dumps de 15 s cobrem 5 dias distintos (01 a 04 e 08/09).
 Agora a **resolucao da barra e' inferida do proprio arquivo** (distancia mediana entre horas distintas / barras
 por hora distinta: 15 s com `hora` em HHMM = 60 / 4; M5 = 300; M15 = 900; 6 min = 360; uma janela 9h-14h nao
 muda isso, so' as barras por dia). Grupos de dias unicos e pares de sobreposicao so' juntam arquivos de mesmo

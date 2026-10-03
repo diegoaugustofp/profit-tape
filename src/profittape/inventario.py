@@ -508,9 +508,9 @@ def relatorio_md(df: pd.DataFrame, coletas: list[dict[str, Any]], hoje: dt.date,
                 periodo_u = f"{_d(u['primeiro'])} a {_d(u['ultimo'])}"
                 furos = "; ".join(
                     f"{_d(b['de'])} a {_d(b['ate'])} ({b['dias_uteis']} dias)"
-                    for b in u["buracos"][:3]) or "—"
-                if len(u["buracos"]) > 3:
-                    furos += f" (+{len(u['buracos']) - 3})"
+                    for b in u["buracos"][:LIMITE_BURACOS_NO_RELATORIO]) or "—"
+                if len(u["buracos"]) > LIMITE_BURACOS_NO_RELATORIO:
+                    furos += f" (+{len(u['buracos']) - LIMITE_BURACOS_NO_RELATORIO})"
                 L.append(f"| {u['tipo']} | {u['resolucao']} | {ativo_u} | {u['arquivos']} | "
                          f"**{_n(u['dias_unicos'])}** | {periodo_u} | {_n(u['soma_dias'])} | "
                          f"{dup} | {furos} |")
@@ -655,6 +655,11 @@ def _rotulo_resolucao(seg: float | None) -> str:
     if seg < 90:
         return f"{round(seg)} s"
     return f"{round(seg / 60, 1):g} min"
+
+
+# v4.27 mostrava so' os 3 maiores e escondia o resto atras de "(+1)": num relatorio cujo trabalho e'
+# mostrar buraco, o quarto buraco do WDO ficava invisivel.
+LIMITE_BURACOS_NO_RELATORIO = 8
 
 
 def buracos(dias: set[dt.date], minimo: int = 5) -> list[dict[str, Any]]:

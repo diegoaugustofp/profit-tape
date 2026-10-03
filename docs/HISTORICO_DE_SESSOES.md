@@ -5242,7 +5242,7 @@ Diego regenerou com a v4.26 (rápido; 27 dumps em 27 arquivos reconhecidos) e en
 dele confirmou a sobreposição (dump_15_22 = soma de três; wdo_2026 = rep + dep; ABS jan-abr dentro de
 jan-abr-jun-jul; unicos: WIN M15 2.705 dias, WDO M15 2.639, ABS 392) e o ativo estimado passou a funcionar. Dois erros
 meus restantes: (1) o `_6m` (barras de 6 min) foi agrupado com os dumps de 15 s: "16 dias únicos de bollinger"
-(são 5 em 15 s) e 18 pares falsos; (2) "Período" min-max escondia o buraco de 21 dias úteis (24/07 a 21/08/2026)
+(são 5 em 15 s) e 7 pares falsos (21 pares na v4.26, 14 na v4.27; a primeira versão desta entrada dizia 18, contagem errada); (2) "Período" min-max escondia o buraco de 21 dias úteis (24/07 a 21/08/2026)
 no ABSBARRA. Corrigido: resolução inferida do arquivo e usada no agrupamento e nos pares; coluna de buracos
 (5+ dias úteis seguidos). Cinco mutações guardadas por teste; o teste de resolução usa o parser da ficha e
 pegou uma fixture minha com 13 campos em vez de 14.
@@ -5253,3 +5253,19 @@ que entreguei (`git fetch <bundle> refs/tags/entregue-vX.YY`) são os da seção
 gerados são do operador e não entram nos bundles.
 
 **Tags:** entregue-v4.27 (sobre v4.26). Suíte 1.387.
+
+### 2026-10-03m — Inventário v4.27 confere; correção de número e buracos completos (v4.28)
+
+Diego regenerou com a v4.27 e o relatório confirmou o previsto: Bollinger separado (15 s com 5 dias únicos, 7
+arquivos e 5 em duplicidade; 6 min com 16), buraco do ABSBARRA (24/07 a 21/08/2026, 21 dias úteis), 14 pares de
+sobreposição e resolução coerente nos 27 arquivos. O relatório novo mostrou o que o período min-max escondia: o
+**WDO M15 não tem quase todo abril, junho e setembro de 2017** (31/03 a 27/04, 31/05 a 30/06, 31/08 a 28/09: 20, 23
+e 21 dias úteis, mais um quarto buraco), e o WIN M15 tem um buraco de 13 dias (14 a 30/12/2016). Nenhuma ficha
+registra isso; as que citam o WDO usam n de eventos (913 e 1.950), não de dias. Causa não verificada.
+
+Dois erros meus: (1) o número de pares falsos do arquivo de 6 min era **7** (21 pares na v4.26, 14 na v4.27), não
+18, e o 18 foi parar no INCREMENTO v4.27, no `OPERACAO.md`, nesta entrada e na mensagem do commit (o commit não
+se reescreve; os docs foram corrigidos); (2) o relatório mostrava só os 3 maiores buracos e escondia o quarto do
+WDO atrás de "(+1)": agora mostra até 8.
+
+**Tags:** entregue-v4.28 (sobre v4.27). Suíte 1.388.

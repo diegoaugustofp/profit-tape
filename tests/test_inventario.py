@@ -826,7 +826,7 @@ def test_resolucao_da_barra_e_inferida_do_proprio_arquivo(tmp_path: Path) -> Non
 
 def test_bollinger_15s_e_6min_nao_se_misturam_nem_viram_duplicata(tmp_path: Path) -> None:
     """O caso real: `dump_..._6m.txt` (16 dias, 95 barras/dia) foi somado aos dumps de 15 s: o
-    relatorio v4.26 dizia '16 dias unicos de bollinger' e listava 18 'sobreposicoes' falsas."""
+    relatorio v4.26 dizia '16 dias unicos de bollinger' e listava 7 'sobreposicoes' falsas."""
     dia15 = _minutos(9, 18)
     for k, dia in enumerate((1260901, 1260902, 1260903, 1260904, 1260908)):
         _dump(tmp_path / f"dump2026090{k}.txt", _bbs_dia(dia, dia15, 4))
@@ -881,4 +881,29 @@ def test_buracos_mostra_o_que_o_periodo_minimo_maximo_esconde(tmp_path: Path) ->
                         entradas)
     assert "24/07/2026 a 21/08/2026 (21 dias)" in md
     assert "Buracos (5+ dias úteis seguidos sem dado)" in md
+
+
+def test_relatorio_lista_todos_os_buracos_ate_o_limite_e_so_depois_resume(tmp_path: Path) -> None:
+    """O WDO do operador tinha 4 buracos de 5+ dias e o relatorio v4.27 mostrava 3 e '(+1)': o
+    quarto ficava invisivel. Agora todos aparecem; '(+N)' so' alem do limite do relatorio."""
+    def dia_abs(ntsl: int) -> list[str]:
+        return [f"ABSBARRA|{ntsl}|{h}|{h}|130.100,0|130.200,0|130.000,0|130.150,0|10|5|1|1|1|1|1|1"
+                for h in _minutos(9, 12, 5)]
+    def md_com(n_buracos: int) -> str:
+        # um dia a cada duas semanas: cada intervalo e' um buraco de 9 dias uteis (>= 5)
+        dias, d = [], dt.date(2026, 1, 5)
+        for _ in range(n_buracos + 1):
+            dias.append(d)
+            d += dt.timedelta(days=14)  # 2 semanas: buraco de 9 dias uteis
+        linhas = [x for dia in dias for x in dia_abs((dia.year - 1900) * 10000 + dia.month * 100
+                                                      + dia.day)]
+        arq = _dump(tmp_path / f"abs_{n_buracos}.txt", linhas)
+        ent, _ = I.escanear_dumps_varios([arq])
+        assert len(I.resumo_dumps(ent)["unicos"][0]["buracos"]) == n_buracos
+        return I.relatorio_md(pd.DataFrame(columns=I.COLUNAS), [], dt.date(2026, 10, 3), {}, "c",
+                              ent)
+    quatro = md_com(4)
+    assert quatro.count("(9 dias)") == 4 and "(+" not in quatro.split("Buracos")[1].split("\n")[2]
+    muitos = md_com(I.LIMITE_BURACOS_NO_RELATORIO + 2)
+    assert muitos.count("(9 dias)") == I.LIMITE_BURACOS_NO_RELATORIO and "(+2)" in muitos
 
