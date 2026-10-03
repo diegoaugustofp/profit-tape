@@ -464,6 +464,22 @@ def estados_dll(eventos: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+def _carimbo_do_123(ops: list[dict[str, Any]], eventos: list[dict[str, Any]]) -> None:
+    """`ea.123.operacao_fechada` nao carrega nome nem sha; o `ea.123.iniciado` de cada instancia
+    carrega `yaml_sha256`, `codigo` e `dry_run` (False = a instancia com ordens reais, E4)."""
+    ini = [e for e in eventos if e.get("event") == "ea.123.iniciado"]
+    for o in ops:
+        if o.get("ea") not in ("123 (E4)", "123 (dry_run)") or o.get("config_sha"):
+            continue
+        dry = o["ea"] == "123 (dry_run)"
+        mesmos = [e for e in ini if bool(e.get("dry_run")) == dry]
+        antes = [e for e in mesmos if e["_t"] <= o["t_saida"]]
+        candidatos = antes or mesmos
+        if candidatos:
+            o["config_sha"] = candidatos[-1].get("yaml_sha256")
+            o["codigo"] = candidatos[-1].get("codigo")
+
+
 def supervisor_do_dia(eventos: list[dict[str, Any]]) -> dict[str, Any]:
     """Capital em conta e capital recomendado por EA, do ULTIMO `ea.supervisor.resumo` do dia."""
     ult = [e for e in eventos if e.get("event") == "ea.supervisor.resumo"]
@@ -544,6 +560,7 @@ def montar(dia: dt.date, log: Path, curated: Path, symbol: str = "WINFUT",
     if not eventos:
         avisos.append(f"nenhum evento de {dia} em {log}")
     todas = extrair_operacoes(eventos)
+    _carimbo_do_123(todas, eventos)
     nao_exec = [o for o in todas if o.get("motivo") == "nao_executou"]
     ops_all = [o for o in todas if o.get("motivo") != "nao_executou"]
     for o in ops_all:

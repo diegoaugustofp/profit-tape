@@ -700,3 +700,30 @@ def test_supervisor_do_dia_e_carimbo_das_operacoes_vem_do_log(tmp_path: Path) ->
     assert cfg.loc[cfg["ea"] == "ea_vwapvp_continuacao", "capital_recomendado"].iloc[0] == 5000.0
     assert D.supervisor_do_dia([]) == {}
 
+
+def test_carimbo_do_123_vem_do_ea_123_iniciado_pela_flag_dry_run(tmp_path: Path) -> None:
+    """`ea.123.operacao_fechada` nao traz nome nem sha. O `ea.123.iniciado` de cada instancia traz
+    yaml_sha256, codigo e dry_run: False = a instancia com ordens reais (E4)."""
+    ev = [
+        _linha(_brt_ns(8, 0), "ea.123.iniciado", level="warning", nome="ea_123_vb", dry_run=True,
+               yaml_sha256="c31a64be64bf", codigo="entregue-v4.01"),
+        _linha(_brt_ns(8, 0, 1), "ea.123.iniciado", level="warning", nome="ea_123_vb_e4",
+               dry_run=False, yaml_sha256="d0b03b1e38e8", codigo="entregue-v4.01"),
+        _linha(_brt_ns(13, 0), "ea.123.operacao_fechada", desfecho="alvo", pnl_pts=10.0,
+               ordens={"entrada": {"slippage_pts": 1.0}}),
+        _linha(_brt_ns(14, 0), "ea.123.operacao_fechada", desfecho="alvo", pnl_pts=5.0, ordens={}),
+    ]
+    log = tmp_path / "log.jsonl"
+    log.write_text("\n".join(ev) + "\n", encoding="utf-8")
+    d = D.montar(DIA, log, tmp_path / "sem_tape")
+    ops = {o["ea"]: o for o in d["operacoes"]}
+    assert ops["123 (E4)"]["config_sha"] == "d0b03b1e38e8"          # dry_run=False
+    assert ops["123 (dry_run)"]["config_sha"] == "c31a64be64bf"     # dry_run=True
+    assert ops["123 (E4)"]["codigo"] == "entregue-v4.01"
+    # EA que reiniciou no meio do dia: vale o carimbo da ULTIMA subida antes da operacao
+    ev.insert(2, _linha(_brt_ns(12, 0), "ea.123.iniciado", level="warning", nome="ea_123_vb_e4",
+                        dry_run=False, yaml_sha256="eeeeeeeeeeee", codigo="entregue-v4.09"))
+    log.write_text("\n".join(ev) + "\n", encoding="utf-8")
+    d2 = D.montar(DIA, log, tmp_path / "sem_tape")
+    assert next(o for o in d2["operacoes"] if o["ea"] == "123 (E4)")["config_sha"] == "eeeeeeeeeeee"
+

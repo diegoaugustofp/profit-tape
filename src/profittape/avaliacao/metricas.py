@@ -70,6 +70,8 @@ def capital(*, mdd_pts: float, pior_perda_pts: float, pior_stop_pts: float | Non
     """Tres leituras de capital, todas DECLARADAS (nao ha' formula unica):
       regra_dos_2pct : capital em que o PIOR STOP PROGRAMADO cabe em `risco_max_pct`
                        (e' a regra do supervisor do projeto: stop x ponto / risco_max_pct);
+                       sem stop programado no log (123, microprice) usa a PIOR PERDA OBSERVADA,
+                       e `base_regra` diz qual das duas foi usada;
       sobreviver     : margem + drawdown observado + 1 pior perda (piso: o observado e' amostra);
       com_folga      : margem + 2 x drawdown observado + 1 pior perda."""
     def brl(pts: float) -> float:
@@ -79,11 +81,16 @@ def capital(*, mdd_pts: float, pior_perda_pts: float, pior_stop_pts: float | Non
     out: dict[str, Any] = {
         "mdd_brl": brl(mdd_pts), "pior_perda_brl": brl(pior_perda_pts),
         "pior_stop_brl": None if pior_stop_pts is None else brl(pior_stop_pts),
-        "regra_2pct": (brl(pior_stop_pts) / risco_max_pct if pior_stop_pts else None),
+        "regra_2pct": None, "base_regra": None,
         "sobreviver": margem + brl(mdd_pts) + brl(pior),
         "com_folga": margem + 2 * brl(mdd_pts) + brl(pior),
         "margem_informada": margem_por_contrato is not None,
         "recomendado_projeto": recomendado_projeto, "capital_inicial": capital_inicial}
+    base_pts = pior_stop_pts or (pior_perda_pts or None)
+    if base_pts:
+        out["regra_2pct"] = brl(base_pts) / risco_max_pct
+        out["base_regra"] = "stop programado" if pior_stop_pts else "pior perda observada"
+        out["base_pts"] = base_pts
     base = out["regra_2pct"]
     out["projeto_subestima"] = bool(
         recomendado_projeto and base and recomendado_projeto < 0.9 * base)

@@ -5080,3 +5080,22 @@ importante", precisa ficar neste projeto ou pode ser independente?
 - Limite declarado: drawdown só de operações fechadas (sem excursão adversa intradia).
 
 **Tags:** entregue-v4.18 (sobre v4.17).
+
+### 2026-10-03d — Link da ficha quebrado nas páginas de EA (v4.19)
+
+Diego: "o link da ficha do EA com a extensão md está quebrado". Causa (minha, v4.18): o índice
+usava `os.path.relpath` até `docs/eas/` (`../../docs/eas/ignicao.md`, funciona), mas a página do EA
+usava o nome cru da ficha (`ignicao.md`), relativo a `data\diario`, onde ela não existe. Nenhum
+teste verificava que o `href` leva ao arquivo. Corrigido com `href_para` (cai para `file:///` se o
+Windows não tiver caminho relativo entre discos) e teste que resolve o link contra o arquivo real;
+conferido por mutação (reintroduzido o defeito, o teste falha).
+
+Lendo as páginas reais para conferir o link, quatro ajustes na mesma tela: Status truncado (cortava
+antes de "o EA segue em demo" no vwap_vp; Status da ficha reescrito para abrir pelo estado
+operacional); índice contava 35 para o 123 (E4) e a página 32 (nota explicando: slippage medido ×
+P&L resolvido); regra dos 2% sem stop programado (123, microprice) agora usa a pior perda observada
+e diz a base — no 123 (E4), 1.290 pts contra os 485 pts que o supervisor assume; "sem carimbo" nas
+operações do 123 vinha de o log não trazer sha, não de CSV antigo: o carimbo passa a vir do
+`ea.123.iniciado`. Suíte 1.347.
+
+**Tags:** entregue-v4.19 (sobre v4.18).

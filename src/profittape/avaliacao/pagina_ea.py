@@ -7,6 +7,7 @@ false`) a pagina diz isso no topo e os numeros ficam marcados como descritivos."
 from __future__ import annotations
 
 import datetime as dt
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -22,6 +23,16 @@ from .fichas import carimbos, historico_da_ficha
 
 def slug(ea: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", ea.lower()).strip("_")
+
+
+def href_para(pasta: Path, destino: Path) -> str:
+    """Link relativo de uma pagina em `pasta` ate `destino` (a ficha .md fica em docs/eas, fora de
+    data/diario: o href cru `ignicao.md` quebrava em v4.18). Outro disco no Windows nao tem
+    caminho relativo: cai para file:///."""
+    try:
+        return os.path.relpath(destino, pasta).replace("\\", "/")
+    except ValueError:
+        return destino.resolve().as_uri()
 
 
 def nome_arquivo(ea: str) -> str:
@@ -86,7 +97,8 @@ def _pos_op(ops: pd.DataFrame, k: int) -> str:
 
 def renderizar_pagina_ea(ea: str, ops_ea: pd.DataFrame, ops_todas: pd.DataFrame,
                          dias: pd.DataFrame, meta: dict[str, Any] | None, conta: dict[str, Any],
-                         recomendado_projeto: float | None, raiz_fichas: Path | None) -> str:
+                         recomendado_projeto: float | None, raiz_fichas: Path | None,
+                         href_ficha: str | None = None) -> str:
     ops = M.ordenar(ops_ea[ops_ea["pnl_liquido"].notna()])
     vp, ctr = float(conta["valor_ponto"]), int(meta.get("contratos", conta["contratos"])
                                                if meta else conta["contratos"])
@@ -104,12 +116,13 @@ def renderizar_pagina_ea(ea: str, ops_ea: pd.DataFrame, ops_todas: pd.DataFrame,
                     risco_max_pct=float(conta["risco_max_pct"]),
                     margem_por_contrato=conta.get("margem_por_contrato"),
                     recomendado_projeto=recomendado_projeto, capital_inicial=cap0)
-    status = (status_da_ficha(raiz_fichas, meta["ficha"]) if (meta and raiz_fichas)
+    status = (status_da_ficha(raiz_fichas, meta["ficha"], max_chars=700) if (meta and raiz_fichas)
               else "sem ficha registrada em metas.yaml")
     partes = ["<div class='nav'><a href='index.html'>&larr; indice (todos os dias)</a></div>",
               f"<h1>EA — {_e(ea)}</h1>",
               f"<div class='sub'>Situação na ficha: {_e(status)}"
-              + (f" · <a href='{_e(meta['ficha'])}'>{_e(meta['ficha'])}</a>" if meta else "")
+              + (f" · <a href='{_e(href_ficha or meta['ficha'])}'>{_e(meta['ficha'])}</a>"
+                 if meta else "")
               + "</div>"]
     if descartado:
         partes.append("<div class='aviso'>EA descartado (ficha): estes números são o que ele "
@@ -173,6 +186,12 @@ def renderizar_pagina_ea(ea: str, ops_ea: pd.DataFrame, ops_todas: pd.DataFrame,
                if p.get("ritmo_obs") is not None else "—"),
               p["previsao"].strftime("%d/%m/%Y") if p.get("previsao") else "—",
               _e(meta.get("criterio"))]]))
+        if p["n"] != len(ops):
+            partes.append(
+                f"<small>Contado para a meta: <b>{_n(p['n'])}</b> (a ficha conta o que mede); a "
+                f"página tem <b>{_n(len(ops))}</b> operações com P&amp;L registrado no log — "
+                "a diferença são operações com o slippage medido e o P&amp;L ainda sem "
+                "resolver (ex.: ambíguas, que a ficha resolve pelo tape).</small>")
 
     # ---- drawdown
     partes.append("<h2>Drawdown máximo</h2>")
@@ -200,11 +219,12 @@ def renderizar_pagina_ea(ea: str, ops_ea: pd.DataFrame, ops_todas: pd.DataFrame,
     linhas = [
         ["Capital recomendado pelo supervisor do record", projeto,
          "o que o record calcula ao incluir o EA"],
-        ["Pela regra dos 2% com o PIOR STOP PROGRAMADO",
+        [("Pela regra dos 2% com o PIOR STOP PROGRAMADO" if cap["base_regra"] == "stop programado"
+          else "Pela regra dos 2% com a PIOR PERDA OBSERVADA (o log não traz stop programado)"),
          _brl(cap["regra_2pct"]) if cap["regra_2pct"] else '<span class="mudo">—</span>',
-         (f"stop {_n(float(stops.max()), 0)} pts x R$ {_n(vp, 2)} x {ctr} ÷ "
-          f"{_n(100 * float(conta['risco_max_pct']), 0)}%" if len(stops)
-          else "sem stop programado registrado")],
+         (f"{_n(cap['base_pts'], 0)} pts x R$ {_n(vp, 2)} x {ctr} ÷ "
+          f"{_n(100 * float(conta['risco_max_pct']), 0)}%" if cap["regra_2pct"]
+          else "sem perda nem stop registrados")],
         ["Para sobreviver ao drawdown observado", _brl(cap["sobreviver"]),
          "margem + drawdown máx + 1 pior perda"],
         ["Com folga (2x o drawdown observado)", _brl(cap["com_folga"]),
@@ -212,10 +232,15 @@ def renderizar_pagina_ea(ea: str, ops_ea: pd.DataFrame, ops_todas: pd.DataFrame,
     partes.append(_tab([("Leitura", True), ("Capital", False), ("Como é calculado", True)],
                        linhas))
     if cap["projeto_subestima"]:
-        partes.append("<div class='aviso'><b>O supervisor subestima este EA:</b> ele calcula o "
-                      "capital a partir do stop genérico do bloco <code>risco</code>, não do "
-                      f"stop programado do EA (até {_n(float(stops.max()), 0)} pts). Pela regra "
-                      f"dos 2% seriam R$ {_n(cap['regra_2pct'], 0)}.</div>")
+        partes.append("<div class='aviso'><b>O supervisor subestima este EA:</b> pela regra dos 2% "
+                      f"com a {_e(cap['base_regra'])} ({_n(cap['base_pts'], 0)} pts) seriam "
+                      f"R$ {_n(cap['regra_2pct'], 0)}, e o record usa R$ "
+                      f"{_n(cap['recomendado_projeto'], 0)}. "
+                      + ("Ele calcula o capital do stop genérico do bloco <code>risco</code>, não "
+                         "do stop programado do EA." if cap["base_regra"] == "stop programado"
+                         else "A pior perda observada é amostra, e o stop do supervisor pode ser "
+                              "um teto de emergência que não atuou: confira antes de concluir.")
+                      + "</div>")
     if not cap["margem_informada"]:
         partes.append("<div class='aviso'>Margem por contrato não informada em "
                       "<code>docs/eas/metas.yaml</code> (<code>conta.margem_por_contrato</code>): "
@@ -257,9 +282,9 @@ def renderizar_pagina_ea(ea: str, ops_ea: pd.DataFrame, ops_todas: pd.DataFrame,
             partes.append("<small>Um único config_sha em toda a amostra: a contagem não foi "
                           "reiniciada.</small>")
     else:
-        partes.append(f"<p class='mudo'>{_n(c['sem_carimbo'])} operações sem carimbo no CSV "
-                      "(gerado antes da v4.18): rode o diário de novo para registrar o "
-                      "config_sha de cada uma.</p>")
+        partes.append(f"<p class='mudo'>{_n(c['sem_carimbo'])} operações sem carimbo: o log desta "
+                      "operação não traz config_sha/yaml_sha256 (ou o CSV é anterior à v4.18: "
+                      "rode o diário de novo).</p>")
     hist = historico_da_ficha(raiz_fichas, meta["ficha"]) if (meta and raiz_fichas) else []
     if hist:
         partes.append(_tab([("Data", True), ("Commit", True), ("O que mudou na ficha", True)],
@@ -297,11 +322,13 @@ def gerar_paginas_ea(pasta: Path, metas: list[dict[str, Any]], conta: dict[str, 
         rc = cfg[cfg["ea"] == nome_sup].sort_values("dia")
         rec = float(rc["capital_recomendado"].iloc[-1]) if len(rc) and pd.notna(
             rc["capital_recomendado"].iloc[-1]) else None
-        html = renderizar_pagina_ea(str(ea), x, ops, dias, meta, conta, rec, raiz_fichas)
+        href = (href_para(pasta, raiz_fichas / meta["ficha"])
+                if (meta and raiz_fichas) else None)
+        html = renderizar_pagina_ea(str(ea), x, ops, dias, meta, conta, rec, raiz_fichas, href)
         arq = nome_arquivo(str(ea))
         (pasta / arq).write_text(html, encoding="utf-8")
         out[str(ea)] = arq
     return out
 
 
-__all__ = ["gerar_paginas_ea", "nome_arquivo", "renderizar_pagina_ea", "slug"]
+__all__ = ["gerar_paginas_ea", "href_para", "nome_arquivo", "renderizar_pagina_ea", "slug"]

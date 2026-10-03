@@ -55,6 +55,15 @@ tabela de `config_sha` x tag de codigo; `config_sha` novo = contagem nova pela r
 O supervisor calcula o capital de EAs fora de 123/microprice/ignicao a partir do stop generico do bloco
 `risco`, nao do stop programado do EA: a pagina mostra os dois e avisa quando divergem.
 
+**Pagina por EA, ajustes da v4.19.** (1) O link da ficha agora e' relativo ate' `docs/eas/` (em v4.18
+era `ignicao.md` solto, relativo a `data\diario`, e quebrava; o teste verifica que o `href` resolve
+para o arquivo). (2) O Status da ficha aparece quase inteiro na pagina (700 caracteres) e o do vwap_vp
+abre pelo estado operacional: o ESTUDO esta' fechado mas o EA `continuacao_tarde` segue em demo.
+(3) Se o contado da meta difere das operacoes com P&L (123 E4: 35 com slippage medido, 32 com P&L), a
+pagina explica. (4) Sem stop programado no log (123, microprice) a regra dos 2% usa a PIOR PERDA
+OBSERVADA e diz qual base usou. (5) O carimbo do 123 vem do `ea.123.iniciado` (a flag `dry_run`
+distingue as instancias), ja' que `operacao_fechada` nao traz nome nem sha.
+
 **Fronteira da avaliacao.** `src/profittape/avaliacao/` le so' arquivos (operacoes.csv, dias.csv,
 eas_config.csv, metas.yaml, fichas e o git log delas) e nao importa codigo de EA, record, DLL, pipeline
 ou storage -- um teste (`tests/test_avaliacao.py`) quebra se importar. Foi desenhado para poder sair

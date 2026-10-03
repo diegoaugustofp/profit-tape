@@ -1,6 +1,6 @@
 # VWAP + Volume Profile (WIN) — fast-track
 
-> **Status:** **FECHADA (01/10, v4.08).** Três setups do documento respondidos pelos dados em 46 dias: A existe como evento (1,87/dia) e não como confluência (0,22/dia com o POC), e como evento é simétrico-a-contra; B morto por taxa; C sem LVN num perfil de 17–20 M contratos. Sobreviveu **uma** assimetria, `continuacao_tarde`, em demo desde 01/10. Eventos congelados em código para reavaliação em dados NOVOS (ver "Plano forward"). — **Criado:** 2026-09-29 (v3.86); fechada em v4.08 —
+> **Status:** **ESTUDO FECHADO (01/10, v4.08); o EA `continuacao_tarde` SEGUE EM DEMO desde 01/10** (dry_run; morte: drawdown acumulado > 7.000 pts OU 40 trades com média negativa). Os três setups do documento foram respondidos pelos dados em 46 dias: A existe como evento (1,87/dia) e não como confluência (0,22/dia com o POC), simétrico-a-contra; B morto por taxa; C sem LVN num perfil de 17–20 M contratos. Sobreviveu uma assimetria, `continuacao_tarde`. Eventos congelados para reavaliação em dados NOVOS (ver "Plano forward"). — **Criado:** 2026-09-29 (v3.86); fechada em v4.08 —
 
 ## Identidade, fase e estado
 

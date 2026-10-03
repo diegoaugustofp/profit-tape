@@ -4,6 +4,7 @@ Numeros conferidos a mao antes de virarem assert."""
 from __future__ import annotations
 
 import ast
+import re
 import subprocess
 from pathlib import Path
 
@@ -91,7 +92,20 @@ def test_capital_tres_leituras_e_subestimativa_do_supervisor() -> None:
     sem_stop = M.capital(mdd_pts=100, pior_perda_pts=50, pior_stop_pts=None, valor_ponto=0.20,
                          contratos=1, risco_max_pct=0.02, margem_por_contrato=None,
                          recomendado_projeto=None, capital_inicial=20000)
-    assert sem_stop["regra_2pct"] is None and sem_stop["projeto_subestima"] is False
+    # sem stop programado (123, microprice): usa a PIOR PERDA OBSERVADA e diz que usou
+    assert sem_stop["regra_2pct"] == pytest.approx(500.0)             # 50 pts*0,20/0,02
+    assert sem_stop["base_regra"] == "pior perda observada"
+    assert sem_stop["projeto_subestima"] is False
+    assert ok["base_regra"] == "stop programado"
+    nada = M.capital(mdd_pts=0, pior_perda_pts=0, pior_stop_pts=None, valor_ponto=0.20,
+                     contratos=1, risco_max_pct=0.02, margem_por_contrato=None,
+                     recomendado_projeto=None, capital_inicial=20000)
+    assert nada["regra_2pct"] is None and nada["base_regra"] is None
+    # o 123 (E4) de 03/10: pior perda 1.290 pts contra os R$ 4.850 do supervisor
+    e4 = M.capital(mdd_pts=3985, pior_perda_pts=1290, pior_stop_pts=None, valor_ponto=0.20,
+                   contratos=1, risco_max_pct=0.02, margem_por_contrato=None,
+                   recomendado_projeto=4850, capital_inicial=20000)
+    assert e4["regra_2pct"] == pytest.approx(12900.0) and e4["projeto_subestima"] is True
 
 
 def test_curva_de_capital() -> None:
@@ -182,6 +196,14 @@ def test_pagina_do_ea_tem_resumo_drawdown_capital_evolucao_e_ficha(tmp_path: Pat
     assert "Margem por contrato não informada" in html            # metas.yaml deixa null
     assert "O config_sha mudou" not in html and "Um único config_sha" in html
     assert "a171e12aa9c0" in html
+    # o link da ficha tem que levar ATE o arquivo: em v4.18 era `vwap_vp.md` solto, relativo a
+    # data/diario, onde a ficha nao existe
+    href = re.search(r"href='([^']*vwap_vp\.md)'", html)
+    assert href, "sem link para a ficha"
+    assert (tmp_path / href.group(1)).resolve() == (RAIZ / "docs/eas/vwap_vp.md").resolve()
+    assert (tmp_path / href.group(1)).exists()
+    # o Status da ficha chega completo ate' a parte que diz que o EA segue em demo
+    assert "SEGUE EM DEMO desde 01/10" in html
     # a ficha do vwap_vp NAO proibe veredito parcial; a da ignicao proibe
     assert "A ficha proíbe olhar resultado" not in html
 
@@ -216,3 +238,60 @@ def test_slug_e_ea_descartado_na_pagina(tmp_path: Path) -> None:
                                        "contratos": 1}, None, None)
     assert "EA descartado (ficha)" in html and "sem ficha registrada" in html
     assert "Histórico da ficha indisponível" in html and np.isfinite(11.0)
+
+
+def test_href_para_e_relativo_e_cai_para_file_uri_em_outro_disco(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from profittape.avaliacao import pagina_ea as P
+
+    pasta = tmp_path / "data" / "diario"
+    ficha = tmp_path / "docs" / "eas" / "ignicao.md"
+    pasta.mkdir(parents=True), ficha.parent.mkdir(parents=True)
+    ficha.write_text("x", encoding="utf-8")
+    assert P.href_para(pasta, ficha) == "../../docs/eas/ignicao.md"
+
+    def outro_disco(*_a: object, **_k: object) -> str:
+        raise ValueError("path is on mount 'D:', start on mount 'C:'")
+    monkeypatch.setattr(P.os.path, "relpath", outro_disco)
+    assert P.href_para(pasta, ficha).startswith("file:///")
+
+
+def test_pagina_explica_quando_o_contado_da_meta_difere_das_operacoes_com_pnl(
+        tmp_path: Path) -> None:
+    """123 (E4) em 03/10: o indice contava 35 (slippage medido) e a pagina mostrava 32 (com P&L):
+    a diferenca sao operacoes cujo P&L ainda nao esta' resolvido."""
+    from profittape.diario_metas import carregar_conta, carregar_metas
+
+    linhas = [{"dia": "2026-09-30", "ea": "123 (E4)", "descartado": False,
+               "hora_saida": f"1{h}:00:00", "motivo": "alvo",
+               "pnl_liquido": (100.0 if h < 3 else None), "slippage_ordens_pts": 4.0}
+              for h in range(5)]
+    ops = pd.DataFrame(linhas)
+    meta = {m["ea"]: m for m in carregar_metas(RAIZ / "docs/eas/metas.yaml")}["123 (E4)"]
+    html = renderizar_pagina_ea("123 (E4)", ops[ops["pnl_liquido"].notna()], ops,
+                                pd.DataFrame({"dia": ["2026-09-30"]}), meta,
+                                carregar_conta(RAIZ / "docs/eas/metas.yaml"), 4850.0,
+                                RAIZ / "docs/eas")
+    assert "Contado para a meta: <b>5</b>" in html and "<b>3</b> operações com P&amp;L" in html
+    # sem diferenca, sem nota
+    todas = ops.assign(pnl_liquido=1.0)
+    html2 = renderizar_pagina_ea("123 (E4)", todas, todas, pd.DataFrame({"dia": ["2026-09-30"]}),
+                                 meta, carregar_conta(RAIZ / "docs/eas/metas.yaml"), 4850.0,
+                                 RAIZ / "docs/eas")
+    assert "Contado para a meta" not in html2
+
+
+def test_pagina_sem_stop_programado_usa_pior_perda_e_diz_qual_base(tmp_path: Path) -> None:
+    ops = pd.DataFrame({"dia": ["2026-09-30"] * 3, "ea": "123 (E4)", "descartado": False,
+                        "hora_saida": ["10:00:00", "11:00:00", "12:00:00"],
+                        "motivo": ["alvo", "stop", "stop"],
+                        "pnl_liquido": [200.0, -1290.0, -400.0], "slippage_ordens_pts": 5.0})
+    conta = {"capital_inicial": 20000, "valor_ponto": 0.2, "risco_max_pct": 0.02,
+             "margem_por_contrato": None, "contratos": 1}
+    html = renderizar_pagina_ea("123 (E4)", ops, ops, pd.DataFrame({"dia": ["2026-09-30"]}), None,
+                                conta, 4850.0, None)
+    assert "PIOR PERDA OBSERVADA (o log não traz stop programado)" in html
+    assert "R$ 12.900" in html and "1.290 pts x R$ 0,20 x 1" in html
+    assert "O supervisor subestima este EA" in html and "pior perda observada" in html
+    assert "confira antes de concluir" in html
+
