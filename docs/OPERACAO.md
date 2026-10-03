@@ -55,6 +55,13 @@ tabela de `config_sha` x tag de codigo; `config_sha` novo = contagem nova pela r
 O supervisor calcula o capital de EAs fora de 123/microprice/ignicao a partir do stop generico do bloco
 `risco`, nao do stop programado do EA: a pagina mostra os dois e avisa quando divergem.
 
+**Deepscalper Fase 2 no indice (v4.20).** Ele NAO e' EA do record: roda como score diario OFFLINE
+(`fase2-score`) e o livro fica em `data/research/fase2/forward_eventos.csv`; por isso nao tem linha em
+"Resumo por EA" (esse resumo vem das operacoes do log). Entra em "Proxima avaliacao" por uma `fonte`
+CSV no `metas.yaml` (n = eventos unicos por `dia` + `ts_open`, desde 28/08; marcos 50 e 150). A ficha
+manda NAO olhar o placar antes de n = 150: o diario le do CSV **so' as colunas dia/ts_open** e nunca
+acerto nem pontos (um teste espia o `usecols`). Quem olha o placar e' o `fase2-score`, em n = 150.
+
 **Pagina por EA, ajustes da v4.19.** (1) O link da ficha agora e' relativo ate' `docs/eas/` (em v4.18
 era `ignicao.md` solto, relativo a `data\diario`, e quebrava; o teste verifica que o `href` resolve
 para o arquivo). (2) O Status da ficha aparece quase inteiro na pagina (700 caracteres) e o do vwap_vp

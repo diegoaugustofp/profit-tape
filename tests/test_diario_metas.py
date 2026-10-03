@@ -113,3 +113,62 @@ def test_previsao_pula_fim_de_semana() -> None:
     sexta = dt.date(2026, 10, 2)
     assert M._dias_uteis_apos(sexta, 1) == dt.date(2026, 10, 5)
     assert M._dias_uteis_apos(sexta, 6) == dt.date(2026, 10, 12)
+
+
+# ------------------------------------------------ fonte CSV (deepscalper Fase 2, offline)
+def _livro(tmp_path: Path, dias: int = 18, por_dia: int = 4, extra_dup: bool = True) -> Path:
+    """Livro do forward: 1 linha por evento, chave (dia, ts_open), com as colunas de RESULTADO
+    que o diario nao pode ler."""
+    linhas = []
+    for d in range(dias):
+        dia = (dt.date(2026, 8, 28) + dt.timedelta(days=d)).isoformat()
+        for k in range(por_dia):
+            linhas.append({"dia": dia, "ts_open": 1_000 + k, "bar_id": k, "lado_previsto": 1,
+                           "conf": 0.7, "label": 1, "acerto": "SEGREDO",
+                           "pnl_liquido_proxy": -99.0})
+    if extra_dup:
+        linhas.append(dict(linhas[0]))                        # re-escorado: nao duplica
+    pasta = tmp_path / "data" / "research" / "fase2"
+    pasta.mkdir(parents=True)
+    pd.DataFrame(linhas).to_csv(pasta / "forward_eventos.csv", index=False)
+    return tmp_path
+
+
+def test_deepscalper_conta_eventos_do_livro_sem_ler_o_placar(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A ficha manda NAO olhar o placar antes de n = 150: o diario so' carrega dia/ts_open."""
+    raiz = _livro(tmp_path)
+    capturado: dict = {}
+    original = pd.read_csv
+
+    def espiao(*a: object, **k: object) -> pd.DataFrame:
+        capturado.update(k)
+        return original(*a, **k)
+    monkeypatch.setattr(M.pd, "read_csv", espiao)
+    ent = _entrada("deepscalper (Fase 2, offline)")
+    p = M.progresso(ent, pd.DataFrame(), pd.DataFrame(), raiz)
+    uc = capturado["usecols"]
+    assert uc("dia") and uc("ts_open") and not uc("acerto") and not uc("pnl_liquido_proxy")
+    assert p["n"] == 72 and p["pregoes"] == 18                    # 18 dias x 4 (duplicata fora)
+    assert p["ritmo_obs"] == pytest.approx(4.0) and p["ritmo_ficha"] == 4.6
+    assert [m["n"] for m in p["atingidas"]] == [50] and p["proximo"]["n"] == 150
+    assert p["faltam"] == 78 and p["faltam_pregoes"] == 20        # 78 / 4,0 = 19,5 -> 20
+    assert p["previsao"] > dt.date.fromisoformat(p["ultimo_dia"])
+    assert not (set(p) & {"acerto", "pnl", "media", "slippage_medio", "drawdown"})
+    assert "SEGREDO" not in repr(p)
+
+
+def test_deepscalper_respeita_o_desde_e_nao_quebra_sem_o_livro(tmp_path: Path) -> None:
+    ent = dict(_entrada("deepscalper (Fase 2, offline)"))
+    raiz = _livro(tmp_path, dias=10, por_dia=2, extra_dup=False)
+    ent["desde"] = "2026-09-02"                                    # 28/08 + 5 dias
+    assert M.progresso(ent, pd.DataFrame(), pd.DataFrame(), raiz)["n"] == 2 * 5
+    ausente = M.progresso(ent, pd.DataFrame(), pd.DataFrame(), tmp_path / "vazio")
+    assert ausente["n"] == 0 and "livro nao encontrado" in ausente["fonte_problema"]
+    assert ausente["proximo"]["n"] == 50 and ausente["previsao"] is None
+    ruim = tmp_path / "ruim"
+    (ruim / "data" / "research" / "fase2").mkdir(parents=True)
+    (ruim / "data" / "research" / "fase2" / "forward_eventos.csv").write_text(
+        "coluna_qualquer\n1\n", encoding="utf-8")
+    assert "ilegivel" in M.progresso(ent, pd.DataFrame(), pd.DataFrame(), ruim)["fonte_problema"]
+

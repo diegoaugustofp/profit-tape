@@ -544,7 +544,8 @@ def test_indice_tem_resumo_por_ea_proxima_avaliacao_e_status_da_ficha(tmp_path: 
     pasta = _gera_dias(tmp_path, [dt.date(2026, 10, 1), dt.date(2026, 10, 2)])
     html = H.renderizar_indice(pasta, carregar_metas(raiz / "metas.yaml"), raiz)
     assert "Resumo por EA" in html and "Próxima avaliação" in html
-    resumo, resto = html.split("Próxima avaliação")[0], html.split("Próxima avaliação")[1]
+    # a nota sob o resumo cita "Próxima avaliação": separar pelo TITULO da secao
+    resumo, resto = html.split("<h2>Próxima avaliação")[0], html.split("<h2>Próxima avaliação")[1]
     assert "ea_ignicao" in resumo and "ea_vwapvp" in resumo          # resumo por EA, antes
     assert "n = 68" in resto and "regra da ficha" in resto           # meta lida do registro
     assert "Veredito so&#x27; com" in resto                          # criterio da ficha
@@ -726,4 +727,26 @@ def test_carimbo_do_123_vem_do_ea_123_iniciado_pela_flag_dry_run(tmp_path: Path)
     log.write_text("\n".join(ev) + "\n", encoding="utf-8")
     d2 = D.montar(DIA, log, tmp_path / "sem_tape")
     assert next(o for o in d2["operacoes"] if o["ea"] == "123 (E4)")["config_sha"] == "eeeeeeeeeeee"
+
+
+def test_indice_mostra_o_deepscalper_so_com_contagem_e_avisa_quando_falta_o_livro(
+        tmp_path: Path) -> None:
+    from profittape.diario_metas import carregar_metas
+
+    raiz = Path(__file__).resolve().parents[1] / "docs" / "eas"
+    pasta = _gera_dias(tmp_path, [dt.date(2026, 10, 1)])
+    # livro presente (com colunas de resultado que NAO podem aparecer)
+    repo = tmp_path / "repo"
+    (repo / "data" / "research" / "fase2").mkdir(parents=True)
+    pd.DataFrame({"dia": ["2026-09-30"] * 3 + ["2026-10-01"] * 3, "ts_open": [1, 2, 3] * 2,
+                  "acerto": ["VAZOU"] * 6, "pnl_liquido_proxy": [-77.0] * 6}).to_csv(
+        repo / "data" / "research" / "fase2" / "forward_eventos.csv", index=False)
+    html = H.renderizar_indice(pasta, carregar_metas(raiz / "metas.yaml"), raiz, None, repo)
+    assert "deepscalper (Fase 2, offline)" in html and "n = 150" in html
+    assert "só a contagem" in html and "VAZOU" not in html and "-77" not in html
+    assert "Fora do record (sem operações no log" in html
+    # sem o livro: a tabela segue de pe' e o problema fica visivel
+    html2 = H.renderizar_indice(pasta, carregar_metas(raiz / "metas.yaml"), raiz, None,
+                                tmp_path / "nada")
+    assert "livro nao encontrado" in html2 and "deepscalper (Fase 2, offline)" in html2
 

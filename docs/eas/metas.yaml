@@ -99,3 +99,20 @@ eas:
     criterio: "Passiva pendente de modelo de fila: o fill simulado nao e' confiavel."
     mostrar: [n]
     trechos: ["passiva pendente de modelo de fila"]
+
+  # Fase 2 do deepscalper NAO e' EA do record: e' um score diario OFFLINE (`fase2-score`) cujo livro
+  # fica em data/research/fase2/forward_eventos.csv. A ficha manda NAO olhar o placar antes de n = 150,
+  # entao o diario le desse CSV SO' as colunas dia/ts_open (a contagem) e nunca acerto nem pontos.
+  - ea: "deepscalper (Fase 2, offline)"
+    ficha: deepscalper_fase2.md
+    unidade: eventos do forward (um por barra-evento; score diario offline, fora do record)
+    fonte: {csv: data/research/fase2/forward_eventos.csv, chave: [dia, ts_open]}
+    desde: 2026-08-28
+    metas:
+      - {n: 50, rotulo: "sanidade (feita em 24/09 com n = 75; nao e' veredito)"}
+      - {n: 150, rotulo: "veredito (FAVORAVEL: acerto >= 0,417 E pts/op >= +15)"}
+    ritmo_ficha: 4.6
+    criterio: "Placar FECHADO ate' n = 150. FAVORAVEL: acerto >= 0,417 E pts/op >= +15; CONTRA: acerto <= 0,337 OU pts/op <= 0; o resto e' INCONCLUSIVO e nao vira 'mais 150'. Teto: 60 pregoes."
+    veredito_parcial: false
+    mostrar: [n]
+    trechos: ["Olha em n = 50 (sanidade) e n = 150 (veredito)", "placar fechado até n=150"]

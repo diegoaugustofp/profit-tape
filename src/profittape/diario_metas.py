@@ -79,8 +79,53 @@ def contar(ent: dict[str, Any], ops: pd.DataFrame) -> pd.DataFrame:
     return ordenado
 
 
-def progresso(ent: dict[str, Any], ops: pd.DataFrame, dias: pd.DataFrame) -> dict[str, Any]:
+def _progresso_fonte(ent: dict[str, Any], raiz: Path) -> dict[str, Any]:
+    """Meta cujo n vem de um CSV FORA do record (ex.: deepscalper Fase 2, score diario offline).
+    Le SO' as colunas de dia e de chave: a ficha manda nao olhar o placar antes do veredito, e o
+    que nunca e' carregado nao pode vazar para a tela (acerto e pontos ficam de fora)."""
+    fonte = ent["fonte"]
+    caminho = raiz / fonte["csv"]
+    metas = ent.get("metas") or []
+    out: dict[str, Any] = {"ea": ent["ea"], "n": 0, "metas": metas, "pregoes": 0,
+                           "ritmo_obs": None, "ritmo_ficha": ent.get("ritmo_ficha"),
+                           "previsao": None, "fonte_csv": str(fonte["csv"])}
+    chave = list(fonte.get("chave") or [])
+    try:
+        quer = {"dia", *chave}
+        df = pd.read_csv(caminho, usecols=lambda c: c in quer, dtype={"dia": str})
+        if "dia" not in df:
+            raise ValueError("sem coluna dia")
+    except FileNotFoundError:
+        out["fonte_problema"] = f"livro nao encontrado: {caminho}"
+    except (ValueError, pd.errors.ParserError, pd.errors.EmptyDataError) as exc:
+        out["fonte_problema"] = f"livro ilegivel ({exc})"
+    else:
+        if chave and set(chave) <= set(df.columns):
+            df = df.drop_duplicates(subset=chave)
+        if ent.get("desde"):
+            df = df[df["dia"].astype(str) >= str(ent["desde"])]
+        out["n"] = len(df)
+        out["pregoes"] = int(df["dia"].nunique())
+        if out["pregoes"]:
+            out["ritmo_obs"] = out["n"] / out["pregoes"]
+            out["primeiro_dia"] = str(df["dia"].min())
+            out["ultimo_dia"] = str(df["dia"].max())
+    n = out["n"]
+    out["proximo"] = next((x for x in metas if x["n"] > n), None)
+    out["faltam"] = (out["proximo"]["n"] - n) if out["proximo"] else None
+    out["atingidas"] = [x for x in metas if x["n"] <= n]
+    if out["proximo"] and out["ritmo_obs"] and out.get("ultimo_dia"):
+        falta = math.ceil(out["faltam"] / out["ritmo_obs"])
+        out["faltam_pregoes"] = falta
+        out["previsao"] = _dias_uteis_apos(dt.date.fromisoformat(out["ultimo_dia"]), falta)
+    return out
+
+
+def progresso(ent: dict[str, Any], ops: pd.DataFrame, dias: pd.DataFrame,
+              raiz: Path | None = None) -> dict[str, Any]:
     """Estado da meta: contado, proximo marco, faltam, ritmo observado x da ficha, previsao."""
+    if ent.get("fonte"):
+        return _progresso_fonte(ent, raiz or Path.cwd())
     x = contar(ent, ops)
     n = len(x)
     out: dict[str, Any] = {"ea": ent["ea"], "n": n, "metas": ent.get("metas") or []}

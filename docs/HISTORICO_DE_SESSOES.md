@@ -5099,3 +5099,19 @@ operações do 123 vinha de o log não trazer sha, não de CSV antigo: o carimbo
 `ea.123.iniciado`. Suíte 1.347.
 
 **Tags:** entregue-v4.19 (sobre v4.18).
+
+### 2026-10-03e — Por que o deepscalper não estava no diário (v4.20)
+
+Diego: "por que não tem sobre o deepscalper no diário?". Duas razões. (1) Ele não é EA do record: a
+Fase 2 roda como score diário offline (`fase2-score`) e o livro é o CSV `forward_eventos.csv`; o
+diário lê o log do record e o tape, então não havia operação para listar. (2) Omissão minha: a ficha
+tem meta numérica clara (n = 50 sanidade, n = 150 veredito, teto 60 pregões) e devia estar em
+"Próxima avaliação" desde a v4.15 — montei o `metas.yaml` só com EAs do record.
+
+Entregue: `fonte` CSV no `metas.yaml` e `_progresso_fonte`: conta eventos únicos por (`dia`, `ts_open`)
+desde 28/08, só com `usecols` de dia e chave. A ficha manda NÃO olhar o placar antes de n = 150 e o
+que nunca é carregado não pode vazar para a tela; teste espia o `usecols` e confere que "acerto" e
+"pnl" não aparecem. Livro ausente ou ilegível vira aviso na linha, não erro. Nota sob o resumo por EA
+explica por que ele não tem linha lá. Suíte 1.350.
+
+**Tags:** entregue-v4.20 (sobre v4.19).

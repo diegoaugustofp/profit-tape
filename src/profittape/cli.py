@@ -1879,7 +1879,7 @@ def diario_operacional(
     metas = carregar_metas(metas_yaml)
     paginas = gerar_paginas_ea(pasta, metas, carregar_conta(metas_yaml), raiz_fichas)
     (pasta / "index.html").write_text(
-        renderizar_indice(pasta, metas, raiz_fichas, paginas), encoding="utf-8")
+        renderizar_indice(pasta, metas, raiz_fichas, paginas, Path.cwd()), encoding="utf-8")
     atualizar_nav(pasta)
     typer.echo(f"  {gerados} dia(s) gerado(s), {len(paginas)} pagina(s) de EA -> "
                f"{pasta / 'index.html'}")

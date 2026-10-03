@@ -406,6 +406,11 @@ def _proxima_avaliacao(prog: list[dict[str, Any]], metas: list[dict[str, Any]],
         marco = (f"n = {prox['n']} — {_e(prox['rotulo'])}" if prox
                  else ("todas as metas atingidas" if p["metas"] else "sem meta numérica"))
         acomp = []
+        if p.get("fonte_csv"):
+            acomp.append(f"fonte: {p['fonte_csv']} (só a contagem; o diário não lê acerto nem "
+                         "pontos do livro)")
+        if p.get("fonte_problema"):
+            acomp.append(f"<b class='neg'>{_e(p['fonte_problema'])}</b>")
         if p.get("slippage_medio") is not None:
             acomp.append(f"slippage médio {_n(p['slippage_medio'], 1)} pts (sem veredito)")
         if p.get("media") is not None:
@@ -429,7 +434,8 @@ def _proxima_avaliacao(prog: list[dict[str, Any]], metas: list[dict[str, Any]],
 
 def renderizar_indice(pasta: Path, metas: list[dict[str, Any]] | None = None,
                       raiz_fichas: Path | None = None,
-                      paginas_ea: dict[str, str] | None = None) -> str:
+                      paginas_ea: dict[str, str] | None = None,
+                      raiz_repo: Path | None = None) -> str:
     from .diario_metas import progresso, status_da_ficha
 
     f = pasta / "dias.csv"
@@ -450,11 +456,11 @@ def renderizar_indice(pasta: Path, metas: list[dict[str, Any]] | None = None,
     if metas and not ops.empty:
         if "descartado" not in ops:
             ops["descartado"] = False
-        prog = [progresso(m, ops, df) for m in metas]
+        prog = [progresso(m, ops, df, raiz_repo) for m in metas]
     elif metas:
         prog = [progresso(m, pd.DataFrame(columns=["ea", "dia", "descartado", "motivo",
                                                    "hora_saida", "slippage_ordens_pts",
-                                                   "pnl_liquido"]), df) for m in metas]
+                                                   "pnl_liquido"]), df, raiz_repo) for m in metas]
 
     linhas = []
     for r in df.itertuples():
@@ -477,6 +483,11 @@ def renderizar_indice(pasta: Path, metas: list[dict[str, Any]] | None = None,
              "<h2>Resumo por EA (todos os dias)</h2>", _resumo_por_ea(ops, status, paginas_ea),
              "<small>O nome do EA abre a página dele: resultado, drawdown, capital e "
              "evolução da ficha.</small>"]
+    fora = [m["ea"] for m in metas if m.get("fonte")]
+    if fora:
+        corpo.append("<small>Fora do record (sem operações no log, por isso sem linha acima): "
+                     + _e("; ".join(fora)) + ". Aparecem em <i>Próxima avaliação</i>, só com a "
+                     "contagem.</small>")
     if metas:
         corpo += ["<h2>Próxima avaliação (segundo a ficha de cada EA)</h2>",
                   _proxima_avaliacao(prog, metas, status, hrefs),
