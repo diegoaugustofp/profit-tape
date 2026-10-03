@@ -5188,3 +5188,32 @@ recusa com o record escrevendo, `--dumps` em streaming com tetos e podas. Quatro
 trava é guardada por teste. Regra geral registrada no `OPERACAO.md`.
 
 **Tags:** entregue-v4.24 (sobre v4.23). Suíte 1.372.
+
+### 2026-10-03j — Primeira rodada real do inventário; `--dumps` repetido (v4.25)
+
+Diego rodou a v4.24 no disco real: **terminou**, listou 1.793 pastas, 28.270 arquivos e 77,4 GB, abriu 590
+rodapés (`curated/trade`) com 2 threads e escreveu `docs/INVENTARIO_DADOS.md` e o CSV, sem travar. Plano
+observado: backup 71,5 GB (book_offer 35,2 GB em 144 pastas; trade 9.645 arquivos), curated/trade 590 pastas
+= 590 arquivos (um por dia e ativo, 2,6 GB), raw com 24 pastas de trade (599 arquivos, ainda não compactadas).
+
+Na linha de comando ele passou `--dumps` duas vezes (`...\data` e `...\data\dumps_15s`); o Typer guardava só a
+última, **em silêncio** — o `data` foi ignorado e o comando não dizia nada sobre dumps. Mesma classe da "falha
+silenciosa". v4.25: `--dumps` repetível, arquivo alcançado por dois caminhos conta uma vez, caminho inexistente
+é avisado, e o comando imprime quantos tipos de linha e arquivos de dump reconheceu. Mutação confirma o teste.
+
+**Tags:** entregue-v4.25 (sobre v4.24). Suíte 1.378.
+
+### 2026-10-03j — Primeiro inventário real: quatro erros do relatório e `--dumps` repetido (v4.25)
+
+Diego rodou o v4.24 (listou 28.270 arquivos em 1.793 pastas, 77,4 GB; abriu 590 rodapés; sem travar) e enviou
+o `INVENTARIO_DADOS.md`. O arquivo expôs quatro erros meus no relatório: origem do dia 0/0/0 (o backup, de
+rodapé fechado, vencia o curated), 1.686 "repetidas" falsas nos dumps de 15 s (identidade `(dia, hora)` em vez
+da do parser da ficha, `(dia, current_bar)`), `tiny_book` tratado como "book" e "0 linhas" onde o rodapé não
+foi aberto. Também: `--dumps` passado duas vezes valia só o último, em silêncio.
+
+Fatos do inventário registrados em `coletas.yaml` e no `ESTADO_E_CAMINHOS.md` (datados de 03/10): WDOV26 e
+WDOX26 têm 7 pregões de par (22 a 30/09) e o V26 não tem dado depois, amostra fechada; WINV26 e WINZ26 não têm
+dado (assinar na segunda 05/10 para ter par antes do vencimento de 14/10); as 14 séries de opção têm dado nos 9
+pregões esperados, mas as mais finas negociam 20 a 30 vezes por dia; o offer book só existe em 6 ativos.
+
+**Tags:** entregue-v4.25 (sobre v4.24). Suíte 1.378.

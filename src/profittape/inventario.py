@@ -32,6 +32,7 @@ import pyarrow.parquet as pq
 _TZ = ZoneInfo("America/Sao_Paulo")
 _NS = 1_000_000_000
 STREAMS_BOOK = ("book_offer", "book_price", "tiny_book")
+_PRIORIDADE_CAMADA = {"curated": 0, "raw": 1, "backup": 2}
 GRACA_AO_VIVO_S = 3600          # recv ate' 1 h depois da meia-noite do dia ainda e' "ao vivo"
 COLUNAS = ["camada", "stream", "ativo", "dia", "arquivos", "bytes", "linhas", "recv_min",
            "recv_max", "origem", "ilegiveis"]
@@ -79,9 +80,9 @@ def _dia_de(pasta: Path) -> dt.date | None:
 #      opcional e progresso continuo.
 NIVEIS = ("listar", "leve", "trade", "completo")
 NIVEL_AJUDA = {
-    "listar": "nenhum parquet aberto: so' pastas, arquivos e MB (linhas e origem ficam em branco)",
-    "leve": "padrao: abre rodapes so' de curated/trade (poucos arquivos, um por dia e ativo)",
-    "trade": "leve + raw/trade (milhares de partes: so' com o record parado)",
+    "listar": "nenhum parquet aberto: só pastas, arquivos e MB (linhas e origem ficam em branco)",
+    "leve": "padrão: abre rodapés só de curated/trade (poucos arquivos: um por dia e ativo)",
+    "trade": "leve + raw/trade (milhares de partes: só com o record parado)",
     "completo": "tudo, inclusive book e backup (centenas de milhares de arquivos: so' com teto)",
 }
 LIMITE_PADRAO = 20_000
@@ -288,13 +289,29 @@ def por_ativo(df: pd.DataFrame) -> pd.DataFrame:
         b = g[g["stream"].isin(STREAMS_BOOK)]
         dias_t = set(t["dia"])
         por_dia = t.groupby("dia")["linhas"].max() if len(t) else pd.Series(dtype=float)
-        orig = t.sort_values("camada").drop_duplicates("dia")["origem"].value_counts().to_dict() \
-            if len(t) else {}
+        # v4.24 ficava com a linha do BACKUP (rodape nao aberto: origem desconhecida) e descartava a
+        # do curated, que tinha a origem: o relatorio saia com 0/0/0 em todo ativo.
+        orig = (t.assign(_ign=t["origem"] == "desconhecido",
+                         _p=t["camada"].map(_PRIORIDADE_CAMADA).fillna(9))
+                 .sort_values(["_ign", "_p"]).drop_duplicates("dia")["origem"]
+                 .value_counts().to_dict()) if len(t) else {}
         streams = sorted(set(g["stream"]))
+        d_of = len(set(g[g["stream"] == "book_offer"]["dia"]))
+        d_pr = len(set(g[g["stream"] == "book_price"]["dia"]))
+        d_tp = len(set(g[g["stream"] == "tiny_book"]["dia"]))
+        if not len(t):
+            tipo = "só book" if len(b) else "—"
+        elif d_of:
+            tipo = "trade + book de ofertas"
+        elif d_pr:
+            tipo = "trade + book de preço"
+        elif d_tp:
+            tipo = "trade + só topo (tiny_book)"
+        else:
+            tipo = "só trade"
         linhas.append({
-            "ativo": ativo, "familia": familia(str(ativo)),
-            "tipo": ("trade + book" if len(t) and len(b) else "so' trade" if len(t)
-                     else "so' book" if len(b) else "—"),
+            "ativo": ativo, "familia": familia(str(ativo)), "tipo": tipo,
+            "dias_ofertas": d_of, "dias_preco": d_pr, "dias_topo": d_tp,
             "streams": ", ".join(streams),
             "trade_primeiro": min(dias_t) if dias_t else None,
             "trade_ultimo": max(dias_t) if dias_t else None, "trade_dias": len(dias_t),
@@ -348,6 +365,10 @@ def _d(v: Any) -> str:
     return "—" if v is None or (isinstance(v, float) and pd.isna(v)) else f"{v:%d/%m/%Y}"
 
 
+def _gb(v: float) -> str:
+    return f"{v / 1e9:.1f}".replace(".", ",")
+
+
 def _mb(v: float) -> str:
     return f"{v / 1e6:,.1f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
@@ -368,9 +389,9 @@ def relatorio_md(df: pd.DataFrame, coletas: list[dict[str, Any]], hoje: dt.date,
          f"- **Raízes varridas:** {raizes_txt}",
          f"- **Linhas de inventário:** {n_linhas} (camada x stream x ativo x dia)",
          *( [f"- **Nível de varredura:** `{plan['nivel']}` — {NIVEL_AJUDA[plan['nivel']]}. "
-             f"Listados {plan['arquivos']:,} arquivos em {plan['pastas']:,} pastas "
-             f"({plan['bytes'] / 1e9:,.1f} GB); rodapés abertos: {plan['a_abrir']:,}.".replace(
-                 ",", ".")] if plan else []),
+             f"Listados {_n(plan['arquivos'])} arquivos em {_n(plan['pastas'])} pastas "
+             f"({_gb(plan['bytes'])} GB); rodapés abertos: {_n(plan['a_abrir'])}."]
+            if plan else []),
          "", "**Vocabulário.** *tape* = negócios com agente agressor e passivo (stream `trade`; "
          "`docs/GLOSSARIO.md`). *Book* = `book_offer`, `book_price`, `tiny_book`. "
          "\"Só trade\" = o ativo tem `trade` e nenhum stream de book. **Origem do dia:** *ao vivo* "
@@ -414,14 +435,18 @@ def relatorio_md(df: pd.DataFrame, coletas: list[dict[str, Any]], hoje: dt.date,
         L += ["_Nenhum dado encontrado nas raízes acima._", ""]
     else:
         L += ["| Ativo | Família | Tipo | Trade: período | Dias | Linhas | "
-              "Ao vivo / importado / misto | Book (dias) | Camadas | Lacunas | Streams |",
-              "|---|---|---|---|---|---|---|---|---|---|---|"]
+              "Ao vivo / importado / misto / desconhecido | Livro (dias): ofertas / preço / topo | "
+              "Camadas | Lacunas |", "|---|---|---|---|---|---|---|---|---|---|"]
         for r in resumo.itertuples():
             per = f"{_d(r.trade_primeiro)} a {_d(r.trade_ultimo)}" if r.trade_dias else "—"
             L.append(f"| `{r.ativo}` | {r.familia} | {r.tipo} | {per} | {r.trade_dias} | "
-                     f"{_n(r.trade_linhas)} | {r.ao_vivo} / {r.importado} / {r.misto} | "
-                     f"{r.book_dias} | {r.camadas} | {r.lacunas} | {r.streams} |")
-        L += ["", "*Linhas* e *origem* (ao vivo/importado) só existem onde o rodapé foi lido: no "
+                     f"{_n(r.trade_linhas)} | {r.ao_vivo} / {r.importado} / {r.misto} / "
+                     f"{r.desconhecido} | {r.dias_ofertas} / {r.dias_preco} / {r.dias_topo} | "
+                     f"{r.camadas} | {r.lacunas} |")
+        L += ["", "*Tipo*: **book de ofertas** = `book_offer` (profundidade, por ordem); "
+              "**só topo** = só `tiny_book` (melhor compra e venda), que chega para todo ticker "
+              "assinado. "
+              "*Linhas* e *origem* (ao vivo/importado) só existem onde o rodapé foi lido: no "
               "nível padrão (`leve`) são os dias do `curated`; dia só no raw aparece como "
               "desconhecido (`--nivel trade`, com o record parado, lê o raw). *Linhas*: do "
               "`trade`, por dia, a maior entre as camadas. *Lacunas*: dias da semana sem dado "
@@ -432,9 +457,9 @@ def relatorio_md(df: pd.DataFrame, coletas: list[dict[str, Any]], hoje: dt.date,
               "|---|---|---|---|---|---|---|"]
         for (cam, st), g in df.groupby(["camada", "stream"]):
             periodo = f"{_d(g['dia'].min())} a {_d(g['dia'].max())}"
+            lidas = _n(g["linhas"].sum()) if g["linhas"].notna().any() else "— (rodapé não aberto)"
             L.append(f"| {cam} | {st} | {g['ativo'].nunique()} | {periodo} | "
-                     f"{_n(g['arquivos'].sum())} | {_mb(g['bytes'].sum())} | "
-                     f"{_n(g['linhas'].sum())} |")
+                     f"{_n(g['arquivos'].sum())} | {_mb(g['bytes'].sum())} | {lidas} |")
         L.append("")
         lac = []
         for ativo, g in df[df["stream"] == "trade"].groupby("ativo"):
@@ -462,13 +487,17 @@ def relatorio_md(df: pd.DataFrame, coletas: list[dict[str, Any]], hoje: dt.date,
         L += ["| Arquivo | Tipo | Linhas | Dias | Primeiro dia | Último dia | Por dia (mediana) | "
               "Ativo provável | Repetidas |", "|---|---|---|---|---|---|---|---|---|"]
         for d in dumps:
-            rep = f"**{d['repetidas']}**" if d["repetidas"] else "0"
+            rep = ("n/d" if d["repetidas"] is None
+                   else f"**{d['repetidas']}**" if d["repetidas"] else "0")
             L.append(f"| `{d['arquivo']}` | {d['tipo']} | {_n(d['linhas'])} | {d['dias']} | "
                      f"{_d(d['primeira'])} | {_d(d['ultima'])} | {_n(d['por_dia_mediana'])} | "
                      f"{d['ativo']} | {rep} |")
-        L += ["", "*Repetidas*: barras com o mesmo dia e hora no mesmo arquivo — dumps sobrepostos "
-              "inflam o n sem informação nova (o parser das fichas recusa). *Ativo provável* é "
-              "estimativa pelo nome do arquivo ou pela ordem de grandeza do preço; confirme.", ""]
+        L += ["", "*Repetidas*: barras com a mesma identidade do parser da ficha (dia + "
+              "`current_bar` em PRCBARRA e BBSBARRA; dia + hora em ABSBARRA) no mesmo arquivo: "
+              "dumps sobrepostos inflam o n sem informação nova. `n/d` = o tipo não tem "
+              "identidade de barra. *Ativo "
+              "provável* é estimativa pelo nome do arquivo ou pela ordem de grandeza do preço "
+              "(só PRCBARRA); confirme.", ""]
     return "\n".join(L) + "\n"
 
 
@@ -485,7 +514,12 @@ PREFIXOS_DUMP = {
     "BBSBARRA|": "bollinger scalp (barras)",
     "ABSDIR|": "absorcao direcional (eventos)",
 }
-_BARRAS = ("PRCBARRA|", "ABSBARRA|", "VWAPVP|", "BBSBARRA|")      # uma linha = uma barra
+# Identidade da barra = a do parser de cada ficha (indices dos campos apos o prefixo):
+#   PRCBARRA e BBSBARRA: (data, current_bar) -- em 15 s quatro barras dividem a MESMA `hora`;
+#   ABSBARRA: (data, hora). VWAPVP e ABSDIR: sem parser que desduplique -> "n/d", nunca um palpite.
+# (v4.24 usava (data, hora) para todos e acusou 75% de "repetidas" nos dumps de 15 s: falso alarme.)
+_IDENTIDADE: dict[str, tuple[int, ...]] = {"PRCBARRA|": (0, 3), "BBSBARRA|": (0, 3),
+                                           "ABSBARRA|": (0, 1)}
 _TICKERS_NO_NOME = ("WINFUT", "WDOFUT", "WIN", "WDO", "PETR4", "VALE3", "ITUB4")
 
 
@@ -563,7 +597,7 @@ def escanear_dumps(destino: Path, limite_bytes: int = LIMITE_DUMP_BYTES) -> list
         out.append({"arquivo": "(pasta com arquivos demais)", "bytes": 0, "tipo": (
             f"CORTADO: so' os primeiros {LIMITE_DUMP_ARQUIVOS} arquivos foram lidos; aponte "
             "--dumps para a pasta certa"), "prefixo": "", "linhas": None, "dias": None,
-            "primeira": None, "ultima": None, "por_dia_mediana": None, "repetidas": 0,
+            "primeira": None, "ultima": None, "por_dia_mediana": None, "repetidas": None,
             "ativo": "—"})
     for f in arquivos:
         nome = f.name if destino.is_file() else str(f.relative_to(destino))
@@ -572,10 +606,10 @@ def escanear_dumps(destino: Path, limite_bytes: int = LIMITE_DUMP_BYTES) -> list
         except OSError:
             continue
         if tamanho > limite_bytes:
-            out.append({"arquivo": nome, "bytes": tamanho, "tipo": (
+            out.append({"arquivo": nome, "caminho": str(f.resolve()), "bytes": tamanho, "tipo": (
                 f"PULADO: arquivo de {tamanho / 1e6:,.0f} MB (limite {limite_bytes / 1e6:,.0f} MB)"
                 .replace(",", ".")), "prefixo": "", "linhas": None, "dias": None,
-                "primeira": None, "ultima": None, "por_dia_mediana": None, "repetidas": 0,
+                "primeira": None, "ultima": None, "por_dia_mediana": None, "repetidas": None,
                 "ativo": "—"})
             continue
         est: dict[str, dict[str, Any]] = {}
@@ -593,8 +627,9 @@ def escanear_dumps(destino: Path, limite_bytes: int = LIMITE_DUMP_BYTES) -> list
                     dia = _data_ntsl(campos[0])
                     if dia is not None:
                         e["dias"][dia] = e["dias"].get(dia, 0) + 1
-                    if prefixo in _BARRAS and len(campos) > 1 and len(e["chaves"]) < _MAX_CHAVES:
-                        chave = (campos[0], campos[1])
+                    idx = _IDENTIDADE.get(prefixo)
+                    if idx and len(campos) > max(idx) and len(e["chaves"]) < _MAX_CHAVES:
+                        chave = tuple(campos[i] for i in idx)
                         e["rep"] += chave in e["chaves"]
                         e["chaves"].add(chave)
                     if prefixo == "PRCBARRA|" and len(campos) > 7 and len(e["closes"]) < 5000:
@@ -611,11 +646,35 @@ def escanear_dumps(destino: Path, limite_bytes: int = LIMITE_DUMP_BYTES) -> list
             cont = sorted(por_dia.values())
             closes = achado["closes"] if prefixo == "PRCBARRA|" else []
             out.append({
-                "arquivo": nome, "bytes": tamanho, "tipo": rotulo, "prefixo": prefixo.rstrip("|"),
+                "arquivo": nome, "caminho": str(f.resolve()), "bytes": tamanho, "tipo": rotulo,
+                "prefixo": prefixo.rstrip("|"),
                 "linhas": achado["n"], "dias": len(por_dia),
                 "primeira": min(por_dia) if por_dia else None,
                 "ultima": max(por_dia) if por_dia else None,
                 "por_dia_mediana": cont[len(cont) // 2] if cont else None,
-                "repetidas": achado["rep"], "ativo": _ativo_provavel(f.name, closes),
+                "repetidas": achado["rep"] if prefixo in _IDENTIDADE else None,
+                "ativo": _ativo_provavel(f.name, closes),
             })
     return out
+
+
+def escanear_dumps_varios(destinos: list[Path]) -> tuple[list[dict[str, Any]], list[str]]:
+    """Varios `--dumps` (pastas e/ou arquivos). Um arquivo alcancado por dois caminhos (uma pasta
+    dentro da outra) entra UMA vez. Com mais de um destino o nome ganha o da pasta de origem.
+    Devolve (entradas, avisos): destino inexistente e' dito, nunca ignorado em silencio."""
+    vistos: set[tuple[str, str]] = set()
+    out: list[dict[str, Any]] = []
+    avisos: list[str] = []
+    for d in destinos:
+        if not d.exists():
+            avisos.append(f"--dumps nao existe: {d}")
+            continue
+        for e in escanear_dumps(d):
+            chave = (e.get("caminho", e["arquivo"]), e.get("prefixo", ""))
+            if chave in vistos:
+                continue
+            vistos.add(chave)
+            if len(destinos) > 1 and d.is_dir() and not e["tipo"].startswith("CORTADO"):
+                e = {**e, "arquivo": f"{d.name}/{e['arquivo']}".replace("\\", "/")}
+            out.append(e)
+    return out, avisos

@@ -96,7 +96,8 @@ def test_por_ativo_tipo_origem_periodo_lacuna_e_uniao_das_camadas(tmp_path: Path
     a = I.por_ativo(df).set_index("ativo")
     # WINFUT: trade + book; dias do trade = uniao das camadas (22/09 em raw e curated conta 1 vez)
     w = a.loc["WINFUT"]
-    assert w["tipo"] == "trade + book" and w["book_dias"] == 2
+    assert w["tipo"] == "trade + book de ofertas" and w["book_dias"] == 2
+    assert (w["dias_ofertas"], w["dias_preco"], w["dias_topo"]) == (2, 0, 2)
     assert w["trade_dias"] == 5 and str(w["trade_primeiro"]) == "2026-09-01"
     assert str(w["trade_ultimo"]) == "2026-09-23"
     assert (w["ao_vivo"], w["importado"], w["misto"]) == (2, 2, 1)
@@ -104,11 +105,11 @@ def test_por_ativo_tipo_origem_periodo_lacuna_e_uniao_das_camadas(tmp_path: Path
     assert w["camadas"] == "backup, curated, raw"
     # WDO: so' trade; a virada: V26 nao negocia em 01/10; lacuna de 24/09 (quarta) no V26
     v26, x26 = a.loc["WDOV26"], a.loc["WDOX26"]
-    assert v26["tipo"] == "so' trade" and v26["familia"] == "futuro (contrato)"
+    assert v26["tipo"] == "só trade" and v26["familia"] == "futuro (contrato)"
     assert v26["trade_dias"] == 3 and x26["trade_dias"] == 4
     # V26 negociou 22, 23 e 25/09 (lacuna: 24/09); X26 tambem 01/10 (lacunas: 24, 28, 29, 30/09)
     assert v26["lacunas"] == 1 and x26["lacunas"] == 4
-    assert a.loc["PETRJ49", "familia"] == "opcao PETR" and a.loc["PETRJ49", "tipo"] == "so' trade"
+    assert a.loc["PETRJ49", "familia"] == "opcao PETR" and a.loc["PETRJ49", "tipo"] == "só trade"
     assert I.familia("PETR4") == "acao" and I.familia("WINFUT") == "futuro (serie continua)"
     assert I.familia("VALEJ80") == "opcao VALE" and I.familia("ZZZ") == "outro"
     assert I.dias_uteis_sem_dado({dt.date(2026, 9, 25), dt.date(2026, 9, 28)}) == []
@@ -144,8 +145,9 @@ def test_relatorio_md_traz_coletas_resumo_lacunas_e_o_aviso_de_nao_diario(tmp_pa
     assert "dias com os dois (o par): 3" in md
     assert "`WINV26`: **sem dado**; `WINZ26`: **sem dado**" in md           # WIN: nenhum dos dois
     assert "**sem dado:** " in md and "PETRV480" in md                      # opcoes: 13 ausentes
-    assert "| `WDOV26` | futuro (contrato) | so' trade |" in md
-    assert "| `WINFUT` | futuro (serie continua) | trade + book |" in md
+    assert "| `WDOV26` | futuro (contrato) | só trade |" in md
+    assert "| `WINFUT` | futuro (serie continua) | trade + book de ofertas |" in md
+    assert "Livro (dias): ofertas / preço / topo" in md and "| 2 / 0 / 2 |" in md
     assert "## Lacunas no trade" in md and "24/09" in md
     assert "Não varrido: passe `--dumps" in md
     assert "faltam 13 dias corridos" in md                                  # opcoes: fim 16/10
@@ -203,7 +205,7 @@ def test_dump_sobreposto_repetidas_e_ativo_pelo_preco_e_varios_tipos(tmp_path: P
     barra, evento = por[("abs.txt", "ABSBARRA")], por[("abs.txt", "ABSDIR")]
     assert barra["dias"] == 1 and barra["repetidas"] == 0
     assert evento["tipo"] == "absorcao direcional (eventos)"
-    assert evento["repetidas"] == 0                  # eventos: nao ha' identidade de barra
+    assert evento["repetidas"] is None               # eventos: sem identidade de barra: n/d
     assert not any(k[0] == "leia.txt" for k in por)  # sem linha de dump: nao entra
     assert I._data_ntsl("1150102") == dt.date(2015, 1, 2)
     assert I._data_ntsl("990102") == dt.date(1999, 1, 2)
@@ -278,7 +280,8 @@ def test_coletas_do_registro_estao_ancoradas_nos_documentos_de_origem() -> None:
         for k in ("titulo", "hipotese", "ativos", "streams", "proximo_passo", "plano"):
             assert c.get(k), f"{c['id']}: falta {k}"
     wdo = next(c for c in cs if c["id"] == "rolagem_wdo")
-    assert wdo["ativos"] == ["WDOV26", "WDOX26"] and wdo["streams"] == ["trade"]
+    assert wdo["ativos"] == ["WDOV26", "WDOX26"] and wdo["streams"] == ["trade", "tiny_book"]
+    assert "o PAR existe em 7 pregoes" in wdo["estado"]
     ops = next(c for c in cs if c["id"] == "opcoes_petr4_out")
     assert len(ops["ativos"]) == 14 and str(ops["fim"]) == "2026-10-16"
 
@@ -494,4 +497,159 @@ def test_dumps_streaming_tetos_e_podas(tmp_path: Path) -> None:
                      encoding="utf-8")
     por = {d["prefixo"]: d for d in I.escanear_dumps(misto)}
     assert por["PRCBARRA"]["linhas"] == 10000 and por["ABSBARRA"]["linhas"] == 10000
+
+
+def _bbs(data: int, hora: int) -> str:
+    return f"BBSBARRA|{data}|{hora}|{hora}|1|2|3|4|5"
+
+
+def test_varios_dumps_deduplicam_pasta_dentro_de_pasta_e_avisam_o_que_nao_existe(
+        tmp_path: Path) -> None:
+    """O operador passou `--dumps data --dumps data\\dumps_15s`: o Typer guardava so' o ultimo, em
+    silencio. Agora todos valem, o arquivo alcancado por dois caminhos entra uma vez, e o que nao
+    existe e' dito."""
+    data = tmp_path / "data"
+    (data / "dumps_15s").mkdir(parents=True)
+    (data / "dumps_15s" / "bb_15s.txt").write_text(
+        "\n".join(_bbs(1260930, 900 + k) for k in range(5)), encoding="utf-8")
+    (data / "m15.txt").write_text(_prc(1150102, 900, 1), encoding="utf-8")
+    entradas, avisos = I.escanear_dumps_varios(
+        [data, data / "dumps_15s", tmp_path / "nao_existe"])
+    bb = [e for e in entradas if e["prefixo"] == "BBSBARRA"]
+    assert len(bb) == 1 and bb[0]["linhas"] == 5                  # nao contou duas vezes
+    assert bb[0]["arquivo"] == "data/dumps_15s/bb_15s.txt"        # nome com a pasta de origem
+    assert {e["prefixo"] for e in entradas} == {"BBSBARRA", "PRCBARRA"}
+    assert avisos == [f"--dumps nao existe: {tmp_path / 'nao_existe'}"]
+    unico, _ = I.escanear_dumps_varios([data / "dumps_15s"])
+    assert unico[0]["arquivo"] == "bb_15s.txt"                    # um destino: nome como antes
+
+
+def test_cli_le_todos_os_dumps_repetidos_e_diz_o_que_encontrou(tmp_path: Path) -> None:
+    from profittape.cli import app
+
+    raizes = _arvore_grande(tmp_path, partes_book=1)
+    a, b = tmp_path / "dumps_a", tmp_path / "dumps_b"
+    a.mkdir()
+    b.mkdir()
+    (a / "bb.txt").write_text(_bbs(1260930, 900), encoding="utf-8")
+    (b / "m15.txt").write_text(_prc(1150102, 900, 1), encoding="utf-8")
+    base = ["inventario-dados", "--raw", str(raizes["raw"]), "--curated", str(raizes["curated"]),
+            "--log-record", str(tmp_path / "sem.jsonl"), "--coletas",
+            str(RAIZ / "docs" / "coletas.yaml"), "--saida", str(tmp_path / "i.md"),
+            "--csv", str(tmp_path / "i.csv")]
+    r = CliRunner().invoke(app, [*base, "--dumps", str(a), "--dumps", str(b)])
+    assert r.exit_code == 0, r.output
+    assert ("dumps: 2 tipo(s) de linha em 2 arquivo(s), lidos em 2 caminho(s): "
+            "BBSBARRA, PRCBARRA") in r.output
+    md = (tmp_path / "i.md").read_text(encoding="utf-8")
+    assert "dumps_a/bb.txt" in md and "dumps_b/m15.txt" in md
+    vazio = tmp_path / "vazio"
+    vazio.mkdir()
+    (vazio / "nada.txt").write_text("sem linha de dump", encoding="utf-8")
+    r2 = CliRunner().invoke(app, [*base, "--dumps", str(vazio)])
+    assert r2.exit_code == 0 and "AVISO: nenhuma linha de dump" in r2.output
+    r3 = CliRunner().invoke(app, [*base, "--dumps", str(tmp_path / "x"), "--dumps", str(a)])
+    assert "AVISO: --dumps nao existe" in r3.output and "1 tipo(s) de linha" in r3.output
+    sem = CliRunner().invoke(app, base)
+    assert sem.exit_code == 0 and "dumps:" not in sem.output
+
+
+# ------------------------------------------- v4.25: erros do primeiro relatorio real do operador
+def _arvore_backup_e_curated(tmp: Path) -> dict[str, Path]:
+    """O caso real: o MESMO dia existe no backup (rodape nao aberto no nivel leve) e no curated."""
+    d = dt.date
+    cur, bak = tmp / "curated", tmp / "backup"
+    for dia, recv in ((d(2026, 9, 1), "importado"), (d(2026, 9, 18), "misto"),
+                      (d(2026, 9, 22), "vivo"), (d(2026, 9, 23), "vivo")):
+        for a in ("WINFUT", "PETR4"):
+            _parte(cur, "trade", a, dia, 100, recv=recv)
+            _parte(bak, "trade", a, dia, 100, recv=recv)
+            _parte(bak, "tiny_book", a, dia, 500)
+    _parte(bak, "book_offer", "PETR4", d(2026, 9, 22), 800)
+    _parte(bak, "book_offer", "PETR4", d(2026, 9, 23), 800)
+    return {"curated": cur, "backup": bak}
+
+
+def test_origem_do_dia_vem_do_curated_mesmo_quando_o_backup_tem_o_mesmo_dia(
+        tmp_path: Path) -> None:
+    """v4.24 ficava com a linha do backup (rodape fechado => origem desconhecida) e jogava fora a
+    do curated: o relatorio real saiu com 'ao vivo / importado / misto = 0 / 0 / 0' no ativo."""
+    raizes = _arvore_backup_e_curated(tmp_path)
+    df = I.escanear(raizes)                                        # nivel leve
+    assert set(df[df["camada"] == "backup"]["origem"]) == {"desconhecido"}
+    a = I.por_ativo(df).set_index("ativo")
+    w = a.loc["WINFUT"]
+    assert (w["ao_vivo"], w["importado"], w["misto"], w["desconhecido"]) == (2, 1, 1, 0)
+    assert w["trade_linhas"] == 400 and w["trade_dias"] == 4
+    plano = I.plano(I.listar(raizes), "leve")
+    md = I.relatorio_md(df, [], dt.date(2026, 10, 3), raizes, "c", None, plano)
+    assert "| 2 / 1 / 1 / 0 |" in md                               # a coluna nao mente mais
+    # um dia so' no backup (nao compactado) continua contando como desconhecido, nao some
+    _parte(raizes["backup"], "trade", "WINFUT", dt.date(2026, 9, 24), 100)
+    w2 = I.por_ativo(I.escanear(raizes)).set_index("ativo").loc["WINFUT"]
+    assert (w2["ao_vivo"], w2["desconhecido"]) == (2, 1)
+
+
+def test_tipo_distingue_book_de_ofertas_de_so_topo_e_a_tabela_nao_chama_tudo_de_book(
+        tmp_path: Path) -> None:
+    raizes = _arvore_backup_e_curated(tmp_path)
+    a = I.por_ativo(I.escanear(raizes)).set_index("ativo")
+    assert a.loc["PETR4", "tipo"] == "trade + book de ofertas"
+    assert (a.loc["PETR4", "dias_ofertas"], a.loc["PETR4", "dias_topo"]) == (2, 4)
+    assert a.loc["WINFUT", "tipo"] == "trade + só topo (tiny_book)"  # tiny_book NAO e' profundidade
+    assert a.loc["WINFUT", "dias_ofertas"] == 0 and a.loc["WINFUT", "dias_topo"] == 4
+    _parte(raizes["backup"], "book_price", "WINFUT", dt.date(2026, 9, 22), 50)
+    assert I.por_ativo(I.escanear(raizes)).set_index("ativo").loc["WINFUT", "tipo"] == (
+        "trade + book de preço")
+    md = I.relatorio_md(I.escanear(raizes), [], dt.date(2026, 10, 3), raizes, "c", None)
+    assert "**só topo** = só `tiny_book`" in md
+
+
+def test_relatorio_nao_mostra_zero_linhas_onde_o_rodape_nao_foi_aberto(tmp_path: Path) -> None:
+    raizes = _arvore_backup_e_curated(tmp_path)
+    df = I.escanear(raizes)
+    md = I.relatorio_md(df, [], dt.date(2026, 10, 3), raizes, "c", None,
+                        I.plano(I.listar(raizes), "leve"))
+    assert "| backup | trade | 2 | 01/09/2026 a 23/09/2026 | 8 |" in md
+    assert "— (rodapé não aberto)" in md                           # backup nao leu: nao e' "0"
+    assert "| curated | trade | 2 | 01/09/2026 a 23/09/2026 | 8 |" in md and "| 800 |" in md
+    assert "padrão: abre rodapés só de curated/trade (poucos arquivos: um por dia e ativo)" in md
+    assert "(0,0 GB)" in md or "GB); rodapés abertos: 8." in md   # GB com virgula; ajuda intacta
+
+
+def test_dumps_de_15s_nao_acusam_repetidas_falsas_e_batem_com_o_parser_da_ficha(
+        tmp_path: Path) -> None:
+    """O dump real do operador (dump20260901.txt) tem 2.249 linhas de BBSBARRA no dia: o relatorio
+    v4.24 acusou 1.686 'repetidas' porque usava (dia, hora), e em 15 s quatro barras dividem a mesma
+    `hora`. A identidade do parser da ficha e' (dia, current_bar)."""
+    from profittape.research.bollinger_scalp import CAMPOS, carregar_log
+
+    def bbs(data: int, hora: int, barra: int) -> str:
+        campos = [data, hora, hora, barra, 100.0, 101.0, 99.0, 100.5, 1000, 101.0, 99.0, 50.0,
+                  1.0, 1.0]
+        return "BBSBARRA|" + "|".join(str(c) for c in campos)
+
+    linhas = []
+    barra = 0
+    for minuto in range(60):                                       # 4 barras de 15 s por minuto
+        for _ in range(4):
+            barra += 1
+            linhas.append(bbs(1260901, 900 + minuto // 60 * 100 + minuto % 60, barra))
+    arq = tmp_path / "dump20260901.txt"
+    arq.write_text("\n".join(linhas), encoding="utf-8")
+    assert len(CAMPOS) == 14
+    df, _ = carregar_log(arq)                                      # o parser da ficha aceita
+    assert len(df) == 240
+    e = I.escanear_dumps(arq)[0]
+    assert e["prefixo"] == "BBSBARRA" and e["linhas"] == 240 and e["dias"] == 1
+    assert e["repetidas"] == 0                                     # v4.24 dizia 180
+    arq.write_text("\n".join([*linhas, linhas[10]]), encoding="utf-8")   # repeticao de verdade
+    assert I.escanear_dumps(arq)[0]["repetidas"] == 1
+    # VWAPVP: sem parser que desduplique => n/d, nunca um numero chutado
+    vw = tmp_path / "vwap.txt"
+    vw.write_text("VWAPVP|1260930|905|1|2\nVWAPVP|1260930|905|1|2\n", encoding="utf-8")
+    assert I.escanear_dumps(vw)[0]["repetidas"] is None
+    md = I.relatorio_md(pd.DataFrame(columns=I.COLUNAS), [],
+                        dt.date(2026, 10, 3), {}, "c", I.escanear_dumps(vw))
+    assert "| n/d |" in md and "dia + `current_bar` em PRCBARRA e BBSBARRA" in md
 

@@ -11,11 +11,13 @@ coletas:
     titulo: "Rolagem do WDO pelo PAR CASADO entre contratos"
     hipotese: "A rolagem de contrato deixa marca no fluxo: o mesmo agente vende num contrato e compra no outro em ate' 2 s, mais do que o acaso."
     ativos: [WDOV26, WDOX26]
-    streams: [trade]                 # so' trades, sem book
+    # `trade` + `tiny_book` (topo do livro, chega para todo ticker assinado). O OFFER BOOK nao foi
+    # assinado para estes contratos (inventario de 03/10: book_offer so' em 6 ativos).
+    streams: [trade, tiny_book]
     desde: 2026-09-22
     marco: {data: 2026-10-01, rotulo: "virada WDOV26 -> WDOX26 (o WDO vence no 1o dia util do mes)"}
     fim: null
-    estado: "Os dois contratos gravam desde 22/09; a virada foi em 01/10. So' os dias em que os DOIS negociaram formam par: confira em docs/INVENTARIO_DADOS.md."
+    estado: "Inventario de 03/10: WDOV26 tem trade de 22 a 30/09 (7 pregoes) e WDOX26 de 22/09 a 02/10 (9); o PAR existe em 7 pregoes (22 a 30/09). WDOV26 nao tem dado em 01 e 02/10, com o X26 negociando: nao ha' mais par a esperar, a amostra esta' fechada. So' os dias em que os DOIS negociaram formam par."
     proximo_passo: "Rodar `profit-tape rolagem-par` com os dias em volta da virada. Baseline: rotulos de agente permutados dentro de cada contrato."
     leitura_declarada: "Razao perto de 1 = acaso (duas corretoras grandes operando os dois contratos). Razao bem acima de 1 NOS DIAS DA VIRADA, com fracao de volume relevante = a rolagem deixa marca; so' entao o passo 2 pergunta se ela move preco, com direcao declarada antes."
     limite: "Agente e' CORRETORA: um par pode ser dois clientes da mesma casa. Reduz o poder; o embaralhado sofre o mesmo."
@@ -27,11 +29,11 @@ coletas:
     titulo: "Rolagem do WIN pelo par casado (mesma hipotese, outro instrumento)"
     hipotese: "Idem rolagem_wdo, no WIN: WINV26 -> WINZ26."
     ativos: [WINV26, WINZ26]
-    streams: [trade]
+    streams: [trade, tiny_book]
     desde: null
     marco: {data: 2026-10-14, rotulo: "vencimento do WIN (WINV26)"}
     fim: null
-    estado: "NAO CONFIRMADO: o plano mandava assinar os dois contratos antes de ~07/10. O inventario diz se ja' ha dado."
+    estado: "Inventario de 03/10: NENHUM dos dois tem dado em disco (nao estao no record). Para ter par antes do vencimento (14/10) a assinatura precisa entrar na segunda, 05/10; o WDO rendeu 7 pregoes de par."
     proximo_passo: "Assinar WINV26 e WINZ26 no record antes de ~07/10 (decisao do operador); depois, `profit-tape rolagem-par`."
     plano: "docs/ESTADO_E_CAMINHOS.md, secao 3.C ('Rolagem refeita')"
     trechos: ["assinar `WINV26` e `WINZ26` antes de ~07/10"]
@@ -41,11 +43,11 @@ coletas:
     hipotese: "O hedge forcado do vendedor de opcao segura o preco perto do strike com OI relevante no vencimento (pinning)."
     ativos: [PETRJ49, PETRV49, PETRJ493, PETRJ494, PETRV494, PETRJ500, PETRV500, PETRJ22, PETRV22,
              PETRJ550, PETRV550, PETRJ470, PETRV470, PETRV480]
-    streams: [trade]                 # trades, sem book
+    streams: [trade, tiny_book]      # offer book nao assinado (inventario de 03/10)
     desde: 2026-09-22
     marco: {data: 2026-10-16, rotulo: "vencimento mensal de outubro (20 pregoes)"}
     fim: 2026-10-16
-    estado: "14 series casando exatamente por OI (semanais excluidas), mes INTEIRO de 22/09 a 16/10. Spot de referencia PETR4 48,52 (fechamento de 18/09); maior strike por OI em 49,61 (15,4 M)."
+    estado: "14 series casando exatamente por OI (semanais excluidas), mes INTEIRO de 22/09 a 16/10. Spot de referencia PETR4 48,52 (fechamento de 18/09); maior strike por OI em 49,61 (15,4 M). Inventario de 03/10: as 14 series tem dado nos 9 pregoes esperados (22/09 a 02/10), mas as mais finas negociam 20 a 30 vezes por dia (PETRV550: 191 negocios em 9 pregoes; PETRJ470: 280), o que limita o poder do placebo."
     proximo_passo: "Depois do fechamento de 16/10 e do compact, rodar `profit-tape opcoes-vencimento` (a conta com strikes FALSOS, deslocados 1,7%, e' o placebo que decide)."
     leitura_declarada: "Declarada ANTES: em outubro o OI esta' colado no spot, entao um resultado NULO PESA CONTRA a hipotese (em setembro nao pesava)."
     limite: "O OI vem do Trade Hunter, e' EOD (nao intradiario) e e' posicao em aberto, nao fluxo. Se PETR4 andar mais de ~2% antes do inicio a lista de series se refaz."

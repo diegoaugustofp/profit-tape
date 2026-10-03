@@ -27,9 +27,9 @@ no diário de operações nem em `eas/`):
 
 | coleta | o que grava | prazo | próximo passo |
 |---|---|---|---|
-| **Rolagem do WDO** (par casado) | `WDOV26` e `WDOX26`, só `trade`, desde 22/09 | virada em **01/10** (já passou) | `profit-tape rolagem-par` com os dias em volta da virada; só valem os dias em que **os dois** negociaram |
-| **Rolagem do WIN** (mesma hipótese) | `WINV26` e `WINZ26` — **não confirmado** | WIN vence em **14/10**; assinar antes de ~07/10 | decisão do operador; o inventário mostra se já há dado |
-| **Opções de PETR4, outubro** (pinning) | 14 séries, só `trade`, mês inteiro desde 22/09 | vencimento **16/10** | depois do fechamento e do compact, `profit-tape opcoes-vencimento` (o placebo de strikes falsos decide) |
+| **Rolagem do WDO** (par casado) | `WDOV26` e `WDOX26`: `trade` + topo do livro (`tiny_book`); sem offer book. Desde 22/09 | virada em **01/10** (já passou). **Inventário de 03/10: 7 pregões de par (22 a 30/09); `WDOV26` sem dado depois, amostra fechada** | `profit-tape rolagem-par` agora; só valem os dias em que **os dois** negociaram |
+| **Rolagem do WIN** (mesma hipótese) | `WINV26` e `WINZ26`: **nenhum dos dois tem dado em disco** (inventário de 03/10) | WIN vence em **14/10**; para ter par, assinar na **segunda 05/10** | decisão do operador: incluir os dois no `recorder.yaml` e reiniciar o record |
+| **Opções de PETR4, outubro** (pinning) | 14 séries: `trade` + topo do livro, mês inteiro desde 22/09. Inventário de 03/10: dado nos 9 pregões esperados; as séries mais finas negociam 20 a 30 vezes por dia | vencimento **16/10** | depois do fechamento e do compact, `profit-tape opcoes-vencimento` (o placebo de strikes falsos decide; séries finas limitam o poder) |
 
 Expectativa declarada **antes** (opções): o OI está colado no spot, então um resultado **nulo pesa
 contra** a hipótese. Detalhes, limites e leitura declarada: `coletas.yaml` e `RESEARCH_PLANO.md`.

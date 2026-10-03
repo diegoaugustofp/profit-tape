@@ -1791,10 +1791,10 @@ def inventario_dados(
     curated: Path = typer.Option(Path("data/curated"), "--curated"),
     backup: Path | None = typer.Option(
         None, "--backup", help="raiz do disco de backup (ex.: D:\\backup_raw\\data\\raw)"),
-    dumps: Path | None = typer.Option(
+    dumps: list[Path] | None = typer.Option(
         None, "--dumps",
         help="pasta OU arquivo com os DUMPS do console do Profit (texto com linhas PRCBARRA|, "
-             "ABSBARRA|, VWAPVP|...); o projeto nao fixa onde ficam"),
+             "ABSBARRA|, VWAPVP|, BBSBARRA|...); repita --dumps para varios caminhos"),
     nivel: str = typer.Option(
         "leve", "--nivel",
         help="listar (nenhum parquet aberto) | leve (padrao: rodapes so' de curated/trade) | "
@@ -1837,7 +1837,7 @@ def inventario_dados(
         NIVEIS,
         LimiteExcedido,
         abrir,
-        escanear_dumps,
+        escanear_dumps_varios,
         listar,
         plano,
         relatorio_md,
@@ -1883,10 +1883,22 @@ def inventario_dados(
                    "--max-arquivos conscientemente, com o record parado.", err=True)
         raise typer.Exit(2) from exc
     agora = _d.datetime.now(tz=ZoneInfo("America/Sao_Paulo"))
-    lista_dumps = (None if dumps is None
-                   else escanear_dumps(dumps) if dumps.exists() else [])
-    if dumps is not None and not dumps.exists():
-        typer.echo(f"  AVISO: --dumps nao existe: {dumps}")
+    lista_dumps: list[dict[str, Any]] | None = None
+    if dumps:
+        lista_dumps, avisos_dumps = escanear_dumps_varios(dumps)
+        for a in avisos_dumps:
+            typer.echo(f"  AVISO: {a}")
+        reconhecidos = [d for d in lista_dumps if d["linhas"]]
+        typer.echo(f"  dumps: {len(reconhecidos)} tipo(s) de linha em "
+                   f"{len({d['caminho'] for d in reconhecidos})} arquivo(s), lidos em {len(dumps)} "
+                   "caminho(s)" + (": " + ", ".join(sorted({d['prefixo'] for d in reconhecidos}))
+                                   if reconhecidos else ""))
+        if not reconhecidos:
+            typer.echo("  AVISO: nenhuma linha de dump (PRCBARRA|, ABSBARRA|, VWAPVP|, BBSBARRA|, "
+                       "ABSDIR|) reconhecida: confira o caminho de --dumps.")
+        for d in lista_dumps:
+            if d["tipo"].startswith(("PULADO", "CORTADO")):
+                typer.echo(f"  AVISO: {d['arquivo']}: {d['tipo']}")
     try:
         from importlib.metadata import version
         ver = version("profit-tape")

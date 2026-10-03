@@ -31,6 +31,19 @@ que escreve no mesmo disco. O aviso "rode depois das 18:00" estava no texto, mas
 **Regra geral registrada:** todo comando que varre disco (1) lista antes e mostra o plano, (2) tem teto, (3)
 nao roda com o `record` escrevendo, (4) imprime progresso. "Rode depois das 18:00" no texto nao e' trava.
 
+### Inventario de dados: o primeiro relatorio real achou quatro erros meus (v4.25)
+
+O arquivo gerado no disco do operador (03/10) mostrou: (1) **origem do dia 0/0/0 em todo ativo** -- o backup
+(rodape nao aberto) tinha o mesmo dia do curated e a linha dele vencia; agora a camada com origem conhecida
+vence (curated, depois raw, depois backup); (2) **"Repetidas" 1.686 de 2.249 nos dumps de 15 s** -- falso
+alarme: em 15 s quatro barras dividem a mesma `hora`; a identidade de barra agora e' a do parser de cada ficha
+(PRCBARRA e BBSBARRA: dia + `current_bar`; ABSBARRA: dia + hora; VWAPVP e ABSDIR: `n/d`); o docstring de
+`bollinger_scalp.carregar_log` ja' avisava e eu nao li; (3) **"trade + book" para ativo que so' tem `tiny_book`**
+-- `tiny_book` e' so' o topo e chega para todo ticker assinado; o tipo agora separa book de ofertas, book de
+preco e so' topo; (4) **"0 linhas" onde o rodape nao foi aberto** (backup e raw no nivel leve); agora "—".
+`--dumps` pode ser repetido (antes o Typer guardava so' o ultimo, em silencio) e o comando imprime quantos
+arquivos de dump reconheceu. Os quatro erros estao guardados por teste de mutacao.
+
 ## Diario operacional (v4.12): o que os EAs fizeram E o que a infraestrutura fez com eles
 
 `profit-tape diario-operacional [--dia AAAA-MM-DD] [--nota "texto"]` (o `diario <dir>` antigo
@@ -115,7 +128,8 @@ linhas do `trade` (o *tape*), se ha' book (`so' trade` x `trade + book`), se cad
 esta' (raw, curated, backup) e as lacunas. **Nao e' diario**: rode antes de formular uma hipotese e quando uma
 coleta terminar; depois do commit do `.md` e do CSV o documento fica disponivel sem rodar nada. Le so' o
 rodape dos parquet, em prioridade baixa; rode depois das 18:00. Limites: a lacuna conta dia da semana sem dado
-e pode incluir feriado; a letra do disco de backup muda. `--dumps <pasta ou arquivo>` le os DUMPS do console
+e pode incluir feriado; a letra do disco de backup muda. `--dumps <pasta ou arquivo>` (repita a opcao para varios caminhos; um arquivo alcancado por dois entra uma vez, e
+caminho inexistente e' avisado) le os DUMPS do console
 do Profit (texto com linhas `PRCBARRA|`, `ABSBARRA|`, `VWAPVP|`...; nao e' CSV): periodo, dias, barras por dia
 e barras REPETIDAS (dumps sobrepostos inflam o n); o NTSL nao emite o ticker, entao o ativo e' estimado
 pelo nome do arquivo ou pelo preco. O projeto nao fixa onde os dumps ficam. As **coletas com prazo** (WDOV26/WDOX26 para a rolagem; opcoes de PETR4 de outubro; WINV26/
