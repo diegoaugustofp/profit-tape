@@ -5157,3 +5157,19 @@ melhor esforço; cruzamento com as coletas) que gera `docs/INVENTARIO_DADOS.md` 
 **depende dos discos do operador**: o repositório traz um marcador, não dado.
 
 **Tags:** entregue-v4.22 (sobre v4.21). Suíte 1.365.
+
+### 2026-10-03h — O que é `--dumps` (e a correção da v4.22)
+
+Diego: "o que seria essa pasta de dump?". O parâmetro `--dumps` da v4.22 saiu do glossário ("histórico no dump
+do gráfico") sem eu conferir o que é um dump no projeto, e eu escrevi a varredura esperando **CSV** com data
+`dd/mm/aaaa` — formato que inventei (o teste usava o mesmo). Errado: dump é o **texto do console do Profit**,
+com as linhas `PRCBARRA|1AAMMDD|hora|...` (e `ABSBARRA|`, `VWAPVP|`, `BBSBARRA|`, `ABSDIR|`) que um indicador
+NTSL escreve via `ConsoleLog` e o operador copia à mão (buffer ~2.000 linhas; o histórico longo vira vários
+dumps concatenados, e dumps sobrepostos inflam o n). A v4.22 não reconheceria nenhum.
+
+Corrigido (v4.23): varredura por prefixo, data no formato do NTSL, tipos, barras por dia, barras repetidas,
+ativo estimado (nome do arquivo ou ordem de grandeza do preço, o NTSL não emite o ticker), aceita pasta ou
+arquivo. Prova cruzada em teste: o parser das fichas (`carregar_log`) e o inventário leem o mesmo arquivo e
+dão o mesmo período. O projeto não fixa onde os dumps ficam.
+
+**Tags:** entregue-v4.23 (sobre v4.22). Suíte 1.367.

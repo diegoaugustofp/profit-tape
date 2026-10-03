@@ -84,8 +84,10 @@ linhas do `trade` (o *tape*), se ha' book (`so' trade` x `trade + book`), se cad
 esta' (raw, curated, backup) e as lacunas. **Nao e' diario**: rode antes de formular uma hipotese e quando uma
 coleta terminar; depois do commit do `.md` e do CSV o documento fica disponivel sem rodar nada. Le so' o
 rodape dos parquet, em prioridade baixa; rode depois das 18:00. Limites: a lacuna conta dia da semana sem dado
-e pode incluir feriado; a letra do disco de backup muda; `--dumps` e' melhor esforco (datas da primeira e
-da ultima linha). As **coletas com prazo** (WDOV26/WDOX26 para a rolagem; opcoes de PETR4 de outubro; WINV26/
+e pode incluir feriado; a letra do disco de backup muda. `--dumps <pasta ou arquivo>` le os DUMPS do console
+do Profit (texto com linhas `PRCBARRA|`, `ABSBARRA|`, `VWAPVP|`...; nao e' CSV): periodo, dias, barras por dia
+e barras REPETIDAS (dumps sobrepostos inflam o n); o NTSL nao emite o ticker, entao o ativo e' estimado
+pelo nome do arquivo ou pelo preco. O projeto nao fixa onde os dumps ficam. As **coletas com prazo** (WDOV26/WDOX26 para a rolagem; opcoes de PETR4 de outubro; WINV26/
 WINZ26, ainda nao confirmada) vivem em `docs/coletas.yaml`, aparecem no indice do diario com contagem
 regressiva, e o inventario as cruza com o disco (ex.: em quantos dias os DOIS contratos do WDO negociaram).
 

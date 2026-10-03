@@ -1792,7 +1792,9 @@ def inventario_dados(
     backup: Path | None = typer.Option(
         None, "--backup", help="raiz do disco de backup (ex.: D:\\backup_raw\\data\\raw)"),
     dumps: Path | None = typer.Option(
-        None, "--dumps", help="pasta com historicos de preco (CSV/TXT) baixados do grafico"),
+        None, "--dumps",
+        help="pasta OU arquivo com os DUMPS do console do Profit (texto com linhas PRCBARRA|, "
+             "ABSBARRA|, VWAPVP|...); o projeto nao fixa onde ficam"),
     coletas_yaml: Path = typer.Option(Path("docs/coletas.yaml"), "--coletas"),
     saida: Path = typer.Option(Path("docs/INVENTARIO_DADOS.md"), "--saida"),
     csv: Path | None = typer.Option(
@@ -1823,8 +1825,10 @@ def inventario_dados(
         raizes["backup"] = backup
     agora = _d.datetime.now(tz=ZoneInfo("America/Sao_Paulo"))
     df = escanear(raizes, contar_linhas=not sem_linhas)
-    lista_dumps = escanear_dumps(dumps) if dumps is not None and dumps.exists() else (
-        None if dumps is None else [])
+    lista_dumps = (None if dumps is None
+                   else escanear_dumps(dumps) if dumps.exists() else [])
+    if dumps is not None and not dumps.exists():
+        typer.echo(f"  AVISO: --dumps nao existe: {dumps}")
     try:
         from importlib.metadata import version
         ver = version("profit-tape")

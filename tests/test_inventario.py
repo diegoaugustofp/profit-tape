@@ -153,16 +153,75 @@ def test_relatorio_md_traz_coletas_resumo_lacunas_e_o_aviso_de_nao_diario(tmp_pa
     assert "(NÃO existe)" in md2 and "Nenhum dado encontrado" in md2
 
 
-def test_dumps_melhor_esforco_datas_e_formato_desconhecido(tmp_path: Path) -> None:
-    (tmp_path / "winfut_m15.csv").write_text(
-        "Ativo;Data;Hora;Abertura\nWIN$;01/10/2015;09:00;50000\nWIN$;02/10/2015;09:15;50100\n"
-        "WIN$;30/12/2022;17:45;105000\n", encoding="utf-8")
-    (tmp_path / "estranho.txt").write_text("sem data nenhuma\noutra linha\n", encoding="utf-8")
-    d = {x["arquivo"]: x for x in I.escanear_dumps(tmp_path)}
-    assert d["winfut_m15.csv"]["linhas"] == 4
-    assert d["winfut_m15.csv"]["primeira"] == "01/10/2015"
-    assert d["winfut_m15.csv"]["ultima"] == "30/12/2022"
-    assert d["estranho.txt"]["primeira"] is None and d["estranho.txt"]["ultima"] is None
+def _prc(data: int, hora: int, barra: int, close: float = 105000.0) -> str:
+    """Linha PRCBARRA| no formato congelado de `ntsl/preco_m15.ntsl` (14 campos)."""
+    campos = [data, hora, hora, barra, close - 50, close + 100, close - 100, close, 1234, 45.0,
+              close - 10, close - 90, 120.0, 130.0]
+    return "PRCBARRA|" + "|".join(str(c) for c in campos)
+
+
+def test_dump_e_o_texto_do_console_do_profit_e_nao_um_csv(tmp_path: Path) -> None:
+    """Formato real: linhas `PRCBARRA|1AAMMDD|hora|...` copiadas do console, possivelmente com
+    texto antes do prefixo. (A v4.22 esperava CSV com data dd/mm/aaaa: nao reconhecia dump.)"""
+    from profittape.research.eas_preco import CAMPOS, carregar_log
+
+    linhas = ["[console] indicador aplicado", "PRCVIDA|1150102|ligado"]
+    for data in (1150102, 1150105, 1221230):               # 02/01/2015, 05/01/2015, 30/12/2022
+        for k, hora in enumerate((900, 915, 930, 945)):
+            linhas.append(("[10:23:01] " if k == 0 else "") + _prc(data, hora, k + 1))
+    arq = tmp_path / "win_m15_2015_2022.txt"
+    arq.write_text("\n".join(linhas), encoding="utf-8")
+    d = I.escanear_dumps(arq)
+    assert len(d) == 1 and d[0]["prefixo"] == "PRCBARRA" and d[0]["tipo"] == "preco M15 (barras)"
+    assert d[0]["linhas"] == 12 and d[0]["dias"] == 3
+    assert d[0]["primeira"] == dt.date(2015, 1, 2) and d[0]["ultima"] == dt.date(2022, 12, 30)
+    assert d[0]["por_dia_mediana"] == 4 and d[0]["repetidas"] == 0
+    assert d[0]["ativo"] == "WIN (pelo nome do arquivo)"
+    assert len(_prc(1150102, 900, 1).split("|")) - 1 == len(CAMPOS)
+    # prova cruzada: o parser que as fichas usam le o MESMO arquivo e da' o mesmo periodo
+    df, _ = carregar_log(arq)
+    assert (df["dia"].min(), df["dia"].max(), df["dia"].nunique(), len(df)) == (
+        d[0]["primeira"], d[0]["ultima"], d[0]["dias"], d[0]["linhas"])
+
+
+def test_dump_sobreposto_repetidas_e_ativo_pelo_preco_e_varios_tipos(tmp_path: Path) -> None:
+    (tmp_path / "sub").mkdir()
+    dolar = [_prc(1250102, h, k + 1, close=5400.0) for k, h in enumerate((900, 915))]
+    (tmp_path / "sub" / "historico.log").write_text(
+        "\n".join(dolar + dolar[:1]), encoding="utf-8")           # barra 09:00 repetida
+    (tmp_path / "abs.txt").write_text(
+        "ABSBARRA|1260930|905|905|1|2|3|4|5|6\nABSBARRA|1260930|910|910|1|2|3|4|5|6\n"
+        "ABSDIR|1260930|905|evento\n", encoding="utf-8")
+    (tmp_path / "leia.txt").write_text("nao e' dump nenhum", encoding="utf-8")
+    por = {(x["arquivo"].replace("\\", "/"), x["prefixo"]): x for x in I.escanear_dumps(tmp_path)}
+    h = por[("sub/historico.log", "PRCBARRA")]
+    assert h["linhas"] == 3 and h["repetidas"] == 1 and h["dias"] == 1
+    assert h["ativo"] == "WDO (estimado pelo preco)"
+    assert por[("abs.txt", "ABSBARRA")]["tipo"] == "absorcao M5 (barras)"
+    barra, evento = por[("abs.txt", "ABSBARRA")], por[("abs.txt", "ABSDIR")]
+    assert barra["dias"] == 1 and barra["repetidas"] == 0
+    assert evento["tipo"] == "absorcao direcional (eventos)"
+    assert evento["repetidas"] == 0                  # eventos: nao ha' identidade de barra
+    assert not any(k[0] == "leia.txt" for k in por)  # sem linha de dump: nao entra
+    assert I._data_ntsl("1150102") == dt.date(2015, 1, 2)
+    assert I._data_ntsl("990102") == dt.date(1999, 1, 2)
+    assert I._data_ntsl("1151302") is None and I._data_ntsl("abc") is None
+    assert I._data_ntsl("") is None
+
+
+def test_relatorio_explica_o_que_e_dump_e_lista_o_periodo_por_arquivo(tmp_path: Path) -> None:
+    arq = tmp_path / "wdo_m15.txt"
+    arq.write_text("\n".join(_prc(1150102 + 3 * k, 900, 1, close=3000.0) for k in range(5)),
+                   encoding="utf-8")
+    md = I.relatorio_md(pd.DataFrame(columns=I.COLUNAS), [], dt.date(2026, 10, 3), {},
+                        "c", I.escanear_dumps(arq))
+    assert "não é CSV nem parquet" in md and "O NTSL não escreve o ticker na linha" in md
+    assert "| `wdo_m15.txt` | preco M15 (barras) | 5 | 5 |" in md and "02/01/2015" in md
+    assert "WDO (pelo nome do arquivo)" in md and "Repetidas" in md
+    assert "passe `--dumps <pasta ou arquivo>`" in I.relatorio_md(
+        pd.DataFrame(columns=I.COLUNAS), [], dt.date(2026, 10, 3), {}, "c", None)
+    vazio = I.relatorio_md(pd.DataFrame(columns=I.COLUNAS), [], dt.date(2026, 10, 3), {}, "c", [])
+    assert "Nenhuma linha de dump" in vazio
 
 
 def test_cli_inventario_escreve_md_e_csv_e_avisa_raiz_ausente(tmp_path: Path) -> None:
@@ -178,6 +237,19 @@ def test_cli_inventario_escreve_md_e_csv_e_avisa_raiz_ausente(tmp_path: Path) ->
     assert "ativo(s) ->" in r.output and saida.exists() and csv.exists()
     inv = pd.read_csv(csv)
     assert {"camada", "stream", "ativo", "dia", "linhas", "origem"} <= set(inv.columns)
+    dump = tmp_path / "meu_dump.txt"
+    dump.write_text(_prc(1150102, 900, 1), encoding="utf-8")
+    r3 = CliRunner().invoke(app, [
+        "inventario-dados", "--raw", str(raizes["raw"]), "--curated", str(raizes["curated"]),
+        "--coletas", str(RAIZ / "docs" / "coletas.yaml"), "--dumps", str(dump),
+        "--saida", str(tmp_path / "d.md"), "--csv", str(tmp_path / "d.csv")])
+    assert r3.exit_code == 0 and "preco M15 (barras)" in (tmp_path / "d.md").read_text(
+        encoding="utf-8")
+    r4 = CliRunner().invoke(app, [
+        "inventario-dados", "--raw", str(raizes["raw"]), "--curated", str(raizes["curated"]),
+        "--dumps", str(tmp_path / "nao_existe_dump"), "--saida", str(tmp_path / "e.md"),
+        "--csv", str(tmp_path / "e.csv")])
+    assert r4.exit_code == 0 and "AVISO: --dumps nao existe" in r4.output
     r2 = CliRunner().invoke(app, [
         "inventario-dados", "--raw", str(tmp_path / "nada"), "--curated", str(tmp_path / "nada2"),
         "--saida", str(tmp_path / "x.md"), "--csv", str(tmp_path / "x.csv")])

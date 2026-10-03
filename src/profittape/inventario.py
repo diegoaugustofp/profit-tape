@@ -303,62 +303,133 @@ def relatorio_md(df: pd.DataFrame, coletas: list[dict[str, Any]], hoje: dt.date,
                 txt = ", ".join(f"{x:%d/%m}" for x in falt[:12]) + (" …" if len(falt) > 12 else "")
                 L.append(f"- `{ativo}`: {len(falt)} dia(s): {txt}")
             L.append("")
-    L += ["## Histórico de preço (dumps)", ""]
+    L += ["## Dumps do console do Profit (histórico de preço e indicadores)", "",
+          "*Dump* = arquivo de texto com as linhas que um indicador NTSL escreve no console do "
+          "Profit (`PRCBARRA|`, `ABSBARRA|`, `VWAPVP|`...) e que você copia à mão: **não é CSV nem "
+          "parquet**. É a amostra longa de preço (ex.: out/2015 a dez/2022), sem agente. O NTSL "
+          "não escreve o ticker na linha.", ""]
     if dumps is None:
-        L += ["_Não varrido: passe `--dumps <pasta>` ao gerar (históricos de preço baixados do "
-              "gráfico, sem agente)._", ""]
+        L += ["_Não varrido: passe `--dumps <pasta ou arquivo>` ao gerar (o projeto não fixa onde "
+              "esses arquivos ficam)._", ""]
     elif not dumps:
-        L += ["_Pasta de dumps vazia ou sem arquivos reconhecidos._", ""]
+        L += ["_Nenhuma linha de dump (`PRCBARRA|`, `ABSBARRA|`, `VWAPVP|`, `BBSBARRA|`, "
+              "`ABSDIR|`) encontrada no caminho informado._", ""]
     else:
-        L += ["| Arquivo | MB | Linhas | Primeira data | Última data |", "|---|---|---|---|---|"]
+        L += ["| Arquivo | Tipo | Linhas | Dias | Primeiro dia | Último dia | Por dia (mediana) | "
+              "Ativo provável | Repetidas |", "|---|---|---|---|---|---|---|---|---|"]
         for d in dumps:
-            L.append(f"| `{d['arquivo']}` | {_mb(d['bytes'])} | {_n(d['linhas'])} | "
-                     f"{d['primeira'] or '—'} | {d['ultima'] or '—'} |")
-        L += ["", "*Melhor esforço*: datas lidas da primeira e da última linha; `—` = formato não "
-              "reconhecido.", ""]
+            rep = f"**{d['repetidas']}**" if d["repetidas"] else "0"
+            L.append(f"| `{d['arquivo']}` | {d['tipo']} | {_n(d['linhas'])} | {d['dias']} | "
+                     f"{_d(d['primeira'])} | {_d(d['ultima'])} | {_n(d['por_dia_mediana'])} | "
+                     f"{d['ativo']} | {rep} |")
+        L += ["", "*Repetidas*: barras com o mesmo dia e hora no mesmo arquivo — dumps sobrepostos "
+              "inflam o n sem informação nova (o parser das fichas recusa). *Ativo provável* é "
+              "estimativa pelo nome do arquivo ou pela ordem de grandeza do preço; confirme.", ""]
     return "\n".join(L) + "\n"
 
 
 # --------------------------------------------------------------------- dumps
-def _linhas_do_arquivo(f: Path) -> int:
-    n = 0
-    with f.open("rb") as fh:
-        while bloco := fh.read(1 << 20):
-            n += bloco.count(b"\n")
-    return n
+# DUMP, no projeto: arquivo de texto com as linhas que um indicador NTSL escreve no console do
+# Profit (`ConsoleLog`) e que o operador COPIA a mao para um arquivo (nao e' CSV nem parquet). Cada
+# linha tem um prefixo, e o primeiro campo e' a data no formato do NTSL (1AAMMDD: 1150102 =
+# 02/01/2015). Sao o "historico (amostra) out/2015 a dez/2022" do glossario. O NTSL nao emite o
+# ticker na linha.
+PREFIXOS_DUMP = {
+    "PRCBARRA|": "preco M15 (barras)",
+    "ABSBARRA|": "absorcao M5 (barras)",
+    "VWAPVP|": "VWAP + VP M5 (barras)",
+    "BBSBARRA|": "bollinger scalp (barras)",
+    "ABSDIR|": "absorcao direcional (eventos)",
+}
+_BARRAS = ("PRCBARRA|", "ABSBARRA|", "VWAPVP|", "BBSBARRA|")      # uma linha = uma barra
+_TICKERS_NO_NOME = ("WINFUT", "WDOFUT", "WIN", "WDO", "PETR4", "VALE3", "ITUB4")
 
 
-def _data_da_linha(linha: str) -> str | None:
-    for sep in (";", ",", "\t"):
-        partes = [p.strip().strip('"') for p in linha.split(sep)]
-        for p in partes[:3]:
-            m = re.match(r"(\d{2}/\d{2}/\d{4}|\d{4}-\d{2}-\d{2})", p)
-            if m:
-                return m.group(1)
-    return None
+def _data_ntsl(campo: str) -> dt.date | None:
+    """1AAMMDD do NTSL (`1900 + d // 10000`, como o parser do projeto). None se nao for data."""
+    campo = campo.strip()
+    if not campo.isdigit() or not 5 <= len(campo) <= 7:
+        return None
+    d = int(campo)
+    ano, mes, dia = 1900 + d // 10000, (d // 100) % 100, d % 100
+    if not (1990 <= ano <= 2100 and 1 <= mes <= 12 and 1 <= dia <= 31):
+        return None
+    try:
+        return dt.date(ano, mes, dia)
+    except ValueError:
+        return None
 
 
-def escanear_dumps(pasta: Path) -> list[dict[str, Any]]:
-    """Melhor esforco sobre CSV/TXT de historico de preco: tamanho, linhas, primeira e ultima data
-    (qualquer das tres primeiras colunas que comece por dd/mm/aaaa ou aaaa-mm-dd)."""
-    out = []
-    for f in sorted(p for p in pasta.rglob("*") if p.is_file()
-                    and p.suffix.lower() in (".csv", ".txt")):
-        primeira = ultima = None
+def _numero(v: str) -> float | None:
+    try:
+        return float(v.strip().replace(",", "."))
+    except ValueError:
+        return None
+
+
+def _ativo_provavel(nome: str, closes: list[float]) -> str:
+    """O dump nao traz o ticker. Pista 1: o nome do arquivo. Pista 2 (so' PRCBARRA): a ordem de
+    grandeza do preco (WIN ~ 40 a 200 mil pontos; WDO ~ 2 a 6 mil). E' ESTIMATIVA."""
+    baixo = nome.lower()
+    for t in _TICKERS_NO_NOME:
+        if t.lower() in baixo:
+            return f"{t} (pelo nome do arquivo)"
+    if closes:
+        med = sorted(closes)[len(closes) // 2]
+        if med > 20_000:
+            return "WIN (estimado pelo preco)"
+        if 1_000 <= med <= 10_000:
+            return "WDO (estimado pelo preco)"
+    return "nao consta"
+
+
+def escanear_dumps(destino: Path) -> list[dict[str, Any]]:
+    """Inventaria os dumps de `destino` (pasta ou arquivo): por arquivo e por TIPO de linha, o
+    numero de linhas, dias, primeiro e ultimo dia, barras por dia (mediana) e barras REPETIDAS
+    (dumps sobrepostos inflam o n sem informacao nova). O console pode por texto antes do
+    prefixo."""
+    arquivos = ([destino] if destino.is_file() else sorted(
+        f for f in destino.rglob("*") if f.is_file()
+        and f.suffix.lower() in (".txt", ".log", ".csv", ".dump", "")))
+    out: list[dict[str, Any]] = []
+    for f in arquivos:
         try:
-            with f.open("r", encoding="utf-8", errors="replace") as fh:
-                for _, linha in zip(range(6), fh, strict=False):
-                    primeira = primeira or _data_da_linha(linha)
-            with f.open("rb") as fh:
-                fh.seek(0, 2)
-                fh.seek(max(0, fh.tell() - 4096))
-                for linha in reversed(fh.read().decode("utf-8", errors="replace").splitlines()):
-                    ultima = _data_da_linha(linha)
-                    if ultima:
-                        break
-            n = _linhas_do_arquivo(f)
+            texto = f.read_text(encoding="utf-8", errors="replace")
         except OSError:
-            n = 0
-        out.append({"arquivo": str(f.relative_to(pasta)), "bytes": f.stat().st_size,
-                    "linhas": n, "primeira": primeira, "ultima": ultima})
+            continue
+        for prefixo, rotulo in PREFIXOS_DUMP.items():
+            if prefixo not in texto:
+                continue
+            por_dia: dict[dt.date, int] = {}
+            chaves: set[tuple[str, str]] = set()
+            repetidas, n = 0, 0
+            closes: list[float] = []
+            for linha in texto.splitlines():
+                if prefixo not in linha:
+                    continue
+                n += 1
+                campos = linha.split(prefixo, 1)[1].strip().split("|")
+                dia = _data_ntsl(campos[0])
+                if dia is not None:
+                    por_dia[dia] = por_dia.get(dia, 0) + 1
+                if prefixo in _BARRAS and len(campos) > 1:
+                    chave = (campos[0], campos[1])
+                    repetidas += chave in chaves
+                    chaves.add(chave)
+                if prefixo == "PRCBARRA|" and len(campos) > 7 and len(closes) < 5000:
+                    c = _numero(campos[7])
+                    if c is not None:
+                        closes.append(c)
+            cont = sorted(por_dia.values())
+            out.append({
+                "arquivo": f.name if destino.is_file() else str(f.relative_to(destino)),
+                "bytes": f.stat().st_size, "tipo": rotulo, "prefixo": prefixo.rstrip("|"),
+                "linhas": n, "dias": len(por_dia),
+                "primeira": min(por_dia) if por_dia else None,
+                "ultima": max(por_dia) if por_dia else None,
+                "por_dia_mediana": cont[len(cont) // 2] if cont else None,
+                "repetidas": repetidas,
+                "ativo": _ativo_provavel(f.name, closes) if prefixo == "PRCBARRA|" else (
+                    _ativo_provavel(f.name, [])),
+            })
     return out
