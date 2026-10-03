@@ -5057,3 +5057,26 @@ Ver o ACHADO 2026-10-01 do `OPERACAO.md`. Também a ignição de 02/10 09:29: `F
 com fill do livro e atraso de 1,0 s — o −659 foi execução simulada contra o livro, não gap.
 
 **Tags:** entregue-v4.17 (sobre v4.16).
+
+### 2026-10-03c — Página de resultado por EA e a fronteira da avaliação (v4.18)
+
+Diego: uma página por EA com resumo dos resultados, evolução das fichas, drawdown máximo, capital
+necessário e evolução do capital; e a pergunta de arquitetura — a avaliação, "talvez a mais
+importante", precisa ficar neste projeto ou pode ser independente?
+
+- **Resposta de arquitetura:** pode ser independente, e a independência que importa é de CAMINHO DE
+  DADO e de CÓDIGO, não de repositório. Hoje: mesmo repositório, pacote `avaliacao/` que só lê
+  arquivos, com a fronteira imposta por teste (não importa EA/record/DLL/pipeline/storage), de modo
+  que sair daqui é mover a pasta. Razões para ficar por ora: a ficha é a única fonte do critério (o
+  `metas.yaml` tem teste de deriva contra ela), uma só esteira de entrega, contrato de CSV ainda
+  mudando a cada versão, operador único. Razões para separar: ver `OPERACAO.md`. O que vale ser
+  independente de verdade é um AUDITOR que recalcule o P&L pelo tape e compare com o log dos EAs.
+- **Entregue:** `avaliacao/metricas.py` (drawdown pico-a-vale à mão, resumo, capital, curva),
+  `avaliacao/fichas.py` (git da ficha, carimbos), `avaliacao/pagina_ea.py`; o diário passa a ler o
+  capital recomendado do `ea.supervisor.resumo` (`eas_config.csv`) e o carimbo (`config_sha`,
+  `codigo`) de cada operação; `conta:` no `metas.yaml`; índice com link por EA.
+- **Achado:** o supervisor calcula o capital do vwap_vp pelo stop genérico do bloco `risco`, não pelo
+  stop programado (até 1.699 pts em 02/10): pela regra dos 2%, R$ 16.990 contra os R$ 5.000 do record.
+- Limite declarado: drawdown só de operações fechadas (sem excursão adversa intradia).
+
+**Tags:** entregue-v4.18 (sobre v4.17).

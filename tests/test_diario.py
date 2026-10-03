@@ -646,3 +646,57 @@ def test_saude_do_record_so_olha_o_pregao() -> None:
     assert s["heartbeats"] == 3 and s["sem_evento_max_s"] == pytest.approx(0.1)
     assert s["linhas_s_min"] == pytest.approx(2000.0) and s["maior_intervalo_s"] == 30.0
 
+
+def test_cli_gera_uma_pagina_por_ea_e_o_indice_aponta_para_elas(tmp_path: Path) -> None:
+    from profittape.cli import app
+
+    log = tmp_path / "log.jsonl"
+    _log_do_dia(log)
+    _tape_sintetico(tmp_path / "curated")
+    pasta = tmp_path / "diario"
+    r = CliRunner().invoke(app, ["diario-operacional", "--dia", DIA.isoformat(), "--log", str(log),
+                                 "--curated", str(tmp_path / "curated"), "--pasta", str(pasta)])
+    assert r.exit_code == 0, r.output
+    assert "3 pagina(s) de EA" in r.output
+    for arq in ("ea_ignicao.html", "ea_vwapvp.html", "ea_123_vb.html"):
+        assert (pasta / arq).exists(), arq
+    idx = (pasta / "index.html").read_text(encoding="utf-8")
+    assert "href='ea_ignicao.html'" in idx and "href='ea_vwapvp.html'" in idx
+    assert "abre a página dele" in idx
+    pagina = (pasta / "ea_ignicao.html").read_text(encoding="utf-8")
+    assert "href='index.html'" in pagina and "Drawdown máximo" in pagina
+    assert (pasta / "eas_config.csv").exists()
+    cfg = pd.read_csv(pasta / "operacoes.csv")
+    assert {"config_sha", "codigo"} <= set(cfg.columns)
+
+
+def test_supervisor_do_dia_e_carimbo_das_operacoes_vem_do_log(tmp_path: Path) -> None:
+    """Capital recomendado por EA = ultimo `ea.supervisor.resumo` do dia; o carimbo (sha do
+    YAML e tag de codigo) acompanha cada operacao -- config_sha (ignicao/vwap_vp) ou
+    yaml_sha256 (123)."""
+    por_ea1 = {"ea_ignicao": {"capital_recomendado": 5300.0, "contratos": 1, "ticker": "WINFUT"}}
+    por_ea2 = {"ea_ignicao": {"capital_recomendado": 5300.0, "contratos": 1, "ticker": "WINFUT"},
+               "ea_vwapvp_continuacao": {"capital_recomendado": 5000.0, "contratos": 1,
+                                         "ticker": "WINFUT"}}
+    ev = [_linha(_brt_ns(8, 0), "ea.supervisor.resumo", capital_em_conta=20000.0, por_ea=por_ea1),
+          _linha(_brt_ns(11, 4), "ea.supervisor.resumo", capital_em_conta=20000.0, por_ea=por_ea2),
+          _linha(_brt_ns(12, 0), "ea.ign.saida", nome="ea_ignicao", lado=1, motivo="stop",
+                 pnl_bruto=-530.0, pnl_liquido=-534.0, config_sha="6e69f2da640f",
+                 codigo="entregue-v4.01"),
+          _linha(_brt_ns(13, 0), "ea.123.operacao_fechada", desfecho="alvo", pnl_pts=10.0,
+                 ordens={"entrada": {"slippage_pts": 1.0}}, yaml_sha256="d0b03b1e38e8")]
+    log = tmp_path / "log.jsonl"
+    log.write_text("\n".join(ev) + "\n", encoding="utf-8")
+    d = D.montar(DIA, log, tmp_path / "sem_tape")
+    assert set(d["supervisor"]["por_ea"]) == {"ea_ignicao", "ea_vwapvp_continuacao"}   # o ultimo
+    ops = {o["ea"]: o for o in d["operacoes"]}
+    assert ops["ea_ignicao"]["config_sha"] == "6e69f2da640f"
+    assert ops["ea_ignicao"]["codigo"] == "entregue-v4.01"
+    assert ops["123 (E4)"]["config_sha"] == "d0b03b1e38e8" and ops["123 (E4)"]["codigo"] is None
+    pasta = tmp_path / "diario"
+    D.gravar_csv(d, pasta)
+    cfg = pd.read_csv(pasta / "eas_config.csv")
+    assert sorted(cfg["ea"]) == ["ea_ignicao", "ea_vwapvp_continuacao"]
+    assert cfg.loc[cfg["ea"] == "ea_vwapvp_continuacao", "capital_recomendado"].iloc[0] == 5000.0
+    assert D.supervisor_do_dia([]) == {}
+

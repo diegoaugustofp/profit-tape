@@ -1826,9 +1826,10 @@ def diario_operacional(
     from .prioridade import baixa_prioridade
 
     baixa_prioridade()
+    from .avaliacao.pagina_ea import gerar_paginas_ea
     from .diario import anotar, gravar_csv, ler_log_varios, ler_notas, linha_resumo_dia, montar
     from .diario_html import atualizar_nav, renderizar, renderizar_indice
-    from .diario_metas import carregar_metas
+    from .diario_metas import carregar_conta, carregar_metas
 
     hoje = _d.datetime.now(tz=ZoneInfo("America/Sao_Paulo")).date()
     if (de or ate) and (dia or nota):
@@ -1875,10 +1876,13 @@ def diario_operacional(
             for av in dados["avisos"]:
                 typer.echo(f"  AVISO: {av}")
     raiz_fichas = metas_yaml.parent
+    metas = carregar_metas(metas_yaml)
+    paginas = gerar_paginas_ea(pasta, metas, carregar_conta(metas_yaml), raiz_fichas)
     (pasta / "index.html").write_text(
-        renderizar_indice(pasta, carregar_metas(metas_yaml), raiz_fichas), encoding="utf-8")
+        renderizar_indice(pasta, metas, raiz_fichas, paginas), encoding="utf-8")
     atualizar_nav(pasta)
-    typer.echo(f"  {gerados} dia(s) gerado(s) -> {pasta / 'index.html'}")
+    typer.echo(f"  {gerados} dia(s) gerado(s), {len(paginas)} pagina(s) de EA -> "
+               f"{pasta / 'index.html'}")
     if falhas:
         typer.echo(f"  {len(falhas)} dia(s) FALHARAM: " + " | ".join(falhas))
         raise typer.Exit(1)

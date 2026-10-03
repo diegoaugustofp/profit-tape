@@ -359,7 +359,8 @@ def _barra(n: int, alvo: int | None) -> str:
     return f"<div class='barra'><i style='width:{pct:.0f}%'></i></div>"
 
 
-def _resumo_por_ea(ops: pd.DataFrame, status: dict[str, str]) -> str:
+def _resumo_por_ea(ops: pd.DataFrame, status: dict[str, str],
+                   paginas: dict[str, str] | None = None) -> str:
     if ops.empty:
         return "<p class='mudo'>Sem operações.</p>"
     ops = ops.copy()
@@ -375,7 +376,9 @@ def _resumo_por_ea(ops: pd.DataFrame, status: dict[str, str]) -> str:
         for ea, g in df.groupby("ea", sort=True):
             p = g["pnl_liquido"].astype(float)
             mot = " · ".join(f"{k} {v}" for k, v in g["motivo"].value_counts().items())
-            out.append([_e(ea), f"<span class='ficha'>{_e(status.get(str(ea), '—'))}</span>",
+            nome = (f"<a href='{_e(paginas[str(ea)])}'>{_e(ea)}</a>"
+                    if paginas and str(ea) in paginas else _e(ea))
+            out.append([nome, f"<span class='ficha'>{_e(status.get(str(ea), '—'))}</span>",
                         _n(len(g)), _n(int((p > 0).sum())), _n(int((p < 0).sum())),
                         _n(100 * (p > 0).mean(), 0), _n(p.sum(), 0, True),
                         _n(p.mean(), 1, True), _n(p.min(), 0, True), _e(mot),
@@ -425,7 +428,8 @@ def _proxima_avaliacao(prog: list[dict[str, Any]], metas: list[dict[str, Any]],
 
 
 def renderizar_indice(pasta: Path, metas: list[dict[str, Any]] | None = None,
-                      raiz_fichas: Path | None = None) -> str:
+                      raiz_fichas: Path | None = None,
+                      paginas_ea: dict[str, str] | None = None) -> str:
     from .diario_metas import progresso, status_da_ficha
 
     f = pasta / "dias.csv"
@@ -470,7 +474,9 @@ def renderizar_indice(pasta: Path, metas: list[dict[str, Any]] | None = None,
     corpo = ["<h1>Diário operacional — todos os dias</h1>",
              "<div class='sub'>resumo por EA, próxima avaliação segundo a ficha, e uma linha "
              "por dia (abra o dia para a decomposição)</div>",
-             "<h2>Resumo por EA (todos os dias)</h2>", _resumo_por_ea(ops, status)]
+             "<h2>Resumo por EA (todos os dias)</h2>", _resumo_por_ea(ops, status, paginas_ea),
+             "<small>O nome do EA abre a página dele: resultado, drawdown, capital e "
+             "evolução da ficha.</small>"]
     if metas:
         corpo += ["<h2>Próxima avaliação (segundo a ficha de cada EA)</h2>",
                   _proxima_avaliacao(prog, metas, status, hrefs),

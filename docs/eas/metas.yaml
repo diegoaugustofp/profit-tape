@@ -13,8 +13,18 @@
 # `mostrar`   o que o indice pode exibir SEM virar veredito: n | slippage_medio | dd_media
 # `veredito_parcial: false` = a ficha proibe olhar resultado antes da meta (so' contagem)
 
+# Conta e custo (usados pelas paginas por EA em data/diario/ea_*.html). Conferido contra o
+# log do record: ignicao, stop 530 pts => capital recomendado R$ 5.300 = 530 x 0,20 / 0,02.
+conta:
+  capital_inicial: 20000      # `capital_em_conta` do record (ea.supervisor.resumo)
+  valor_ponto: 0.20           # WINFUT: R$ por ponto por contrato
+  risco_max_pct: 0.02         # regra do supervisor: o stop de um EA cabe em 2% do capital dele
+  margem_por_contrato: null   # PREENCHER: R$ exigidos pela corretora por contrato (day trade)
+  contratos: 1
+
 eas:
   - ea: ea_ignicao
+    nome_supervisor: ea_ignicao
     ficha: ignicao.md
     unidade: decididos (saiu no alvo ou no stop; tempo nao conta)
     contar: {motivos: [alvo, stop]}
@@ -29,6 +39,7 @@ eas:
     trechos: ["Veredito so' com >= 68 decididos OU 6 meses"]
 
   - ea: "123 (E4)"
+    nome_supervisor: ea_123_vb_e4
     ficha: 123_volume_baixo.md
     unidade: operacoes com ordens reais (demo)
     contar: {com_slippage: true}
@@ -44,6 +55,7 @@ eas:
     trechos: ["~50 pregões, slippage", "≤ 6 pts em n = 100"]
 
   - ea: ea_vwapvp_continuacao
+    nome_supervisor: ea_vwapvp_continuacao
     ficha: vwap_vp.md
     unidade: operacoes (demo, dry_run)
     contar: {}
@@ -58,6 +70,7 @@ eas:
     trechos: ["drawdown acumulado > 7.000 pts OU 40 trades com média"]
 
   - ea: z_agf_win
+    nome_supervisor: z_agf_win
     ficha: z_agf_3.md
     unidade: sem meta numerica na ficha
     contar: {}
@@ -68,6 +81,7 @@ eas:
     trechos: ["Roda em dry_run dentro do record desde agosto"]
 
   - ea: ea_microprice
+    nome_supervisor: ea_microprice
     ficha: microprice.md
     unidade: DESCARTADO
     contar: {}
@@ -77,6 +91,7 @@ eas:
     trechos: ["DESCARTADO como taker"]
 
   - ea: ea_microprice_passiva
+    nome_supervisor: ea_microprice_passiva
     ficha: microprice.md
     unidade: DESCARTADO
     contar: {}

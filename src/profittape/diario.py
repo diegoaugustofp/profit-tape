@@ -140,6 +140,13 @@ def decompor(*, lado: int, d: float, entrada: float, saida: float, saida_tape: f
             "stop_real_sobre_programado": razao}
 
 
+def _carimbo(e: dict[str, Any]) -> dict[str, Any]:
+    """sha do YAML e tag de codigo que o EA carimba no log (ignicao/vwap_vp: config_sha; 123:
+    yaml_sha256). Sem eles a pagina do EA nao sabe sob qual configuracao rodou."""
+    return {"config_sha": e.get("config_sha") or e.get("yaml_sha256"),
+            "codigo": e.get("codigo")}
+
+
 def _f(e: dict[str, Any], k: str) -> float | None:
     v = e.get(k)
     return None if v is None else float(v)
@@ -155,7 +162,7 @@ def _op_ign(s: dict[str, Any], ent: dict[str, Any] | None) -> dict[str, Any]:
                           "pnl_bruto": _f(s, "pnl_bruto"), "pnl_liquido": _f(s, "pnl_liquido"),
                           "duracao_s": _f(s, "duracao_s"), "fill_origem": s.get("fill_origem"),
                           "atraso_log_entrada_s": _f(ent, "atraso_s") if ent else None,
-                          "ancora": s.get("ancora")}
+                          "ancora": s.get("ancora"), **_carimbo(s)}
     if ent is not None and None not in (op["entrada"], op["saida"], op["pnl_bruto"],
                                         op["pnl_liquido"], _f(s, "saida_tape"),
                                         _f(s, "preco_deteccao")):
@@ -177,7 +184,7 @@ def _op_vwapvp(s: dict[str, Any], ent: dict[str, Any] | None,
                           "preco_ref": _f(sin, "close") if sin else None,
                           "pnl_bruto": _f(s, "pnl_bruto"), "pnl_liquido": _f(s, "pnl_liquido"),
                           "duracao_s": _f(s, "duracao_s"), "fill_origem": "tape",
-                          "hhmm_sinal": s.get("hhmm_sinal")}
+                          "hhmm_sinal": s.get("hhmm_sinal"), **_carimbo(s)}
     if sin is not None and None not in (op["entrada"], op["saida"], op["pnl_bruto"],
                                         op["pnl_liquido"], _f(sin, "close")):
         # dry_run: o fill de saida e' o proprio preco do negocio -> tape == fill
@@ -207,7 +214,7 @@ def _op_generica(e: dict[str, Any]) -> dict[str, Any]:
             "t_saida": e["_t"], "t_entrada": None,
             "pnl_liquido": None if pnl is None else float(pnl),
             "slippage_ordens_pts": float(sum(slip)) if slip else None,
-            "latencia_fill_max_ms": float(max(lat)) if lat else None}
+            "latencia_fill_max_ms": float(max(lat)) if lat else None, **_carimbo(e)}
 
 
 def extrair_operacoes(eventos: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -457,6 +464,17 @@ def estados_dll(eventos: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+def supervisor_do_dia(eventos: list[dict[str, Any]]) -> dict[str, Any]:
+    """Capital em conta e capital recomendado por EA, do ULTIMO `ea.supervisor.resumo` do dia."""
+    ult = [e for e in eventos if e.get("event") == "ea.supervisor.resumo"]
+    if not ult:
+        return {}
+    e = ult[-1]
+    por_ea = e.get("por_ea")
+    return {"capital_em_conta": e.get("capital_em_conta"),
+            "por_ea": por_ea if isinstance(por_ea, dict) else {}}
+
+
 RUIDO_CONHECIDO = {"ea.cancel_todas_recusado", "ea.123.limpeza_na_subida",
                    "ea.123.limpeza_na_subida_desistiu"}
 
@@ -553,6 +571,7 @@ def montar(dia: dt.date, log: Path, curated: Path, symbol: str = "WINFUT",
         "atribuicao": atribuicao(ops), "avisos": avisos,
         "saude": saude_record(eventos), "ocorrencias": ocorrencias(eventos),
         "estados_dll": estados_dll(eventos), "notas": notas,
+        "supervisor": supervisor_do_dia(eventos),
         "tape": None, "incidentes": [], "buracos": [], "por_minuto": [],
     }
     if tape is not None:
@@ -588,7 +607,7 @@ _COLUNAS_OPS = [
     "pnl_bruto", "pnl_liquido", "duracao_s", "ideal", "entrada_slip", "gap", "fill", "custo",
     "residuo", "stop_pts", "alvo_pts", "stop_real_sobre_programado", "atraso_entrada_s",
     "atraso_saida_s", "custo_atraso_entrada_est", "custo_atraso_saida_est", "saida_tape",
-    "fill_origem", "slippage_ordens_pts", "latencia_fill_max_ms"]
+    "fill_origem", "slippage_ordens_pts", "latencia_fill_max_ms", "config_sha", "codigo"]
 
 
 def _atualiza_csv(caminho: Path, novas: pd.DataFrame, dia: str) -> None:
@@ -616,6 +635,14 @@ def gravar_csv(dados: dict[str, Any], pasta: Path) -> None:
     _atualiza_csv(pasta / "incidentes.csv",
                   pd.DataFrame(inc + bur, columns=["dia", "inicio", "fim", "minutos", "pico_s",
                                                    "negocios", "tipo", "duracao_s"]), dia)
+    sup = dados.get("supervisor") or {}
+    cfg_rows = [{"dia": dia, "ea": nome, "capital_recomendado": v.get("capital_recomendado"),
+                 "contratos": v.get("contratos"), "ticker": v.get("ticker"),
+                 "capital_em_conta": sup.get("capital_em_conta")}
+                for nome, v in (sup.get("por_ea") or {}).items()]
+    _atualiza_csv(pasta / "eas_config.csv",
+                  pd.DataFrame(cfg_rows, columns=["dia", "ea", "capital_recomendado", "contratos",
+                                                  "ticker", "capital_em_conta"]), dia)
     a, t, s = dados["atribuicao"], dados["tape"] or {}, dados["saude"]
     ops = dados["operacoes"]
     desc = dados["ops_descartadas"]

@@ -43,6 +43,25 @@ em 21/09. Ficam fora de atraso/incidentes/buracos e aparecem na coluna "Importad
 separa por ter ordens reais -> `123 (E4)` / `123 (dry_run)`. Backlog: logar `nome` no ciclo
 (exige reiniciar o record e mexe no caminho do E4).
 
+**Pagina por EA (v4.18).** O nome do EA no indice abre `data\diario\ea_<nome>.html`: resumo dos
+resultados (ganhos, payoff, fator de lucro, expectativa, por motivo, por dia, decomposicao acumulada),
+proxima avaliacao segundo a ficha, **drawdown maximo** (pico, vale, recuperacao; so' operacoes
+FECHADAS -- o drawdown marcado a mercado e' maior ou igual), **capital necessario** em tres leituras
+declaradas (supervisor do record; regra dos 2% com o pior stop programado; margem + drawdown + 1 pior
+perda, simples e com folga de 2x), **evolucao do capital** (R$ 20.000 e o valor do ponto vem de
+`docs/eas/metas.yaml`, bloco `conta`) e **evolucao da ficha** (commits do git que tocaram a ficha e a
+tabela de `config_sha` x tag de codigo; `config_sha` novo = contagem nova pela regra do projeto).
+**Preencha `conta.margem_por_contrato`** (margem da corretora): sem ela o capital sai sem margem, piso.
+O supervisor calcula o capital de EAs fora de 123/microprice/ignicao a partir do stop generico do bloco
+`risco`, nao do stop programado do EA: a pagina mostra os dois e avisa quando divergem.
+
+**Fronteira da avaliacao.** `src/profittape/avaliacao/` le so' arquivos (operacoes.csv, dias.csv,
+eas_config.csv, metas.yaml, fichas e o git log delas) e nao importa codigo de EA, record, DLL, pipeline
+ou storage -- um teste (`tests/test_avaliacao.py`) quebra se importar. Foi desenhado para poder sair
+deste repositorio (mover a pasta). Gatilhos para separar de fato: outra pessoa ou maquina avaliando; um
+auditor que RECALCULE o P&L a partir do tape e compare com o log dos EAs; dependencias pesadas
+(scipy/statsmodels) que nao devem ir para a maquina de captura; contrato de CSV estavel por ~1 mes.
+
 **RETROATIVO (v4.13):** `profit-tape diario-operacional --de 2026-07-24 [--ate 2026-10-02]` percorre
 os dias uteis do intervalo (o log e' lido uma vez) e pula o dia que nao tem nem evento no log nem
 tape curado. O que existe retroativamente: o **atraso do feed, os incidentes e os buracos de

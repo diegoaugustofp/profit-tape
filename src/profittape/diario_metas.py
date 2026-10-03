@@ -24,6 +24,20 @@ def carregar_metas(caminho: Path) -> list[dict[str, Any]]:
     return list(dados.get("eas") or [])
 
 
+CONTA_PADRAO: dict[str, Any] = {"capital_inicial": 20000.0, "valor_ponto": 0.20,
+                                "risco_max_pct": 0.02, "margem_por_contrato": None,
+                                "contratos": 1}
+
+
+def carregar_conta(caminho: Path) -> dict[str, Any]:
+    """Bloco `conta:` do metas.yaml sobre os padroes (arquivo ausente = padroes)."""
+    conta = dict(CONTA_PADRAO)
+    if caminho.exists():
+        dados = yaml.safe_load(caminho.read_text(encoding="utf-8")) or {}
+        conta.update(dados.get("conta") or {})
+    return conta
+
+
 def status_da_ficha(raiz_fichas: Path, ficha: str, max_chars: int = 260) -> str:
     """Primeira linha `> **Status:** ...` da ficha, sem markdown, truncada."""
     f = raiz_fichas / ficha
