@@ -5235,3 +5235,21 @@ por teste. O relatório da v4.25 também mostrou 28 dias de ações importados (
 registrado como pendência de conferência, não como conclusão.
 
 **Tags:** entregue-v4.26 (sobre v4.25). Suíte 1.384.
+
+### 2026-10-03l — Terceiro inventário real: resolução da barra e buracos (v4.27)
+
+Diego regenerou com a v4.26 (rápido; 27 dumps em 27 arquivos reconhecidos) e enviou o relatório. A aritmética
+dele confirmou a sobreposição (dump_15_22 = soma de três; wdo_2026 = rep + dep; ABS jan-abr dentro de
+jan-abr-jun-jul; unicos: WIN M15 2.705 dias, WDO M15 2.639, ABS 392) e o ativo estimado passou a funcionar. Dois erros
+meus restantes: (1) o `_6m` (barras de 6 min) foi agrupado com os dumps de 15 s: "16 dias únicos de bollinger"
+(são 5 em 15 s) e 18 pares falsos; (2) "Período" min-max escondia o buraco de 21 dias úteis (24/07 a 21/08/2026)
+no ABSBARRA. Corrigido: resolução inferida do arquivo e usada no agrupamento e nos pares; coluna de buracos
+(5+ dias úteis seguidos). Cinco mutações guardadas por teste; o teste de resolução usa o parser da ficha e
+pegou uma fixture minha com 13 campos em vez de 14.
+
+Também: li a skill `profit-tape-engenharia` (que eu não tinha consultado nesta sessão). Os comandos de aplicação
+que entreguei (`git fetch <bundle> refs/tags/entregue-vX.YY`) são os da seção 3.4 dela; faltava só o
+`pip install -e ".[dev]"` opcional (versão exibida), agora no INCREMENTO. O `docs/INVENTARIO_DADOS.md` e o CSV
+gerados são do operador e não entram nos bundles.
+
+**Tags:** entregue-v4.27 (sobre v4.26). Suíte 1.387.

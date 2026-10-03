@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import itertools
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -215,12 +216,12 @@ def test_dump_sobreposto_repetidas_e_ativo_pelo_preco_e_varios_tipos(tmp_path: P
 
 def test_relatorio_explica_o_que_e_dump_e_lista_o_periodo_por_arquivo(tmp_path: Path) -> None:
     arq = tmp_path / "wdo_m15.txt"
-    arq.write_text("\n".join(_prc(1150102 + 3 * k, 900, 1, close=3000.0) for k in range(5)),
-                   encoding="utf-8")
+    arq.write_text("\n".join(_prc(1150102 + 3 * k, 900 + 15 * b, b + 1, close=3000.0)
+                             for k in range(5) for b in range(4)), encoding="utf-8")
     md = I.relatorio_md(pd.DataFrame(columns=I.COLUNAS), [], dt.date(2026, 10, 3), {},
                         "c", I.escanear_dumps(arq))
     assert "não é CSV nem parquet" in md and "O NTSL não escreve o ticker na linha" in md
-    assert "| `wdo_m15.txt` | preco M15 (barras) | 5 | 5 |" in md and "02/01/2015" in md
+    assert "| `wdo_m15.txt` | preco M15 (barras) | 15 min | 20 | 5 |" in md and "02/01/2015" in md
     assert "WDO (pelo nome do arquivo)" in md and "Repetidas" in md
     assert "passe `--dumps <pasta ou arquivo>`" in I.relatorio_md(
         pd.DataFrame(columns=I.COLUNAS), [], dt.date(2026, 10, 3), {}, "c", None)
@@ -780,4 +781,104 @@ def test_vocabulario_do_relatorio_nao_crava_datas_de_importacao(tmp_path: Path) 
     dias importados, nao 14)."""
     md = I.relatorio_md(pd.DataFrame(columns=I.COLUNAS), [], dt.date(2026, 10, 3), {}, "c", None)
     assert "15/09" not in md and "por backfill" in md
+
+
+# ----------------------------- v4.27: resolucao da barra e buracos (2o inventario real)
+def _bbs_dia(data: int, horas: list[int], por_hora: int, primeira_barra: int = 1) -> list[str]:
+    """BBSBARRA com `por_hora` barras por hora distinta (15 s em HHMM => 4)."""
+    out, barra = [], primeira_barra
+    for h in horas:
+        for _ in range(por_hora):
+            out.append(f"BBSBARRA|{data}|{h}|{h}|{barra}|1,0|1,0|1,0|125.000,0|10|1|1|1|1|1")
+            barra += 1
+    return out
+
+
+def _minutos(inicio_h: int, fim_h: int, passo_min: int = 1) -> list[int]:
+    return [h * 100 + m for h in range(inicio_h, fim_h) for m in range(0, 60, passo_min)]
+
+
+def test_resolucao_da_barra_e_inferida_do_proprio_arquivo(tmp_path: Path) -> None:
+    from profittape.research.bollinger_scalp import CAMPOS, carregar_log
+
+    assert len(CAMPOS) == 14
+    cheio = _bbs_dia(1260901, _minutos(9, 18), 4)                       # 15 s, hora em HHMM
+    janela = _bbs_dia(1260902, _minutos(9, 14), 4)                      # 15 s, so' 9h as 14h
+    seis_min = _bbs_dia(1260903, _minutos(9, 18, 6), 1)                 # barras de 6 min
+    com_seg = [f"BBSBARRA|1260904|{h}|{h}|{i + 1}|1,0|1,0|1,0|125.000,0|10|1|1|1|1|1"
+               for i, h in enumerate(h * 10000 + m * 100 + s for h in (9, 10) for m in range(60)
+                                     for s in (0, 15, 30, 45))]         # 15 s, hora em HHMMSS
+    m5 = [f"ABSBARRA|1260905|{h}|{h}|130.100,0|130.200,0|130.000,0|130.150,0|10|5|1|1|1|1|1|1"
+          for h in _minutos(9, 18, 5)]
+    m15 = _dias_prc(1150102, 2, "125.450,00", barras=1)                 # 1 barra/dia: nao infere
+    for nome, linhas, esperado in (("cheio", cheio, "15 s"), ("janela", janela, "15 s"),
+                                   ("seis", seis_min, "6 min"), ("seg", com_seg, "15 s"),
+                                   ("m5", m5, "5 min"), ("degenerado", m15, "—")):
+        e = I.escanear_dumps(_dump(tmp_path / f"{nome}.txt", linhas))[0]
+        assert e["resolucao"] == esperado, (nome, e["resolucao"], e["resolucao_s"])
+    df, _ = carregar_log(tmp_path / "janela.txt")      # o parser da ficha aceita o mesmo arquivo
+    assert len(df) == 5 * 60 * 4
+    assert I._rotulo_resolucao(None) == "—" and I._rotulo_resolucao(900.0) == "15 min"
+    assert I._rotulo_resolucao(360.0) == "6 min" and I._rotulo_resolucao(15.0) == "15 s"
+    assert I._segundos_do_dia(930) == 9 * 3600 + 30 * 60
+    assert I._segundos_do_dia(93015) == 9 * 3600 + 30 * 60 + 15
+
+
+def test_bollinger_15s_e_6min_nao_se_misturam_nem_viram_duplicata(tmp_path: Path) -> None:
+    """O caso real: `dump_..._6m.txt` (16 dias, 95 barras/dia) foi somado aos dumps de 15 s: o
+    relatorio v4.26 dizia '16 dias unicos de bollinger' e listava 18 'sobreposicoes' falsas."""
+    dia15 = _minutos(9, 18)
+    for k, dia in enumerate((1260901, 1260902, 1260903, 1260904, 1260908)):
+        _dump(tmp_path / f"dump2026090{k}.txt", _bbs_dia(dia, dia15, 4))
+    _dump(tmp_path / "dump_dia_completo.txt", _bbs_dia(1260901, dia15, 4))      # copia de um dia
+    _dump(tmp_path / "dump_9h_14h.txt", list(itertools.chain.from_iterable(
+        _bbs_dia(d, _minutos(9, 14), 4) for d in (1260901, 1260902, 1260903, 1260904))))
+    dias_6m = [1260901 + k for k in range(16)]
+    _dump(tmp_path / "dump_6m.txt", list(itertools.chain.from_iterable(
+        _bbs_dia(d, _minutos(9, 18, 6), 1) for d in dias_6m)))
+    entradas, _ = I.escanear_dumps_varios([tmp_path])
+    res = I.resumo_dumps(entradas)
+    por_res = {u["resolucao"]: u for u in res["unicos"]}
+    assert set(por_res) == {"15 s", "6 min"}
+    assert por_res["15 s"]["dias_unicos"] == 5 and por_res["15 s"]["arquivos"] == 7
+    assert por_res["15 s"]["soma_dias"] == 5 + 1 + 4 and por_res["15 s"]["repetidos"] == 5
+    assert por_res["6 min"]["dias_unicos"] == 16 and por_res["6 min"]["arquivos"] == 1
+    assert por_res["6 min"]["repetidos"] == 0
+    assert res["pares"] and all(p["resolucao"] == "15 s" for p in res["pares"])
+    assert not any("dump_6m.txt" in (p["a"], p["b"]) for p in res["pares"])   # 6 min: sem par
+    assert any({p["a"], p["b"]} == {"dump_dia_completo.txt", "dump20260900.txt"}
+               and p["relacao"] == "mesmos dias" for p in res["pares"])
+    md = I.relatorio_md(pd.DataFrame(columns=I.COLUNAS), [], dt.date(2026, 10, 3), {}, "c",
+                        entradas)
+    assert "| bollinger scalp (barras) | 15 s | WIN | 7 | **5** |" in md
+    assert "| bollinger scalp (barras) | 6 min | WIN | 1 | **16** |" in md
+    assert "Resolução (estimada)" in md and "arquivos de resoluções diferentes não são dupl" in md
+
+
+def test_buracos_mostra_o_que_o_periodo_minimo_maximo_esconde(tmp_path: Path) -> None:
+    """ABSBARRA do operador: 02/01/2025 a 26/08/2026 parece continuo, mas 24/07 a 21/08/2026 nao
+    tem dado (21 dias uteis). Feriado isolado nao pode virar buraco."""
+    d = dt.date
+    dias = {d(2026, 7, 21), d(2026, 7, 22), d(2026, 7, 23), d(2026, 8, 24), d(2026, 8, 25)}
+    assert I.buracos(dias) == [{"de": d(2026, 7, 24), "ate": d(2026, 8, 21), "dias_uteis": 21}]
+    feriado = {d(2026, 9, 4), d(2026, 9, 8)}               # 07/09 (segunda): 1 dia util sem dado
+    assert I.buracos(feriado) == [] and I.buracos(set()) == []
+    carnaval = {d(2026, 2, 13), d(2026, 2, 18)}            # seg e ter: 2 dias uteis
+    assert I.buracos(carnaval) == []
+    assert I.buracos({d(2026, 3, 2), d(2026, 3, 9)}, minimo=4) == [
+        {"de": d(2026, 3, 3), "ate": d(2026, 3, 6), "dias_uteis": 4}]
+    assert I.buracos({d(2026, 3, 2), d(2026, 3, 9)}) == []           # 4 < 5: nao e' buraco
+    assert I.buracos({d(2026, 3, 6), d(2026, 3, 9)}) == []           # fim de semana nao conta
+    def abs_(dia: int) -> list[str]:
+        return [f"ABSBARRA|{dia}|{h}|{h}|130.100,0|130.200,0|130.000,0|130.150,0|10|5|1|1|1|1|1|1"
+                for h in _minutos(9, 18, 5)]
+    arq = _dump(tmp_path / "abs_2026.txt", list(itertools.chain.from_iterable(
+        abs_(x) for x in (1260721, 1260722, 1260723, 1260824, 1260825))))
+    entradas, _ = I.escanear_dumps_varios([arq])
+    u = I.resumo_dumps(entradas)["unicos"][0]
+    assert u["dias_unicos"] == 5 and u["buracos"][0]["dias_uteis"] == 21
+    md = I.relatorio_md(pd.DataFrame(columns=I.COLUNAS), [], dt.date(2026, 10, 3), {}, "c",
+                        entradas)
+    assert "24/07/2026 a 21/08/2026 (21 dias)" in md
+    assert "Buracos (5+ dias úteis seguidos sem dado)" in md
 

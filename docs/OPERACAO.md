@@ -61,6 +61,21 @@ trocando a virgula; agora segue a regra do parser das fichas (milhar com ponto, 
 para BBSBARRA e ABSBARRA. A frase fixa "01 a 14/09 foram importados em 15/09" saiu do gerador: o relatorio
 mostrou 28 dias importados nas acoes, nao 14.
 
+### Inventario de dumps: resolucao da barra e buracos (v4.27)
+
+O terceiro relatorio real (03/10, v4.26) acertou a sobreposicao entre arquivos, mas somou **resolucoes
+diferentes** como se fossem o mesmo dado: `dump_20260901_20260923_6m.txt` (16 dias, 95 barras/dia) entrou no
+mesmo grupo dos dumps de 15 s (2.249 barras/dia) e o relatorio dizia "16 dias unicos de bollinger scalp" e
+listava 18 "sobreposicoes" que nao eram duplicata. Os dumps de 15 s cobrem 5 dias distintos (01 a 04 e 08/09).
+Agora a **resolucao da barra e' inferida do proprio arquivo** (distancia mediana entre horas distintas / barras
+por hora distinta: 15 s com `hora` em HHMM = 60 / 4; M5 = 300; M15 = 900; 6 min = 360; uma janela 9h-14h nao
+muda isso, so' as barras por dia). Grupos de dias unicos e pares de sobreposicao so' juntam arquivos de mesmo
+tipo, ativo E resolucao. Dump com menos de 3 horas distintas por dia nao tem resolucao inferivel ("—").
+
+O periodo min-max tambem enganava: ABSBARRA "02/01/2025 a 26/08/2026" nao tem dado de 24/07 a 21/08/2026 (21
+dias uteis). A tabela de dias unicos ganhou **buracos**: sequencias de 5 ou mais dias da semana seguidos sem
+dado (feriado isolado e carnaval nao entram; 5 e' o piso). O `trade` ja' tinha lacunas por data.
+
 ## Diario operacional (v4.12): o que os EAs fizeram E o que a infraestrutura fez com eles
 
 `profit-tape diario-operacional [--dia AAAA-MM-DD] [--nota "texto"]` (o `diario <dir>` antigo

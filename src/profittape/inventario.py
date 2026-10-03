@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import contextlib
 import datetime as dt
+import itertools
 import os
 import re
 import threading
@@ -485,28 +486,36 @@ def relatorio_md(df: pd.DataFrame, coletas: list[dict[str, Any]], hoje: dt.date,
         L += ["_Nenhuma linha de dump (`PRCBARRA|`, `ABSBARRA|`, `VWAPVP|`, `BBSBARRA|`, "
               "`ABSDIR|`) encontrada no caminho informado._", ""]
     else:
-        L += ["| Arquivo | Tipo | Linhas | Dias | Primeiro dia | Último dia | Por dia (mediana) | "
-              "Ativo provável | Repetidas |", "|---|---|---|---|---|---|---|---|---|"]
+        L += ["| Arquivo | Tipo | Resolução (estimada) | Linhas | Dias | Primeiro dia | "
+              "Último dia | Por dia (mediana) | Ativo provável | Repetidas |",
+              "|---|---|---|---|---|---|---|---|---|---|"]
         for d in dumps:
             rep = ("n/d" if d["repetidas"] is None
                    else f"**{d['repetidas']}**" if d["repetidas"] else "0")
-            L.append(f"| `{d['arquivo']}` | {d['tipo']} | {_n(d['linhas'])} | {d['dias']} | "
+            L.append(f"| `{d['arquivo']}` | {d['tipo']} | {d.get('resolucao', '—')} | "
+                     f"{_n(d['linhas'])} | {d['dias']} | "
                      f"{_d(d['primeira'])} | {_d(d['ultima'])} | {_n(d['por_dia_mediana'])} | "
                      f"{d['ativo']} | {rep} |")
         res = resumo_dumps(dumps)
         if res["unicos"]:
             L += ["", "### Dias únicos por tipo e ativo (sem contar a sobreposição)", "",
-                  "| Tipo | Ativo provável | Arquivos | Dias únicos | Período | Soma dos dias dos "
-                  "arquivos | Contados em duplicidade |", "|---|---|---|---|---|---|---|"]
+                  "| Tipo | Resolução | Ativo provável | Arquivos | Dias únicos | Período | "
+                  "Soma dos dias dos arquivos | Contados em duplicidade | Buracos (5+ dias úteis "
+                  "seguidos sem dado) |", "|---|---|---|---|---|---|---|---|---|"]
             for u in res["unicos"]:
                 ativo_u = u["ativo"] if u["ativo"] != "?" else "não identificado"
                 dup = f"**{u['repetidos']}**" if u["repetidos"] else "0"
                 periodo_u = f"{_d(u['primeiro'])} a {_d(u['ultimo'])}"
-                L.append(f"| {u['tipo']} | {ativo_u} | {u['arquivos']} | "
+                furos = "; ".join(
+                    f"{_d(b['de'])} a {_d(b['ate'])} ({b['dias_uteis']} dias)"
+                    for b in u["buracos"][:3]) or "—"
+                if len(u["buracos"]) > 3:
+                    furos += f" (+{len(u['buracos']) - 3})"
+                L.append(f"| {u['tipo']} | {u['resolucao']} | {ativo_u} | {u['arquivos']} | "
                          f"**{_n(u['dias_unicos'])}** | {periodo_u} | {_n(u['soma_dias'])} | "
-                         f"{dup} |")
+                         f"{dup} | {furos} |")
         if res["pares"]:
-            L += ["", "### Sobreposição entre arquivos (mesmo tipo e ativo)", "",
+            L += ["", "### Sobreposição entre arquivos (mesmo tipo, ativo e resolução)", "",
                   "Somar as linhas destes arquivos conta de novo os dias em comum. **Mesmos dias "
                   "não provam mesmas barras**: confira as barras por dia (resolução ou janela de "
                   "horário podem diferir).", "",
@@ -516,7 +525,8 @@ def relatorio_md(df: pd.DataFrame, coletas: list[dict[str, Any]], hoje: dt.date,
                 ativo_p = x["ativo"] if x["ativo"] != "?" else "não identificado"
                 if x["ambiguo"]:
                     ativo_p += " (um dos arquivos sem ativo identificado: confirme)"
-                L.append(f"| {x['tipo']} | {ativo_p} | `{x['a']}` ({_n(x['dias_a'])}; "
+                L.append(f"| {x['tipo']} · {x['resolucao']} | {ativo_p} | `{x['a']}` "
+                         f"({_n(x['dias_a'])}; "
                          f"{_n(x['barras_dia_a'])}) | `{x['b']}` ({_n(x['dias_b'])}; "
                          f"{_n(x['barras_dia_b'])}) | **{_n(x['comuns'])}** "
                          f"({_d(x['primeiro'])} a {_d(x['ultimo'])}) | {x['relacao']} |")
@@ -526,9 +536,11 @@ def relatorio_md(df: pd.DataFrame, coletas: list[dict[str, Any]], hoje: dt.date,
               "blocos acima. Barras com a mesma identidade do parser da ficha (dia + "
               "`current_bar` em PRCBARRA e BBSBARRA; dia + hora em ABSBARRA) no mesmo arquivo: "
               "dumps sobrepostos inflam o n sem informação nova. `n/d` = o tipo não tem "
-              "identidade de barra. *Ativo "
+              "identidade de barra. *Resolução* é inferida do próprio arquivo (distância entre "
+              "horas / barras por hora): arquivos de resoluções diferentes não são duplicatas, "
+              "mesmo nos mesmos dias. *Ativo "
               "provável* é estimativa pelo nome do arquivo ou pela ordem de grandeza do preço "
-              "(só PRCBARRA); confirme.", ""]
+              "(PRCBARRA, BBSBARRA e ABSBARRA); confirme.", ""]
     return "\n".join(L) + "\n"
 
 
@@ -604,6 +616,71 @@ def _ativo_provavel(nome: str, closes: list[float]) -> str:
     return "nao consta"
 
 
+def _segundos_do_dia(h: int) -> int:
+    """`hora` do dump: HHMM (<= 2359) ou HHMMSS, como o parser das fichas aceita."""
+    if h > 2359:
+        return (h // 10000) * 3600 + ((h // 100) % 100) * 60 + h % 100
+    return (h // 100) * 3600 + (h % 100) * 60
+
+
+def _mediana(v: list[float]) -> float:
+    v = sorted(v)
+    return v[len(v) // 2]
+
+
+def _resolucao_s(linhas_por_dia: dict[dt.date, int],
+                 horas_por_dia: dict[dt.date, set[int]]) -> float | None:
+    """Resolucao da barra em segundos, inferida do proprio arquivo: (distancia mediana entre horas
+    distintas) / (barras por hora distinta). 15 s com `hora` em HHMM: 60 / 4 = 15; M5: 300;
+    M15: 900; 6 min: 360. Uma janela de horario (9h as 14h) nao muda a resolucao, so' as barras
+    por dia."""
+    deltas: list[float] = []
+    razoes: list[float] = []
+    for dia, horas in horas_por_dia.items():
+        if len(horas) < 3 or not linhas_por_dia.get(dia):
+            continue
+        seg = sorted(_segundos_do_dia(h) for h in horas)
+        d = [float(b - a) for a, b in itertools.pairwise(seg) if b > a]
+        if d:
+            deltas.append(_mediana(d))
+            razoes.append(linhas_por_dia[dia] / len(horas))
+    if not deltas:
+        return None
+    return _mediana(deltas) / _mediana(razoes)
+
+
+def _rotulo_resolucao(seg: float | None) -> str:
+    if seg is None:
+        return "—"
+    if seg < 90:
+        return f"{round(seg)} s"
+    return f"{round(seg / 60, 1):g} min"
+
+
+def buracos(dias: set[dt.date], minimo: int = 5) -> list[dict[str, Any]]:
+    """Sequencias de `minimo` ou mais dias da SEMANA seguidos sem dado entre o primeiro e o ultimo
+    dia. Feriado isolado nao entra (carnaval e' 2 dias); o periodo min-max sozinho esconde isto."""
+    if not dias:
+        return []
+    d, fim = min(dias), max(dias)
+    corrida: list[dt.date] = []
+    out: list[dict[str, Any]] = []
+
+    def fechar() -> None:
+        if len(corrida) >= minimo:
+            out.append({"de": corrida[0], "ate": corrida[-1], "dias_uteis": len(corrida)})
+        corrida.clear()
+    while d <= fim:
+        if d.weekday() < 5:
+            if d in dias:
+                fechar()
+            else:
+                corrida.append(d)
+        d += dt.timedelta(days=1)
+    fechar()
+    return sorted(out, key=lambda b: -b["dias_uteis"])
+
+
 LIMITE_DUMP_BYTES = 300 * 1024 * 1024
 LIMITE_DUMP_ARQUIVOS = 300
 _PODAR = {".git", ".venv", "venv", "node_modules", "__pycache__", "raw", "curated", "_quarentena"}
@@ -641,7 +718,7 @@ def escanear_dumps(destino: Path, limite_bytes: int = LIMITE_DUMP_BYTES) -> list
             f"CORTADO: so' os primeiros {LIMITE_DUMP_ARQUIVOS} arquivos foram lidos; aponte "
             "--dumps para a pasta certa"), "prefixo": "", "linhas": None, "dias": None,
             "primeira": None, "ultima": None, "por_dia_mediana": None, "repetidas": None,
-            "ativo": "—"})
+            "ativo": "—", "resolucao_s": None, "resolucao": "—"})
     for f in arquivos:
         nome = f.name if destino.is_file() else str(f.relative_to(destino))
         try:
@@ -653,7 +730,7 @@ def escanear_dumps(destino: Path, limite_bytes: int = LIMITE_DUMP_BYTES) -> list
                 f"PULADO: arquivo de {tamanho / 1e6:,.0f} MB (limite {limite_bytes / 1e6:,.0f} MB)"
                 .replace(",", ".")), "prefixo": "", "linhas": None, "dias": None,
                 "primeira": None, "ultima": None, "por_dia_mediana": None, "repetidas": None,
-                "ativo": "—"})
+                "ativo": "—", "resolucao_s": None, "resolucao": "—"})
             continue
         est: dict[str, dict[str, Any]] = {}
         try:
@@ -664,12 +741,14 @@ def escanear_dumps(destino: Path, limite_bytes: int = LIMITE_DUMP_BYTES) -> list
                         continue
                     prefixo = m.group(1) + "|"
                     e = est.setdefault(prefixo, {"n": 0, "dias": {}, "chaves": set(), "rep": 0,
-                                                 "closes": []})
+                                                 "closes": [], "horas": {}})
                     e["n"] += 1
                     campos = linha[m.end():].strip().split("|")
                     dia = _data_ntsl(campos[0])
                     if dia is not None:
                         e["dias"][dia] = e["dias"].get(dia, 0) + 1
+                        if prefixo != "ABSDIR|" and len(campos) > 1 and campos[1].strip().isdigit():
+                            e["horas"].setdefault(dia, set()).add(int(campos[1]))
                     idx = _IDENTIDADE.get(prefixo)
                     if idx and len(campos) > max(idx) and len(e["chaves"]) < _MAX_CHAVES:
                         chave = tuple(campos[i] for i in idx)
@@ -689,6 +768,7 @@ def escanear_dumps(destino: Path, limite_bytes: int = LIMITE_DUMP_BYTES) -> list
             por_dia: dict[dt.date, int] = achado["dias"]
             cont = sorted(por_dia.values())
             closes = achado["closes"]
+            res_s = _resolucao_s(por_dia, achado["horas"]) if prefixo != "ABSDIR|" else None
             out.append({
                 "arquivo": nome, "caminho": str(f.resolve()), "bytes": tamanho, "tipo": rotulo,
                 "prefixo": prefixo.rstrip("|"),
@@ -698,6 +778,7 @@ def escanear_dumps(destino: Path, limite_bytes: int = LIMITE_DUMP_BYTES) -> list
                 "por_dia_mediana": cont[len(cont) // 2] if cont else None,
                 "repetidas": achado["rep"] if prefixo in _IDENTIDADE else None,
                 "ativo": _ativo_provavel(f.name, closes), "_dias": frozenset(por_dia),
+                "resolucao_s": res_s, "resolucao": _rotulo_resolucao(res_s),
             })
     return out
 
@@ -742,16 +823,18 @@ def resumo_dumps(entradas: list[dict[str, Any]]) -> dict[str, list[dict[str, Any
     nao um veredito. Arquivos de ativos diferentes (WIN x WDO) nao sao comparados; arquivo com ativo
     nao identificado ("?") e' comparado com todos e marcado como ambiguo."""
     com_dias = [e for e in entradas if e.get("_dias")]
-    grupos: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    grupos: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
     for e in com_dias:
-        grupos.setdefault((e["prefixo"], _token_ativo(e["ativo"])), []).append(e)
+        grupos.setdefault((e["prefixo"], _token_ativo(e["ativo"]), e.get("resolucao", "—")),
+                          []).append(e)
     unicos: list[dict[str, Any]] = []
-    for (pref, tok), es in sorted(grupos.items()):
+    for (pref, tok, res), es in sorted(grupos.items()):
         uniao: set[dt.date] = set().union(*(e["_dias"] for e in es))
         soma = sum(len(e["_dias"]) for e in es)
-        unicos.append({"prefixo": pref, "tipo": es[0]["tipo"], "ativo": tok, "arquivos": len(es),
-                       "dias_unicos": len(uniao), "primeiro": min(uniao), "ultimo": max(uniao),
-                       "soma_dias": soma, "repetidos": soma - len(uniao)})
+        unicos.append({"prefixo": pref, "tipo": es[0]["tipo"], "ativo": tok, "resolucao": res,
+                       "arquivos": len(es), "dias_unicos": len(uniao), "primeiro": min(uniao),
+                       "ultimo": max(uniao), "soma_dias": soma, "repetidos": soma - len(uniao),
+                       "buracos": buracos(set(uniao))})
     pares: list[dict[str, Any]] = []
     por_prefixo: dict[str, list[dict[str, Any]]] = {}
     for e in com_dias:
@@ -763,6 +846,8 @@ def resumo_dumps(entradas: list[dict[str, Any]]) -> dict[str, list[dict[str, Any
                 ta, tb = _token_ativo(a["ativo"]), _token_ativo(b["ativo"])
                 if ta != tb and "?" not in (ta, tb):
                     continue                                   # ativos diferentes: nao e' duplicata
+                if a.get("resolucao") != b.get("resolucao"):
+                    continue                                   # barras de tamanhos diferentes: idem
                 comuns = a["_dias"] & b["_dias"]
                 if not comuns:
                     continue
@@ -774,7 +859,8 @@ def resumo_dumps(entradas: list[dict[str, Any]]) -> dict[str, list[dict[str, Any
                     rel = "A esta' dentro de B"
                 else:
                     rel = "parcial"
-                pares.append({"prefixo": pref, "tipo": a["tipo"], "a": a["arquivo"],
+                pares.append({"prefixo": pref, "tipo": a["tipo"],
+                              "resolucao": a.get("resolucao", "—"), "a": a["arquivo"],
                               "b": b["arquivo"], "ativo": ta if ta != "?" else tb,
                               "ambiguo": ta != tb, "comuns": len(comuns), "dias_a": len(a["_dias"]),
                               "dias_b": len(b["_dias"]), "barras_dia_a": a["por_dia_mediana"],
