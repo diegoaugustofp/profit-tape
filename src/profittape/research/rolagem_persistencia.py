@@ -27,10 +27,24 @@ a relacao de sinal. A PERMUTACAO entre corretoras esta' ERRADA aqui: destroi a
 correlacao de magnitude (corretora grande e' grande nos dois dias) e inventa
 sinal. Foi o erro do baseline da v4.28 e voltou na sessao de 2026-10-03.
 Limite conhecido: a inversao nao preserva a soma zero do dia (cada negocio tem
-comprador e vendedor); o tamanho do teste e' conferido por simulacao.
+comprador e vendedor). Conferido por simulacao num mercado de soma zero, sem
+persistencia (400 repeticoes, 2026-10-04): tamanho de 5,8% a 6,8% em cinco
+desenhos (27 corretoras com pesos moderados e muito desiguais, um agente
+absorvendo 80%, 10 corretoras, poucos negocios). Pouco acima de 5%: aceitavel.
+Um caso espelhado (cada corretora com uma contraparte exclusiva) INFLA o tamanho,
+mas nao e' a estrutura do tape.
 
 PODER, ANTES DE OLHAR: `poder()` planta persistencia de uma fracao `f` das
 corretoras nas magnitudes REAIS do evento e diz quanto o teste enxerga.
+
+MODO PRIMARIO (v4.31): a ficha (RESEARCH_PLANO, secao 7) fixa a janela em D-2,
+D-1 e D e o portao de poder ANTES de qualquer dado do WIN. `avaliar_primaria`
+IMPOE isso, em vez de depender de quem roda: janela = os 3 ultimos PREGOES ate'
+`ultimo_pregao` (calendario = dias com dado em curated/trade, de qualquer
+simbolo, para um dia vazio no roll nao deslizar a janela), portao = poder
+>= 70% em f = 0,75, e o veredito sai da regra. Se o portao reprova, o evento e'
+INCONCLUSIVO POR DESENHO e z e p ficam fora da tela. O modo livre (`descrever`)
+continua e e' DESCRITIVO: a janela e' de quem roda, e nao vale como criterio.
 """
 
 from __future__ import annotations
@@ -50,6 +64,11 @@ from ..features.pipeline import _carregar_dia
 log = structlog.get_logger(__name__)
 _COLS = ["ts_ns", "price", "quantidade", "agente_comprador", "agente_vendedor", "trade_type"]
 FRACOES_PODER = (0.0, 0.25, 0.5, 0.75, 1.0)
+# Limiares da ficha (RESEARCH_PLANO, secao 7), fixados antes de qualquer dado do WIN.
+JANELA_PRIMARIA = 3          # D-2, D-1 e D
+PORTAO_F = 0.75              # fracao de corretoras que mantem o sinal
+PORTAO_PODER_MIN = 0.70
+ALFA = 0.05
 Mat = npt.NDArray[np.float64]
 
 
@@ -161,8 +180,8 @@ def descrever(curated: Path, roll: str, dias: list[dt.date], n_sorteios: int, co
                  agentes=int((liq != 0).sum()))
         vets.append(liq)
         uteis.append(d)
-    r: dict[str, Any] = {"roll": roll, "dias": [d.isoformat() for d in uteis], "por_dia": por_dia,
-                         "n_sorteios": n_sorteios}
+    r: dict[str, Any] = {"modo": "livre", "roll": roll, "dias": [d.isoformat() for d in uteis],
+                         "por_dia": por_dia, "n_sorteios": n_sorteios}
     if len(vets) >= 2:
         v = alinhar(vets)
         r["transicoes"] = []
@@ -179,3 +198,99 @@ def descrever(curated: Path, roll: str, dias: list[dt.date], n_sorteios: int, co
     (saida / "rolagem_persistencia.json").write_text(
         json.dumps(r, indent=2, ensure_ascii=False, default=float), encoding="utf-8")
     return r
+
+
+def pregoes(curated: Path) -> list[dt.date]:
+    """Calendario de pregoes = dias com alguma particao em curated/trade (qualquer simbolo)."""
+    raiz = curated / "trade"
+    if not raiz.exists():
+        return []
+    dias: list[dt.date] = []
+    for p in raiz.glob("dt=*"):
+        if p.is_dir() and any(p.glob("sym=*")):
+            dias.append(dt.date.fromisoformat(p.name[3:]))
+    return sorted(dias)
+
+
+def janela_primaria(curated: Path, ultimo_pregao: dt.date) -> list[dt.date]:
+    """Os 3 ultimos PREGOES ate' `ultimo_pregao`, que tem de ser um pregao do calendario."""
+    cal = pregoes(curated)
+    if ultimo_pregao not in cal:
+        raise ValueError(
+            f"{ultimo_pregao.isoformat()} nao tem nenhum dado em {curated / 'trade'}: "
+            "falta backfill/curate do ultimo pregao. O modo primario nao desliza a janela.")
+    ate = [d for d in cal if d <= ultimo_pregao]
+    if len(ate) < JANELA_PRIMARIA:
+        raise ValueError(f"so' {len(ate)} pregoes no calendario ate' {ultimo_pregao.isoformat()}; "
+                         f"o modo primario precisa de {JANELA_PRIMARIA}.")
+    return ate[-JANELA_PRIMARIA:]
+
+
+def avaliar_primaria(curated: Path, roll: str, ultimo_pregao: dt.date, n_sorteios: int,
+                     saida: Path, repeticoes_poder: int = 500) -> dict[str, Any]:
+    """Criterio da ficha, imposto: janela D-2..D, portao de poder e veredito pela regra."""
+    janela = janela_primaria(curated, ultimo_pregao)
+    r: dict[str, Any] = {
+        "modo": "primaria", "roll": roll, "ultimo_pregao": ultimo_pregao.isoformat(),
+        "janela": [d.isoformat() for d in janela], "n_sorteios": n_sorteios,
+        "limiares": {"portao_f": PORTAO_F, "portao_poder_min": PORTAO_PODER_MIN, "alfa": ALFA}}
+    vets: list[pd.Series] = []
+    vazios: list[str] = []
+    por_dia: list[dict[str, Any]] = []
+    for i, d in enumerate(janela, 1):
+        t = carregar(curated, roll, d)
+        if t.empty:
+            vazios.append(d.isoformat())
+            log.info("rolagem_persistencia.primaria_dia_vazio", dia=d.isoformat(), roll=roll,
+                     i=i, n=len(janela))
+            continue
+        liq = liquido_por_agente(t)
+        dif = int(t.loc[t["agente_comprador"] != t["agente_vendedor"], "quantidade"].sum())
+        por_dia.append({"dia": d.isoformat(), "negocios": len(t),
+                        "contratos": int(t["quantidade"].sum()),
+                        "contratos_corretoras_diferentes": dif,
+                        "agentes_com_liquido": int((liq != 0).sum())})
+        log.info("rolagem_persistencia.primaria_dia", dia=d.isoformat(), roll=roll, i=i,
+                 n=len(janela), negocios=len(t), contratos_dif=dif, agentes=int((liq != 0).sum()))
+        vets.append(liq)
+    r["por_dia"] = por_dia
+    if vazios:
+        r["veredito"] = "inconclusivo_por_desenho"
+        r["motivo"] = f"pregao(oes) sem negocios no roll: {', '.join(vazios)}"
+        r["portao"] = {"avaliado": False}
+        log.info("rolagem_persistencia.primaria_veredito", roll=roll, veredito=r["veredito"],
+                 motivo=r["motivo"])
+        return _gravar_primaria(r, saida, roll, ultimo_pregao)
+    v = alinhar(vets)
+    poder_f = poder(v, (PORTAO_F,), repeticoes=repeticoes_poder)[f"{PORTAO_F:.2f}"]
+    aprovado = poder_f >= PORTAO_PODER_MIN
+    resultado: dict[str, Any] = {"conjunto": testar(v, n_sorteios), "transicoes": []}
+    for k in range(len(vets) - 1):
+        par = testar(v[k:k + 2], n_sorteios)
+        resultado["transicoes"].append({
+            "de": janela[k].isoformat(), "para": janela[k + 1].isoformat(),
+            "S": par["S"], "z": par["z"], "p": par["p"]})
+    r["portao"] = {"avaliado": True, "f": PORTAO_F, "poder": poder_f,
+                   "minimo": PORTAO_PODER_MIN, "aprovado": bool(aprovado)}
+    if aprovado:
+        r["veredito"] = ("persistencia_detectada" if resultado["conjunto"]["p"] < ALFA
+                         else "sem_persistencia_detectavel")
+        r["resultado"] = resultado
+    else:
+        r["veredito"] = "inconclusivo_por_desenho"
+        r["motivo"] = "poder em f=0,75 abaixo do minimo: nao se interpreta"
+        r["descritivo_nao_interpretar"] = resultado
+    log.info("rolagem_persistencia.primaria_veredito", roll=roll, veredito=r["veredito"],
+             poder=round(poder_f, 3), aprovado=bool(aprovado))
+    return _gravar_primaria(r, saida, roll, ultimo_pregao)
+
+
+def _gravar_primaria(r: dict[str, Any], saida: Path, roll: str,
+                     ultimo_pregao: dt.date) -> dict[str, Any]:
+    saida.mkdir(parents=True, exist_ok=True)
+    destino = saida / f"primaria_{roll}_{ultimo_pregao.isoformat()}.json"
+    destino.write_text(json.dumps(r, indent=2, ensure_ascii=False, default=float),
+                       encoding="utf-8")
+    r["arquivo"] = str(destino)
+    return r
+

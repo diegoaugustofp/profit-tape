@@ -5305,3 +5305,19 @@ bundle (v4.28..v4.30, as duas tags) porque a v4.29 ainda não foi aplicada.
 
 **Tags:** entregue-v4.30 (sobre v4.29). Suíte 1.397 (1.388 + 9 novos); referência de CLI com 87 comandos.
 
+### 2026-10-04b — Rolagem, pergunta A: `--primaria` impõe a janela e o portão da ficha (v4.31)
+
+Diego aplicou a v4.30 (tags no remoto) e rodou a calibração: reproduziu z +0,08, +0,50 e +1,00, poder 55% em f=0,50 e 89% em f=0,75. Brecha que eu deixei: a rodada dele usou 25 a 30/09 (3 transições) e não D-2..D (2 transições) da ficha,
+e o portão é calculado sobre a matriz que se passa. No WIN isso abriria um grau de liberdade (ampliar a janela até o portão passar).
+
+`rolagem-persistencia --primaria --ultimo-pregao D`: janela = 3 últimos PREGÕES até D (calendário = dias com dado em `curated/trade`, de qualquer símbolo, para que um dia vazio no roll não deslize a janela);
+portão de poder >= 70% em f=0,75 imposto; veredito pela regra; com o portão reprovado ou um pregão sem negócios no roll, z e p ficam fora da tela (JSON: `descritivo_nao_interpretar`); D sem dado no curated é erro;
+`--primaria` recusa `--de`, `--ate` e `--poder`. O modo livre continua, marcado como descritivo (retrocompatível: mesmas chaves + `modo`). Cada evento grava `primaria_<roll>_<D>.json` para o pool.
+
+Achado ao testar: um caso espelhado (cada corretora com uma contraparte exclusiva) inflava o tamanho do teste; era um teste irreal meu, e o portão "reprovado" só passou a funcionar com 3 corretoras negociando entre si.
+Medi o tamanho num mercado de soma zero realista, sem persistência: 5,8% a 6,8% em cinco desenhos; aceitável, e registrado no docstring. Teste novo guarda isso (< 12%).
+
+Calibração no WDO pelo modo primário (D = 30/09): portão 81% (aprovado), S 16.115, z +0,63, p 0,277, veredito `sem_persistencia_detectavel` (depuração; não é resultado). Suíte 1.406 (+9 testes em `test_rolagem_persistencia.py`).
+
+**Tags:** entregue-v4.31 (sobre v4.30).
+

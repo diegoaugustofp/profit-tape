@@ -7302,7 +7302,14 @@ Unidade: corretora x janela. Fluxo líquido `n` = contratos comprados menos vend
                  Os limiares (70%, 0,05, 3 eventos) foram fixados depois de ver o WDO e ANTES de qualquer dado do WIN; o WDO nao entra no pool
     PARADA       nao olhar WIN parcial; analise so' depois de 14/10 e do backfill de D-2 a D (ate' ~13/11); nao rodar sem `--poder` antes; nao mexer em limiar depois de ver o resultado
 
-O WDO como depuracao (3 pregoes D-2 a D, 27 corretoras): S 16.115, z +0,63, p 0,28; dia a dia z +0,08, +0,50, +1,00. Nao e' resultado: e' a calibracao da ferramenta (reproduz o ensaio a mao).
+**Execucao imposta pela ferramenta (v4.31):** `profit-tape rolagem-persistencia --primaria --ultimo-pregao 2026-10-14 --roll WI1V26Z26` fixa a janela nos 3 ultimos PREGOES ate' D
+(calendario = dias com dado em `curated/trade`, de qualquer simbolo, para um dia vazio no roll nao deslizar a janela), avalia o portao de poder (>= 70% em f=0,75) e emite o veredito pela regra:
+`persistencia_detectada` (portao aprovado e p < 0,05), `sem_persistencia_detectavel` (portao aprovado e p >= 0,05) ou `inconclusivo_por_desenho`. Com o portao reprovado, ou com algum dos 3 pregoes sem negocios no roll,
+z e p ficam fora da tela (o JSON os guarda em `descritivo_nao_interpretar`). D sem nenhum dado no curated e' ERRO (falta backfill ou curate), nao desliza. Janela livre (`--de/--ate`) e `--poder` ficam
+DESCRITIVOS e a saida diz isso. Cada evento grava `primaria_<roll>_<D>.json` (insumo do pool de >= 3 eventos; o comando de pool ainda nao existe e entra quando houver 3 eventos).
+
+O WDO como depuracao (3 pregoes D-2 a D, 27 corretoras): S 16.115, z +0,63, p 0,28; dia a dia z +0,08, +0,50, +1,00; no modo primario (D = 30/09) o portao deu 81% (84% na primeira simulacao: o Monte Carlo varia cerca de 3 pontos) e o veredito foi `sem_persistencia_detectavel`. Nao e' resultado: e' a calibracao da ferramenta (reproduz o ensaio a mao).
+Tamanho do teste em mercado de soma zero, sem persistencia: 5,8% a 6,8% em cinco desenhos (simulacao de 2026-10-04); um caso espelhado (cada corretora com contraparte exclusiva) infla o tamanho e nao e' a estrutura do tape.
 
 **Honestidade sobre o que A pode entregar:** persistencia no roll nao diz que o preco se move e nao rende nada ao EA sozinha; ela so' libera a pergunta C. Com n=1 por evento e poder de ~50% em f=0,50,
 o provavel e' um evento inconclusivo. O valor e' fechar a hipotese com criterio declarado e nao por falta de critica, e acumular eventos (a ferramenta roda no WDO todo mes).

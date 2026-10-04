@@ -34,7 +34,7 @@ coletas:
     marco: {data: 2026-10-14, rotulo: "vencimento do WIN (WINV26)"}
     fim: null
     estado: "Inventario de 03/10 (apos backfill do operador): WINV26 tem 21 dias (03/09 a 02/10, todos importados), WINZ26 desde 03/09 (6 a 23 mil negocios por dia); Os instrumentos de roll WI1V26Z26 (61 contratos em 7 dias) e IR1V26Z26 (so' 02/10) existem no GetHistoryTrades, mas ficam fora de `ativos` para nao entrar na conta do par do inventario. O backfill cobre 30 dias: o roll de D-2 a D (ate' 14/10) pode ser recuperado ate' ~13/11, sem gravar ao vivo."
-    proximo_passo: "Depois de 14/10: backfill --por-dia de WINV26, WINZ26, WI1V26Z26 e IR1V26Z26 (--fim INCLUSIVO); curate; rolagem-persistencia --poder ANTES de olhar o resultado (portao de poder da ficha, RESEARCH_PLANO secao 7). Resultado de 1 roll e' descritivo."
+    proximo_passo: "Depois de 14/10: backfill --por-dia de WINV26, WINZ26, WI1V26Z26 e IR1V26Z26 (--fim INCLUSIVO); curate; rolagem-persistencia --primaria --ultimo-pregao 2026-10-14 --roll WI1V26Z26 (impoe janela D-2..D e portao de poder da ficha, RESEARCH_PLANO secao 7). Resultado de 1 roll e' descritivo."
     plano: "docs/ESTADO_E_CAMINHOS.md, secao 3.C ('Rolagem refeita')"
     trechos: ["assinar `WINV26` e `WINZ26` antes de ~07/10"]
 

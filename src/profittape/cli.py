@@ -3577,26 +3577,54 @@ def rolagem_par_cmd(
 
 @app.command(name="rolagem-persistencia")
 def rolagem_persistencia_cmd(
-    de: str = typer.Option(..., "--de", help="YYYY-MM-DD"),
-    ate: str = typer.Option(..., "--ate", help="YYYY-MM-DD"),
+    de: str = typer.Option("", "--de", help="YYYY-MM-DD (modo livre)"),
+    ate: str = typer.Option("", "--ate", help="YYYY-MM-DD (modo livre)"),
     roll: str = typer.Option("WD1V26X26", "--roll",
                              help="instrumento de roll (WD1, DR1, WI1, IR1)"),
     curated: Path = typer.Option(Path("data/curated"), "--curated"),
     sorteios: int = typer.Option(20000, "--sorteios"),
     poder: bool = typer.Option(False, "--poder",
                                help="planta persistencia nas magnitudes reais e mostra o poder"),
+    primaria: bool = typer.Option(False, "--primaria",
+                                  help="CRITERIO DA FICHA: janela D-2..D, portao de poder e "
+                                       "veredito impostos; exige --ultimo-pregao"),
+    ultimo_pregao: str = typer.Option("", "--ultimo-pregao",
+                                      help="YYYY-MM-DD, D = ultimo pregao do contrato que vence"),
     saida: Path = typer.Option(Path("data/research/rolagem_persistencia"), "--saida"),
     log_level: str = typer.Option("INFO", "--log-level"),
 ) -> None:
     """
     ROLAGEM, pergunta A: o fluxo LIQUIDO de uma corretora no instrumento de roll
     persiste de um dia para o seguinte? Nulo por inversao de sinal. Sem direcao,
-    zero trial. Rode --poder ANTES de olhar o resultado.
+    zero trial. --primaria impoe a janela e o portao de poder da ficha; sem ela e'
+    modo livre, DESCRITIVO.
     """
     import datetime as dt
 
     configurar(log_level)
-    from .research.rolagem_persistencia import descrever
+    from .research.rolagem_persistencia import avaliar_primaria, descrever
+
+    if primaria:
+        if de or ate or poder:
+            typer.echo("--primaria nao aceita --de, --ate nem --poder: a janela e o portao "
+                       "sao da ficha.", err=True)
+            raise typer.Exit(2)
+        if not ultimo_pregao:
+            typer.echo("--primaria exige --ultimo-pregao YYYY-MM-DD (D = ultimo pregao do "
+                       "contrato que vence).", err=True)
+            raise typer.Exit(2)
+        try:
+            rp = avaliar_primaria(curated, roll, dt.date.fromisoformat(ultimo_pregao),
+                                  sorteios, saida)
+        except ValueError as e:
+            typer.echo(f"ERRO: {e}", err=True)
+            raise typer.Exit(2) from e
+        _imprime_primaria(rp)
+        return
+    if not de or not ate:
+        typer.echo("modo livre exige --de e --ate (ou use --primaria --ultimo-pregao).",
+                   err=True)
+        raise typer.Exit(2)
 
     d0, d1 = dt.date.fromisoformat(de), dt.date.fromisoformat(ate)
     dias = [d0 + dt.timedelta(days=k) for k in range((d1 - d0).days + 1)
@@ -3604,6 +3632,8 @@ def rolagem_persistencia_cmd(
     r = descrever(curated, roll, dias, sorteios, poder, saida)
     typer.echo("=" * 72)
     typer.echo(f"ROLAGEM, PERSISTENCIA DO FLUXO LIQUIDO -- {roll} ({len(r['dias'])} dias com dado)")
+    typer.echo("MODO LIVRE: DESCRITIVO. A janela e' sua; o criterio da ficha so' vale em "
+               "--primaria.")
     typer.echo("=" * 72)
     typer.echo(f"    {'dia':>12} {'negocios':>9} {'contratos':>10} {'c/ direcao':>11} "
                f"{'corretoras':>11}")
@@ -3626,6 +3656,39 @@ def rolagem_persistencia_cmd(
     typer.echo("\n  LEITURA: persistencia nao diz que o preco se move; so' libera a pergunta C. "
                "Um dia com pouco volume ou poucas corretoras e' INCONCLUSIVO, nao negativo.")
     typer.echo(f"\n  Saida: {saida}/rolagem_persistencia.json")
+
+
+def _imprime_primaria(r: dict[str, Any]) -> None:
+    """Saida do modo primario: z e p so' aparecem se o portao de poder aprovou."""
+    typer.echo("=" * 72)
+    typer.echo(f"ROLAGEM, PERSISTENCIA -- MODO PRIMARIO (ficha) -- {r['roll']}, "
+               f"D = {r['ultimo_pregao']}")
+    typer.echo("=" * 72)
+    typer.echo(f"  janela: {', '.join(str(d) for d in r['janela'])}")
+    for x in r["por_dia"]:
+        typer.echo(f"    {x['dia']}  negocios {x['negocios']:>7,}  c/ direcao "
+                   f"{x['contratos_corretoras_diferentes']:>9,}  "
+                   f"corretoras {x['agentes_com_liquido']:>3}")
+    pt = r["portao"]
+    if pt["avaliado"]:
+        typer.echo(f"\n  PORTAO DE PODER (f={pt['f']:.2f}): {100 * pt['poder']:.0f}% "
+                   f"(minimo {100 * pt['minimo']:.0f}%) -> "
+                   f"{'APROVADO' if pt['aprovado'] else 'REPROVADO'}")
+    typer.echo(f"\n  VEREDITO: {str(r['veredito']).upper().replace('_', ' ')}")
+    if r.get("motivo"):
+        typer.echo(f"  motivo: {r['motivo']}")
+    if "resultado" in r:
+        res = r["resultado"]
+        for x in res["transicoes"]:
+            typer.echo(f"    {x['de']} -> {x['para']}  S {x['S']:>9,.0f}  z {x['z']:+.2f}  "
+                       f"p {x['p']:.3f}")
+        c = res["conjunto"]
+        typer.echo(f"  CONJUNTO: S {c['S']:,.0f}  z {c['z']:+.2f}  p {c['p']:.3f}")
+    else:
+        typer.echo("  (z e p ficam fora da tela: evento inconclusivo por desenho nao se "
+                   "interpreta; os numeros estao no JSON, em 'descritivo_nao_interpretar')")
+    typer.echo("\n  Persistencia nao diz que o preco se move: so' conta para o pool da pergunta C.")
+    typer.echo(f"  Saida: {r['arquivo']}")
 
 
 @app.command(name="opcoes-vencimento")
