@@ -102,6 +102,7 @@ COMANDOS: dict[str, tuple[str, str]] = {
     "fase2-score": ("deepscalper", "eas/deepscalper_fase2.md"),
     "rolagem": ("contraparte", "RESEARCH_PLANO.md (ROLAGEM)"),
     "rolagem-par": ("contraparte", "RESEARCH_PLANO.md (RECLASSIFICACAO rolagem)"),
+    "rolagem-persistencia": ("contraparte", "RESEARCH_PLANO.md (ROLAGEM: ensaio do WDO, secao 6)"),
     "fechamento": ("contraparte", "RESEARCH_PLANO.md (AJUSTE/FECHAMENTO)"),
     "defasagem": ("contraparte", "RESEARCH_PLANO.md (DEFASAGEM)"),
     "leadlag": ("contraparte", "research/leadlag.py (docstring); HISTORICO 2026-09-25"),

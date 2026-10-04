@@ -5289,3 +5289,19 @@ detector "morto por construção" (exagero); (5) chamei de desatualizados docs q
 O primeiro rascunho da v4.29 (detector por quantidade e milissegundo) NÃO foi entregue: o operador ainda não tinha aplicado; a tag foi refeita com o registro novo. `coletas.yaml`, `ESTADO_E_CAMINHOS.md` e `GLOSSARIO.md` atualizados.
 
 **Tags:** entregue-v4.29 (sobre v4.28, só documentação). Suíte 1.388 (inalterada).
+
+### 2026-10-04a — Rolagem, pergunta A: persistência do fluxo líquido por corretora no instrumento de roll (v4.30)
+
+O Diego escolheu seguir pela pergunta A (persistência do líquido por corretora no instrumento de roll, não nas pernas), sabendo que ela não rende nada ao EA sozinha: só libera a pergunta C. Construído
+`research/rolagem_persistencia.py` e `profit-tape rolagem-persistencia` (`--poder` planta persistência nas magnitudes reais). Estatística S (volume casado de mesmo sinal menos o oposto), só com corretoras diferentes;
+nulo por inversão de sinal por corretora e por dia (a permutação ficou descartada por teste: `test_permutacao_entre_corretoras_seria_enviesada`). Verificadores: tamanho do teste com magnitudes correlacionadas e sinais
+independentes (rejeita < 10%; medido 5% a 6%); persistência plantada achada; exemplo a mão (S = 4 - 5 - 3).
+
+Calibração no WDO (depuração): reproduz o ensaio a mão (z +0,08, +0,50, +1,00 nas três transições; conjunto z +0,63 em 3 pregões, p 0,28). Poder: 47% a 55% com metade das corretoras mantendo o sinal, 84% a 89% com três quartos.
+Ficha de seis linhas COMPLETA antes de qualquer dado do WIN: portão de poder (>= 70% em f=0,75), p < 0,05 por evento, pergunta C só pelo pool de >= 3 eventos (Stouffer). Limiares fixados depois de ver o WDO e antes do WIN.
+
+Erro meu desta rodada: o INCREMENTO da v4.29 trazia `git fetch ...bundle refs/tags/entregue-v4.29` e `git merge entregue-v4.29`, que pode não criar a tag local; o comando da skill usa `tag:tag`. Corrigido, e a v4.29 e a v4.30 vão no mesmo
+bundle (v4.28..v4.30, as duas tags) porque a v4.29 ainda não foi aplicada.
+
+**Tags:** entregue-v4.30 (sobre v4.29). Suíte 1.397 (1.388 + 9 novos); referência de CLI com 87 comandos.
+

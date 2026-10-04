@@ -28,7 +28,7 @@ no diário de operações nem em `eas/`):
 | coleta | o que grava | prazo | próximo passo |
 |---|---|---|---|
 | **Rolagem do WDO** (par casado) | `WDOV26` e `WDOX26`: `trade` + topo do livro; instrumentos de roll `WD1V26X26` e `DR1V26X26` recuperados por backfill (03/10). Amostra fechada: 7 pregões de par (22 a 30/09) | virada em **01/10** (passou) | ensaio de 03/10 = **depuração**, `rolagem-par` v4.28 com defeitos de fórmula; abordagem reformulada para **fluxo líquido por corretora**; controle positivo falhou no tape dos outrights; ver `RESEARCH_PLANO` (seção ROLAGEM: ensaio do WDO) |
-| **Rolagem do WIN** (mesma hipótese) | `WINV26` (21 dias importados), `WINZ26` (desde 03/09), `WI1V26Z26`, `IR1V26Z26` (backfill) | WIN vence em **14/10**; pico esperado nos 2 pregões antes | depois de 14/10: `backfill --por-dia` até ~13/11; gravar ao vivo é redundância |
+| **Rolagem do WIN** (mesma hipótese) | `WINV26` (21 dias importados), `WINZ26` (desde 03/09), `WI1V26Z26`, `IR1V26Z26` (backfill) | WIN vence em **14/10**; pico esperado nos 2 pregões antes | depois de 14/10: `backfill --por-dia` até ~13/11; depois `rolagem-persistencia --poder` (ficha completa em `RESEARCH_PLANO`, seção 7) |
 | **Opções de PETR4, outubro** (pinning) | 14 séries: `trade` + topo do livro, mês inteiro desde 22/09. Inventário de 03/10: dado nos 9 pregões esperados; as séries mais finas negociam 20 a 30 vezes por dia | vencimento **16/10** | depois do fechamento e do compact, `profit-tape opcoes-vencimento` (o placebo de strikes falsos decide; séries finas limitam o poder) |
 
 Expectativa declarada **antes** (opções): o OI está colado no spot, então um resultado **nulo pesa

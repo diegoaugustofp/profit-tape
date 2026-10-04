@@ -3575,6 +3575,59 @@ def rolagem_par_cmd(
     typer.echo(f"\n  Saida: {saida}/rolagem_par.json")
 
 
+@app.command(name="rolagem-persistencia")
+def rolagem_persistencia_cmd(
+    de: str = typer.Option(..., "--de", help="YYYY-MM-DD"),
+    ate: str = typer.Option(..., "--ate", help="YYYY-MM-DD"),
+    roll: str = typer.Option("WD1V26X26", "--roll",
+                             help="instrumento de roll (WD1, DR1, WI1, IR1)"),
+    curated: Path = typer.Option(Path("data/curated"), "--curated"),
+    sorteios: int = typer.Option(20000, "--sorteios"),
+    poder: bool = typer.Option(False, "--poder",
+                               help="planta persistencia nas magnitudes reais e mostra o poder"),
+    saida: Path = typer.Option(Path("data/research/rolagem_persistencia"), "--saida"),
+    log_level: str = typer.Option("INFO", "--log-level"),
+) -> None:
+    """
+    ROLAGEM, pergunta A: o fluxo LIQUIDO de uma corretora no instrumento de roll
+    persiste de um dia para o seguinte? Nulo por inversao de sinal. Sem direcao,
+    zero trial. Rode --poder ANTES de olhar o resultado.
+    """
+    import datetime as dt
+
+    configurar(log_level)
+    from .research.rolagem_persistencia import descrever
+
+    d0, d1 = dt.date.fromisoformat(de), dt.date.fromisoformat(ate)
+    dias = [d0 + dt.timedelta(days=k) for k in range((d1 - d0).days + 1)
+            if (d0 + dt.timedelta(days=k)).weekday() < 5]
+    r = descrever(curated, roll, dias, sorteios, poder, saida)
+    typer.echo("=" * 72)
+    typer.echo(f"ROLAGEM, PERSISTENCIA DO FLUXO LIQUIDO -- {roll} ({len(r['dias'])} dias com dado)")
+    typer.echo("=" * 72)
+    typer.echo(f"    {'dia':>12} {'negocios':>9} {'contratos':>10} {'c/ direcao':>11} "
+               f"{'corretoras':>11}")
+    for x in r["por_dia"]:
+        typer.echo(f"    {x['dia']:>12} {x['negocios']:>9,} {x['contratos']:>10,} "
+                   f"{x['contratos_corretoras_diferentes']:>11,} {x['agentes_com_liquido']:>11}")
+    if "transicoes" in r:
+        typer.echo("\n  PERSISTENCIA DIA A DIA (S>0 = mesmo sinal; p unilateral)")
+        for x in r["transicoes"]:
+            typer.echo(f"    {x['de']} -> {x['para']}  corretoras {x['agentes']:>2}  "
+                       f"S {x['S']:>9,.0f}  z {x['z']:+.2f}  p {x['p']:.3f}  "
+                       f"rho {x['spearman']:+.2f}")
+        c = r["conjunto"]
+        typer.echo(f"\n  CONJUNTO (todas as transicoes): S {c['S']:,.0f}  z {c['z']:+.2f}  "
+                   f"p {c['p']:.3f}")
+    if "poder" in r:
+        typer.echo("\n  PODER (f = fracao das corretoras que mantem o sinal; f=0 e' o tamanho):")
+        typer.echo("    " + "  ".join(f"f={k}: {100 * v:.0f}%"
+                                      for k, v in r["poder"].items()))
+    typer.echo("\n  LEITURA: persistencia nao diz que o preco se move; so' libera a pergunta C. "
+               "Um dia com pouco volume ou poucas corretoras e' INCONCLUSIVO, nao negativo.")
+    typer.echo(f"\n  Saida: {saida}/rolagem_persistencia.json")
+
+
 @app.command(name="opcoes-vencimento")
 def opcoes_vencimento_cmd(
     de: str = typer.Option(..., "--de", help="YYYY-MM-DD"),

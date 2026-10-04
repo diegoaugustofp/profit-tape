@@ -7285,19 +7285,27 @@ Unidade: corretora x janela. Fluxo líquido `n` = contratos comprados menos vend
 - **Pergunta B, rastro no outright:** só depois de a pergunta A ou o controle positivo darem sentido. A direção (descarga ou continuidade) é declarada antes de olhar o WIN.
 - **Pergunta C, preço:** só se A ou B passarem no WIN. Preço médio de cada corretora em cada perna contra o VWAP da janela, deslocamento e retorno ao início da janela, |Δ| do outright (`WDOFUT` normalizado). Consome trial; contabilidade declarada antes.
 - **Verificador antes de qualquer detector novo em dado real:** (i) sintético com magnitudes correlacionadas e sinais independentes, onde `S` tem de ser ~0; (ii) sintético com rolagem plantada, que tem de ser achada; (iii) controle positivo real pelo roll.
-- **Não vira código novo agora:** com o controle positivo reprovado, a ferramenta só se justifica para as perguntas A e C. A decisão fica com o operador.
+- **Pergunta A implementada** em `research/rolagem_persistencia.py` e `profit-tape rolagem-persistencia` (v4.30); `--poder` planta persistência nas magnitudes reais. A pergunta C não tem código e só abre pelo critério da ficha.
 
-### 7. Ficha de seis linhas (WIN V26 -> Z26) — INCOMPLETA de propósito
+### 7. Ficha de seis linhas — pergunta A (WIN V26 -> Z26), COMPLETA em 2026-10-04, antes de qualquer dado do WIN
 
-    HIPOTESE     corretoras que rolam via instrumento de roll deixam fluxo liquido persistente entre dias e/ou rastro no outright
-    EVENTO       corretora x dia: liquido no roll com corretoras diferentes; S contra nulo de inversao de sinal. Janela de rastro no outright: PENDENTE
-    TAXA         PENDENTE: medir no WDO (corretoras com liquido relevante por dia; dias de roll)
-    EFEITO       PENDENTE
-    HORIZONTE    UM roll (n=1 evento de calendario); o seguinte do WIN e' em dezembro; o WDO rola todo mes
-    CRITERIO     PENDENTE: fixado antes de olhar o WIN, com o nulo de inversao de sinal e o controle positivo pelo roll
-    PARADA       nao olhar WIN parcial; analise so' depois de 14/10 e do backfill completo (D-2 a D, ate' ~13/11)
+    HIPOTESE     corretoras que rolam via `WI1` deixam fluxo liquido que PERSISTE de um pregao para o seguinte (ordem pai de mais de um dia)
+    EVENTO       corretora x pregao: liquido (compra menos venda) no `WI1V26Z26` so' em negocios com corretoras DIFERENTES. Janela primaria: D-2, D-1 e D (3 pregoes, 2 transicoes);
+                 D = ultimo pregao de V26 (14/10), definido por pregoes e nao por datas. D-3 -> D-2 e' descritivo. Estatistica S (volume casado de mesmo sinal menos o oposto)
+    TAXA         medida no WDO (depuracao, `rolagem-persistencia`): 25 a 27 corretoras com liquido nos dias de pico; contratos COM direcao 65.030 (D-2), 195.934 (D-1), 10.781 (D); 10 corretoras e 16.981 contratos em D-3
+    EFEITO       o menor que o teste enxerga, por simulacao nas magnitudes reais do WDO: poder 47% a 55% quando metade das corretoras mantem o sinal (f=0,50), 84% a 89% em f=0,75, tamanho 5% a 6%.
+                 Ou seja, so' 3 de cada 4 corretoras mantendo o sinal aparecem com folga
+    HORIZONTE    UM evento por roll. Eventos ate' 30/12: WIN 14/10, WDO ~30/10, WDO ~30/11, WDO ~30/12 (WD1X26Z26 etc.; ticker a confirmar no Profit); o WIN seguinte e' 16/12. Cada evento e' DESCRITIVO
+    CRITERIO     (1) PORTAO DE PODER, antes de olhar o resultado: `rolagem-persistencia --poder` nos dados do WIN; se o poder em f=0,75 ficar abaixo de 70%, o evento e' INCONCLUSIVO POR DESENHO
+                 e nao se interpreta. (2) Evento com portao aprovado: p unilateral do CONJUNTO < 0,05. (3) Liberar a pergunta C so' com o POOL de pelo menos 3 eventos com portao aprovado (Stouffer, unilateral p < 0,05)
+                 e nenhum evento com z < -1,645 (persistencia negativa e' descritiva, nao entra no criterio).
+                 Os limiares (70%, 0,05, 3 eventos) foram fixados depois de ver o WDO e ANTES de qualquer dado do WIN; o WDO nao entra no pool
+    PARADA       nao olhar WIN parcial; analise so' depois de 14/10 e do backfill de D-2 a D (ate' ~13/11); nao rodar sem `--poder` antes; nao mexer em limiar depois de ver o resultado
 
-Resultado do WIN com n=1 roll e' DESCRITIVO e nao decide nada sozinho.
+O WDO como depuracao (3 pregoes D-2 a D, 27 corretoras): S 16.115, z +0,63, p 0,28; dia a dia z +0,08, +0,50, +1,00. Nao e' resultado: e' a calibracao da ferramenta (reproduz o ensaio a mao).
+
+**Honestidade sobre o que A pode entregar:** persistencia no roll nao diz que o preco se move e nao rende nada ao EA sozinha; ela so' libera a pergunta C. Com n=1 por evento e poder de ~50% em f=0,50,
+o provavel e' um evento inconclusivo. O valor e' fechar a hipotese com criterio declarado e nao por falta de critica, e acumular eventos (a ferramenta roda no WDO todo mes).
 
 ### 8. Dados do WIN (nada depende de gravar ao vivo)
 

@@ -2,7 +2,7 @@
 
 > **Status:** vivo (GERADO) — **Revisado:** pela ultima execucao de `tools/gera_referencia_cli.py` — **Assunto:** todos os comandos de `src/profittape/cli.py`, agrupados por categoria, com a nota de trial e o documento de referencia. NAO EDITE A MAO: rode o script.
 
-86 comandos. Categoria e documento vem do dicionario no script; nome e descricao vem do docstring do proprio comando (`profit-tape <cmd> --help` mostra as opcoes).
+87 comandos. Categoria e documento vem do dicionario no script; nome e descricao vem do docstring do proprio comando (`profit-tape <cmd> --help` mostra as opcoes).
 
 A distincao que mais importa: comandos que **consomem trial** sobem o limiar deflacionado a cada rodada e so' devem rodar com dado NOVO suficiente; os que nao consomem podem rodar quando quiser (skill `profit-tape-disciplina`, 2).
 
@@ -130,6 +130,7 @@ A distincao que mais importa: comandos que **consomem trial** sobem o limiar def
 | `opcoes-vencimento` | OPCAO SOBRE ACAO, passo 1: a semana do vencimento e' diferente, e o volume do papel se concentra perto dos STRIKES? | RESEARCH_PLANO.md (Opcao sobre acao) |
 | `rolagem` | DESCRICAO da rolagem (passo 1 de "anomalia medida"): a contraparte OBRIGADA (quem precisa rolar ou fechar no vencimento) deixa marca? | RESEARCH_PLANO.md (ROLAGEM) |
 | `rolagem-par` | ROLAGEM pelo PAR CASADO: o mesmo agente vendendo num contrato e comprando no outro, em segundos. | RESEARCH_PLANO.md (RECLASSIFICACAO rolagem) |
+| `rolagem-persistencia` | ROLAGEM, pergunta A: o fluxo LIQUIDO de uma corretora no instrumento de roll persiste de um dia para o seguinte? | RESEARCH_PLANO.md (ROLAGEM: ensaio do WDO, secao 6) |
 
 ## EA: forward, replay, execucao, diagnostico
 

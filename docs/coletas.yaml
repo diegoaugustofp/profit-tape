@@ -18,7 +18,7 @@ coletas:
     marco: {data: 2026-10-01, rotulo: "virada WDOV26 -> WDOX26 (o WDO vence no 1o dia util do mes)"}
     fim: null
     estado: "Amostra FECHADA: o PAR existe em 7 pregoes (22 a 30/09). ENSAIO de 03/10 com o rolagem-par v4.28: razao 0,71 a 0,91 em 7 de 7 dias = defeito de FORMULA (nulo nao calibrado, unidade muitos-para-um, janela de 2 s saturada), nao resultado. Instrumentos de roll recuperados por backfill (WD1V26X26, DR1V26X26): pico em D-2 e D-1 (28 e 29/09). Pernas do roll so' em ate' 1% do volume no tape. Ver RESEARCH_PLANO, secao ROLAGEM: ensaio do WDO."
-    proximo_passo: "Sem detector novo por ora: o controle positivo da abordagem por fluxo liquido de corretora FALHOU no tape dos outrights. Perguntas A (persistencia do liquido no instrumento de roll) e C (preco medio e retorno) ficam para decisao do operador; ver RESEARCH_PLANO, secoes 5 e 6."
+    proximo_passo: "Pergunta A implementada (v4.30): rolagem-persistencia --roll WD1V26X26 e' o ensaio de calibracao; o WDO rola todo mes (X26 -> Z26 em ~30/10: gravar ou fazer backfill de WD1X26Z26, WDOX26 e WDOZ26) e cada roll e' um evento da ficha (RESEARCH_PLANO, secao 7). Pergunta C so' abre pelo pool de >= 3 eventos."
     leitura_declarada: "Mudou em 03/10 (RESEARCH_PLANO, secao 6): vale o fluxo liquido por corretora contra nulo de INVERSAO DE SINAL (a permutacao entre corretoras foi descartada: destroi a correlacao de magnitude). O resultado do WDO e' depuracao e nao decide."
     limite: "Agente e' CORRETORA: um par pode ser dois clientes da mesma casa. Reduz o poder; o embaralhado sofre o mesmo."
     plano: "docs/RESEARCH_PLANO.md, secao 'ROLAGEM pelo PAR CASADO'"
@@ -34,7 +34,7 @@ coletas:
     marco: {data: 2026-10-14, rotulo: "vencimento do WIN (WINV26)"}
     fim: null
     estado: "Inventario de 03/10 (apos backfill do operador): WINV26 tem 21 dias (03/09 a 02/10, todos importados), WINZ26 desde 03/09 (6 a 23 mil negocios por dia); Os instrumentos de roll WI1V26Z26 (61 contratos em 7 dias) e IR1V26Z26 (so' 02/10) existem no GetHistoryTrades, mas ficam fora de `ativos` para nao entrar na conta do par do inventario. O backfill cobre 30 dias: o roll de D-2 a D (ate' 14/10) pode ser recuperado ate' ~13/11, sem gravar ao vivo."
-    proximo_passo: "Depois de 14/10: backfill --por-dia de WINV26, WINZ26, WI1V26Z26 e IR1V26Z26 (--fim INCLUSIVO). Analise so' com a ficha completa (RESEARCH_PLANO, secao 7) e o verificador aprovado. Resultado de 1 roll e' descritivo."
+    proximo_passo: "Depois de 14/10: backfill --por-dia de WINV26, WINZ26, WI1V26Z26 e IR1V26Z26 (--fim INCLUSIVO); curate; rolagem-persistencia --poder ANTES de olhar o resultado (portao de poder da ficha, RESEARCH_PLANO secao 7). Resultado de 1 roll e' descritivo."
     plano: "docs/ESTADO_E_CAMINHOS.md, secao 3.C ('Rolagem refeita')"
     trechos: ["assinar `WINV26` e `WINZ26` antes de ~07/10"]
 
