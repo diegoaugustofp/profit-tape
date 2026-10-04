@@ -7287,32 +7287,47 @@ Unidade: corretora x janela. Fluxo líquido `n` = contratos comprados menos vend
 - **Verificador antes de qualquer detector novo em dado real:** (i) sintético com magnitudes correlacionadas e sinais independentes, onde `S` tem de ser ~0; (ii) sintético com rolagem plantada, que tem de ser achada; (iii) controle positivo real pelo roll.
 - **Pergunta A implementada** em `research/rolagem_persistencia.py` e `profit-tape rolagem-persistencia` (v4.30); `--poder` planta persistência nas magnitudes reais. A pergunta C não tem código e só abre pelo critério da ficha.
 
-### 7. Ficha de seis linhas — pergunta A (WIN V26 -> Z26), COMPLETA em 2026-10-04, antes de qualquer dado do WIN
+### 7. Ficha de seis linhas — pergunta A (WIN V26 -> Z26), CONGELADA em 2026-10-04 (v4.32)
 
     HIPOTESE     corretoras que rolam via `WI1` deixam fluxo liquido que PERSISTE de um pregao para o seguinte (ordem pai de mais de um dia)
-    EVENTO       corretora x pregao: liquido (compra menos venda) no `WI1V26Z26` so' em negocios com corretoras DIFERENTES. Janela primaria: D-2, D-1 e D (3 pregoes, 2 transicoes);
-                 D = ultimo pregao de V26 (14/10), definido por pregoes e nao por datas. D-3 -> D-2 e' descritivo. Estatistica S (volume casado de mesmo sinal menos o oposto)
-    TAXA         medida no WDO (depuracao, `rolagem-persistencia`): 25 a 27 corretoras com liquido nos dias de pico; contratos COM direcao 65.030 (D-2), 195.934 (D-1), 10.781 (D); 10 corretoras e 16.981 contratos em D-3
-    EFEITO       o menor que o teste enxerga, por simulacao nas magnitudes reais do WDO: poder 47% a 55% quando metade das corretoras mantem o sinal (f=0,50), 84% a 89% em f=0,75, tamanho 5% a 6%.
-                 Ou seja, so' 3 de cada 4 corretoras mantendo o sinal aparecem com folga
-    HORIZONTE    UM evento por roll. Eventos ate' 30/12: WIN 14/10, WDO ~30/10, WDO ~30/11, WDO ~30/12 (WD1X26Z26 etc.; ticker a confirmar no Profit); o WIN seguinte e' 16/12. Cada evento e' DESCRITIVO
-    CRITERIO     (1) PORTAO DE PODER, antes de olhar o resultado: `rolagem-persistencia --poder` nos dados do WIN; se o poder em f=0,75 ficar abaixo de 70%, o evento e' INCONCLUSIVO POR DESENHO
-                 e nao se interpreta. (2) Evento com portao aprovado: p unilateral do CONJUNTO < 0,05. (3) Liberar a pergunta C so' com o POOL de pelo menos 3 eventos com portao aprovado (Stouffer, unilateral p < 0,05)
-                 e nenhum evento com z < -1,645 (persistencia negativa e' descritiva, nao entra no criterio).
-                 Os limiares (70%, 0,05, 3 eventos) foram fixados depois de ver o WDO e ANTES de qualquer dado do WIN; o WDO nao entra no pool
-    PARADA       nao olhar WIN parcial; analise so' depois de 14/10 e do backfill de D-2 a D (ate' ~13/11); nao rodar sem `--poder` antes; nao mexer em limiar depois de ver o resultado
+    EVENTO       corretora x pregao: liquido (compra menos venda) no `WI1V26Z26`, so' em negocios com corretoras DIFERENTES. Janela: os 3 ultimos PREGOES ate' D (D-2, D-1 e D; 2 transicoes),
+                 D = ultimo pregao de V26 (14/10). Calendario = dias com dado em `curated/trade`, de qualquer simbolo; a lista de datas abaixo e' so' expectativa. Estatistica S (volume casado de mesmo
+                 sinal menos o oposto), nulo por inversao de sinal por corretora e por dia, p unilateral do CONJUNTO
+    TAXA         medida no WDO (depuracao): 25 a 27 corretoras com liquido nos dias de pico; contratos COM direcao 65.030 (D-2), 195.934 (D-1) e 10.781 (D). Um evento por roll, nao por pregao
+    EFEITO       o menor que o teste enxerga, por simulacao nas magnitudes reais do WDO: poder 47% a 55% com metade das corretoras mantendo o sinal (f=0,50), 81% a 89% em f=0,75, tamanho 5% a 6,8%
+    HORIZONTE    ate' 30/12: WIN 14/10, WDO ~30/10 (X26 -> Z26), ~30/11 (Z26 -> F27), ~30/12 (F27 -> G27) e WIN ~16/12; tickers `WD1`/`WI1` = prefixo + origem + destino, a confirmar no Profit. ~2,5 meses
+                 para 3 eventos com portao aprovado, abaixo do teto de 6 meses da skill forward: pode ligar
+    CRITERIO     (1) PORTAO DE PODER por evento: poder >= 70% em f=0,75, calculado pela ferramenta; reprovado = INCONCLUSIVO POR DESENHO, nao se interpreta. (2) Evento com portao aprovado:
+                 `persistencia_detectada` se p do conjunto < 0,05; senao `sem_persistencia_detectavel`. (3) Pergunta C so' abre com o POOL de >= 3 eventos com portao aprovado e o MESMO `limiares_sha`
+                 (Stouffer unilateral, p < 0,05) e nenhum evento com z < -1,645 (persistencia negativa e' descritiva, nao entra). O WDO de setembro fica fora do pool.
+                 Limiares fixados depois de ver o WDO e ANTES de qualquer dado do WIN
+    PARADA       analise so' depois de 14/10, do `backfill` e do `curate`; so' no modo `--primaria`; nao rodar o modo livre no `WI1V26Z26` antes do primario; nao mexer em limiar, janela, portao
+                 nem `--sorteios` depois de ver o resultado; `inconclusivo` nao e' negativo nem positivo; olhar o WI1 parcial antes de fechar 14/10 nao autoriza nada
 
-**Execucao imposta pela ferramenta (v4.31):** `profit-tape rolagem-persistencia --primaria --ultimo-pregao 2026-10-14 --roll WI1V26Z26` fixa a janela nos 3 ultimos PREGOES ate' D
-(calendario = dias com dado em `curated/trade`, de qualquer simbolo, para um dia vazio no roll nao deslizar a janela), avalia o portao de poder (>= 70% em f=0,75) e emite o veredito pela regra:
-`persistencia_detectada` (portao aprovado e p < 0,05), `sem_persistencia_detectavel` (portao aprovado e p >= 0,05) ou `inconclusivo_por_desenho`. Com o portao reprovado, ou com algum dos 3 pregoes sem negocios no roll,
-z e p ficam fora da tela (o JSON os guarda em `descritivo_nao_interpretar`). D sem nenhum dado no curated e' ERRO (falta backfill ou curate), nao desliza. Janela livre (`--de/--ate`) e `--poder` ficam
-DESCRITIVOS e a saida diz isso. Cada evento grava `primaria_<roll>_<D>.json` (insumo do pool de >= 3 eventos; o comando de pool ainda nao existe e entra quando houver 3 eventos).
+**Calendario (operador, 2026-10-04): 12/10 nao tem pregao.** A janela esperada do WIN e' 09/10 (sexta), 13/10 (terca) e 14/10 (quarta); a transicao 09 -> 13 cruza 4 dias corridos de fim de semana prolongado.
+**Ressalva do evento WIN, nao mudanca de regra:** uma ordem pai de mais de um dia pode persistir menos sobre o feriado do que entre pregoes seguidos, e o poder simulado nao cobre isso (usa so' as magnitudes reais).
+Um `sem_persistencia_detectavel` no WIN le-se com essa ressalva. A janela foi fixada por PREGOES antes de ver o WIN e nao muda.
 
-O WDO como depuracao (3 pregoes D-2 a D, 27 corretoras): S 16.115, z +0,63, p 0,28; dia a dia z +0,08, +0,50, +1,00; no modo primario (D = 30/09) o portao deu 81% (84% na primeira simulacao: o Monte Carlo varia cerca de 3 pontos) e o veredito foi `sem_persistencia_detectavel`. Nao e' resultado: e' a calibracao da ferramenta (reproduz o ensaio a mao).
-Tamanho do teste em mercado de soma zero, sem persistencia: 5,8% a 6,8% em cinco desenhos (simulacao de 2026-10-04); um caso espelhado (cada corretora com contraparte exclusiva) infla o tamanho e nao e' a estrutura do tape.
+**Carimbo (skill forward, regra 2).** Cada evento grava `primaria_<roll>_<D>.json` com `carimbo.codigo` (`git describe --tags --always`, informativo) e `carimbo.limiares_sha` (hash da janela, do portao,
+do alfa, de `--sorteios` e das repeticoes de poder). **Valor congelado desta ficha: `limiares_sha` = `ae4ba331841f`** (com `--sorteios 20000`, o default). Eventos so' se somam com o mesmo hash. Mudanca de limiar, janela,
+portao ou regra de saida reinicia a contagem, mesmo que pareca pequena; correcao de bug que faz o codigo fazer o que a ficha ja diz nao reinicia. O comando de pool ainda nao existe: entra quando houver 3 eventos.
 
-**Honestidade sobre o que A pode entregar:** persistencia no roll nao diz que o preco se move e nao rende nada ao EA sozinha; ela so' libera a pergunta C. Com n=1 por evento e poder de ~50% em f=0,50,
-o provavel e' um evento inconclusivo. O valor e' fechar a hipotese com criterio declarado e nao por falta de critica, e acumular eventos (a ferramenta roda no WDO todo mes).
+**Antes de ligar (skill forward, secao 3), feito:** conta a mao em exemplo pequeno (S = 4 - 5 - 3) e teste correspondente; verificadores que DEVERIAM reprovar e reprovam (permutacao entre corretoras enviesada;
+poucas corretoras sem poder; D sem dado e' erro; pregao sem negocios no roll e' inconclusivo); persistencia plantada achada; tamanho do teste em mercado de soma zero (5,8% a 6,8%); calibracao no WDO reproduzida
+na maquina do operador (portao 81%, S 16.115, z +0,63, p 0,277). Falta o pregao real do WIN, que e' o ponto.
+
+**Sequencia depois do fechamento de 14/10 (nada antes):**
+
+    profit-tape backfill --inicio 2026-10-05 --fim 2026-10-14 --ticker WI1V26Z26 --ticker WINZ26 --por-dia
+    profit-tape curate --simbolo WI1V26Z26
+    profit-tape curate --simbolo WINZ26
+    profit-tape rolagem-persistencia --primaria --ultimo-pregao 2026-10-14 --roll WI1V26Z26
+
+`WINZ26` e' leve e garante o calendario de 14/10 mesmo que o `WI1` nao tenha negocios no dia; `WINV26` e `IR1V26Z26` so' servem para descricao depois e nao entram na pergunta A. `--fim` e' INCLUSIVO com `--por-dia`.
+O backfill vale ate' ~13/11. Resultado: registrar o veredito e o JSON no `HISTORICO_DE_SESSOES.md`, sem reinterpretar.
+
+**Honestidade sobre o que A pode entregar:** persistencia no roll nao diz que o preco se move e nao rende nada ao EA sozinha; so' libera a pergunta C. Com um evento por roll e poder de ~50% em f=0,50, o provavel e' um
+evento inconclusivo ou sem persistencia detectavel. O valor e' fechar a hipotese com criterio declarado e nao por falta de critica, e acumular eventos (a ferramenta roda no WDO todo mes).
 
 ### 8. Dados do WIN (nada depende de gravar ao vivo)
 

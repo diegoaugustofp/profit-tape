@@ -50,7 +50,9 @@ continua e e' DESCRITIVO: a janela e' de quem roda, e nao vale como criterio.
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import json
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -200,6 +202,26 @@ def descrever(curated: Path, roll: str, dias: list[dt.date], n_sorteios: int, co
     return r
 
 
+def _carimbo_codigo() -> str:
+    """Tag/hash do codigo que produziu o evento (git describe, rodado na pasta do pacote)."""
+    try:
+        out = subprocess.run(["git", "describe", "--tags", "--always"], capture_output=True,
+                             text=True, timeout=5, check=False,
+                             cwd=Path(__file__).resolve().parent).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return "desconhecido"
+    return out or "desconhecido"
+
+
+def _sha_limiares(n_sorteios: int, repeticoes_poder: int) -> str:
+    """Hash do que define o MECANISMO do evento. Eventos com hash diferente nao se somam."""
+    base = json.dumps({"janela": JANELA_PRIMARIA, "portao_f": PORTAO_F,
+                       "portao_poder_min": PORTAO_PODER_MIN, "alfa": ALFA,
+                       "n_sorteios": n_sorteios, "repeticoes_poder": repeticoes_poder},
+                      sort_keys=True)
+    return hashlib.sha256(base.encode()).hexdigest()[:12]
+
+
 def pregoes(curated: Path) -> list[dt.date]:
     """Calendario de pregoes = dias com alguma particao em curated/trade (qualquer simbolo)."""
     raiz = curated / "trade"
@@ -233,7 +255,9 @@ def avaliar_primaria(curated: Path, roll: str, ultimo_pregao: dt.date, n_sorteio
     r: dict[str, Any] = {
         "modo": "primaria", "roll": roll, "ultimo_pregao": ultimo_pregao.isoformat(),
         "janela": [d.isoformat() for d in janela], "n_sorteios": n_sorteios,
-        "limiares": {"portao_f": PORTAO_F, "portao_poder_min": PORTAO_PODER_MIN, "alfa": ALFA}}
+        "limiares": {"portao_f": PORTAO_F, "portao_poder_min": PORTAO_PODER_MIN, "alfa": ALFA},
+        "carimbo": {"codigo": _carimbo_codigo(),
+                    "limiares_sha": _sha_limiares(n_sorteios, repeticoes_poder)}}
     vets: list[pd.Series] = []
     vazios: list[str] = []
     por_dia: list[dict[str, Any]] = []

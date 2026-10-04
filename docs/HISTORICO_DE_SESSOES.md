@@ -5321,3 +5321,15 @@ Calibração no WDO pelo modo primário (D = 30/09): portão 81% (aprovado), S 1
 
 **Tags:** entregue-v4.31 (sobre v4.30).
 
+### 2026-10-04c — Ficha da pergunta A congelada até 14/10 (v4.32)
+
+Diego confirmou que 12/10 não tem pregão e rodou a calibração do modo primário na máquina dele (portão 81%, S 16.115, z +0,63, p 0,277, `sem_persistencia_detectavel`), reproduzindo o esperado.
+A janela esperada do WIN fica em 09/10, 13/10 e 14/10; a transição 09 -> 13 cruza 4 dias corridos. Registrado como RESSALVA do evento, sem mudar a regra: a janela foi fixada por pregões antes de ver o WIN.
+
+Ficha congelada na seção 7 do `RESEARCH_PLANO.md`, com HORIZONTE conferido contra o teto de 6 meses da skill forward (~2,5 meses para 3 eventos), PARADA explícita (nada antes do fechamento de 14/10; modo livre
+no `WI1V26Z26` só depois do primário) e a sequência exata de comandos (`backfill` de `WI1V26Z26` e `WINZ26`; `WINZ26` garante o calendário de 14/10). Código: o evento primário passa a gravar o carimbo da skill forward
+(`carimbo.codigo` = `git describe`, informativo; `carimbo.limiares_sha`, hash do mecanismo). Valor congelado `ae4ba331841f` com `--sorteios 20000`. Eventos só se somam com o mesmo hash; é a regra 2 da skill, sem a qual
+"ajusto e continuo contando" produziria um número sem significado. Mudança aditiva no JSON, sem alterar o mecanismo (nada havia sido contado ainda).
+
+**Tags:** entregue-v4.32 (sobre v4.31). Suíte 1.408 (+2).
+

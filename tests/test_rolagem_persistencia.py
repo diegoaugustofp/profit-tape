@@ -238,6 +238,27 @@ def test_primaria_exige_tres_pregoes(tmp_path: Path, monkeypatch: pytest.MonkeyP
         rp.avaliar_primaria(curated, "WD1V26X26", D[-1], 100, tmp_path / "s", 30)
 
 
+def test_primaria_grava_carimbo_e_o_hash_muda_com_o_mecanismo(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Carimbo de versao (skill forward, regra 2): eventos de mecanismos diferentes nao se somam."""
+    rng = np.random.default_rng(17)
+    dias = {d: _dia_grande(rng) for d in D}
+    curated = _montar(tmp_path, monkeypatch, dias, [])
+    a = rp.avaliar_primaria(curated, "WD1V26X26", D[-1], 300, tmp_path / "s", 40)
+    b = rp.avaliar_primaria(curated, "WD1V26X26", D[-1], 300, tmp_path / "s", 40)
+    c = rp.avaliar_primaria(curated, "WD1V26X26", D[-1], 600, tmp_path / "s", 40)
+    assert isinstance(a["carimbo"]["codigo"], str) and a["carimbo"]["codigo"]
+    assert a["carimbo"]["limiares_sha"] == b["carimbo"]["limiares_sha"]
+    assert a["carimbo"]["limiares_sha"] != c["carimbo"]["limiares_sha"]
+
+
+def test_hash_dos_limiares_depende_dos_limiares_da_ficha(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    base = rp._sha_limiares(20000, 500)
+    monkeypatch.setattr(rp, "PORTAO_PODER_MIN", 0.60)
+    assert rp._sha_limiares(20000, 500) != base
+
+
 def test_modo_livre_mantem_o_comportamento_antigo(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Retrocompatibilidade: `descrever` devolve as mesmas chaves de antes (+ `modo`)."""

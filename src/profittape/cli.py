@@ -3664,6 +3664,8 @@ def _imprime_primaria(r: dict[str, Any]) -> None:
     typer.echo(f"ROLAGEM, PERSISTENCIA -- MODO PRIMARIO (ficha) -- {r['roll']}, "
                f"D = {r['ultimo_pregao']}")
     typer.echo("=" * 72)
+    typer.echo(f"  carimbo: codigo={r['carimbo']['codigo']} "
+               f"limiares={r['carimbo']['limiares_sha']}")
     typer.echo(f"  janela: {', '.join(str(d) for d in r['janela'])}")
     for x in r["por_dia"]:
         typer.echo(f"    {x['dia']}  negocios {x['negocios']:>7,}  c/ direcao "
