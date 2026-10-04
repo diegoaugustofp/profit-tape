@@ -27,8 +27,8 @@ no diário de operações nem em `eas/`):
 
 | coleta | o que grava | prazo | próximo passo |
 |---|---|---|---|
-| **Rolagem do WDO** (par casado) | `WDOV26` e `WDOX26`: `trade` + topo do livro (`tiny_book`); sem offer book. Desde 22/09 | virada em **01/10** (já passou). **Inventário de 03/10: 7 pregões de par (22 a 30/09); `WDOV26` sem dado depois, amostra fechada** | `profit-tape rolagem-par` agora; só valem os dias em que **os dois** negociaram |
-| **Rolagem do WIN** (mesma hipótese) | `WINV26` e `WINZ26`: **nenhum dos dois tem dado em disco** (inventário de 03/10) | WIN vence em **14/10**; para ter par, assinar na **segunda 05/10** | decisão do operador: incluir os dois no `recorder.yaml` e reiniciar o record |
+| **Rolagem do WDO** (par casado) | `WDOV26` e `WDOX26`: `trade` + topo do livro; instrumentos de roll `WD1V26X26` e `DR1V26X26` recuperados por backfill (03/10). Amostra fechada: 7 pregões de par (22 a 30/09) | virada em **01/10** (passou) | ensaio de 03/10 = **depuração**, `rolagem-par` v4.28 com defeitos de fórmula; abordagem reformulada para **fluxo líquido por corretora**; controle positivo falhou no tape dos outrights; ver `RESEARCH_PLANO` (seção ROLAGEM: ensaio do WDO) |
+| **Rolagem do WIN** (mesma hipótese) | `WINV26` (21 dias importados), `WINZ26` (desde 03/09), `WI1V26Z26`, `IR1V26Z26` (backfill) | WIN vence em **14/10**; pico esperado nos 2 pregões antes | depois de 14/10: `backfill --por-dia` até ~13/11; gravar ao vivo é redundância |
 | **Opções de PETR4, outubro** (pinning) | 14 séries: `trade` + topo do livro, mês inteiro desde 22/09. Inventário de 03/10: dado nos 9 pregões esperados; as séries mais finas negociam 20 a 30 vezes por dia | vencimento **16/10** | depois do fechamento e do compact, `profit-tape opcoes-vencimento` (o placebo de strikes falsos decide; séries finas limitam o poder) |
 
 Expectativa declarada **antes** (opções): o OI está colado no spot, então um resultado **nulo pesa
@@ -97,6 +97,7 @@ contra** a hipótese. Detalhes, limites e leitura declarada: `coletas.yaml` e `R
   assinar `WINV26` e `WINZ26` antes de ~07/10. **WDO vence no 1º dia útil
   do mês → a virada é nesta semana**; se quiser a amostra mais rápida,
   assinar `WDOV26` e `WDOX26` já.
+- **Atualização de 03/10 (rolagem):** o `backfill` (30 dias) recupera `WINZ26` e os instrumentos de roll (`WI1`/`IR1`/`WD1`/`DR1`); assinar ao vivo antes de 07/10 deixou de ser pré-requisito. Ver `RESEARCH_PLANO`, "ROLAGEM: ensaio do WDO".
 - **Agente** (saldo acumulado e a sua virada) — depois do book.
 
 ## 4. Onde cada hipótese está (a taxonomia de fechamento)

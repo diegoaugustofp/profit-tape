@@ -1,6 +1,6 @@
 # Plano do modulo research/ (decidido 2026-08-22, pre-implementacao)
 
-> **Status:** vivo — **Revisado:** 2026-09-24 — **Assunto:** decisões de sinal/estratégia, pré-registros e resultados de trial — documento de origem da maioria das hipóteses. Use o índice por assunto.
+> **Status:** vivo — **Revisado:** 2026-10-03 — **Assunto:** decisões de sinal/estratégia, pré-registros e resultados de trial — documento de origem da maioria das hipóteses. Use o índice por assunto.
 
 Regras de desenho, decisoes de sinal/estrategia, e resultados -- em ordem
 cronologica abaixo. Para navegar rapido por ASSUNTO em vez de ler tudo em
@@ -18,6 +18,7 @@ arquivo cresceu demais para navegar so' por titulo cronologico).
 - [Passo 1 da DEFASAGEM: RESULTADO — nao ha' o que explorar, e o achado e' INVERTIDO (2026-09-17)](#passo-1-da-defasagem-resultado--nao-ha-o-que-explorar-e-o-achado-e-invertido-2026-09-17)
 - [COMO CLASSIFICAR UM FECHAMENTO (2026-09-17, depois de eu errar isto)](#como-classificar-um-fechamento-2026-09-17-depois-de-eu-errar-isto)
 - [RECLASSIFICACAO: rolagem e vencimento de opcao (2026-09-17, critica do operador)](#reclassificacao-rolagem-e-vencimento-de-opcao-2026-09-17-critica-do-operador)
+- [ROLAGEM: ensaio do WDO, o instrumento de roll e o redesenho (2026-10-03)](#rolagem-ensaio-do-wdo-o-instrumento-de-roll-e-o-redesenho-2026-10-03)
 - [Opcao sobre acao: series de OUTUBRO e a expectativa DECLARADA ANTES (2026-09-21)](#opcao-sobre-acao-series-de-outubro-e-a-expectativa-declarada-antes-2026-09-21)
 
 **Setembro/2026 -- iceberg e livro de ofertas (book)**
@@ -7192,3 +7193,120 @@ foi medida ainda -- o funil de agente é trabalho novo.
 **Regra que vale para os dois**: entram como ficha PRÓPRIA, com
 mecanismo declarado antes, e nunca no meio de um forward em andamento
 (isso reiniciaria a contagem).
+
+## ROLAGEM: ensaio do WDO, o instrumento de roll e o redesenho (2026-10-03)
+
+> **Status:** desenho registrado ANTES de qualquer código novo; nada aqui consome trial. O ensaio do WDO é amostra de DEPURAÇÃO
+> (skill `profit-tape-disciplina`, 7.1): serve para achar defeito de fórmula; **nenhum nível medido nele é interpretável**.
+> **Este registro foi reescrito na mesma sessão:** o primeiro rascunho propunha casar quantidade e milissegundo; a crítica do operador
+> (ordem pai, não negócio filho) o substituiu, e o controle positivo da abordagem nova falhou (seção 5).
+
+### 1. O ensaio do `rolagem-par` v4.28 (WDOV26 x WDOX26, 22 a 30/09, 7 pregões de par)
+
+Razão observado/baseline: **0,71 a 0,91 em 7 de 7 dias** (agregado 0,73 e 0,75). Um baseline que não dá 1 sem efeito não é baseline. Defeitos de FÓRMULA:
+
+1. **Nulo não calibrado.** A permutação de rótulos espalha cada corretora uniformemente pelo dia; no dado real operam em rajadas. Causa PROVÁVEL, não verificada.
+   (Eu havia previsto razão ACIMA de 1: o sinal previsto estava errado. Prever não é verificar.)
+2. **Unidade muitos-para-um.** Conta negócios da perna A com par em B: em 22/09, 21.611 "pares" com 2.971 negócios em X26 e 117.280 contratos "nos pares" contra
+   4.701 contratos no X26 inteiro. `fracao_do_volume` mede a densidade da perna A, não a rolagem.
+3. **Janela de 2 s satura:** WDO tem 14 a 19 negócios/s e o WINV26 cerca de 183/s (124,3 M linhas em 21 dias).
+4. **Teste sintético fácil demais:** `test_sem_rolagem_a_razao_fica_perto_de_um` passa com agentes uniformes e falha no dado real.
+
+### 2. Fatos medidos em 03/10 (o instrumento de roll)
+
+A B3 negocia a rolagem como contrato próprio (`DR1`/`WD1` dólar, `IR1`/`WI1` Ibovespa; Ofício Circular 076/2023-PRE: operação estruturada, pernas em Execution
+Reports). Os quatro tickers existem no `GetHistoryTrades`: `DR1V26X26`, `WD1V26X26`, `IR1V26Z26`, `WI1V26Z26`.
+
+| dia | `WD1V26X26` neg / contratos | `DR1V26X26` neg / contratos |
+|---|---|---|
+| 23/09 | 37 / 180 | 12 / 5.220 |
+| 24/09 | 156 / 1.228 | 48 / 7.765 |
+| 25/09 | 412 / 44.056 | 42 / 9.340 |
+| **28/09** | **19.847 / 184.933** | **6.152 / 272.230** |
+| **29/09** | **13.903 / 283.904** | **4.182 / 441.025** |
+| 30/09 | 1.628 / 12.459 | 498 / 43.900 |
+| total | 526.760 contratos | 779.540 contratos (10.946 neg) |
+
+- **Pico em D-2 e D-1** (89% do `WD1`, 91,5% do `DR1`); o último pregão já é pequeno. A liquidez do OUTRIGHT migra em D: `WDOFUT` tem exatamente as linhas de `WDOV26` de 22 a 29/09 e as de
+  `WDOX26` em 30/09. A série contínua é normalizada (operador: sem salto no `WDOFUT` nem no `WINFUT`).
+- **O volume está em TICKETS GRANDES** (28+29/09): `WD1` 60,8% em negócios acima de 100 contratos (32,5% em 50 negócios acima de 1.000); `DR1` 85,5% (41,8% em 96 negócios acima de 1.000).
+  Os maiores são crosses (`trade_type` 1) de 10.000 contratos, com a MESMA corretora nos dois lados (Itaú, Terra, Tullett, Santander Institucional). 10.000 WDO = US$100 milhões de nocional.
+- **Mesma corretora nos dois lados:** 58,4% do volume do `DR1` e 44,9% do `WD1`. Nesses negócios não há direção no nível da corretora: é o cliente que rola, e o tape não mostra o cliente.
+  Só 55% (`WD1`) e 42% (`DR1`) do volume têm corretoras diferentes e, portanto, direção.
+- **Preço do roll = spread, já arbitrado:** contra X menos V pelos últimos negócios das pernas (V com até 2 s e X com até 5 s de idade; 19.655 de 33.750 negócios), a mediana do desvio é de −0,28 a +0,10 ponto
+  por faixa de tamanho (p10 a p90 cerca de ±0,6; tick 0,5). Sem espaço visível para deslocamento e retorno do spread. O operador descartou o spread como pergunta (EA de pessoa física).
+- Quem aparece: `DR1` com XP, Itaú, Tullett Prebon, Necton, BGC Liquidez, BTG, Agora; `WD1` com Agora, Necton, CM Capital, Itaú. Tullett e BGC são interdealer brokers.
+- **Volume do instrumento de roll NÃO é posição rolada:** inclui cross, intermediação e spread. Unidade da `quantidade` do `DR1` não verificada (1 DOL = 5 WDO; o 7,4x entre cheio e mini é ordem de grandeza).
+- `WI1V26Z26`: 61 contratos em 7 dias esparsos. `IR1V26Z26`: só 02/10 (490 contratos). `WINZ26` tem dado desde 03/09 (6 a 23 mil negócios/dia); `DOLV26`/`DOLX26` só em 28 e 29/09.
+
+### 3. As pernas do roll no tape (28 e 29/09, depuração)
+
+- **O volume não cabe.** `WD1`: 184.933 e 283.904 contratos contra 89.085 e 160.055 no `WDOX26` inteiro; `DR1`: 272.230 e 441.025 contra 16.995 e 65.305 no `DOLX26`. Diferença de preço e de lote NÃO explicam
+  (compara-se contagem de contratos; onde as pernas aparecem a quantidade é igual).
+- **Parte das pernas existe, acima do acaso** (ts exato + mesma quantidade, contra o nulo deslocado de 30 s a 5 min): `WD1` x V26 1,84% e 4,23% (nulo 0,27% e 0,12%); x X26 0,47% e 1,78% (0,03% e 0,02%);
+  `DR1` x `DOLV26` 1,35% e 6,48% (0,02% e 0,01%); x `DOLX26` 0,73% e 4,50% (0,00% e 0,01%). **No máximo 1,0% do volume** do roll, em negócios de agressão (`trade_type` 2 e 3) de 2 a 10 contratos;
+  acima de 50 contratos a taxa é 0 a 0,1%; cross 0,0% a 0,3%.
+- **São pernas de verdade:** com as duas no mesmo ms (`WD1` n=224, `DR1` n=114), X menos V reproduz o preço do roll (mediana do erro 0,26 e 0,28 ponto; máximo 1,2).
+- **Assinatura de agente nas pernas que aparecem:** na V26 o comprador do roll também compra em 54,3% (vende em 18,4%; n=1.307); na X26 o comprador do roll vende em 51,4% (n=574).
+- **Retratado:** (a) "detector morto por construção": exagero meu; o volume diz que o roll ESTRUTURADO é quase invisível no tape, não que o par montado à mão não exista. (b) "o WINFUT terá salto de ~3.800 pontos": sem base, a série é normalizada.
+- Limites: 2 pregões, um par de contratos; ts exato é piso. O casamento por quantidade e milissegundo mira o pedaço pequeno (1% do volume): **abandonado como teste principal** pela crítica do operador (item 4).
+
+### 4. A hipótese, reformulada pelo operador (2026-10-03)
+
+> Quem rola grande não casa quantidade nem horário: trabalha uma ORDEM PAI, em lotes diferentes nas duas pernas, ao longo de minutos ou horas (ordem limite, várias execuções),
+> e só precisa que o PREÇO MÉDIO dos dois lados fique onde ele quer. A assinatura é fluxo líquido acumulado por corretora, de sinal oposto em V e X. O que pergunta: o preço desloca, e quanto volta?
+
+Escolha do operador: seguir por **fluxo de corretora** (o spread fica fora: "para um EA de pessoa física não dará em nada"). O operador soube só há pouco que existe contrato de roll.
+Pontos que ficam em aberto, ditos sem rodeio: o ator grande tende a usar o contrato de roll (risco de perna nulo) e cruzar dentro de uma corretora, fora do livro do outright; e o par é neutro por construção,
+então não há razão estrutural para DIREÇÃO do outright. Expectativa declarada: **baixa chance de sinal acionável** (Chutando).
+
+### 5. Teste do fluxo líquido por corretora (depuração, WDOV26 x WDOX26, 28 e 29/09)
+
+Unidade: corretora x janela. Fluxo líquido `n` = contratos comprados menos vendidos pela corretora na janela (agressor ou passivo). Estatística
+`S = soma_a min(|nV_a|, |nX_a|) * (-sinal(nV_a * nX_a))` (volume casado de sinal OPOSTO menos o de mesmo sinal).
+
+- **Nulo CERTO: inversão de sinal independente por corretora em `nX`** (20.000 sorteios). Preserva magnitudes e identidade; testa só a relação de sinal.
+- **Nulo ERRADO, rodado primeiro e descartado:** permutar as corretoras entre si em `nX`. Destrói a correlação de magnitude (corretora grande é grande nos dois contratos) e inventou "sinal":
+  p de 0,037 no dia 29/09 e p de 0,004 a 0,009 em 4 de 22 janelas de 60 min. Com o nulo certo, tudo some. Foi o mesmo tipo de defeito do baseline da v4.28, cometido por mim de novo na mesma sessão.
+- **Resultado com o nulo certo:** dia inteiro z +0,05 (28/09) e +0,59 (29/09); janelas de 60 min: 1 de 20 com p<0,05 (esperado 1,0), menor p 0,038; controle cruzado de dias (V de um dia com X de outro) z +0,45 e +0,42,
+  igual ao real. Nada.
+- **CONTROLE POSITIVO FALHOU.** O fluxo líquido do roll (`WD1`) por corretora, contra as pernas (comprador do roll compra V e vende X): roll x V, esperado mesmo sinal: S −26.008 (z −1,40) em 28/09 e −9.589 (z −0,34) em 29/09,
+  SINAL CONTRÁRIO nos dois dias; roll x X, esperado oposto: z −0,47 em 28/09 e +2,20 em 29/09 (+17.379 contratos, 15,1% do fluxo líquido do roll, p=0,0098; um em quatro testes). O método, no tape dos outrights,
+  não enxerga o roll que sabemos que existe. Pela regra 7.3, ele não está apto a testar a hipótese no tape dos outrights.
+- **Hipótese pós-hoc (Chutando):** o sinal contrário em V pode ser descarga (a corretora recebe o roll em cross e desfaz no outright). Nasceu do ensaio; só vale testar no WIN, com a direção declarada antes.
+- **Persistência do líquido por corretora entre dias, no instrumento de roll**, só com corretoras diferentes: `WD1` rho +0,16, +0,23, +0,39 em 25→28, 28→29 e 29→30/09 (z +0,09, +0,49, +0,98; nenhum significativo);
+  `DR1` rho −0,29, +0,10, −0,09. 25 a 29 corretoras por par de dias. Sem conclusão. Maiores líquidos (compra menos venda do roll) em 25 a 30/09: `WD1` CM Capital +53.957, UBS −41.928, Merrill +37.082, Necton −22.514,
+  BGC −18.649, BTG +18.415; `DR1` Agora −51.320, Tullett +19.830, Ativa +17.430, BTG +14.310.
+
+### 6. Desenho decidido (revisado)
+
+- **Fonte do fluxo: o instrumento de roll** (`WD1`/`DR1`/`WI1`/`IR1`), não o tape das pernas. Só negócios com corretoras diferentes têm direção.
+- **Pergunta A, ordem pai:** o líquido por corretora no roll persiste entre dias (D-3 a D)? Estatística `S` de mesmo sinal entre dias, nulo por inversão de sinal. WDO: indistinguível (z até 0,98).
+- **Pergunta B, rastro no outright:** só depois de a pergunta A ou o controle positivo darem sentido. A direção (descarga ou continuidade) é declarada antes de olhar o WIN.
+- **Pergunta C, preço:** só se A ou B passarem no WIN. Preço médio de cada corretora em cada perna contra o VWAP da janela, deslocamento e retorno ao início da janela, |Δ| do outright (`WDOFUT` normalizado). Consome trial; contabilidade declarada antes.
+- **Verificador antes de qualquer detector novo em dado real:** (i) sintético com magnitudes correlacionadas e sinais independentes, onde `S` tem de ser ~0; (ii) sintético com rolagem plantada, que tem de ser achada; (iii) controle positivo real pelo roll.
+- **Não vira código novo agora:** com o controle positivo reprovado, a ferramenta só se justifica para as perguntas A e C. A decisão fica com o operador.
+
+### 7. Ficha de seis linhas (WIN V26 -> Z26) — INCOMPLETA de propósito
+
+    HIPOTESE     corretoras que rolam via instrumento de roll deixam fluxo liquido persistente entre dias e/ou rastro no outright
+    EVENTO       corretora x dia: liquido no roll com corretoras diferentes; S contra nulo de inversao de sinal. Janela de rastro no outright: PENDENTE
+    TAXA         PENDENTE: medir no WDO (corretoras com liquido relevante por dia; dias de roll)
+    EFEITO       PENDENTE
+    HORIZONTE    UM roll (n=1 evento de calendario); o seguinte do WIN e' em dezembro; o WDO rola todo mes
+    CRITERIO     PENDENTE: fixado antes de olhar o WIN, com o nulo de inversao de sinal e o controle positivo pelo roll
+    PARADA       nao olhar WIN parcial; analise so' depois de 14/10 e do backfill completo (D-2 a D, ate' ~13/11)
+
+Resultado do WIN com n=1 roll e' DESCRITIVO e nao decide nada sozinho.
+
+### 8. Dados do WIN (nada depende de gravar ao vivo)
+
+`GetHistoryTrades` cobre 30 dias; `WINV26` foi recuperado por backfill (03/09 a 02/10) e `WINZ26` existe desde 03/09. Depois de 14/10: `backfill --por-dia` de `WINV26`, `WINZ26`, `WI1V26Z26` e `IR1V26Z26` até ~13/11.
+Com `--por-dia`, `--fim` é **INCLUSIVO** (o `--help` diz; o `OPERACAO.md` fala de exclusivo para o modo sem `--por-dia`). Gravar ao vivo é redundância.
+
+### 9. Pendências de engenharia (sem versão marcada)
+
+- `inventario-dados`: 07/09 é feriado e aparece como lacuna (falso positivo); 02/09 é dia parcial de verdade (1 de 9 arquivos).
+- `backfill`: o `WI1V26Z26` de 02/10 saiu em duas partes idênticas (reentrega benigna; o `curate` removeu 17 linhas). Causa da segunda parte não encontrada.
+- Pergunta em aberto: os negócios grandes do roll (cross, acima de 50 contratos) não aparecem nas pernas. Ticket não publicado, ou outro timestamp.
+- Triagem pendente (skill 7.2) antes de qualquer feature nova: `agf_*` por corretora já existe em `features/flow.py`; "fluxo de corretora em janela de roll" pode ser só `agf` condicionado a dia de roll. `grep` e correlação antes de construir.

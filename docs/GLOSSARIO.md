@@ -137,6 +137,7 @@ ficha em `docs/eas/`.
 - **regime** ⚠ — (1) nas fichas de preço: `close` vs MME80 (a favor / contra), como cláusula ou estrato; (2) na triagem de features: a quebra estrutural de 2020 (variância de log-volume caiu de 1,24 para ~0,3), `por_regime` no combinar. `EAS_DE_PRECO §2`; `RESEARCH_PLANO`, "…o WIN quebrou em 2020".
 - **replicação (amostra)** — 2026 até 13/08 nas fichas de preço; reportada depois do teste primário, sem veto sobre ele. `eas/README`.
 - **RLP** — retail liquidity provider: negócio internalizado (código 13), ~25% do WIN; entra na barra sem fechá-la; `rlp_frac` é proxy de varejo. `FEATURES.md`.
+- **instrumento de roll (WD1 / DR1 / WI1 / IR1)** — rolagem negociada como contrato próprio na B3 (`WD1V26X26` = mini dólar, `DR1` = dólar cheio, `WI1V26Z26` = mini índice, `IR1` = índice cheio; ticker = prefixo + origem + destino). Histórico via `backfill`. O volume dele NÃO é posição rolada (inclui cross e spread) e as pernas aparecem no tape de V e X em até ~1% do volume. `RESEARCH_PLANO`, "ROLAGEM: ensaio do WDO".
 - **rolagem** — troca do contrato vencendo pelo seguinte (WINV26 → WINZ26 na semana de 05/10). Como hipótese, reclassificada: a assinatura é o par casado entre contratos, não a série contínua. `RESEARCH_PLANO`, "RECLASSIFICACAO: rolagem".
 - **Rota A / Rota B** — Rota A: saída por tempo (h barras) + stop catastrófico largo — a que foi validada. Rota B: overlay de stop/alvo fixos (100/120) checados no close da barra; pesquisa fechou que o stop não detecta reversão. `eas/z_agf_3`; `EA_ARQUITETURA`, "Rota A escolhida".
 

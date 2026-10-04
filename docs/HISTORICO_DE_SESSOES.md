@@ -5269,3 +5269,23 @@ se reescreve; os docs foram corrigidos); (2) o relatório mostrava só os 3 maio
 WDO atrás de "(+1)": agora mostra até 8.
 
 **Tags:** entregue-v4.28 (sobre v4.27). Suíte 1.388.
+
+### 2026-10-03n — Rolagem: ensaio do WDO, instrumentos de roll e a abordagem por fluxo de corretora (v4.29, só docs)
+
+Diego terminou a coleta WDOV26/WDOX26 e rodou o `rolagem-par` v4.28 (7 pregões de par): razão 0,71 a 0,91 em 7 de 7 dias. Eu havia previsto razão ACIMA de 1; o sinal estava errado,
+e o diagnóstico (nulo sem estrutura temporal) ficou de pé. Defeitos de fórmula: nulo não calibrado, unidade muitos-para-um, janela de 2 s saturada (WIN ~183 negócios/s), teste sintético fácil demais. O ensaio é depuração.
+
+O Diego achou o ticker do roll (`WI1V26Z26`) e recuperou por `backfill` `WD1V26X26`, `DR1V26X26`, `IR1V26Z26`, `WI1V26Z26`, `WINZ26`, `DOLV26`/`DOLX26` (28 e 29/09). Medido: pico do roll em D-2 e D-1; `WDOFUT` troca no último
+pregão; volume do roll não cabe no tape das pernas (só ~1% casa, acima do nulo); 60,8% (`WD1`) e 85,5% (`DR1`) do volume em tickets acima de 100 contratos, os maiores crosses de 10.000 contratos com a MESMA corretora nos dois lados
+(sem direção); preço do roll dentro de um tick do spread implícito. O `curate` removeu 17 duplicatas (reentrega idêntica do `WI1V26Z26` de 02/10).
+
+Virada da sessão: o Diego criticou a premissa de casar quantidade e milissegundo (quem rola grande trabalha ordem pai, com lotes e horários diferentes nas duas pernas) e escolheu seguir por FLUXO LÍQUIDO DE CORRETORA. Testei isso em 28 e 29/09:
+com o nulo certo (inversão de sinal por corretora) não há nada, e o CONTROLE POSITIVO (fluxo líquido do roll contra as pernas) falhou. Antes, eu havia rodado um nulo errado (permutação entre corretoras, que destrói a correlação de
+magnitude) e ele inventou "p de 0,004": mesmo tipo de defeito do baseline da v4.28, cometido por mim de novo. Registrado, com as saídas honestas: o ator grande usa o contrato de roll e cruza dentro da corretora; o par é neutro.
+
+Erros meus nesta sessão, corrigidos no registro: (1) previ razão > 1; (2) disse que `--fim` do `backfill` é exclusivo (com `--por-dia` é INCLUSIVO); (3) disse que o roll do WINFUT geraria salto de ~3.800 pontos (a série é normalizada); (4) declarei o
+detector "morto por construção" (exagero); (5) chamei de desatualizados docs que eram verdadeiros na hora; (6) o nulo por permutação acima; (7) primeiro rascunho do desenho mirava o pedaço de 1% do volume.
+
+O primeiro rascunho da v4.29 (detector por quantidade e milissegundo) NÃO foi entregue: o operador ainda não tinha aplicado; a tag foi refeita com o registro novo. `coletas.yaml`, `ESTADO_E_CAMINHOS.md` e `GLOSSARIO.md` atualizados.
+
+**Tags:** entregue-v4.29 (sobre v4.28, só documentação). Suíte 1.388 (inalterada).
