@@ -342,3 +342,45 @@ def test_123_o_sinal_puro_nao_envia_ordem_e_a_reconstrucao_nao_manda_nova_entrad
 
 def test_123_barras_por_dia_default_e_o_medido_38() -> None:
     assert re.search(r"BarrasPorDia\(38\)", "\n".join(_codigo("ea_123_vb.ntsl")))
+
+
+# --------------------------------------------------------------------------
+# v4.41: alarme ALVO_CRUZADO no 123 (so' diagnostico). O fill da entrada e' em
+# t+1 do arme; so' candles POSTERIORES ao do fill contam (a faixa do candle do
+# fill inclui o pre-fill).
+# --------------------------------------------------------------------------
+def _alarme_123_py(lado: float, alvo: float, stop: float, hi: float, lo: float,
+                   bar: int, arm_bar: int, evento: int = 0, tem_pos: bool = True) -> bool:
+    """Espelho da condicao do .ntsl."""
+    if not (tem_pos and evento != 11 and stop > 0 and alvo > 0 and bar >= arm_bar + 2):
+        return False
+    if lado > 0:
+        return hi >= alvo or lo <= stop
+    if lado < 0:
+        return lo <= alvo or hi >= stop
+    return False
+
+
+def test_123_alarme_existe_default_ligado_e_so_apos_o_candle_do_fill() -> None:
+    codigo = "\n".join(_codigo("ea_123_vb.ntsl"))
+    assert re.search(r"AlarmeCruzado\(1\)", codigo)
+    linhas = _codigo("ea_123_vb.ntsl")
+    ini = next(k for k, ln in enumerate(linhas) if "AlarmeCruzado = 1" in ln)
+    bloco = "\n".join(linhas[ini : ini + 16])
+    assert "CurrentBar >= sArmBar + 2" in bloco and "HasPosition" in bloco
+    atribs = set(re.findall(r"(\w+)\s*:=", bloco.split("ConsoleLog")[0]))
+    assert atribs <= {"sBar", "sTmp"}, atribs
+    for ordem in ("BuyStop", "SellShortStop", "ClosePosition", "ToCover", "CancelPendingOrders"):
+        assert ordem not in bloco
+    assert "LastBarOnChart" not in bloco
+
+
+def test_123_alarme_comportamento_na_mao() -> None:
+    # compra, alvo 100, stop 90, arme na barra 10 (fill na 11): so' >= 12 conta
+    assert _alarme_123_py(1, 100, 90, 101, 95, 12, 10)
+    assert not _alarme_123_py(1, 100, 90, 101, 95, 11, 10)  # candle do fill
+    assert _alarme_123_py(1, 100, 90, 99, 89, 12, 10)       # stop cruzado
+    assert not _alarme_123_py(1, 100, 90, 99, 91, 13, 10)   # sem cruzar
+    assert _alarme_123_py(-1, 90, 100, 96, 89, 12, 10)      # venda, alvo (Low cruza)
+    assert not _alarme_123_py(1, 100, 90, 101, 95, 12, 10, evento=11)
+    assert not _alarme_123_py(1, 100, 90, 101, 95, 12, 10, tem_pos=False)

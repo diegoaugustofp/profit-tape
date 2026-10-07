@@ -277,6 +277,20 @@ Risco declarado: uma posição órfã de outra origem pode ser "reconstruída" c
 **NÃO coberto:** nunca compilado nem rodado depois do conserto; não sei se o preenchimento do STOP no simulador é o do mercado; o backtest antigo (5 pares ORFA) não conta, nem o novo.
 Carimbo novo: `ea_123_vb.ntsl` sha256 `a33f82b505f0…` (nunca contou). Formato `NT123D`/`NT123|DIA` da v4.39 inalterado; `Evento 11` = reconstruído.
 
+## 123: backtest depois do conserto e alarme `ALVO_CRUZADO` (2026-10-07, v4.41)
+
+**Backtest 123 M15, 30/09–06/10, `BarrasPorDia` 38, `GuardaRelogio` 0, duas últimas passadas idênticas (v4.40):** zero `NT123|ORFA|`, cinco `Evento 11` (as mesmas 5 barras que antes davam ORFA), `GateN = 20`.
+CSV de operações cruzado com o `NT123D` (`D` = distância entrada–stop; alvo e stop a ±`D` da entrada): 5 operações, todas de compra, todas encheram na barra seguinte à de arme e saíram EXATAMENTE em alvo ou stop:
+
+    30/09 10:45  D 765  +765 alvo | 30/09 11:45  D 705  −705 stop | 30/09 13:00  D 950  +950 alvo
+    30/09 15:30  D 355  −355 stop | 06/10 14:00  D 505  +505 alvo         total +1.160 pts (R$ 232)
+
+[Certo] o conserto e o ToCover funcionam no 123 no backtest. [Certo] n = 5, depuração, NÃO conta. [Provável] o simulador enche alvo/stop no nível, sem deslizamento: otimista; o stop-limite com folga 50 nunca foi testado contra gap.
+
+**Alarme (v4.41, só diagnóstico, input `AlarmeCruzado(1)`):** `NT123|ALVO_CRUZADO|Date|Time|Bar|LadoPos|AlvoPx|StopPx|High|Low|BarrasDesdeArme`.
+Dispara com posição, sem `Evento 11`, níveis > 0 e `CurrentBar >= ArmBar + 2` (o fill é em t+1 do arme; a faixa do candle do fill inclui o pré-fill) quando o High/Low cruzou alvo ou stop. Mesma regra dos outros: **ao vivo, uma linha destas é DEFEITO DE EXECUÇÃO: PARADA imediata, o dia não conta.** Não confirmado contra console (o `NT123D` não traz High/Low); a condição segue o ignicao/vwapvp, onde foi reaplicada ao `NTSVD` (24 disparos na passada inicial, 0 nas finais).
+Carimbo novo: `ea_123_vb.ntsl` sha256 `b768ec42c477…` (nunca contou). Contagem do 123 NTSL: só simulador ao vivo, a partir da data em que o Diego ligar com este carimbo.
+
 ## O que NÃO sei (nenhum item testado; é o que eu verificaria primeiro)
 
 [Chutando] ≈ 8 itens, por ordem de risco:

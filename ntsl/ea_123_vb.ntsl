@@ -94,6 +94,7 @@ input
   UsarGate(1);               // 1 = ficha 12 (volume baixo) | 0 = 123 puro
   GuardaRelogio(1);          // 1 = so' arma se CurrentTime >= fim da barra
   LogAtivo(1);
+  AlarmeCruzado(1);          // 1 = linha NT123|ALVO_CRUZADO (v4.41, so' diagnostico)
   LogDiag(1);                // 1 = linhas NT123D e NT123|DIA (v4.39, so' diagnostico;
                              // NAO dependem de LastBarOnChart: aparecem no backtest)
 
@@ -388,6 +389,27 @@ begin
         else
           SellShortStop(sEntrada, sEntrada - SlackStopPts, Lote);
       end;
+    end;
+
+    //-----------------------------------------------------------------
+    // ALARME DE EXECUCAO (v4.41, SO' diagnostico, nao altera ordens nem
+    // estado). Posicao aberta num candle POSTERIOR ao do fill (o fill e'
+    // em t+1 do arme; a faixa desse candle inclui o pre-fill) cujo
+    // High/Low cruzou alvo ou stop = o ToCover nao executou. Medido no
+    // ignicao e no vwapvp: acontece nas passadas iniciais do backtest
+    // (Pend=1, preco cruzou, sem fill). Ao vivo, uma linha destas e'
+    // DEFEITO DE EXECUCAO: parar e nao contar.
+    //-----------------------------------------------------------------
+    if (AlarmeCruzado = 1) and HasPosition and (sEvento <> 11)
+       and (sNivStop > 0) and (sNivAlvo > 0) and (CurrentBar >= sArmBar + 2) then
+    begin
+      sBar := CurrentBar;
+      sTmp := sBar - sArmBar;
+      if ((sLadoPos > 0) and ((sHigh >= sNivAlvo) or (sLow <= sNivStop)))
+         or ((sLadoPos < 0) and ((sLow <= sNivAlvo) or (sHigh >= sNivStop))) then
+        ConsoleLog("NT123|ALVO_CRUZADO|" + sData + "|" + sHora + "|" + sBar
+          + "|" + sLadoPos + "|" + sNivAlvo + "|" + sNivStop + "|" + sHigh
+          + "|" + sLow + "|" + sTmp);
     end;
 
     //-----------------------------------------------------------------
