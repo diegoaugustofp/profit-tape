@@ -206,6 +206,9 @@ Ler: se `High`/`Low` cruzaram `AlvoPx`/`StopPx` e a posição continuou, o ToCov
 `NTSD|Bar|Date|Time|Close|Pos|LadoAnt|LadoPos|Ops|BarsPos|Refrat|Lado|Status|Evento|AlvoPx|StopPx`
 Como ler: duas linhas com o MESMO `Bar` = reprocessamento do mesmo candle. `Pos = 1` com `LadoAnt = 0` e `Evento = 11` = o conserto agiu. `Evento = 9` = perda de estado fora do caso coberto.
 
+**REGRA DO RELÓGIO E DA JANELA NO BACKTEST (2026-10-07; medida em vwapvp, vale para 123 e z_agf_win):** no backtest `CurrentTime` é o relógio do PC, não o do candle. Com `GuardaRelogio = 1` o resultado depende da hora em que se roda (só entre 18:30 e 23:59 todas as barras "terminaram"; às 00:13 deu ZERO operações, `Fechou = 0`).
+Backtest: `GuardaRelogio = 0` e datas inicial/final EXPLÍCITAS (a janela padrão anda com a data: 30/09–06/10 virou 01/10–07/10 e a operação de 30/09 sumiu; as outras 5 saíram idênticas). Ao vivo: `GuardaRelogio = 1`. Conferir sempre `Fechou = 1` no `NTSV`/`NT123`/`NTZA` do backtest.
+
 ## Regra das passadas do backtest e alarme `ALVO_CRUZADO` (2026-10-07, v4.38)
 
 **Medido (6/10, console do vwapvp e do ignicao, primeira x segunda execução):** o editor de estratégia do Profit roda o backtest em VÁRIAS passadas (o console repete o histórico inteiro).
@@ -237,6 +240,28 @@ Conferido sobre o console do vwapvp (condição reaplicada em Python às linhas 
 `ignicao.ntsl` sha256 `0da080ab35cb…` (substitui `30248ebe0439…`), `vwapvp_continuacao.ntsl` sha256 `6891f8a2db47…`. Gráfico: ignicao 5 s com `BarrasJanela` 12; vwapvp M5.
 
 **NÃO coberto:** o alarme só enxerga cruzamento em candle posterior; uma falha do ToCover no próprio candle de entrada não aparece. Se o Profit rodar passadas iniciais ao vivo, não sei. `ea_123_vb` e `z_agf_win` não receberam o alarme (123 sem backtest validado; z_agf em `ModoConferir`, sem ordens).
+
+## Backtest do `ea_123_vb`: 0 operações (2026-10-07, v4.39)
+
+Backtest WINFUT M15, 30/09–06/10, `GuardaRelogio = 0`: **0 operações**. O console tem só a linha do último candle (`LastBarOnChart`), 06/10 18:15:
+`GateN = 0`, `Med = 0`, `Motivo = 2` (fora da janela), `Fechou = 1`.
+
+    [Certo]     o relógio não é o problema (Fechou = 1) e o log não diz por que nenhum dia armou.
+    [Certo]     existe candle com label 18:15 em 06/10. O código supõe `BarrasPorDia = 37`
+                (09:00..18:00) e o 1º candle do dia às 09:00; com 09:00..18:15 são 38.
+    [Provável]  `BarrasPorDia` errado desalinha o perfil de volume (a conferência do label de hora falha),
+                o gate fica INDEFINIDO (`GateN < 20`, Motivo 6) e nada arma, em silêncio. É o caso que
+                a conferência do 1º pregão já previa (item 3). `GateN = 0` num candle fora da janela
+                também pode ser só aquele candle; falta ver as barras da janela.
+    [Chutando]  0 operações em 5 pregões é raro se a regra gera ~1 sinal/dia depois do gate (li as
+                fichas de relance, não conferi a taxa).
+
+**Medida (v4.39, só diagnóstico, comportamento idêntico, novo input `LogDiag(1)`; sem `LastBarOnChart`):**
+`NT123|DIA|Date|BarrasDoDia|UltimaHora` (uma linha por pregão; dia cheio esperado: 38 e 1815 se o pregão for 09:00–18:15)
+`NT123D|Bar|Date|Time|Fechou|PadC|PadV|Regime|D|LadoCand|VolT|Med|GateN|GateOk|Motivo|Evento|Close|Mme`
+(toda barra da janela com padrão 123 ou evento). Ler: `Motivo 6` = gate indefinido (alinhamento); `5` = gate reprovou; `3` regime; `4` D < mínimo; `1` armou.
+Se `BarrasDoDia` ≠ 37, trocar `BarrasPorDia` é mudança de parâmetro com pré-registro próprio (mecanismo de alinhamento do perfil, não calibração de número).
+Carimbo novo: `ea_123_vb.ntsl` sha256 `172244413fd5…` (nunca contou).
 
 ## O que NÃO sei (nenhum item testado; é o que eu verificaria primeiro)
 

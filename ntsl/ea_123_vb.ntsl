@@ -94,6 +94,8 @@ input
   UsarGate(1);               // 1 = ficha 12 (volume baixo) | 0 = 123 puro
   GuardaRelogio(1);          // 1 = so' arma se CurrentTime >= fim da barra
   LogAtivo(1);
+  LogDiag(1);                // 1 = linhas NT123D e NT123|DIA (v4.39, so' diagnostico;
+                             // NAO dependem de LastBarOnChart: aparecem no backtest)
 
 var
   sData, sDataAnt, sData2, sHora, sHoraD, sDataD       : Float;
@@ -104,6 +106,7 @@ var
   sMed, sGateN, sGateOk, sMotivo, sEvento, sPos        : Float;
   sPadC, sPadV, sRegime, sDiaOk, sFimBarra, sFechou    : Float;
   sDailyRes, sTmp, sLimStop                            : Float;
+  sBarDia, sHoraAnt, sBar                              : Float;
   nIndex, nOff, nI, nJ                                 : Integer;
   vals                                                 : array[1..20] of Float;
   bNovoDia, bCalcular, bJanela, bCompleta, bSaida      : Boolean;
@@ -131,9 +134,21 @@ begin
   sNivAlvo  := sNivAlvo[1];
   sArmBar   := sArmBar[1];
   sDiaOk    := sDiaOk[1];
+  sBarDia   := sBarDia[1];
+  sHoraAnt  := sHora[1];
 
   bNovoDia  := (sData <> sDataAnt);
   bCalcular := (CalcDataInicio = 0) or (sData >= CalcDataInicio);
+
+  // DIAGNOSTICO (v4.39): quantas barras o Profit entrega por pregao. O
+  // perfil de volume desloca BarrasPorDia barras; se o pregao real tem outro
+  // numero (p.ex. 38 = 09:00..18:15), o gate fica INDEFINIDO e nada arma.
+  if bNovoDia and (LogDiag = 1) and (CurrentBar > 1) then
+    ConsoleLog("NT123|DIA|" + sDataAnt + "|" + sBarDia + "|" + sHoraAnt);
+  if bNovoDia then
+    sBarDia := 1
+  else
+    sBarDia := sBarDia + 1;
 
   if (CurrentBar = 1) and (RS_BarsPerDay <> BarrasPorDia) then
     ConsoleLog("NT123|AVISO|barras_por_dia=" + RS_BarsPerDay
@@ -350,6 +365,20 @@ begin
     //         | 8 barra incompleta
     // Evento: 1 armou | 4 zeragem | 6 protecao do stop | 9 orfa
     //-----------------------------------------------------------------
+    // DIAGNOSTICO (v4.39, nao altera ordens nem estado): toda barra da
+    // janela em que o padrao 123 apareceu (ou houve evento), com o funil
+    // inteiro: por que armou ou por que nao (Motivo 3 regime | 4 D<min |
+    // 5 gate reprovou | 6 gate indefinido | 8 incompleta). Sem LastBarOnChart.
+    if (LogDiag = 1) and ((sPadC = 1) or (sPadV = 1) or (sEvento <> 0)) then
+    begin
+      sBar := CurrentBar;
+      if bCompleta then sFechou := 1 else sFechou := 0;
+      ConsoleLog("NT123D|" + sBar + "|" + sData + "|" + sHora + "|" + sFechou
+        + "|" + sPadC + "|" + sPadV + "|" + sRegime + "|" + sD + "|" + sLadoCand
+        + "|" + sVolTot + "|" + sMed + "|" + sGateN + "|" + sGateOk
+        + "|" + sMotivo + "|" + sEvento + "|" + sClose + "|" + sMme);
+    end;
+
     if (LogAtivo = 1) and LastBarOnChart then
     begin
       if bCompleta then sFechou := 1 else sFechou := 0;

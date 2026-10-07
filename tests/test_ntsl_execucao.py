@@ -288,3 +288,26 @@ def test_alarme_comportamento_na_mao() -> None:
     assert not _alarme_py(1, 100, 90, 101, 95, 0)
     # sem posicao: nada (fill normal do ToCover)
     assert not _alarme_py(1, 100, 90, 101, 95, 1, tem_pos=False)
+
+
+# --------------------------------------------------------------------------
+# v4.39: diagnostico do 123 (NT123D e NT123|DIA). Backtest 30/09-06/10 deu
+# 0 operacoes e o unico log era o do ultimo candle (GateN = 0, Med = 0).
+# --------------------------------------------------------------------------
+def test_123_diagnostico_nao_depende_de_lastbaronchart_e_nao_altera_nada() -> None:
+    linhas = _codigo("ea_123_vb.ntsl")
+    texto = "\n".join(linhas)
+    assert re.search(r"LogDiag\(1\)", texto)
+    i = next(k for k, ln in enumerate(linhas) if "ConsoleLog(\"NT123D|\"" in ln)
+    janela = "\n".join(linhas[max(0, i - 4) : i + 6])
+    assert "LastBarOnChart" not in janela
+    for ordem in ("BuyStop", "SellShortStop", "ClosePosition", "CancelPendingOrders"):
+        assert ordem not in janela
+    j = next(k for k, ln in enumerate(linhas) if "NT123|DIA|" in ln)
+    assert "LastBarOnChart" not in "\n".join(linhas[max(0, j - 2) : j + 1])
+
+
+def test_123_contador_de_barras_do_dia_e_recursivo_e_le_posicional_no_topo() -> None:
+    texto = "\n".join(_codigo("ea_123_vb.ntsl"))
+    assert "sBarDia   := sBarDia[1];" in texto
+    assert "sBarDia := sBarDia + 1" in texto

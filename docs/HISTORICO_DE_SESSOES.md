@@ -5410,3 +5410,11 @@ Regra registrada: só vale a lista das duas últimas passadas, idênticas, sem a
 
 Entregue: alarme `ALVO_CRUZADO` no ignicao e no vwapvp (só diagnóstico, input `AlarmeCruzado`), 7 testes novos (espelho do comportamento, nada de ordem/estado no bloco, Float no log), seção em `NTSL_PORTE_EAS.md`, carimbos novos (ignicao `0da080ab35cb…`, vwapvp `6891f8a2db47…`; contagem do ignicao ainda não começou).
 Backtests são depuração, não contam. **Não compilado.** **Tags:** entregue-v4.38 (sobre v4.37).
+
+### 2026-10-07b — Relógio no backtest e 0 operações no 123 (v4.39)
+
+Backtest do vwapvp à 00:13 deu zero operações: `bCompleta` usa `CurrentTime` (relógio do PC) em todas as barras do histórico; só funciona entre 18:30 e 23:59. Com `GuardaRelogio = 0` voltaram 5 operações (as 6 de ontem sem a de 30/09: a janela do backtest andou para 01/10; mesmos níveis nas 5). Regra: backtest com `GuardaRelogio = 0` e datas explícitas; ao vivo `1`. Correção no código ficou como opção do Diego (3 arquivos, 3 carimbos, `LastBarOnChart` ao vivo não medido).
+Backtest do 123 (M15, 30/09–06/10, relógio 0): 0 operações, sem log útil. Hipótese [Provável]: `BarrasPorDia = 37` contra 38 reais (existe candle 18:15) ⇒ gate indefinido.
+
+Entregue: logs `NT123D` e `NT123|DIA` no `ea_123_vb` (só diagnóstico, input `LogDiag`), 2 testes, seção em `NTSL_PORTE_EAS.md`. Nenhuma regra mudou. **Não compilado.** **Tags:** entregue-v4.39 (sobre v4.38).
+
