@@ -1,0 +1,418 @@
+//=====================================================================
+// z_agf_win -- ESTRATEGIA DE EXECUCAO NTSL (WINFUT, barra de VOLUME 120.000)
+//
+// PORTE para o Profit do EA `z_agf_3` (config/ea_venda_rota_b.yaml,
+// docs/eas/z_agf_3.md) na ROTA A, escolhida pelo operador em 2026-10-06.
+// Existe porque o ProfitDLL caiu em 04/10/2026 e o `record` nao sobe.
+// MECANISMO NOVO com a mesma regra escrita: carimbo e contagem PROPRIOS;
+// nao soma com o EA Python (skill forward, regra 2). Ficha:
+// docs/NTSL_PORTE_EAS.md.
+//
+// SO' CONTA SIMULADOR. O z_agf_3 NUNCA mandou ordem no Python (so'
+// dry_run). O NTSL nao trava a conta; a trava e' a conta que voce
+// escolhe. Este arquivo sai com ModoConferir = 1: NAO ENVIA ORDEM NENHUMA,
+// so' escreve o log NTZA e a decisao que tomaria. So' vire ModoConferir
+// para 0 depois de conferir o log de um pregao (docs/NTSL_PORTE_EAS.md).
+//
+// REGRA (a de `ea/sinal.py` + `ea/decisao.py` + `ea/risco.py`, Rota A)
+//   agf  = (comprado - vendido pelo agente 3) / volume da barra
+//   z    = (agf - media das 50 barras ANTERIORES) / desvio (n-1) delas;
+//          so' com >= 25 barras validas (min_periods do research)
+//   z >= 1,4 (contrarian) -> VENDE a mercado no fechamento da barra
+//   (LadoPermitido = 2: so' venda; z <= -1,4 so' compraria com 0 ou 1)
+//   saida: POR TEMPO, no fechamento da 3a barra depois da entrada;
+//   stop catastrofico 500 pts (2% de R$ 5.000 = R$ 100 = 500 pts WIN);
+//   uma posicao por vez (sinal com posicao aberta: IGNORADO);
+//   circuit breaker: 3 perdas liquidas seguidas bloqueiam o dia.
+//   SEM alvo e SEM stop da Rota B (100/120): e' o procedimento validado.
+//
+// DIFERENCAS PARA O EA PYTHON (declaradas, nao corrigidas)
+//   1. FONTE DO agf. Python: contratos do agente 3 (comprador menos
+//      vendedor) so' nos negocios de AGRESSAO (exclui RLP/leilao),
+//      dividido pelo volume de agressao. NTSL: BalanceAgent (saldo
+//      FINANCEIRO do agente no candle) dividido por Volume (financeiro do
+//      candle). Escala constante nao muda o z; o resto (RLP/leilao dentro
+//      do saldo, preco variando na janela) NAO FOI MEDIDO. O log NTZA
+//      grava Bal, VolAg, Volume e QuantityVol para a conferencia.
+//   2. BARRA. Python: 120.000 contratos de AGRESSAO acumulados no dia, com
+//      o excesso carregado para a proxima. Profit: grafico de lotes
+//      (itLote); o que ele conta (RLP/leilao entram?) e como trata o
+//      excesso NAO SEI. A barra so' conta como completa se QuantityVol >=
+//      VolBarra; o campo Fechou do log mostra se isso acontece.
+//   3. HISTORICO DO z. Python ao vivo recomeca a janela no inicio de cada
+//      `record` (as primeiras ~25 barras saem NaN). NTSL: a janela atravessa
+//      o dia SE o BalanceAgent devolver as barras do dia anterior (o manual
+//      diz "no maximo ate o dia anterior"); senao aquece do zero. O campo
+//      Cnt do log diz quantas barras validas a janela tem.
+//   4. STOP. Python checa o stop catastrofico no FECHAMENTO da barra.
+//      Aqui, StopModo = 1 manda uma ordem BuyToCoverStop em repouso
+//      (intrabarra, limite de SlackStopPts); StopModo = 0 reproduz o
+//      Python (checa no fechamento).
+//   5. ENTRADA. Python registra o fechamento da barra como preco de
+//      entrada; aqui o FILL e' do simulador. O nivel do stop sai do Close
+//      do sinal, nao do fill.
+//   6. HORARIO. Python encerra no horario do `record` (17:30). Aqui
+//      FimEntradaHHMM (1700) bloqueia entradas novas e ZerarHHMM (1730)
+//      zera, mas o codigo SO' RODA no fechamento de barra de 120.000: se a
+//      barra demorar, a zeragem atrasa. Se a automacao tiver horario de
+//      termino proprio, use-o tambem (NAO CONFIRMEI que exista).
+//   7. CUSTO. Como no vwapvp: DailyResult(False)/ValorPonto; DescontarCusto
+//      = 1 subtrai CustoPts (11). NAO SEI se o simulador ja' traz taxas;
+//      o log imprime o valor cru (DeltaRes).
+//   8. CONTA/POSICAO. Duas automacoes no mesmo ativo e na mesma conta
+//      SOMAM a posicao liquida. NAO LIGUE esta junto com outra automacao em
+//      WINFUT na mesma conta (ver docs/NTSL_PORTE_EAS.md).
+//
+// COMO LIGAR (Automacao de estrategias, WINFUT, grafico de 120.000 LOTES)
+//   - Requer Profit Ultra ou Automacao de Estrategias 2 (BalanceAgent,
+//     VolumeAgent). Nao funciona em backtest: so' ao vivo.
+//   - Grafico: periodo por quantidade de LOTES = 120000.
+//   - Modo: "Realizar envio de ordens no FECHAMENTO DO CANDLE" + opcao
+//     "executar apenas no fechamento do candle ou com atualizacao de
+//     posicao" MARCADA.
+//   - Quantidade por Ordem = 1; Quantidade maxima da posicao = 1.
+//   - CONTA: SIMULADOR. ModoConferir = 1 no primeiro pregao.
+//   - Ligar antes da abertura. Contadores e bloqueio zeram a cada dia.
+//
+// IDIOMAS (skill engenharia 3.1): leitura posicional so' no topo, em
+// atribuicao simples; acumuladores `s := s[1] + x`; sem Abs(); Float no
+// ConsoleLog. NAO COMPILEI: ver docs/NTSL_PORTE_EAS.md.
+//=====================================================================
+
+input
+  Lote(1);
+  AgenteId(3);               // participante B3 3 (varejo, XP) -- o do Python
+  JanelaZ(50);
+  MinPeriodos(25);           // janela_z // 2, como normalize.py
+  Limiar(1.4);
+  LadoPermitido(2);          // 0 ambos | 1 so' compra | 2 so' venda
+  HorizonteBarras(3);
+  StopCatPts(500);
+  SlackStopPts(150);         // limite do stop = 30 ticks (o automatico)
+  StopModo(1);               // 1 = ordem em repouso | 0 = checa no fechamento
+  VolBarra(120000);
+  GuardaCompleta(1);         // 1 = so' vale com QuantityVol >= VolBarra
+  FimEntradaHHMM(1700);
+  ZerarHHMM(1730);
+  MaxPerdasSeguidas(3);
+  ValorPonto(0.2);
+  CustoPts(11);
+  DescontarCusto(1);
+  GuardaRelogio(1);          // 1 = usa CurrentTime | 0 = usa o label da barra
+                             // (Market Replay: o relogio e' o de hoje)
+  ModoConferir(1);           // 1 = NUNCA envia ordem | 0 = envia (SIMULADOR)
+  LogAtivo(1);
+
+var
+  sData, sDataAnt, sHora, sRelogio                 : Float;
+  sBal, sVolAg, sVolFin, sQtd, sAgf, sOk           : Float;
+  sOldAgf, sOldOk, sSumP, sSqP, sCntP              : Float;
+  sSum, sSq, sCnt, sMedia, sVar, sDp, sZ, sZok     : Float;
+  sLadoRaw, sLadoSinal, sMotivo, sEvento, sArma    : Float;
+  sHold, sHoldAnt, sLadoPos, sLadoAnt              : Float;
+  sEntradaPx, sStopPx, sExc, sPos                  : Float;
+  sPerdas, sBloq, sPnlDia                          : Float;
+  sDailyRes, sDailyAnt, sDelta, sLiqPts, sFechou   : Float;
+  sModo                                            : Float;
+  bNovoDia, bCompleta, bTemPos, bSaiuAgora, bSaida : Boolean;
+  bFechouTrade                                     : Boolean;
+begin
+  //-------------------------------------------------------------------
+  // LEITURAS POSICIONAIS: todas aqui, atribuicao simples.
+  //-------------------------------------------------------------------
+  sDataAnt   := Date[1];
+  sOldAgf    := sAgf[JanelaZ];
+  sOldOk     := sOk[JanelaZ];
+  sSumP      := sSum[1];
+  sSqP       := sSq[1];
+  sCntP      := sCnt[1];
+  sHoldAnt   := sHold[1];
+  sLadoAnt   := sLadoPos[1];
+  sLadoPos   := sLadoPos[1];
+  sEntradaPx := sEntradaPx[1];
+  sStopPx    := sStopPx[1];
+  sPerdas    := sPerdas[1];
+  sBloq      := sBloq[1];
+  sPnlDia    := sPnlDia[1];
+  sDailyAnt  := sDailyRes[1];
+
+  if CurrentBar <= JanelaZ then
+  begin
+    sOldAgf := 0;
+    sOldOk  := 0;
+  end;
+
+  sData  := Date;
+  sHora  := Time;
+  bNovoDia := (sData <> sDataAnt);
+  if bNovoDia then
+  begin
+    sHoldAnt := 0; sLadoAnt := 0; sLadoPos := 0;
+    sEntradaPx := 0; sStopPx := 0;
+    sPerdas := 0; sBloq := 0; sPnlDia := 0; sDailyAnt := 0;
+  end;
+
+  if GuardaRelogio = 1 then
+    sRelogio := CurrentTime
+  else
+    sRelogio := sHora;
+
+  //-------------------------------------------------------------------
+  // DADOS DO CANDLE
+  //-------------------------------------------------------------------
+  sBal      := BalanceAgent(AgenteId, 1);
+  sVolAg    := VolumeAgent(AgenteId, 1);
+  sVolFin   := Volume;
+  sQtd      := QuantityVol(False, False);
+  sDailyRes := DailyResult(False);
+
+  if GuardaCompleta = 1 then
+    bCompleta := (sQtd >= VolBarra)
+  else
+    bCompleta := True;
+
+  sMotivo := 0;
+  sEvento := 0;
+  sArma := 0;
+  sPos := 0;
+  bSaida := False;
+
+  //-------------------------------------------------------------------
+  // agf DA BARRA e ESTATISTICA DA JANELA (soma e soma de quadrados
+  // recursivas: sem laco, sem acesso posicional em condicao). Barra
+  // invalida (agente nao negociou, sem volume, ou nao completa) fica de
+  // fora: Ok = 0 e contribui zero.
+  //-------------------------------------------------------------------
+  sAgf := 0;
+  sOk := 0;
+  if bCompleta and (sVolFin > 0) and (sVolAg > 0) then
+  begin
+    sAgf := sBal / sVolFin;
+    sOk := 1;
+  end;
+
+  if bCompleta then
+  begin
+    sSum := sSumP + sOk * sAgf - sOldOk * sOldAgf;
+    sSq  := sSqP + sOk * sAgf * sAgf - sOldOk * sOldAgf * sOldAgf;
+    sCnt := sCntP + sOk - sOldOk;
+  end
+  else
+  begin
+    sSum := sSumP;
+    sSq  := sSqP;
+    sCnt := sCntP;
+  end;
+
+  // z contra o passado ESTRITO (estatistica ate' a barra anterior)
+  sZ := 0;
+  sZok := 0;
+  sMedia := 0;
+  sDp := 0;
+  if (sOk = 1) and (sCntP >= MinPeriodos) then
+  begin
+    sMedia := sSumP / sCntP;
+    sVar := (sSqP - sCntP * sMedia * sMedia) / (sCntP - 1);
+    if sVar > 0.0000000001 then
+    begin
+      sDp := Sqrt(sVar);
+      sZ := (sAgf - sMedia) / sDp;
+      sZok := 1;
+    end;
+  end;
+
+  //-------------------------------------------------------------------
+  // TRADE FECHADO desde a barra anterior? Pelo resultado fechado do dia
+  // (idempotente: recalcula do mesmo [1] se a barra for reprocessada).
+  //-------------------------------------------------------------------
+  sDelta := sDailyRes - sDailyAnt;
+  bFechouTrade := (sDelta > 0.001) or (sDelta < 0 - 0.001);
+  sLiqPts := 0;
+  if bFechouTrade then
+  begin
+    sLiqPts := sDelta / ValorPonto / Lote;
+    if DescontarCusto = 1 then
+      sLiqPts := sLiqPts - CustoPts;
+    sPnlDia := sPnlDia + sLiqPts;
+    if sLiqPts > 0 then
+      sPerdas := 0
+    else
+      sPerdas := sPerdas + 1;
+    if sPerdas >= MaxPerdasSeguidas then
+      sBloq := 1;
+  end;
+
+  //-------------------------------------------------------------------
+  // SINAL (contrarian). z alto vende; z baixo compra. LadoPermitido filtra.
+  //-------------------------------------------------------------------
+  sLadoRaw := 0;
+  if sZok = 1 then
+  begin
+    if sZ >= Limiar then
+      sLadoRaw := 0 - 1;
+    if sZ <= 0 - Limiar then
+      sLadoRaw := 1;
+  end;
+  sLadoSinal := sLadoRaw;
+  if (LadoPermitido = 1) and (sLadoSinal < 0) then
+    sLadoSinal := 0;
+  if (LadoPermitido = 2) and (sLadoSinal > 0) then
+    sLadoSinal := 0;
+
+  //-------------------------------------------------------------------
+  // CONTAGEM DE BARRAS DA POSICAO (real ou virtual do ModoConferir).
+  // Hold: 3 na barra do sinal, 2, 1; na barra em que sHoldAnt = 1 e' a
+  // barra de saida (fechamento da 3a barra depois). Nao ha' entrada na
+  // mesma barra da saida.
+  //-------------------------------------------------------------------
+  if bCompleta then
+  begin
+    if sHoldAnt > 1 then
+      sHold := sHoldAnt - 1
+    else
+      sHold := 0;
+  end
+  else
+    sHold := sHoldAnt;
+
+  if ModoConferir = 1 then
+    bTemPos := (sHoldAnt > 0)
+  else
+    bTemPos := HasPosition;
+  bSaiuAgora := (ModoConferir = 0) and (sLadoAnt <> 0) and (not HasPosition);
+
+  if (ModoConferir = 1) and bCompleta and (sHoldAnt = 1) then
+    sEvento := 3;
+
+  //-------------------------------------------------------------------
+  // 1. POSICAO REAL ABERTA (so' ModoConferir = 0): saidas.
+  //    Ordem do gestor: stop catastrofico -> tempo -> (zeragem).
+  //-------------------------------------------------------------------
+  if (ModoConferir = 0) and HasPosition then
+  begin
+    sPos := 1;
+    if bCompleta then
+    begin
+      if sLadoAnt = 0 then
+      begin
+        if sLadoSinal <> 0 then
+        begin
+          // reprocessamento da barra de ENTRADA: reconstroi o estado
+          // (o sinal e' deterministico), sem nova ordem.
+          sLadoPos := sLadoSinal;
+          sEntradaPx := Close;
+          sStopPx := Round2Fraction(Close - sLadoSinal * StopCatPts);
+          sHold := HorizonteBarras;
+          sEvento := 11;
+        end
+        else
+        begin
+          ConsoleLog("NTZA|ORFA|" + sData + "|" + sHora + "|posicao sem estado: ClosePosition");
+          bSaida := True;
+          sEvento := 9;
+        end;
+      end
+      else
+      begin
+        sExc := (sEntradaPx - Close) * sLadoPos;
+        if (StopModo = 0) and (sExc >= StopCatPts) then
+        begin
+          bSaida := True;
+          sEvento := 2;
+        end
+        else if sHoldAnt = 1 then
+        begin
+          bSaida := True;
+          sEvento := 3;
+        end
+        else if sRelogio >= ZerarHHMM then
+        begin
+          bSaida := True;
+          sEvento := 4;
+        end;
+      end;
+    end;
+
+    if bSaida then
+    begin
+      ClosePosition;
+      sHold := 0;
+    end
+    else if (StopModo = 1) and (sLadoPos <> 0) then
+    begin
+      if IsBought then
+        SellToCoverStop(sStopPx, sStopPx - SlackStopPts, Lote)
+      else
+        BuyToCoverStop(sStopPx, sStopPx + SlackStopPts, Lote);
+    end;
+  end
+  else if ModoConferir = 0 then
+  begin
+    // sem posicao real: limpa o estado (a entrada abaixo o recria)
+    sLadoPos := 0;
+    sEntradaPx := 0;
+    sStopPx := 0;
+    if bCompleta then
+      sHold := 0;
+  end;
+
+  //-------------------------------------------------------------------
+  // 2. ENTRADA (so' no fechamento de barra completa; ordem dos filtros =
+  //    a do Python: lado -> posicao -> circuit breaker -> horario).
+  //-------------------------------------------------------------------
+  if bCompleta and (sLadoRaw <> 0) then
+  begin
+    if sLadoSinal = 0 then
+      sMotivo := 3
+    else if bTemPos then
+      sMotivo := 5
+    else if bSaiuAgora then
+      sMotivo := 7
+    else if sBloq = 1 then
+      sMotivo := 4
+    else if sRelogio >= FimEntradaHHMM then
+      sMotivo := 2
+    else
+      sArma := 1;
+  end;
+
+  if sArma = 1 then
+  begin
+    sMotivo := 1;
+    sEvento := 1;
+    sHold := HorizonteBarras;
+    sEntradaPx := Close;
+    sStopPx := Round2Fraction(Close - sLadoSinal * StopCatPts);
+    if ModoConferir = 0 then
+    begin
+      sLadoPos := sLadoSinal;
+      if sLadoSinal < 0 then
+        SellShortAtMarket(Lote)
+      else
+        BuyAtMarket(Lote);
+    end;
+  end;
+
+  //-------------------------------------------------------------------
+  // LOG (ordem congelada; docs/NTSL_PORTE_EAS.md). So' no ultimo candle.
+  // Motivo: 0 sem sinal | 1 ARMOU | 2 fora do horario | 3 lado nao
+  //         permitido | 4 bloqueado | 5 com posicao | 7 saiu nesta barra
+  // Evento: 1 entrada | 2 stop (fechamento) | 3 saida por tempo | 4 zeragem
+  //         | 9 orfa | 11 estado reconstruido
+  //-------------------------------------------------------------------
+  if (LogAtivo = 1) and LastBarOnChart then
+  begin
+    if bCompleta then sFechou := 1 else sFechou := 0;
+    sModo := ModoConferir;
+    ConsoleLog("NTZA|" + sData + "|" + sHora + "|" + CurrentTime + "|" + sFechou
+      + "|" + Close + "|" + sQtd + "|" + sVolFin + "|" + sBal + "|" + sVolAg
+      + "|" + sAgf + "|" + sOk + "|" + sMedia + "|" + sDp + "|" + sCntP
+      + "|" + sZ + "|" + sMotivo + "|" + sEvento + "|" + sModo
+      + "|" + sHold + "|" + sLadoPos + "|" + sEntradaPx + "|" + sStopPx
+      + "|" + sPos + "|" + sPerdas + "|" + sPnlDia + "|" + sBloq + "|" + sDelta);
+  end;
+
+  Plot(sZ);
+  Plot2(Limiar);
+  Plot3(0 - Limiar);
+end;

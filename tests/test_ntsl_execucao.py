@@ -1,6 +1,6 @@
 """
-Guarda ESTATICA dos tres .ntsl de EXECUCAO (v4.33): vwapvp_continuacao,
-ignicao, ea_123_vb.
+Guarda ESTATICA dos .ntsl de EXECUCAO: vwapvp_continuacao, ignicao,
+ea_123_vb (v4.33) e z_agf_win (v4.34).
 
 NAO prova que compilam nem que operam -- nao existe interpretador NTSL fora
 do Profit. Pega so' os defeitos que a skill de engenharia (3.1) ja' custou
@@ -17,7 +17,8 @@ from pathlib import Path
 import pytest
 
 NTSL = Path(__file__).resolve().parents[1] / "ntsl"
-ARQUIVOS = ["vwapvp_continuacao.ntsl", "ignicao.ntsl", "ea_123_vb.ntsl"]
+ARQUIVOS = ["vwapvp_continuacao.ntsl", "ignicao.ntsl", "ea_123_vb.ntsl",
+            "z_agf_win.ntsl"]
 
 
 def _codigo(nome: str) -> list[str]:
@@ -107,3 +108,85 @@ def test_ordens_so_com_quantidade_explicita() -> None:
         texto = "\n".join(_codigo(nome))
         for m in padrao.finditer(texto):
             assert m.group(3) and "Lote" in m.group(3), f"{nome}: {m.group(0)!r} sem Lote"
+
+
+# ---------------------------------------------------------------- z_agf_win
+ORDENS_DE_ENTRADA = re.compile(r"\b(BuyAtMarket|SellShortAtMarket)\b", re.IGNORECASE)
+
+
+def _entradas_sem_guarda(linhas: list[str]) -> list[str]:
+    """Linhas que enviam ordem de ENTRADA sem `ModoConferir = 0` nas 6 linhas
+    anteriores. E' o que garante que o modo conferencia nunca opera."""
+    ruins = []
+    for i, ln in enumerate(linhas):
+        if ORDENS_DE_ENTRADA.search(ln):
+            janela = linhas[max(0, i - 6):i + 1]
+            if not any(re.search(r"ModoConferir\s*=\s*0", w) for w in janela):
+                ruins.append(ln.strip())
+    return ruins
+
+
+def test_z_agf_win_sai_em_modo_conferir() -> None:
+    codigo = "\n".join(_codigo("z_agf_win.ntsl"))
+    assert re.search(r"\bModoConferir\s*\(\s*1\s*\)", codigo), "default tem que ser 1"
+
+
+def test_z_agf_win_toda_entrada_esta_guardada() -> None:
+    assert _entradas_sem_guarda(_codigo("z_agf_win.ntsl")) == []
+
+
+def test_verificador_de_guarda_reprova_o_caso_ruim() -> None:
+    """Skill disciplina 7.3: verificador novo roda contra o que DEVE pegar."""
+    ruim = ["begin", "  if sArma = 1 then", "    BuyAtMarket(Lote);", "end;"]
+    bom = ["begin", "  if ModoConferir = 0 then", "  begin", "    BuyAtMarket(Lote);",
+           "  end;", "end;"]
+    assert _entradas_sem_guarda(ruim) == ["BuyAtMarket(Lote);"]
+    assert _entradas_sem_guarda(bom) == []
+
+
+def _z_recursivo(xs: list[float], n: int, min_p: int) -> list[float]:
+    """Espelho EXATO da aritmetica de z_agf_win.ntsl: soma e soma de quadrados
+    recursivas, estatistica ate' a barra anterior, NaN = barra invalida."""
+    soma = quad = cnt = 0.0
+    hist: list[tuple[float, float]] = []   # (agf, ok) por barra
+    saida: list[float] = []
+    for i, x in enumerate(xs):
+        ok = 0.0 if x != x else 1.0
+        agf = 0.0 if x != x else x
+        velho_agf, velho_ok = hist[i - n] if i >= n else (0.0, 0.0)
+        z = float("nan")
+        if ok == 1.0 and cnt >= min_p:
+            media = soma / cnt
+            var = (quad - cnt * media * media) / (cnt - 1)
+            if var > 1e-10:
+                z = (agf - media) / var ** 0.5
+        soma = soma + ok * agf - velho_ok * velho_agf
+        quad = quad + ok * agf * agf - velho_ok * velho_agf * velho_agf
+        cnt = cnt + ok - velho_ok
+        hist.append((agf, ok))
+        saida.append(z)
+    return saida
+
+
+def test_z_recursivo_na_mao() -> None:
+    """Conta a mao: janela [1,2,3] (media 2, desvio n-1 = 1); x=4 -> z = 2."""
+    z = _z_recursivo([1.0, 2.0, 3.0, 4.0], n=3, min_p=2)
+    assert z[3] == pytest.approx(2.0)
+    assert z[0] != z[0] and z[1] != z[1]   # aquecimento: NaN
+
+
+def test_z_recursivo_igual_ao_zscore_rolante_do_research() -> None:
+    import numpy as np
+    import pandas as pd
+
+    from profittape.features.normalize import zscore_rolante
+
+    rng = np.random.default_rng(7)
+    x = rng.normal(0.0, 0.05, 400)
+    x[rng.random(400) < 0.1] = np.nan          # barras invalidas
+    esperado = zscore_rolante(pd.Series(x), 50).to_numpy()
+    obtido = np.array(_z_recursivo(list(x), 50, 25))
+    ambos = ~np.isnan(esperado) & ~np.isnan(obtido)
+    assert ambos.sum() > 250
+    assert np.array_equal(np.isnan(esperado), np.isnan(obtido))
+    assert np.max(np.abs(esperado[ambos] - obtido[ambos])) < 1e-8

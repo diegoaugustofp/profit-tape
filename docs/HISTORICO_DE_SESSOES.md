@@ -5337,7 +5337,7 @@ no `WI1V26Z26` só depois do primário) e a sequência exata de comandos (`backf
 
 Nelogica com incidente no ProfitDLL desde 04/10: `record` não sobe (`profitdll.estado tipo=0 valor=200`), sem captura há 2 dias, sem previsão. As entregas v4.28–v4.32 não tocaram recorder/profitdll/ea/config
 (o `record` roda de venv separado); a causa é externa. O Profit funciona. Diego pediu `vwapvp_continuacao`, `ignicao` e o `ea_123_vb_e4`; `ea_123_volume_baixo` e `_e4` são o mesmo EA (e4 = ordens na conta Simulador).
-`z_agf_win` e `microprice` não foram portados (agent_id por corretora, book por negócio: sem equivalente em NTSL).
+`z_agf_win` e `microprice` não foram portados na v4.33, com a justificativa "sem equivalente em NTSL" — **ERRADA**: o NTSL tem `VolumeAgent`/`AvgAgent`/`BalanceAgent` e funções de book (corrigido na v4.34, abaixo).
 
 Entregue: `ntsl/vwapvp_continuacao.ntsl` (M5), `ntsl/ignicao.ntsl` (1 s), `ntsl/ea_123_vb.ntsl` (M15, com gate de volume baixo por perfil de 20 pregões), `docs/NTSL_PORTE_EAS.md` (pré-registro, diferenças,
 como ligar, formato dos logs, o que não sei) e `tests/test_ntsl_execucao.py` (guarda estática: sem `Abs`, `begin/end` balanceado, sem acesso posicional em condição, sem Integer no `ConsoleLog`, nomes declarados,
@@ -5350,3 +5350,24 @@ Decisões: (1) porte = MECANISMO NOVO, carimbo (nome + sha256 do `.ntsl`) e cont
 taxas no `DailyResult`, ordem no `WINFUT` na rolagem de 14/10).
 
 **Tags:** entregue-v4.33 (sobre v4.32).
+
+### 2026-10-06b — `z_agf_win` em NTSL, Rota A (v4.34)
+
+Diego corrigiu a v4.33: o NTSL TEM funções de agente (`VolumeAgent`, `AvgAgent`, `BalanceAgent`, parâmetro `AgentID` = código do participante na B3) e de book. Eu havia escrito "sem equivalente em NTSL" sem abrir o manual.
+Verificado no `ManualNTSL.pdf` (20.18, 20.25, 20.157): existem, exigem Ultra ou Automação 2, `BalanceAgent` não roda em backtest e o histórico vai no máximo até o dia anterior. Diego tem Ultra e escolheu a **Rota A**.
+
+Entregue: `ntsl/z_agf_win.ntsl` (barra de 120.000 lotes; agf = `BalanceAgent(3,1)` / `Volume`; z de 50 barras anteriores com soma e soma de quadrados recursivas; venda apenas, z >= 1,4 contrarian;
+saída por tempo em 3 barras + stop catastrófico 500 pts; circuit breaker de 3 perdas). **Sai com `ModoConferir = 1`: nenhuma ordem**, só o log `NTZA`; virar para 0 só depois da conferência pré-registrada.
+`microprice` continua sem porte, agora pelo motivo certo: a ficha o descartou como taker em 2026-09-25.
+
+Achados que mudaram o que prometi: (1) o `agf` do Python é saldo de CONTRATOS do agente nos negócios de agressão sobre o volume de agressão (comprador e vendedor, não o lado agressor); o NTSL só dá saldo FINANCEIRO,
+então a equivalência é por medir, não por construção; (2) o YAML do Python carrega a Rota B (100/120) enquanto o Diego quer a A: o NTSL roda A e o Python segue como estava (YAML intacto); (3) as quatro estratégias
+operam WINFUT e duas automações na mesma conta somam posição: nenhum documento da v4.33 avisava isso, agora avisa (item 8 de "Como ligar").
+
+Testes: `tests/test_ntsl_execucao.py` passa a cobrir os 4 arquivos + garantia de que toda ordem de entrada do `z_agf_win` está sob `ModoConferir = 0` (verificador testado contra o caso ruim) + a aritmética recursiva do z
+igualada ao `zscore_rolante` do research (|dif| < 1e-8, com barras inválidas) e conferida à mão (janela [1,2,3], x=4 -> z=2). `docs/NTSL_PORTE_EAS.md` corrigido (afirmação falsa, pré-registro, critério de conferência fixado
+antes do dado, formato `NTZA`, itens 9-13 de "O que não sei"); `docs/eas/z_agf_3.md` aponta para o porte.
+
+**Não compilado.** Suíte 1438 (sem os 2 testes de relógio do vigia, que já falhavam). `ruff` e `mypy` limpos.
+
+**Tags:** entregue-v4.34 (sobre v4.33).

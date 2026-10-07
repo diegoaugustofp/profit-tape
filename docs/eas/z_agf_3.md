@@ -10,7 +10,7 @@
 | Instrumento | WINFUT |
 | Config | `config/ea_venda_rota_b.yaml` (`dry_run: true`; o E4 liga `dry_run=false` via `--ea-ticker-ordem`) |
 | Código | `ea/sinal.py`, `ea/decisao.py`, `ea/risco.py`, `ea/service.py`; features em `features/` |
-| NTSL | nenhum (o indicador `absorcao_dir` é outra hipótese, já reprovada) |
+| NTSL | `ntsl/z_agf_win.ntsl` (porte da Rota A, v4.34, mecanismo novo, contagem própria; ver `NTSL_PORTE_EAS.md`). O indicador `absorcao_dir` é outra hipótese, já reprovada |
 | Nome no registro de EAs | `z_agf_3` |
 
 ## Fase e estado

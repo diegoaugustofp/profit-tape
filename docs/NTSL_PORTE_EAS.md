@@ -1,15 +1,17 @@
 # Porte dos EAs para NTSL (contingência da queda do ProfitDLL)
 
-> **Status:** vivo — **Revisado:** 2026-10-06 — **Assunto:** `vwapvp_continuacao`, `ignicao` e `ea_123_vb` (E4) reescritos como estratégias de execução do Profit enquanto o ProfitDLL da Nelogica está fora; MECANISMO NOVO, carimbo e contagem próprios; NÃO COMPILADO ainda.
+> **Status:** vivo — **Revisado:** 2026-10-06 — **Assunto:** `vwapvp_continuacao`, `ignicao`, `ea_123_vb` (E4) e `z_agf_win` (Rota A, v4.34) reescritos como estratégias de execução do Profit enquanto o ProfitDLL da Nelogica está fora; MECANISMO NOVO, carimbo e contagem próprios; NÃO COMPILADO ainda.
 
-Arquivos: `ntsl/vwapvp_continuacao.ntsl`, `ntsl/ignicao.ntsl`, `ntsl/ea_123_vb.ntsl`.
+Arquivos: `ntsl/vwapvp_continuacao.ntsl`, `ntsl/ignicao.ntsl`, `ntsl/ea_123_vb.ntsl`, `ntsl/z_agf_win.ntsl` (v4.34).
 Guarda estática: `tests/test_ntsl_execucao.py` (só pega os defeitos de sintaxe/idioma que a skill de engenharia §3.1 já custou; **não prova que compila nem que opera**).
 
 ## Por que existe
 
 Desde 04/10/2026 o ProfitDLL está fora (`profitdll.estado tipo=0 valor=200`, LOGIN_UNKNOWN_ERR) e o `record` não sobe: sem captura de tape/book e sem os EAs
-Python, que moram dentro do `record`. O Profit em si funciona. Todos os EAs do `config/` foram portados, **menos `z_agf_win`** (usa `agent_id` por corretora e barra de
-volume de 120.000: não existe em NTSL) e `microprice` (precisa do book por negócio).
+Python, que moram dentro do `record`. O Profit em si funciona. Os três primeiros EAs foram portados na v4.33. **Correção (v4.34):** a v4.33 dizia que `z_agf_win` e
+`microprice` "não existem em NTSL" (agente por corretora, book por negócio). **Isso estava errado**: o NTSL tem `VolumeAgent`/`AvgAgent`/`BalanceAgent` (Ultra ou Automação 2,
+manual NTSL 20.18, 20.25, 20.157) e funções de book. Eu afirmei sem ter aberto o manual; o Diego apontou. O `z_agf_win` foi portado na v4.34 (Rota A). O `microprice`
+**continua sem porte, por outro motivo**: a ficha o descartou como taker em 2026-09-25 (`docs/eas/microprice.md`); ter o book disponível não reabre isso.
 
 ## PRÉ-REGISTRO (escrito antes de qualquer sinal NTSL)
 
@@ -28,6 +30,39 @@ volume de 120.000: não existe em NTSL) e `microprice` (precisa do book por neg�
                CONTAGEM NTSL, que mede o simulador do Profit, não o book real.
     PARADA     Defeito de execução (ordem duplicada, posição sem proteção, ordem fora do
                Simulador) = desliga na hora, sem esperar n.
+
+### Acréscimo v4.34 — `z_agf_win` (pré-registrado antes de qualquer log NTZA)
+
+    HIPOTESE   O porte executa a regra escrita da ficha z_agf_3 na ROTA A (a
+               validada: venda apenas, z >= 1,4 contrarian, saída por TEMPO em 3
+               barras, stop catastrófico 500 pts, circuit breaker de 3 perdas).
+               Não é a Rota B que o YAML do Python carrega (100/120): o operador
+               escolheu a A em 2026-10-06, o que também resolve, para o NTSL, a
+               "Divergência a resolver" da ficha. O YAML do Python NÃO mudou.
+    CARIMBO    ntsl/z_agf_win.ntsl + sha256. Contagem PRÓPRIA, nunca soma com
+               o forward Python (dry_run) nem com os outros três .ntsl.
+    ETAPAS     1) ModoConferir = 1 (default): nenhuma ordem; o log NTZA registra
+                  Bal, VolAg, Volume, QuantityVol, agf, z e a decisão que tomaria.
+               2) Conferência (abaixo) passa -> ModoConferir = 0 em SIMULADOR.
+               Pular a etapa 1 invalida a contagem.
+    EQUIVALENCIA  Só se declara quando, no mesmo pregão, as barras e o z do log
+               NTZA concordarem com os do Python recalculado do tape recuperado
+               (`profit-tape features`, mesma config). Hoje: NADA provado. A
+               aritmética da janela (soma/soma de quadrados recursivas) está
+               provada contra `zscore_rolante` em teste; a FONTE (BalanceAgent) não.
+    CRITERIO   Conferência, fixada AGORA (o operador pode mudá-la por escrito antes do
+               1º pregão de conferência; depois de ver dado, não): (i) Fechou = 1
+               em toda barra de fechamento; (ii) nº de barras do pregão no Profit
+               dentro de ±5% do nº do Python (com ~40 barras/dia, ±2 barras);
+               (iii) nas barras pareadas por horário de fechamento, correlação
+               >= 0,90 entre `Agf` (NTSL) e `agf_3` (Python) e mesmo lado em
+               >= 90% das barras com |z| >= 1,4 em qualquer dos dois. Qualquer
+               item fora: o porte NÃO conta como equivalente e `ModoConferir = 0`
+               só roda como mecanismo novo, sem relação com a ficha. Os números
+               0,90/90%/5% são escolhas minhas, sem base empírica nesta amostra;
+               o que importa é estarem escritos antes do dado.
+    PARADA     Defeito de execução (ordem duplicada, posição sem estado/ORFA
+               repetido, ordem fora do Simulador) desliga na hora.
 
 O que isto **não** é: não reabre nenhuma ficha, não troca número, não autoriza conta real.
 
@@ -58,6 +93,10 @@ O que isto **não** é: não reabre nenhuma ficha, não troca número, não auto
 5. Ligar **antes** da abertura da janela (vwapvp 11:00; ignição 09:16; 123 09:30). Contadores e bloqueios recomeçam em zero se ligar no meio do dia.
 6. **Nunca junto com o `record` no mesmo ticker e conta.** O Python tem "vaga do ticker"; o NTSL não o conhece. Quando o DLL voltar: desligar as automações NTSL ANTES de subir o `record`.
 7. Market Replay: `GuardaRelogio = 0` (o relógio do PC é o de hoje, não o do replay).
+8. **Uma automação por ativo e por conta.** As quatro estratégias operam WINFUT. Duas automações na MESMA conta e no mesmo ativo somam a posição líquida: uma vê
+   `HasPosition` por causa da outra e a lógica de estado (que assume que a posição é dela) quebra. **NÃO SEI** se o Profit oferece subcontas/contas simuladas separadas
+   para isso. Até saber, ligue UMA automação por vez, ou cada uma numa conta simulada distinta. Isto também vale para as três da v4.33 (não constava lá).
+9. `z_agf_win`: gráfico de **120.000 lotes** (período por quantidade de lotes), não de tempo; ao vivo apenas (o `BalanceAgent` não roda em backtest).
 
 ### Rolagem do WIN (14/10)
 
@@ -79,6 +118,11 @@ Status: 1 ARMOU · 2 ignorada posicionado · 3 limite do dia. Evento: 1 alvo · 
 `NT123|Date|Time|CurrentTime|Fechou|O|H|L|C|Mme|PadC|PadV|Regime|D|LadoCand|Entrada|Stop|Alvo|VolT|Med|GateN|GateOk|Motivo|Evento|Pos|DailyRes`
 Motivo: 0 sem padrão · 1 ARMOU · 2 fora da janela · 3 regime · 4 D < mínimo · 5 gate reprovou · 6 gate indefinido · 8 barra incompleta. Evento: 1 armou · 4 zeragem · 6 proteção do stop · 9 órfã.
 
+**`NTZA` (z_agf_win, uma linha por avaliação do último candle; as completas têm `Fechou = 1`):**
+`NTZA|Date|Time|CurrentTime|Fechou|Close|Qtd|Volume|Bal|VolAg|Agf|Ok|Media|Dp|Cnt|Z|Motivo|Evento|Modo|Hold|LadoPos|EntradaPx|StopPx|Pos|Perdas|PnlDiaPts|Bloq|DeltaRes`
+Motivo: 0 sem sinal · 1 ARMOU · 2 fora do horário · 3 lado não permitido · 4 bloqueado · 5 com posição · 7 saiu nesta barra. Evento: 1 entrada · 2 stop (fechamento) · 3 saída por tempo (no modo conferência é a saída VIRTUAL) · 4 zeragem · 9 órfã · 11 estado reconstruído.
+`Qtd` = QuantityVol do candle; `Volume` = financeiro; `Bal`/`VolAg` = BalanceAgent/VolumeAgent do agente 3 no candle; `Cnt` = barras válidas na janela ANTES desta barra.
+
 O que olhar, nesta ordem:
 
 1. **`Fechou = 1` em toda linha de fechamento** (vwapvp e 123). Se aparecer `Fechou = 0` num fechamento de verdade, o relógio do PC está atrás do da bolsa e o guarda está descartando sinais: ligar `GuardaRelogio = 0` e avisar.
@@ -86,6 +130,16 @@ O que olhar, nesta ordem:
 3. **123: `GateN = 20` e `Med` bate com o Python** (`PerfilVolumeHorario.mediana` para o mesmo dia/horário, calculado do parquet). Se `GateN < 20` em dia normal, `BarrasPorDia` está errado (o aviso `NT123|AVISO` no 1º candle diz o que o Profit mede).
 4. **`DeltaRes` (vwapvp)**: o resultado fechado que o simulador reporta, em R$. Dividir por 0,20 e comparar com Close de entrada/saída: diz se o simulador já desconta taxas (se descontar, `DescontarCusto = 0`).
 5. **Se aparecer `ORFA`**: a posição existia sem níveis guardados (estado perdido no reprocessamento ou automação religada com posição). A estratégia fecha a mercado por segurança. Anotar quando.
+
+### Conferência do `z_agf_win` (etapa 1, `ModoConferir = 1`)
+
+1. `Qtd` das linhas `Fechou = 1` deve ficar perto de 120.000 (se for sempre maior, o excesso não é carregado como no Python; se `Fechou = 0` no fechamento, a barra do
+   Profit não chega a `VolBarra`: o RLP/leilão está fora do QuantityVol dele, ou o gráfico não é de 120.000 lotes).
+2. `Bal` ≠ 0 e `VolAg` > 0 nas barras: se vierem zerados, o `BalanceAgent` não está devolvendo dado (licença, conta ou agente) e **nada abaixo vale**.
+3. `Cnt` crescendo de 0 até 50 ao longo do dia (ou já começando alto se o histórico do dia anterior veio): diz se a janela atravessa o dia.
+4. Depois que o DLL voltar: `profit-tape backfill` do pregão, recalcular as barras e `agf_3`/`z_agf_3` com a MESMA config e parear com o log (por horário de fechamento).
+   Medir: nº de barras do dia, correlação do `Agf` (NTSL) com o `agf_3` (Python) e concordância do lado do z nas barras com |z| ≥ 1,4, contra os limiares do pré-registro acima.
+5. Só então `ModoConferir = 0`, em conta SIMULADOR, sozinha (item 8 de "Como ligar").
 
 ## O que NÃO sei (nenhum item testado; é o que eu verificaria primeiro)
 
@@ -99,11 +153,19 @@ O que olhar, nesta ordem:
 6. **Ligar a automação no meio do dia**: o histórico é reprocessado; se o Profit simular ordens nos candles passados, os contadores nascem sujos.
 7. **Ordem no `WINFUT`**: ver "Rolagem do WIN".
 8. **Limite automático do stop** quando omitido: o manual diz 30 ticks para futuros BMF; passei `SlackStopPts` explícito (150 no vwapvp/ignição, 50 no 123 como no Python).
+9. **`BalanceAgent` é o mesmo número que o `agf` do Python?** O Python soma contratos do agente 3 (comprador − vendedor) nos negócios de agressão, sobre o volume de agressão.
+   O NTSL só oferece saldo FINANCEIRO por agente. Não sei se o saldo inclui RLP/leilão, nem como ele trata o preço dentro do candle. O z não depende da escala constante, mas depende do resto.
+10. **Barra de 120.000 lotes**: o que o Profit conta e como carrega o excesso. Diferença aqui desloca todas as barras e invalida a comparação com o Python.
+11. **Histórico do `BalanceAgent`**: o manual diz "no máximo até o dia anterior". Não sei se isso significa candles do dia anterior ao carregar o gráfico ou só o saldo agregado.
+12. **`BalanceAgent`/`VolumeAgent` com `AgenteId` vindo de `input`**: o manual diz que funções de indicador só aceitam constantes nos parâmetros. Input é constante em tempo de execução, mas
+    não conferi que o compilador aceite. Se recusar: trocar `AgenteId` por `3` literal.
+13. **Uma automação por conta** (item 8 de "Como ligar").
 
 ## Quando o DLL voltar
 
 - `profit-tape backfill` recupera os negócios dos dias sem captura (janela de 30 dias do Profit); **o book ao vivo desses dias não volta**.
-- Desligar as três automações NTSL antes de subir o `record` com `--ea-dir config/`.
+- Desligar as automações NTSL (as quatro) antes de subir o `record` com `--ea-dir config/`.
+- `z_agf_win`: fazer a conferência do item 4 acima com o tape recuperado.
 - A contagem NTSL e a do Python ficam em carimbos separados; o relatório do forward não mistura.
 
 ## Relação com as fichas
