@@ -5394,3 +5394,11 @@ Entregue: `vwapvp_continuacao.ntsl` com o mesmo conserto (sinal calculado antes 
 
 **Não compilado.** **Tags:** entregue-v4.36 (sobre v4.35).
 
+### 2026-10-06e — Backtest do vwapvp: ToCover sob suspeita e limite de licença (v4.37)
+
+Diego informou que o pacote de automação dele não permite gráfico de 1 s: explica o 1 s sem relatório; o `ignicao` roda em 5 s com `BarrasJanela` 12.
+Backtest do `vwapvp_continuacao` (M5, v4.36): zero ORFA, mas as 4 operações saíram todas por TEMPO (1 h exata), nenhuma por alvo/stop, inclusive uma venda que andou 910 pts a favor (o log do ignicao mostra o WIN em 205.145)
+e saiu a −240 pts; +1.215 pts no total, 130% numa única operação (n = 4, sem leitura). Suspeita [Provável]: as ordens ToCover não atuam no vwapvp; causa [Chutando].
+
+Entregue: log `NTSVD` no vwapvp (High/Low, níveis, `HasPendingOrders` após o envio, sem `LastBarOnChart`) e a seção de achados em `NTSL_PORTE_EAS.md`. Nenhuma regra mudou. **Não compilado.** **Tags:** entregue-v4.37 (sobre v4.36).
+

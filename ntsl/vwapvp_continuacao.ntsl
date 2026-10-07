@@ -90,6 +90,7 @@ input
   GuardaRelogio(1);           // 1 = so' arma se CurrentTime >= fim da barra.
                               // 0 em Market Replay (o relogio e' de hoje).
   LogAtivo(1);
+  LogDiag(1);                 // 1 = linha NTSVD com posicao/sinal (sem LastBarOnChart)
 
 var
   sDataAnt, sData, sHora                         : Float;
@@ -99,7 +100,7 @@ var
   sLadoPos, sAlvoPx, sStopPx, sBarsPos           : Float;
   sOps, sUltBar, sPerdas, sBloq, sPnlDia         : Float;
   sDailyRes, sDailyAnt, sDelta, sLiqPts          : Float;
-  sFimBarra, sFechou, sPos                       : Float;
+  sFimBarra, sFechou, sPos, sBar, sPend          : Float;
   bNovoDia, bCalcular, bJanela, bBanda, bCompleta : Boolean;
   bFechouTrade, bSaida                           : Boolean;
 begin
@@ -316,6 +317,23 @@ begin
         else
           SellShortAtMarket(Lote);
       end;
+    end;
+
+    //-----------------------------------------------------------------
+    // DIAGNOSTICO (v4.37): aparece no BACKTEST (sem LastBarOnChart).
+    // High/Low da barra + niveis guardados + se ha' ordem pendente DEPOIS
+    // de enviar os ToCover: mostra se o preco cruzou alvo/stop e se as
+    // ordens existiam. Pend = 1 se HasPendingOrders.
+    //-----------------------------------------------------------------
+    if (LogDiag = 1) and (HasPosition or (sArma = 1) or (sEvento <> 0)) then
+    begin
+      sBar := CurrentBar;
+      if HasPendingOrders then sPend := 1 else sPend := 0;
+      ConsoleLog("NTSVD|" + sBar + "|" + sData + "|" + sHora + "|" + High
+        + "|" + Low + "|" + Close + "|" + sPos + "|" + sLadoPos
+        + "|" + sAlvoPx + "|" + sStopPx + "|" + sBarsPos + "|" + sOps
+        + "|" + sMotivo + "|" + sEvento + "|" + sPend + "|" + sZ
+        + "|" + sSd + "|" + sVwap);
     end;
 
     //-----------------------------------------------------------------

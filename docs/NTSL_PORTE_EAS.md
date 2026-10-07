@@ -181,6 +181,27 @@ Diego rodou o `ignicao` em backtest (30/09–06/10) nos gráficos de 5 s (`Barra
                 `NT123|ORFA|`, ela caiu. `z_agf_win` (entrada a mercado) já reconstrói a barra
                 de entrada, mas não tem o NTSD.
 
+## Achados do backtest do `vwapvp_continuacao` e limite de licença (2026-10-06, v4.37)
+
+**Licença:** o pacote de automação do Diego NÃO permite gráfico de 1 s. Isso explica o 1 s sem relatório [Certo, informado pelo operador]. O `ignicao` roda em **5 s com `BarrasJanela` 12** (a janela de 60 s é a mesma, a referência
+fica até 5 s mais grossa); o carimbo da contagem inclui "gráfico de 5 s".
+
+**vwapvp (M5, 30/09–06/10, v4.36):** 4 operações, TODAS com duração exata de 1 h (o tempo máximo de 12 barras), nenhuma por alvo ou stop; bruto −535, +405, +1.585, −240 pts (+1.215 pts, R$ 243): uma operação
+responde por 130% do total, n = 4. Zero ORFA: o conserto do estado funcionou.
+
+    SUSPEITA    [Provável] as ordens ToCover (alvo/stop) não estão atuando. Operação 4: venda em 206.055
+                às 11:20 de 06/10; o próprio log do ignicao mostra o WIN em 205.145 às 11:56, 910 pts a
+                favor; o alvo é 0,5 SD (SD da sessão chegou a 1.028 pts só no fim do dia, então < ~500 pts
+                às 11:20) e mesmo assim saiu por tempo, em 206.295 (−240). Operação 3: +1.585 pts em 1 h
+                sem tocar o alvo.
+    CAUSA       [Chutando] não sei. Nas 7 operações do ignicao as mesmas ordens ToCover funcionaram. A
+                diferença é de gráfico (M5 de tempo, não 5 s) ou de nível; falta medir.
+    MEDIDA      v4.37: log `NTSVD` no vwapvp (sem LastBarOnChart): High/Low da barra, níveis guardados e
+                `HasPendingOrders` depois de enviar os ToCover.
+
+**`NTSVD`:** `NTSVD|Bar|Date|Time|High|Low|Close|Pos|LadoPos|AlvoPx|StopPx|BarsPos|Ops|Motivo|Evento|Pend|Z|SD|VWAP`.
+Ler: se `High`/`Low` cruzaram `AlvoPx`/`StopPx` e a posição continuou, o ToCover não atuou; `Pend = 0` com `Pos = 1` = as ordens nem existiam depois do envio.
+
 **`NTSD` (diagnóstico, uma linha por avaliação com posição, sinal ou evento; sem `LastBarOnChart`):**
 `NTSD|Bar|Date|Time|Close|Pos|LadoAnt|LadoPos|Ops|BarsPos|Refrat|Lado|Status|Evento|AlvoPx|StopPx`
 Como ler: duas linhas com o MESMO `Bar` = reprocessamento do mesmo candle. `Pos = 1` com `LadoAnt = 0` e `Evento = 11` = o conserto agiu. `Evento = 9` = perda de estado fora do caso coberto.
