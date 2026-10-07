@@ -63,6 +63,7 @@ veredito da época. Regras de leitura:
 | [`DESENHO_2_absorcao_com_risco.md`](DESENHO_2_absorcao_com_risco.md) | desenho 2 da absorção (com risco): abandonado antes do teste por EMD insuficiente | fechado | 2026-09-04 |
 | [`DESENHO_3_absorcao_K1.md`](DESENHO_3_absorcao_K1.md) | desenho 3 da absorção (K=1), congelado; trial 2025 fechou INVERTIDO (`RESEARCH_PLANO.md`, 2026-09-04) | fechado | 2026-09-04 |
 | [`NTSL_ABSORCAO.md`](NTSL_ABSORCAO.md) | indicador `absorcao_dir` no Profit — visualização exploratória, NÃO é sinal | vivo | 2026-09-02 |
+| [`NTSL_PORTE_EAS.md`](NTSL_PORTE_EAS.md) | porte de `vwapvp_continuacao`, `ignicao` e `ea_123_vb` para NTSL durante a queda do ProfitDLL — mecanismo novo, contagem própria, não compilado | vivo | 2026-10-06 |
 
 ### Estratégias e EAs
 

@@ -1,0 +1,366 @@
+//=====================================================================
+// ea_123_vb -- ESTRATEGIA DE EXECUCAO NTSL (WINFUT, M15)
+//
+// PORTE para o Profit do EA `ea_123_vb_e4` (config/
+// ea_123_volume_baixo_e4.yaml; fichas docs/eas/123_m15.md e
+// docs/eas/123_volume_baixo.md): 123 de tres barras a favor da MME80,
+// entrada STOP no rompimento, com o GATE de volume baixo. Existe porque o
+// ProfitDLL caiu em 04/10/2026 e o `record` nao sobe. MECANISMO NOVO com a
+// mesma regra escrita: carimbo e contagem PROPRIOS; nao soma com o
+// `ea_123_vb_e4` Python (skill forward, regra 2). Ficha:
+// docs/NTSL_PORTE_EAS.md.
+//
+// SO' CONTA SIMULADOR (a mesma conta Simulador do E4). O NTSL NAO trava a
+// conta -- o Python tinha `apenas_simulador` fixo; aqui a trava e' voce
+// conferir o nome da conta ao ligar a automacao.
+//
+// NUNCA LIGUE JUNTO COM O `record --ea-ticker-ordem` NO MESMO TICKER E
+// CONTA: o Python tem "vaga do ticker"; o NTSL nao conhece o Python, os
+// dois mandariam ordem em cima um do outro.
+//
+// REGRA (formula de `research.eas_preco.avaliar_123`)
+//   Barra t fecha (label entre 09:30 e 16:30):
+//     COMPRA: low(t-1) < low(t-2) e low(t-1) < low(t) e Close(t) > MME80(t)
+//       entrada = high(t) + 1 tick   (ordem STOP, valida SO' durante t+1)
+//       stop    = low(t-1) - 1 tick
+//       D = entrada - stop >= 20 pts;  stop' = entrada - D;  alvo = entrada + D
+//     VENDA: espelho. Compra tem precedencia se as duas valerem.
+//   GATE (ficha 12): vol(t) < MEDIANA do volume da barra de MESMO horario
+//   nos 20 pregoes anteriores. Gate indefinido (menos de 20 pregoes
+//   validos) = sinal fora.
+//   Uma posicao por vez. Entrou -> stop (stop-limite, slack 50) + alvo
+//   (limitada) como ToCover/OCO. Zeragem 17:30.
+//
+// DIFERENCAS PARA O EA PYTHON (declaradas, nao corrigidas)
+//   1. MME80 = MediaExp(80, Close) do PROPRIO grafico: e' a referencia do
+//      research (coluna `mme80_ntsl`). O Python vivo semeia por parquet +
+//      tape; aqui nao ha' semente -- o grafico precisa de >= 30 pregoes
+//      carregados.
+//   2. VOLUME = QuantityVol do candle do Profit (o do research/parquet).
+//      O Python vivo usava o tape + regra `volume_confiavel` (lacuna > 5
+//      s = indefinido). Aqui nao existe "barra nao confiavel": se o
+//      Profit perder feed, o candle subconta volume e o gate PASSA.
+//   3. PERFIL DE VOLUME por deslocamento fixo de `BarrasPorDia` barras e
+//      conferencia do label de hora e da data: exige os 20 pregoes
+//      CONSECUTIVOS do grafico com o mesmo numero de barras. Pregao com
+//      barras faltando (abertura tardia, feriado meio dia) quebra o
+//      alinhamento -> gate INDEFINIDO ate' sair da janela de 20 pregoes.
+//      Nunca passa sinal errado; pode perder sinal. O Python pulava o dia
+//      faltante e seguia. Log mostra GateN (quantos dos 20 validaram).
+//   4. Fills no simulador do Profit, nao no tape do record. O slippage
+//      daqui NAO e' o que a ficha de forward do E4 mede.
+//   5. Protecao do stop-limite: o Python zerava a mercado 2 s depois de
+//      negocio alem do limite. Aqui, no fechamento da barra: se Close
+//      passou do limite do stop, ClosePosition (resolucao de barra).
+//   6. Sinal novo na barra t+1, com a entrada de t ainda pendente: o
+//      Python contava `ignorado_pendente`; aqui a entrada vencida e'
+//      cancelada e o sinal novo vale (a entrada so' vive em t+1).
+//   7. Contratos: no WINFUT a ordem vai para o contrato corrente que o
+//      Profit resolver; na semana do vencimento (14/10) confira para qual.
+//      Em grafico de contrato especifico (WINV26/WINZ26) o perfil de
+//      volume do contrato novo e' curto/fino logo depois da rolagem e o
+//      gate sai distorcido. UsarGate=0 desliga o gate (= `ea_123` puro,
+//      outra familia).
+//
+// COMO LIGAR (Automacao de estrategias, grafico WINFUT M15)
+//   - Modo: "Realizar envio de ordens no FECHAMENTO DO CANDLE" + opcao
+//     "executar apenas no fechamento do candle ou com atualizacao de
+//     posicao" MARCADA (a ordem STOP vale ate' o fim do candle seguinte e
+//     o Profit a cancela sozinho se nao for reenviada).
+//   - Quantidade por Ordem = 1; Quantidade maxima da posicao = 1.
+//   - CONTA: SIMULADOR.
+//   - Grafico com >= 30 pregoes de historico.
+//   - Market Replay: GuardaRelogio = 0 (o relogio do PC e' de hoje).
+//
+// IDIOMAS (skill engenharia 3.1): leitura posicional no topo, em
+// atribuicao simples (a unica excecao e' o laco do perfil, que le
+// `serie[n]` de variaveis declaradas, como o laco do z em
+// vwapvp_conferir.ntsl); sem Abs(); Float no ConsoleLog. NAO COMPILEI:
+// ver docs/NTSL_PORTE_EAS.md.
+//=====================================================================
+
+input
+  Lote(1);
+  CalcDataInicio(0);         // 1AnoMesDia; 0 = tudo
+  MmePeriodo(80);
+  PrimeiroHHMM(930);         // barra t (label = abertura) a partir daqui
+  UltimoHHMM(1630);          // ... ate' aqui, inclusive
+  TickPts(5);
+  DMinimoPts(20);
+  SlackStopPts(50);          // limite do stop = stop -+ 50 (slack_limite_pts)
+  ZerarBarraHHMM(1715);      // barra que FECHA as 17:30
+  MinutosBarra(15);
+  BarrasPorDia(37);          // barras M15 por pregao no grafico
+  UsarGate(1);               // 1 = ficha 12 (volume baixo) | 0 = 123 puro
+  GuardaRelogio(1);          // 1 = so' arma se CurrentTime >= fim da barra
+  LogAtivo(1);
+
+var
+  sData, sDataAnt, sData2, sHora, sHoraD, sDataD       : Float;
+  sOpen, sHigh, sLow, sClose, sHi1, sLo1, sHi2, sLo2   : Float;
+  sMme, sVolTot, sVolD, sDataUlt                       : Float;
+  sEntrada, sStopPx, sAlvoPx, sD, sLadoCand, sArmBar   : Float;
+  sLadoPos, sNivEnt, sNivStop, sNivAlvo                : Float;
+  sMed, sGateN, sGateOk, sMotivo, sEvento, sPos        : Float;
+  sPadC, sPadV, sRegime, sDiaOk, sFimBarra, sFechou    : Float;
+  sDailyRes, sTmp, sLimStop                            : Float;
+  nIndex, nOff, nI, nJ                                 : Integer;
+  vals                                                 : array[1..20] of Float;
+  bNovoDia, bCalcular, bJanela, bCompleta, bSaida      : Boolean;
+  bValido                                              : Boolean;
+begin
+  //-------------------------------------------------------------------
+  // LEITURAS POSICIONAIS: todas aqui, atribuicao simples.
+  //-------------------------------------------------------------------
+  sData     := Date;
+  sHora     := Time;
+  sOpen     := Open;
+  sHigh     := High;
+  sLow      := Low;
+  sClose    := Close;
+  sVolTot   := QuantityVol(False, False);
+  sDataAnt  := sData[1];
+  sData2    := sData[2];
+  sHi1      := sHigh[1];
+  sLo1      := sLow[1];
+  sHi2      := sHigh[2];
+  sLo2      := sLow[2];
+  sLadoPos  := sLadoPos[1];
+  sNivEnt   := sNivEnt[1];
+  sNivStop  := sNivStop[1];
+  sNivAlvo  := sNivAlvo[1];
+  sArmBar   := sArmBar[1];
+  sDiaOk    := sDiaOk[1];
+
+  bNovoDia  := (sData <> sDataAnt);
+  bCalcular := (CalcDataInicio = 0) or (sData >= CalcDataInicio);
+
+  if (CurrentBar = 1) and (RS_BarsPerDay <> BarrasPorDia) then
+    ConsoleLog("NT123|AVISO|barras_por_dia=" + RS_BarsPerDay
+      + "|BarrasPorDia=" + BarrasPorDia + "|confira que o grafico e' M15");
+
+  if bNovoDia then
+  begin
+    sLadoPos := 0; sNivEnt := 0; sNivStop := 0; sNivAlvo := 0;
+    sArmBar := 0 - 1000;
+    // regra "dia incompleto" do Python: a 1a barra do dia tem que ser 09:00
+    if sHora = 900 then sDiaOk := 1 else sDiaOk := 0;
+  end;
+
+  sMme := MediaExp(MmePeriodo, Close);
+
+  //-------------------------------------------------------------------
+  // PERFIL DE VOLUME (incondicional, no topo -- nao em `if`): para a
+  // barra de mesmo horario d pregoes atras, offset d * BarrasPorDia.
+  // Valida o label de hora, a data estritamente decrescente e volume > 0.
+  // Preenche `vals`, conta quantos validaram, mediana de 20 (media dos
+  // dois centrais, como statistics.median).
+  //-------------------------------------------------------------------
+  sGateN := 0;
+  sDataUlt := sData;
+  for nIndex := 1 to 20 do
+  begin
+    nOff    := nIndex * BarrasPorDia;
+    sVolD   := sVolTot[nOff];
+    sHoraD  := sHora[nOff];
+    sDataD  := sData[nOff];
+    bValido := (sHoraD = sHora) and (sDataD < sDataUlt) and (sVolD > 0);
+    if bValido then
+    begin
+      sGateN := sGateN + 1;
+      vals[nIndex] := sVolD;
+      sDataUlt := sDataD;
+    end
+    else
+      vals[nIndex] := 0;
+  end;
+
+  sMed := 0;
+  if sGateN = 20 then
+  begin
+    for nI := 1 to 19 do
+      for nJ := 1 to 20 - nI do
+      begin
+        sTmp  := vals[nJ];
+        sVolD := vals[nJ + 1];
+        if sTmp > sVolD then
+        begin
+          vals[nJ]     := sVolD;
+          vals[nJ + 1] := sTmp;
+        end;
+      end;
+    sMed := (vals[10] + vals[11]) / 2;
+  end;
+
+  sDailyRes := DailyResult(False);
+  sMotivo := 0;
+  sEvento := 0;
+  sLadoCand := 0;
+  sEntrada := 0; sStopPx := 0; sAlvoPx := 0; sD := 0;
+  sPadC := 0; sPadV := 0; sRegime := 0; sGateOk := 0; sPos := 0;
+
+  if bCalcular then
+  begin
+    sFimBarra := CalcTime(sHora, MinutosBarra);
+    bCompleta := (GuardaRelogio = 0) or (CurrentTime >= sFimBarra);
+
+    //-----------------------------------------------------------------
+    // POSICAO ABERTA: ToCover (stop-limite + limitada) a cada candle.
+    //-----------------------------------------------------------------
+    if HasPosition then
+    begin
+      sPos := 1;
+      bSaida := False;
+      if (sLadoPos = 0) or (sNivStop = 0) or (sNivAlvo = 0) then
+      begin
+        ConsoleLog("NT123|ORFA|" + sData + "|" + sHora + "|posicao sem niveis: ClosePosition");
+        bSaida := True;
+        sEvento := 9;
+      end
+      else if sHora >= ZerarBarraHHMM then
+      begin
+        bSaida := True;
+        sEvento := 4;
+      end
+      else if (sLadoPos > 0) and (sClose < sNivStop - SlackStopPts) then
+      begin
+        bSaida := True;           // protecao do stop-limite, resolucao de barra
+        sEvento := 6;
+      end
+      else if (sLadoPos < 0) and (sClose > sNivStop + SlackStopPts) then
+      begin
+        bSaida := True;
+        sEvento := 6;
+      end;
+
+      if bSaida then
+        ClosePosition
+      else
+      begin
+        if IsBought then
+        begin
+          SellToCoverStop(sNivStop, sNivStop - SlackStopPts, Lote);
+          SellToCoverLimit(sNivAlvo, Lote);
+        end
+        else
+        begin
+          BuyToCoverStop(sNivStop, sNivStop + SlackStopPts, Lote);
+          BuyToCoverLimit(sNivAlvo, Lote);
+        end;
+      end;
+    end
+    else
+    begin
+      //---------------------------------------------------------------
+      // SEM POSICAO. Entrada vencida (so' vive em t+1): cancela e limpa.
+      //---------------------------------------------------------------
+      if (CurrentBar > sArmBar) and (sLadoPos <> 0) then
+      begin
+        if HasPendingOrders then
+          CancelPendingOrders;
+        sLadoPos := 0; sNivEnt := 0; sNivStop := 0; sNivAlvo := 0;
+      end;
+      if (sHora >= ZerarBarraHHMM) and HasPendingOrders then
+        CancelPendingOrders;
+
+      //---------------------------------------------------------------
+      // SINAL: formula do research, na ordem do funil.
+      //---------------------------------------------------------------
+      bJanela := (sHora >= PrimeiroHHMM) and (sHora <= UltimoHHMM);
+      if (sDiaOk = 1) and (sData2 = sData) and bJanela then
+      begin
+        if (sLo1 < sLo2) and (sLo1 < sLow) then sPadC := 1;
+        if (sHi1 > sHi2) and (sHi1 > sHigh) then sPadV := 1;
+
+        if sPadC = 1 then
+        begin
+          if sClose > sMme then
+          begin
+            sRegime := 1;
+            sEntrada := sHigh + TickPts;
+            sD := sEntrada - (sLo1 - TickPts);
+            if sD >= DMinimoPts then
+              sLadoCand := 1
+            else
+              sMotivo := 4;
+          end
+          else
+            sMotivo := 3;
+        end;
+
+        if (sLadoCand = 0) and (sPadV = 1) then
+        begin
+          if sClose < sMme then
+          begin
+            sRegime := 1;
+            sEntrada := sLow - TickPts;
+            sD := (sHi1 + TickPts) - sEntrada;
+            if sD >= DMinimoPts then
+              sLadoCand := 0 - 1
+            else
+              sMotivo := 4;
+          end
+          else
+            sMotivo := 3;
+        end;
+
+        if sLadoCand <> 0 then
+        begin
+          sStopPx := sEntrada - sLadoCand * sD;
+          sAlvoPx := sEntrada + sLadoCand * sD;
+
+          // GATE
+          if UsarGate = 0 then
+            sGateOk := 1
+          else if sGateN < 20 then
+            sMotivo := 6
+          else if sVolTot < sMed then
+            sGateOk := 1
+          else
+            sMotivo := 5;
+
+          if (sGateOk = 1) and (not bCompleta) then
+            sMotivo := 8;
+
+          if (sGateOk = 1) and bCompleta then
+          begin
+            sMotivo := 1;
+            sEvento := 1;
+            sLadoPos := sLadoCand;
+            sNivEnt  := sEntrada;
+            sNivStop := sStopPx;
+            sNivAlvo := sAlvoPx;
+            sArmBar  := CurrentBar;
+            if sLadoCand > 0 then
+              BuyStop(sEntrada, sEntrada + SlackStopPts, Lote)
+            else
+              SellShortStop(sEntrada, sEntrada - SlackStopPts, Lote);
+          end;
+        end;
+      end
+      else if not bJanela then
+        sMotivo := 2;
+    end;
+
+    //-----------------------------------------------------------------
+    // LOG (ordem congelada; docs/NTSL_PORTE_EAS.md). Todo fechamento no
+    // ultimo candle do grafico (M15: ~37 linhas/dia).
+    // Motivo: 0 sem padrao | 1 ARMOU | 2 fora_janela | 3 regime
+    //         | 4 D<minimo | 5 gate reprovou | 6 gate indefinido
+    //         | 8 barra incompleta
+    // Evento: 1 armou | 4 zeragem | 6 protecao do stop | 9 orfa
+    //-----------------------------------------------------------------
+    if (LogAtivo = 1) and LastBarOnChart then
+    begin
+      if bCompleta then sFechou := 1 else sFechou := 0;
+      ConsoleLog("NT123|" + sData + "|" + sHora + "|" + CurrentTime + "|" + sFechou
+        + "|" + sOpen + "|" + sHigh + "|" + sLow + "|" + sClose + "|" + sMme
+        + "|" + sPadC + "|" + sPadV + "|" + sRegime + "|" + sD
+        + "|" + sLadoCand + "|" + sEntrada + "|" + sStopPx + "|" + sAlvoPx
+        + "|" + sVolTot + "|" + sMed + "|" + sGateN + "|" + sGateOk
+        + "|" + sMotivo + "|" + sEvento + "|" + sPos + "|" + sDailyRes);
+    end;
+
+    Plot(sMme);
+  end;
+end;

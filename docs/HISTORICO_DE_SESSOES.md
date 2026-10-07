@@ -5333,3 +5333,20 @@ no `WI1V26Z26` só depois do primário) e a sequência exata de comandos (`backf
 
 **Tags:** entregue-v4.32 (sobre v4.31). Suíte 1.408 (+2).
 
+### 2026-10-06 — Porte dos EAs para NTSL durante a queda do ProfitDLL (v4.33)
+
+Nelogica com incidente no ProfitDLL desde 04/10: `record` não sobe (`profitdll.estado tipo=0 valor=200`), sem captura há 2 dias, sem previsão. As entregas v4.28–v4.32 não tocaram recorder/profitdll/ea/config
+(o `record` roda de venv separado); a causa é externa. O Profit funciona. Diego pediu `vwapvp_continuacao`, `ignicao` e o `ea_123_vb_e4`; `ea_123_volume_baixo` e `_e4` são o mesmo EA (e4 = ordens na conta Simulador).
+`z_agf_win` e `microprice` não foram portados (agent_id por corretora, book por negócio: sem equivalente em NTSL).
+
+Entregue: `ntsl/vwapvp_continuacao.ntsl` (M5), `ntsl/ignicao.ntsl` (1 s), `ntsl/ea_123_vb.ntsl` (M15, com gate de volume baixo por perfil de 20 pregões), `docs/NTSL_PORTE_EAS.md` (pré-registro, diferenças,
+como ligar, formato dos logs, o que não sei) e `tests/test_ntsl_execucao.py` (guarda estática: sem `Abs`, `begin/end` balanceado, sem acesso posicional em condição, sem Integer no `ConsoleLog`, nomes declarados,
+quantidade explícita em toda ordem, cabeçalho "SIMULADOR" e "NAO COMPILEI").
+
+Decisões: (1) porte = MECANISMO NOVO, carimbo (nome + sha256 do `.ntsl`) e contagem próprios, não soma com o Python (skill forward, regra 2); (2) só conta Simulador, o NTSL não tem trava de conta;
+(3) modo "fechamento do candle" nos três, com guarda de relógio contra reavaliação em barra parcial; (4) 123: gate indefinido em vez de errado quando o perfil de 20 pregões não alinha.
+
+**Não compilado.** Sem interpretador NTSL fora do Profit; o primeiro erro de compilação é esperado. Itens não verificados listados no documento (contexto do reprocessamento pós-fill, OCO reeditada em barra de 1 s,
+taxas no `DailyResult`, ordem no `WINFUT` na rolagem de 14/10).
+
+**Tags:** entregue-v4.33 (sobre v4.32).

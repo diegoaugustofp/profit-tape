@@ -1,0 +1,309 @@
+//=====================================================================
+// vwapvp_continuacao -- ESTRATEGIA DE EXECUCAO NTSL (WINFUT, M5)
+//
+// PORTE para o Profit do EA `ea_vwapvp_continuacao` (config/
+// ea_vwapvp_continuacao.yaml, docs/eas/vwap_vp.md). Existe porque o
+// ProfitDLL da Nelogica caiu em 04/10/2026 e o `record` nao sobe; o
+// Profit funciona. NAO e' o mesmo EA: e' um MECANISMO NOVO com a mesma
+// regra escrita (ver "DIFERENCAS" abaixo). Carimbo proprio, contagem
+// propria -- observacoes daqui NAO somam com as do EA Python
+// (skill forward, regra 2). Ficha: docs/NTSL_PORTE_EAS.md.
+//
+// SO' CONTA SIMULADOR. Nada neste arquivo autoriza conta real: o
+// caminho pre-registrado do vwapvp era dry_run -> demo, nunca real. O
+// NTSL NAO TEM como travar a conta (o Python tinha `apenas_simulador`
+// fixo no codigo); a trava aqui e' a conta que VOCE escolhe ao ligar a
+// automacao. Confira o nome da conta antes de ligar.
+//
+// REGRA (identica a `ea/sinal_vwapvp.py`)
+//   No FECHAMENTO da barra M5: z = (Close - VWAP) / SD da sessao.
+//   |z| >= 2,0, barra que ABRE em [11:00, 17:00), lado = sinal de z
+//   (CONTINUACAO), nao bloqueado, sem posicao, < 6 ops no dia, 30 min
+//   desde o ultimo sinal operado, dist > 0 -> ordem a MERCADO.
+//   alvo  = Close + lado * 0,5 * SD            (niveis do SINAL, nao do fill)
+//   stop  = Close - lado * 0,5 * |Close-VWAP|
+//   saidas: stop, alvo (ordens ToCover = OCO), tempo (12 barras = 60 min),
+//   zeragem 18:00. 3 perdas seguidas ou -1.200 pts liquidos no dia ->
+//   bloqueia o resto do dia.
+//
+// DIFERENCAS PARA O EA PYTHON (declaradas, nao corrigidas)
+//   1. VWAP/SD POR BARRA (preco tipico x QuantityVol), nao por negocio.
+//      E' a aproximacao ja' medida em `vwapvp_conferir.ntsl` (113/113
+//      sinais iguais em 28/09 contra o replay Python).
+//   2. Fills: simulador do Profit (fila/book dele), nao o tape do record.
+//      Slippage daqui NAO e' o do Python.
+//   3. Tempo: 12 barras contadas no fechamento (Python: primeiro negocio
+//      apos 3.600 s). Diferenca <= 1 barra.
+//   4. Stop/alvo sao ordens ToCover no simulador (intrabarra), Python
+//      checava a cada negocio. Stop com limite de SlackStopPts.
+//   5. Custo: o Python desconta 11 pts por operacao. Aqui o resultado
+//      vem de DailyResult(False) / ValorPonto; DescontarCusto=1 subtrai
+//      CustoPts. NAO SEI se o resultado do simulador ja' traz taxas --
+//      o log imprime o valor cru (campo DeltaRes) para voce conferir.
+//   6. Bloqueio/contadores recomecam em zero se a automacao for ligada
+//      no meio do dia. Ligue ANTES das 11:00.
+//
+// COMO LIGAR (Automacao de estrategias, grafico WINFUT M5)
+//   - Modo: "Realizar envio de ordens no FECHAMENTO DO CANDLE".
+//   - Marcar a opcao "executar apenas no fechamento do candle ou com
+//     atualizacao de posicao" (desmarcada, o codigo roda varias vezes
+//     por candle e o estado abaixo conta em dobro).
+//   - Quantidade por Ordem = 1; Quantidade maxima da posicao = 1.
+//   - CONTA: SIMULADOR.
+//   - Grafico com >= 3 pregoes de historico (a VWAP zera por dia; o
+//     historico so' aquece o grafico).
+//
+// IDIOMAS (skill engenharia 3.1): leitura posicional `X[1]` so' no topo,
+// em atribuicao simples; acumulador `s := s[1] + x`; sem Abs(); Float no
+// ConsoleLog.
+//
+// NAO COMPILEI ISTO. Nao ha' interpretador NTSL fora do Profit. O que
+// nao foi verificado esta' em docs/NTSL_PORTE_EAS.md, secao "O que nao
+// sei".
+//=====================================================================
+
+input
+  Lote(1);
+  CalcDataInicio(0);          // 1AnoMesDia; 0 = tudo
+  ZBanda(2.0);
+  JanelaIniHHMM(1100);        // barra que ABRE a partir daqui
+  JanelaFimHHMM(1700);        // ... e antes daqui
+  LadoPermitido(0);           // 0 ambos | 1 so' compra | -1 so' venda
+  AlvoSd(0.5);
+  StopFracDist(0.5);
+  TempoMaxBarras(12);         // 3.600 s / 300 s
+  ZerarBarraHHMM(1755);       // barra que FECHA as 18:00 (label = abertura)
+  CooldownBarras(6);          // 1.800 s / 300 s
+  MaxOpsDia(6);
+  MaxPerdasSeguidas(3);
+  PerdaMaxDiaPts(1200);
+  ValorPonto(0.2);            // R$ por ponto por contrato (WIN)
+  CustoPts(11);
+  DescontarCusto(1);
+  SlackStopPts(150);          // limite do stop = 30 ticks (o automatico)
+  MinutosBarra(5);
+  GuardaRelogio(1);           // 1 = so' arma se CurrentTime >= fim da barra.
+                              // 0 em Market Replay (o relogio e' de hoje).
+  LogAtivo(1);
+
+var
+  sDataAnt, sData, sHora                         : Float;
+  sPVant, sVant, sPPVant, sPV, sV, sPPV          : Float;
+  sTip, sVol, sVwap, sVar, sSd, sZ, sDist        : Float;
+  sLadoSinal, sMotivo, sArma, sEvento            : Float;
+  sLadoPos, sAlvoPx, sStopPx, sBarsPos           : Float;
+  sOps, sUltBar, sPerdas, sBloq, sPnlDia         : Float;
+  sDailyRes, sDailyAnt, sDelta, sLiqPts          : Float;
+  sFimBarra, sFechou, sPos                       : Float;
+  bNovoDia, bCalcular, bJanela, bBanda, bCompleta : Boolean;
+  bFechouTrade, bSaida                           : Boolean;
+begin
+  //-------------------------------------------------------------------
+  // LEITURAS POSICIONAIS: todas aqui, atribuicao simples.
+  //-------------------------------------------------------------------
+  sDataAnt  := Date[1];
+  sPVant    := sPV[1];
+  sVant     := sV[1];
+  sPPVant   := sPPV[1];
+  sLadoPos  := sLadoPos[1];
+  sAlvoPx   := sAlvoPx[1];
+  sStopPx   := sStopPx[1];
+  sBarsPos  := sBarsPos[1];
+  sOps      := sOps[1];
+  sUltBar   := sUltBar[1];
+  sPerdas   := sPerdas[1];
+  sBloq     := sBloq[1];
+  sPnlDia   := sPnlDia[1];
+  sDailyAnt := sDailyRes[1];
+
+  sData  := Date;
+  sHora  := Time;
+  bNovoDia  := (sData <> sDataAnt);
+  bCalcular := (CalcDataInicio = 0) or (sData >= CalcDataInicio);
+
+  if bNovoDia then
+  begin
+    sLadoPos := 0; sAlvoPx := 0; sStopPx := 0; sBarsPos := 0;
+    sOps := 0; sUltBar := 0 - 1000; sPerdas := 0; sBloq := 0; sPnlDia := 0;
+    sDailyAnt := 0;
+  end;
+
+  sDailyRes := DailyResult(False);
+  sMotivo := 0;
+  sArma := 0;
+  sEvento := 0;
+  sDelta := 0;
+  sLiqPts := 0;
+
+  if bCalcular then
+  begin
+    //-----------------------------------------------------------------
+    // VWAP/SD de sessao POR BARRA (igual a vwapvp_conferir.ntsl)
+    //-----------------------------------------------------------------
+    sTip := (High + Low + Close) / 3;
+    sVol := QuantityVol(False, False);
+    if bNovoDia then
+    begin
+      sPV  := sTip * sVol;
+      sV   := sVol;
+      sPPV := sTip * sTip * sVol;
+    end
+    else
+    begin
+      sPV  := sPVant  + sTip * sVol;
+      sV   := sVant   + sVol;
+      sPPV := sPPVant + sTip * sTip * sVol;
+    end;
+    sVwap := 0; sSd := 0; sZ := 0;
+    if sV > 0 then
+    begin
+      sVwap := sPV / sV;
+      sVar  := sPPV / sV - sVwap * sVwap;
+      if sVar > 0 then
+        sSd := Sqrt(sVar);
+      if sSd > 0 then
+        sZ := (Close - sVwap) / sSd;
+    end;
+
+    //-----------------------------------------------------------------
+    // TRADE FECHADO desde a barra anterior? Pelo resultado fechado do
+    // dia (idempotente: recalcula do mesmo [1] se a barra for
+    // reprocessada). Pega tambem entrada+saida dentro da MESMA barra.
+    //-----------------------------------------------------------------
+    sDelta := sDailyRes - sDailyAnt;
+    bFechouTrade := (sDelta > 0.001) or (sDelta < 0 - 0.001);
+    if bFechouTrade then
+    begin
+      sLiqPts := sDelta / ValorPonto / Lote;
+      if DescontarCusto = 1 then
+        sLiqPts := sLiqPts - CustoPts;
+      sPnlDia := sPnlDia + sLiqPts;
+      if sLiqPts > 0 then
+        sPerdas := 0
+      else
+        sPerdas := sPerdas + 1;
+      if (sPerdas >= MaxPerdasSeguidas) or (sPnlDia <= 0 - PerdaMaxDiaPts) then
+        sBloq := 1;
+    end;
+
+    //-----------------------------------------------------------------
+    // POSICAO ABERTA: gerencia saidas. Nada de sinal novo aqui.
+    //-----------------------------------------------------------------
+    sFimBarra := CalcTime(sHora, MinutosBarra);
+    bCompleta := (GuardaRelogio = 0) or (CurrentTime >= sFimBarra);
+    sPos := 0;
+    if HasPosition then
+    begin
+      sPos := 1;
+      sBarsPos := sBarsPos + 1;
+      bSaida := False;
+
+      // niveis nao guardados (ligou com posicao antiga, ou o contexto de
+      // reprocessamento perdeu o estado): NAO inventa nivel. Zera.
+      if (sLadoPos = 0) or (sAlvoPx = 0) or (sStopPx = 0) then
+      begin
+        ConsoleLog("NTSV|ORFA|" + sData + "|" + sHora + "|posicao sem niveis: ClosePosition");
+        bSaida := True;
+        sEvento := 9;
+      end
+      else if sBarsPos >= TempoMaxBarras then
+      begin
+        bSaida := True;
+        sEvento := 3;
+      end
+      else if sHora >= ZerarBarraHHMM then
+      begin
+        bSaida := True;
+        sEvento := 4;
+      end;
+
+      if bSaida then
+        ClosePosition
+      else
+      begin
+        if IsBought then
+        begin
+          SellToCoverStop(sStopPx, sStopPx - SlackStopPts, Lote);
+          SellToCoverLimit(sAlvoPx, Lote);
+        end
+        else
+        begin
+          BuyToCoverStop(sStopPx, sStopPx + SlackStopPts, Lote);
+          BuyToCoverLimit(sAlvoPx, Lote);
+        end;
+      end;
+    end
+    else
+    begin
+      sBarsPos := 0;
+      sLadoPos := 0; sAlvoPx := 0; sStopPx := 0;
+
+      //---------------------------------------------------------------
+      // SINAL (so' sem posicao). Ordem dos filtros = a do Python.
+      //---------------------------------------------------------------
+      bBanda := (sZ >= ZBanda) or (sZ <= 0 - ZBanda);
+      bJanela := (sHora >= JanelaIniHHMM) and (sHora < JanelaFimHHMM);
+
+      if bBanda and (sSd > 0) then
+      begin
+        if sZ > 0 then sLadoSinal := 1 else sLadoSinal := 0 - 1;
+        sDist := Close - sVwap;
+        if sDist < 0 then sDist := 0 - sDist;
+
+        if not bJanela then
+          sMotivo := 2
+        else if (LadoPermitido <> 0) and (LadoPermitido <> sLadoSinal) then
+          sMotivo := 3
+        else if sBloq = 1 then
+          sMotivo := 4
+        else if sOps >= MaxOpsDia then
+          sMotivo := 6
+        else if (CurrentBar - sUltBar) < CooldownBarras then
+          sMotivo := 7
+        else if sDist <= 0 then
+          sMotivo := 8
+        else if not bCompleta then
+          sMotivo := 9
+        else
+          sArma := 1;
+      end;
+
+      if sArma = 1 then
+      begin
+        sLadoPos := sLadoSinal;
+        sAlvoPx  := Round2Fraction(Close + sLadoSinal * AlvoSd * sSd);
+        sStopPx  := Round2Fraction(Close - sLadoSinal * StopFracDist * sDist);
+        sOps     := sOps + 1;
+        sUltBar  := CurrentBar;
+        sMotivo  := 1;
+        sEvento  := 1;
+        if sLadoSinal > 0 then
+          BuyAtMarket(Lote)
+        else
+          SellShortAtMarket(Lote);
+      end;
+    end;
+
+    //-----------------------------------------------------------------
+    // LOG (ordem congelada; ver docs/NTSL_PORTE_EAS.md). So' no ultimo
+    // candle do grafico: nao despeja o historico no console.
+    // Motivo: 0 fora_banda | 1 ARMOU | 2 fora_janela | 3 lado | 4 bloqueado
+    //         | 6 max_ops | 7 cooldown | 8 sem_dist | 9 barra_incompleta
+    // Evento: 0 nada | 1 entrada | 3 saiu por tempo | 4 zeragem | 9 orfa
+    //-----------------------------------------------------------------
+    if (LogAtivo = 1) and LastBarOnChart then
+    begin
+      if bCompleta then sFechou := 1 else sFechou := 0;
+      ConsoleLog("NTSV|" + sData + "|" + sHora + "|" + CurrentTime + "|" + sFechou
+        + "|" + Close + "|" + sVwap + "|" + sSd + "|" + sZ
+        + "|" + sMotivo + "|" + sEvento + "|" + sLadoPos
+        + "|" + sAlvoPx + "|" + sStopPx
+        + "|" + sPos + "|" + sBarsPos + "|" + sOps + "|" + sPerdas
+        + "|" + sPnlDia + "|" + sBloq + "|" + sDelta);
+    end;
+
+    Plot(sVwap);
+    Plot2(sVwap + ZBanda * sSd);
+    Plot3(sVwap - ZBanda * sSd);
+  end;
+end;
