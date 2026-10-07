@@ -5371,3 +5371,15 @@ antes do dado, formato `NTZA`, itens 9-13 de "O que não sei"); `docs/eas/z_agf_
 **Não compilado.** Suíte 1438 (sem os 2 testes de relógio do vigia, que já falhavam). `ruff` e `mypy` limpos.
 
 **Tags:** entregue-v4.34 (sobre v4.33).
+
+### 2026-10-06c — Primeiro backtest do `ignicao`: defeito do ORFA (v4.35)
+
+Diego começou a validar pelo `ignicao`. 5 s (janela 12): 7 operações, todas com duração de 1 barra, ganho/perda de dezenas a ~185 pts em vez de 530; 15 s: 24 operações em 5 pregões contra teto de 20; 1 s sem relatório.
+O console trouxe `NTSI|ORFA|` em toda entrada: a hipótese "estado perdido no reprocessamento" (risco nº 2 da v4.33) está confirmada como fato; o candle exato do reprocessamento continua por medir.
+
+Entregue: `ignicao.ntsl` com a detecção antes do bloco de posição, reconstrução do estado na barra de entrada reprocessada (evento 11, sem nova ordem) e log `NTSD` independente de `LastBarOnChart`;
+teste estrutural da ordem; `NTSL_PORTE_EAS.md` com o achado, o conserto, o que ele NÃO cobre e o formato NTSD. Os números do backtest são amostra de depuração (skill §7.1) e não contam.
+`vwapvp_continuacao` e `ea_123_vb` NÃO foram alterados: mesmo ramo ORFA, mecanismo ainda não medido. Pendente depois do NTSD.
+
+**Não compilado.** **Tags:** entregue-v4.35 (sobre v4.34).
+

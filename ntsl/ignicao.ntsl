@@ -36,6 +36,11 @@
 //   6. Ancoras de agenda (930/1000/1030/1500) NAO foram portadas: so'
 //      registravam, nao decidiam.
 //   7. Fills no simulador do Profit, nao no tape do record.
+//   8. v4.35: no backtest de 05-06/10 TODA entrada caiu no ramo ORFA (estado
+//      perdido no reprocessamento do candle apos o fill) e fechou em 1 barra.
+//      Agora a barra de entrada reprocessada se reconhece e reconstroi o
+//      estado (evento 11). Se o estado se perder DEPOIS, o ORFA continua
+//      fechando por seguranca. O log NTSD diz qual dos dois acontece.
 //
 // COMO LIGAR (Automacao de estrategias, WINFUT em 1 SEGUNDO)
 //   - Grafico em SEGUNDOS: 1 s => BarrasJanela 60 | 5 s => 12 | 15 s => 4.
@@ -72,14 +77,16 @@ input
   ModoSaidaOCO(1);           // 1 = ToCover (OCO) | 0 = ClosePosition por barra
   LogAtivo(1);
   HeartbeatBarras(300);      // uma linha de vida a cada N barras (0 = nunca)
+  LogDiag(1);                // 1 = linha NTSD a cada avaliacao com posicao/deteccao
+                             // (NAO depende de LastBarOnChart: aparece no backtest)
 
 var
   sData, sDataAnt, sDataRef, sHora                 : Float;
   sClose, sHigh, sLow, sRef, sSegBarra             : Float;
   sLadoPos, sNivel, sAlvoPx, sStopPx, sBarsPos    : Float;
   sRefrat, sOps, sLado, sStatus, sEvento           : Float;
-  sDailyRes, sPos, sNivelDet                       : Float;
-  bNovoDia, bNaJanela, bTemRef, bSaida             : Boolean;
+  sDailyRes, sPos, sNivelDet, sBar, sLadoAnt       : Float;
+  bNovoDia, bNaJanela, bTemRef, bSaida, bRecons    : Boolean;
 begin
   //-------------------------------------------------------------------
   // LEITURAS POSICIONAIS no topo, atribuicao simples.
@@ -92,6 +99,7 @@ begin
   sDataAnt  := sData[1];
   sDataRef  := sData[BarrasJanela];
   sRef      := sClose[BarrasJanela];
+  sLadoAnt  := sLadoPos[1];
   sLadoPos  := sLadoPos[1];
   sNivel    := sNivel[1];
   sAlvoPx   := sAlvoPx[1];
@@ -113,6 +121,33 @@ begin
   sLado := 0;
   sNivelDet := 0;
   sPos := 0;
+  bRecons := False;
+
+  //-------------------------------------------------------------------
+  // DETECCAO (pura, ANTES do bloco de posicao: o reprocessamento da barra
+  // de entrada precisa reconhecer o proprio sinal). O refratario comeca em
+  // TODA deteccao, como no DetectorIgnicao do EA.
+  //-------------------------------------------------------------------
+  if sRefrat > 0 then
+    sRefrat := sRefrat - 1;
+
+  bNaJanela := (sHora >= PrimeiraHHMM) and (sHora < FimHHMM);
+  bTemRef   := (CurrentBar > BarrasJanela) and (sDataRef = sData);
+
+  if bTemRef and bNaJanela and (sRefrat <= 0) then
+  begin
+    if sHigh - sRef >= LimiarPts then
+      sLado := 1;
+    if sRef - sLow >= LimiarPts then
+    begin
+      if sLado = 0 then
+        sLado := 0 - 1
+      else if sClose < sRef then
+        sLado := 0 - 1;
+    end;
+  end;
+  if sLado <> 0 then
+    sNivelDet := sRef + sLado * LimiarPts;
 
   //-------------------------------------------------------------------
   // 1. POSICAO ABERTA: saidas. Ordem do EA: tempo -> alvo -> stop -> 18:00
@@ -125,9 +160,28 @@ begin
 
     if (sLadoPos = 0) or (sAlvoPx = 0) or (sStopPx = 0) then
     begin
-      ConsoleLog("NTSI|ORFA|" + sData + "|" + sHora + "|posicao sem niveis: ClosePosition");
-      bSaida := True;
-      sEvento := 9;
+      if (sLado <> 0) and (sOps < MaxOpsDia) and (sBarsPos <= 1) then
+      begin
+        // v4.35: REPROCESSAMENTO DA BARRA DE ENTRADA. O Profit reprocessa o
+        // candle depois do fill e o estado gravado na avaliacao anterior
+        // nao esta' em [1]. O sinal e' deterministico (so' depende de
+        // dados da barra), entao ele se reconhece de novo: reconstroi o
+        // estado que a avaliacao perdida teria gravado, SEM nova ordem.
+        bRecons   := True;
+        sOps      := sOps + 1;
+        sLadoPos  := sLado;
+        sNivel    := sNivelDet;
+        sAlvoPx   := Round2Fraction(sNivelDet + sLado * AlvoPts);
+        sStopPx   := Round2Fraction(sNivelDet - sLado * StopPts);
+        sBarsPos  := 0;
+        sEvento   := 11;
+      end
+      else
+      begin
+        ConsoleLog("NTSI|ORFA|" + sData + "|" + sHora + "|posicao sem niveis: ClosePosition");
+        bSaida := True;
+        sEvento := 9;
+      end;
     end
     else if sBarsPos * sSegBarra > TempoMaxSeg then
     begin
@@ -184,32 +238,11 @@ begin
   end;
 
   //-------------------------------------------------------------------
-  // 2. DETECCAO (com ou sem posicao: o refratario comeca em TODA
-  //    deteccao, como no DetectorIgnicao do EA).
+  // 2. ARMAR (deteccao acima; com ou sem posicao o refratario comeca)
   //-------------------------------------------------------------------
-  if sRefrat > 0 then
-    sRefrat := sRefrat - 1;
-
-  bNaJanela := (sHora >= PrimeiraHHMM) and (sHora < FimHHMM);
-  bTemRef   := (CurrentBar > BarrasJanela) and (sDataRef = sData);
-
-  if bTemRef and bNaJanela and (sRefrat <= 0) then
-  begin
-    if sHigh - sRef >= LimiarPts then
-      sLado := 1;
-    if sRef - sLow >= LimiarPts then
-    begin
-      if sLado = 0 then
-        sLado := 0 - 1
-      else if sClose < sRef then
-        sLado := 0 - 1;
-    end;
-  end;
-
   if sLado <> 0 then
   begin
-    sRefrat   := RefratarioSeg / sSegBarra;
-    sNivelDet := sRef + sLado * LimiarPts;
+    sRefrat := RefratarioSeg / sSegBarra;
     if HasPosition then
       sStatus := 2
     else if sOps >= MaxOpsDia then
@@ -235,9 +268,23 @@ begin
   //    linha de vida; so' no ultimo candle (nao despeja historico).
   //    Status: 1 ARMOU | 2 ignorada posicionado | 3 limite do dia
   //    Evento: 1 alvo | 2 stop | 3 tempo | 4 zeragem | 5 ambiguo
-  //            | 9 orfa | 10 entrada
+  //            | 9 orfa | 10 entrada | 11 estado reconstruido (v4.35)
   //-------------------------------------------------------------------
   sDailyRes := DailyResult(False);
+
+  // DIAGNOSTICO (v4.35): sem LastBarOnChart, para aparecer no backtest.
+  // LadoAnt = estado que o candle ANTERIOR deixou em [1]; Recons = 1 se
+  // este candle reconstruiu o estado. Duas linhas com o MESMO Bar =
+  // reprocessamento do mesmo candle.
+  if (LogDiag = 1) and (HasPosition or (sLado <> 0) or (sEvento <> 0)) then
+  begin
+    sBar := CurrentBar;
+    ConsoleLog("NTSD|" + sBar + "|" + sData + "|" + sHora + "|" + sClose
+      + "|" + sPos + "|" + sLadoAnt + "|" + sLadoPos + "|" + sOps
+      + "|" + sBarsPos + "|" + sRefrat + "|" + sLado + "|" + sStatus
+      + "|" + sEvento + "|" + sAlvoPx + "|" + sStopPx);
+  end;
+
   if (LogAtivo = 1) and LastBarOnChart then
   begin
     if (sStatus <> 0) or (sEvento <> 0)

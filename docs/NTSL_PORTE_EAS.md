@@ -141,12 +141,43 @@ O que olhar, nesta ordem:
    Medir: nº de barras do dia, correlação do `Agf` (NTSL) com o `agf_3` (Python) e concordância do lado do z nas barras com |z| ≥ 1,4, contra os limiares do pré-registro acima.
 5. Só então `ModoConferir = 0`, em conta SIMULADOR, sozinha (item 8 de "Como ligar").
 
+## Achado do 1º backtest do `ignicao` (2026-10-06, v4.35)
+
+Diego rodou o `ignicao` em backtest (30/09–06/10) nos gráficos de 5 s (`BarrasJanela` 12) e 15 s; no de 1 s não saiu relatório.
+
+    EVIDENCIA   console: NTSI|ORFA| em TODA entrada (14 linhas = 7 trades x 2, 5 s).
+                CSV 5 s: 7 operações, TODAS com tempo = 1 barra (5 s), ganho médio
+                +15 a +50 pts, perda -140/-185 pts; o desenho é alvo/stop 530 ou 60 min.
+                15 s: 24 operações em 5 pregões (teto 4/dia = 20): contador diário
+                não acumulou.
+    DEFEITO     estado (níveis, contador) não está em `[1]` no primeiro candle avaliado
+                com posição; o ramo ORFA fecha a posição na hora. Defeito de EXECUÇÃO:
+                pela PARADA do pré-registro, a contagem NTSL do ignicao não começou.
+                Os números desse backtest são amostra de DEPURAÇÃO (skill disciplina
+                §7.1): não interpretáveis, não contam.
+    CONSERTO    detecção calculada antes do bloco de posição; se há posição, o estado
+                falta, o sinal se reproduz nesta barra e é a 1ª barra com posição: o
+                estado é reconstruído (sem nova ordem, contador +1, evento 11).
+                Cobre o reprocessamento do MESMO candle. NÃO cobre a perda de estado
+                numa barra posterior (continua ORFA). O log `NTSD` mede qual caso é.
+    1 s         sem relatório: NÃO SEI. Indício (fraco): as 7 entradas do 5 s só
+                aparecem em 05 e 06/10, o que sugere pouco histórico de segundos no
+                backtest. Ver o texto da tela no 1 s antes de concluir.
+    PENDENTE    `vwapvp_continuacao` e `ea_123_vb` têm o MESMO ramo ORFA e quase
+                certamente o mesmo defeito; não foram alterados porque o mecanismo
+                exato (mesmo candle ou barra seguinte) ainda não está medido. O
+                `z_agf_win` já reconstrói a barra de entrada, mas não tem o NTSD.
+
+**`NTSD` (diagnóstico, uma linha por avaliação com posição, sinal ou evento; sem `LastBarOnChart`):**
+`NTSD|Bar|Date|Time|Close|Pos|LadoAnt|LadoPos|Ops|BarsPos|Refrat|Lado|Status|Evento|AlvoPx|StopPx`
+Como ler: duas linhas com o MESMO `Bar` = reprocessamento do mesmo candle. `Pos = 1` com `LadoAnt = 0` e `Evento = 11` = o conserto agiu. `Evento = 9` = perda de estado fora do caso coberto.
+
 ## O que NÃO sei (nenhum item testado; é o que eu verificaria primeiro)
 
 [Chutando] ≈ 8 itens, por ordem de risco:
 
 1. **Compila?** Escrevi contra o manual e os `.ntsl` que já rodam. Nenhum compilador à mão. O primeiro erro de compilação é esperado.
-2. **Em que candle o reprocessamento pós-fill roda.** O manual (11.11) diz "reprocessa o mesmo candle para as ordens Cover"; assumi que é o candle em formação (t+1), com os níveis lidos de `[1]`. Se for o candle t, o estado do sinal se perde e a estratégia cai no ramo `ORFA` e fecha a posição que acabou de abrir.
+2. **Em que candle o reprocessamento pós-fill roda.** [CONFIRMADO que o estado se perde, 06/10; o candle exato falta medir com o NTSD.] O manual (11.11) diz "reprocessa o mesmo candle para as ordens Cover"; assumi que é o candle em formação (t+1), com os níveis lidos de `[1]`. Se for o candle t, o estado do sinal se perde e a estratégia cai no ramo `ORFA` e fecha a posição que acabou de abrir.
 3. **Reavaliação no meio do candle sem posição.** Se uma cover fechar a posição no meio de um candle, o código roda de novo com a barra PARCIAL. O guarda de relógio (`CurrentTime >= fim da barra`) cobre vwapvp e 123; na ignição o refratário de 30 min cobre.
 4. **OCO re-editada a cada barra.** Em 1 s isso pode virar enxurrada (`ModoSaidaOCO = 0` é a saída).
 5. **`DailyResult(False)` e taxas**: o `DescontarCusto` pode estar contando o custo em dobro ou não contando.

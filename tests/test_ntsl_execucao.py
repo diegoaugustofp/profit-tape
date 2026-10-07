@@ -190,3 +190,15 @@ def test_z_recursivo_igual_ao_zscore_rolante_do_research() -> None:
     assert ambos.sum() > 250
     assert np.array_equal(np.isnan(esperado), np.isnan(obtido))
     assert np.max(np.abs(esperado[ambos] - obtido[ambos])) < 1e-8
+
+
+def test_ignicao_detecta_antes_do_bloco_de_posicao() -> None:
+    """v4.35: o reprocessamento da barra de entrada precisa reconhecer o
+    proprio sinal, entao a deteccao (sLado) tem que estar calculada ANTES de
+    `if HasPosition`, e o ramo de reconstrucao precisa existir antes do ORFA."""
+    codigo = "\n".join(_codigo("ignicao.ntsl"))
+    assert codigo.index("sLado := 1;") < codigo.index("if HasPosition then")
+    recons = codigo.index("sEvento   := 11;")
+    orfa = codigo.index('ConsoleLog("NTSI|ORFA|"')
+    assert recons < orfa
+    assert "NTSD|" in codigo
