@@ -90,7 +90,7 @@ input
   SlackStopPts(50);          // limite do stop = stop -+ 50 (slack_limite_pts)
   ZerarBarraHHMM(1715);      // barra que FECHA as 17:30
   MinutosBarra(15);
-  BarrasPorDia(37);          // barras M15 por pregao no grafico
+  BarrasPorDia(38);          // barras M15 por pregao (09:00..18:15; MEDIDO 2026: 38 desde 15/02/2024)
   UsarGate(1);               // 1 = ficha 12 (volume baixo) | 0 = 123 puro
   GuardaRelogio(1);          // 1 = so' arma se CurrentTime >= fim da barra
   LogAtivo(1);
@@ -110,7 +110,7 @@ var
   nIndex, nOff, nI, nJ                                 : Integer;
   vals                                                 : array[1..20] of Float;
   bNovoDia, bCalcular, bJanela, bCompleta, bSaida      : Boolean;
-  bValido                                              : Boolean;
+  bValido, bSinal                                      : Boolean;
 begin
   //-------------------------------------------------------------------
   // LEITURAS POSICIONAIS: todas aqui, atribuicao simples.
@@ -220,6 +220,81 @@ begin
     bCompleta := (GuardaRelogio = 0) or (CurrentTime >= sFimBarra);
 
     //-----------------------------------------------------------------
+    // SINAL (puro, ANTES do bloco de posicao -- v4.40). O Profit
+    // reprocessa o candle de arme depois do fill da ordem STOP e o estado
+    // gravado nao esta' em [1] (medido: 10 ORFA no backtest de 30/09-06/10).
+    // O sinal e' deterministico (so' depende de dados da barra), entao ele
+    // se reconhece de novo. Nenhum efeito colateral: so' candidato, gate
+    // e motivo; bSinal = armaria agora.
+    //-----------------------------------------------------------------
+    bSinal := False;
+    bJanela := (sHora >= PrimeiroHHMM) and (sHora <= UltimoHHMM);
+    if (sDiaOk = 1) and (sData2 = sData) and bJanela then
+    begin
+      if (sLo1 < sLo2) and (sLo1 < sLow) then sPadC := 1;
+      if (sHi1 > sHi2) and (sHi1 > sHigh) then sPadV := 1;
+
+      if sPadC = 1 then
+      begin
+        if sClose > sMme then
+        begin
+          sRegime := 1;
+          sEntrada := sHigh + TickPts;
+          sD := sEntrada - (sLo1 - TickPts);
+          if sD >= DMinimoPts then
+            sLadoCand := 1
+          else
+            sMotivo := 4;
+        end
+        else
+          sMotivo := 3;
+      end;
+
+      if (sLadoCand = 0) and (sPadV = 1) then
+      begin
+        if sClose < sMme then
+        begin
+          sRegime := 1;
+          sEntrada := sLow - TickPts;
+          sD := (sHi1 + TickPts) - sEntrada;
+          if sD >= DMinimoPts then
+            sLadoCand := 0 - 1
+          else
+            sMotivo := 4;
+        end
+        else
+          sMotivo := 3;
+      end;
+
+      if sLadoCand <> 0 then
+      begin
+        sStopPx := sEntrada - sLadoCand * sD;
+        sAlvoPx := sEntrada + sLadoCand * sD;
+
+        // GATE
+        if UsarGate = 0 then
+          sGateOk := 1
+        else if sGateN < 20 then
+          sMotivo := 6
+        else if sVolTot < sMed then
+          sGateOk := 1
+        else
+          sMotivo := 5;
+
+        if (sGateOk = 1) and (not bCompleta) then
+          sMotivo := 8;
+
+        if (sGateOk = 1) and bCompleta then
+        begin
+          sMotivo := 1;
+          bSinal  := True;
+        end;
+      end;
+    end
+    else if not bJanela then
+      sMotivo := 2;
+
+    //-----------------------------------------------------------------
     // POSICAO ABERTA: ToCover (stop-limite + limitada) a cada candle.
     //-----------------------------------------------------------------
     if HasPosition then
@@ -228,9 +303,25 @@ begin
       bSaida := False;
       if (sLadoPos = 0) or (sNivStop = 0) or (sNivAlvo = 0) then
       begin
-        ConsoleLog("NT123|ORFA|" + sData + "|" + sHora + "|posicao sem niveis: ClosePosition");
-        bSaida := True;
-        sEvento := 9;
+        if bSinal then
+        begin
+          // v4.40: reprocessamento do candle de arme depois do fill.
+          // Reconstroi o estado que a avaliacao perdida teria gravado,
+          // SEM nova ordem (a entrada ja' encheu).
+          sLadoPos := sLadoCand;
+          sNivEnt  := sEntrada;
+          sNivStop := sStopPx;
+          sNivAlvo := sAlvoPx;
+          sArmBar  := CurrentBar;
+          sMotivo  := 1;
+          sEvento  := 11;
+        end
+        else
+        begin
+          ConsoleLog("NT123|ORFA|" + sData + "|" + sHora + "|posicao sem niveis: ClosePosition");
+          bSaida := True;
+          sEvento := 9;
+        end;
       end
       else if sHora >= ZerarBarraHHMM then
       begin
@@ -247,6 +338,9 @@ begin
         bSaida := True;
         sEvento := 6;
       end;
+
+      if sEvento <> 11 then
+        sMotivo := 7;               // com posicao: sinal nao arma
 
       if bSaida then
         ClosePosition
@@ -279,82 +373,21 @@ begin
         CancelPendingOrders;
 
       //---------------------------------------------------------------
-      // SINAL: formula do research, na ordem do funil.
+      // ARMAR: o sinal ja' foi calculado acima.
       //---------------------------------------------------------------
-      bJanela := (sHora >= PrimeiroHHMM) and (sHora <= UltimoHHMM);
-      if (sDiaOk = 1) and (sData2 = sData) and bJanela then
+      if bSinal then
       begin
-        if (sLo1 < sLo2) and (sLo1 < sLow) then sPadC := 1;
-        if (sHi1 > sHi2) and (sHi1 > sHigh) then sPadV := 1;
-
-        if sPadC = 1 then
-        begin
-          if sClose > sMme then
-          begin
-            sRegime := 1;
-            sEntrada := sHigh + TickPts;
-            sD := sEntrada - (sLo1 - TickPts);
-            if sD >= DMinimoPts then
-              sLadoCand := 1
-            else
-              sMotivo := 4;
-          end
-          else
-            sMotivo := 3;
-        end;
-
-        if (sLadoCand = 0) and (sPadV = 1) then
-        begin
-          if sClose < sMme then
-          begin
-            sRegime := 1;
-            sEntrada := sLow - TickPts;
-            sD := (sHi1 + TickPts) - sEntrada;
-            if sD >= DMinimoPts then
-              sLadoCand := 0 - 1
-            else
-              sMotivo := 4;
-          end
-          else
-            sMotivo := 3;
-        end;
-
-        if sLadoCand <> 0 then
-        begin
-          sStopPx := sEntrada - sLadoCand * sD;
-          sAlvoPx := sEntrada + sLadoCand * sD;
-
-          // GATE
-          if UsarGate = 0 then
-            sGateOk := 1
-          else if sGateN < 20 then
-            sMotivo := 6
-          else if sVolTot < sMed then
-            sGateOk := 1
-          else
-            sMotivo := 5;
-
-          if (sGateOk = 1) and (not bCompleta) then
-            sMotivo := 8;
-
-          if (sGateOk = 1) and bCompleta then
-          begin
-            sMotivo := 1;
-            sEvento := 1;
-            sLadoPos := sLadoCand;
-            sNivEnt  := sEntrada;
-            sNivStop := sStopPx;
-            sNivAlvo := sAlvoPx;
-            sArmBar  := CurrentBar;
-            if sLadoCand > 0 then
-              BuyStop(sEntrada, sEntrada + SlackStopPts, Lote)
-            else
-              SellShortStop(sEntrada, sEntrada - SlackStopPts, Lote);
-          end;
-        end;
-      end
-      else if not bJanela then
-        sMotivo := 2;
+        sEvento  := 1;
+        sLadoPos := sLadoCand;
+        sNivEnt  := sEntrada;
+        sNivStop := sStopPx;
+        sNivAlvo := sAlvoPx;
+        sArmBar  := CurrentBar;
+        if sLadoCand > 0 then
+          BuyStop(sEntrada, sEntrada + SlackStopPts, Lote)
+        else
+          SellShortStop(sEntrada, sEntrada - SlackStopPts, Lote);
+      end;
     end;
 
     //-----------------------------------------------------------------
@@ -362,8 +395,9 @@ begin
     // ultimo candle do grafico (M15: ~37 linhas/dia).
     // Motivo: 0 sem padrao | 1 ARMOU | 2 fora_janela | 3 regime
     //         | 4 D<minimo | 5 gate reprovou | 6 gate indefinido
-    //         | 8 barra incompleta
+    //         | 7 com posicao (v4.40) | 8 barra incompleta
     // Evento: 1 armou | 4 zeragem | 6 protecao do stop | 9 orfa
+    //         | 11 estado reconstruido (v4.40)
     //-----------------------------------------------------------------
     // DIAGNOSTICO (v4.39, nao altera ordens nem estado): toda barra da
     // janela em que o padrao 123 apareceu (ou houve evento), com o funil

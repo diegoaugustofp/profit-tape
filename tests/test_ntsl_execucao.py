@@ -214,10 +214,10 @@ def test_vwapvp_reconhece_o_proprio_sinal_antes_do_bloco_de_posicao() -> None:
 
 
 def test_123_nao_tem_o_defeito_do_reprocessamento_do_mesmo_candle() -> None:
-    """O 123 entra por ordem STOP: o fill acontece em t+1 e o estado foi
-    gravado em t (slot [1]). Este teste so' registra a premissa para nao
-    mexer no arquivo sem medir: se o backtest do 123 mostrar ORFA, a premissa
-    caiu e o ramo de reconstrucao precisa ser portado."""
+    """HISTORICO: a premissa era "entrada STOP enche em t+1 com estado gravado
+    em t". FALSA (v4.40: 10 ORFA no backtest). Fica so' o fato estrutural: a
+    entrada continua sendo ordem STOP, nao a mercado. O conserto tem os testes
+    `test_123_sinal_puro_...` abaixo."""
     codigo = "\n".join(_codigo("ea_123_vb.ntsl"))
     assert "BuyStop(" in codigo and "BuyAtMarket" not in codigo
 
@@ -311,3 +311,34 @@ def test_123_contador_de_barras_do_dia_e_recursivo_e_le_posicional_no_topo() -> 
     texto = "\n".join(_codigo("ea_123_vb.ntsl"))
     assert "sBarDia   := sBarDia[1];" in texto
     assert "sBarDia := sBarDia + 1" in texto
+
+
+# --------------------------------------------------------------------------
+# v4.40: o 123 TEM o defeito do reprocessamento (backtest 30/09-06/10 com
+# BarrasPorDia 38: 23 armadas, 10 eventos ORFA em 5 trades). Mesmo conserto do
+# ignicao/vwapvp: sinal puro antes do bloco de posicao + reconstrucao sem ordem.
+# --------------------------------------------------------------------------
+def test_123_sinal_puro_antes_do_bloco_de_posicao_e_reconstrucao_antes_do_orfa() -> None:
+    linhas = _codigo("ea_123_vb.ntsl")
+    i_sinal = next(k for k, ln in enumerate(linhas) if "bSinal := False" in ln)
+    i_pos = next(k for k, ln in enumerate(linhas) if re.match(r"\s*if HasPosition then", ln))
+    assert i_sinal < i_pos
+    i_recons = next(k for k, ln in enumerate(linhas) if "sEvento  := 11" in ln)
+    i_orfa = next(k for k, ln in enumerate(linhas) if "NT123|ORFA|" in ln)
+    assert i_pos < i_recons < i_orfa
+
+
+def test_123_o_sinal_puro_nao_envia_ordem_e_a_reconstrucao_nao_manda_nova_entrada() -> None:
+    linhas = _codigo("ea_123_vb.ntsl")
+    i_sinal = next(k for k, ln in enumerate(linhas) if "bSinal := False" in ln)
+    i_pos = next(k for k, ln in enumerate(linhas) if re.match(r"\s*if HasPosition then", ln))
+    bloco_sinal = "\n".join(linhas[i_sinal:i_pos])
+    for ordem in ("BuyStop", "SellShortStop", "ClosePosition", "ToCover", "CancelPendingOrders"):
+        assert ordem not in bloco_sinal
+    i_recons = next(k for k, ln in enumerate(linhas) if "sEvento  := 11" in ln)
+    janela = "\n".join(linhas[i_recons - 10 : i_recons + 2])
+    assert "BuyStop" not in janela and "SellShortStop" not in janela
+
+
+def test_123_barras_por_dia_default_e_o_medido_38() -> None:
+    assert re.search(r"BarrasPorDia\(38\)", "\n".join(_codigo("ea_123_vb.ntsl")))

@@ -263,6 +263,20 @@ Backtest WINFUT M15, 30/09–06/10, `GuardaRelogio = 0`: **0 operações**. O co
 Se `BarrasDoDia` ≠ 37, trocar `BarrasPorDia` é mudança de parâmetro com pré-registro próprio (mecanismo de alinhamento do perfil, não calibração de número).
 Carimbo novo: `ea_123_vb.ntsl` sha256 `172244413fd5…` (nunca contou).
 
+## 123: `BarrasPorDia` medido e ORFA confirmado (2026-10-07, v4.40)
+
+**Barras por pregão (M15 WINFUT, console completo 2015–06/10/2026, 2.718 pregões, `NT123|DIA`):** 36 (último 17:45) no horário de verão americano; 37 (18:00) em 2015–2020 no inverno; **38 (18:15) em todo o período desde 15/02/2024** (e no inverno desde 2020).
+Pregões curtos isolados desde 2024: Quarta de Cinzas (22 barras, abre às 13:00), 21/08/2025 (35), 31/07/2026 (24). `BarrasPorDia = 37` NUNCA batia: o gate ficava indefinido em 100% das barras (`GateN = 0`, `Med = 0`, 113 padrões 24/09–06/10 bloqueados em `Motivo 6` ou `3`). [Certo] Essa foi a causa dos zero trades.
+**Default agora 38** (alinhamento com o que o Profit entrega, medida, não calibração). Falha fechada: pregão curto ⇒ gate indefinido nos 20 pregões seguintes (1 a 3 eventos por ano ≈ 20–60 pregões), nunca sinal errado. A janela 30/09–06/10 tem 45 pregões de 38 barras desde 03/08, então o gate vale.
+
+**Com 38 (`GuardaRelogio = 0`, `CalcDataInicio = 1260924`, 24/09–06/10):** `GateN = 20` e `Med > 0` nas 123 barras com padrão; 23 armadas (`Motivo 1`), 38 reprovadas pelo gate (`Motivo 5`), 52 por regime (`Motivo 3`), 10 por `Evento 9` (ORFA).
+**[Certo] ORFA no 123:** as 10 linhas `Evento 9` vêm em 5 pares (a barra de arme e a seguinte: 30/09 10:45/11:00, 11:45/12:00, 13:00/13:15, 15:30/15:45 e 06/10 14:00/14:15). A premissa registrada na v4.36 ("o STOP enche em t+1 com estado gravado em t") era FALSA: o Profit reprocessa o candle de arme depois do fill e o estado gravado não está em `[1]`, o mesmo mecanismo do ignicao/vwapvp. Cada ORFA fechava a posição na hora.
+
+**Conserto (v4.40, mesmo padrão da v4.35/v4.36):** o sinal é calculado ANTES do bloco de posição (puro, sem ordens); com posição e estado ausente, se o sinal se reproduz, o estado é reconstruído SEM nova ordem (`Evento 11`); senão ORFA como antes. `Motivo 7` = com posição.
+Risco declarado: uma posição órfã de outra origem pode ser "reconstruída" com o candidato de uma barra que por acaso tenha sinal (o `Evento 11` aparece no log e no `NT123D`).
+**NÃO coberto:** nunca compilado nem rodado depois do conserto; não sei se o preenchimento do STOP no simulador é o do mercado; o backtest antigo (5 pares ORFA) não conta, nem o novo.
+Carimbo novo: `ea_123_vb.ntsl` sha256 `a33f82b505f0…` (nunca contou). Formato `NT123D`/`NT123|DIA` da v4.39 inalterado; `Evento 11` = reconstruído.
+
 ## O que NÃO sei (nenhum item testado; é o que eu verificaria primeiro)
 
 [Chutando] ≈ 8 itens, por ordem de risco:

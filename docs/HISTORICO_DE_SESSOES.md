@@ -5418,3 +5418,8 @@ Backtest do 123 (M15, 30/09–06/10, relógio 0): 0 operações, sem log útil. 
 
 Entregue: logs `NT123D` e `NT123|DIA` no `ea_123_vb` (só diagnóstico, input `LogDiag`), 2 testes, seção em `NTSL_PORTE_EAS.md`. Nenhuma regra mudou. **Não compilado.** **Tags:** entregue-v4.39 (sobre v4.38).
 
+### 2026-10-07c — 123: BarrasPorDia 38 medido, ORFA confirmado (v4.40)
+
+Console completo do 123 (M15, 2015–2026): 38 barras por pregão desde 15/02/2024 (36/37/38 antes); `BarrasPorDia = 37` nunca batia, o gate ficava indefinido em tudo (113 padrões, `GateN = 0`). Com 38: `GateN = 20`, 23 armadas, 38 reprovadas pelo gate de volume, 52 por regime, e 10 eventos ORFA em 5 pares ⇒ a premissa "o 123 não tem o defeito do reprocessamento" (v4.36) era falsa.
+Entregue: `ea_123_vb.ntsl` com sinal puro antes do bloco de posição, reconstrução sem nova ordem (evento 11) e `BarrasPorDia` default 38; 3 testes estruturais. Backtests são depuração, não contam. **Não compilado.** **Tags:** entregue-v4.40 (sobre v4.39).
+
