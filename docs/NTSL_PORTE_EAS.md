@@ -163,10 +163,23 @@ Diego rodou o `ignicao` em backtest (30/09–06/10) nos gráficos de 5 s (`Barra
     1 s         sem relatório: NÃO SEI. Indício (fraco): as 7 entradas do 5 s só
                 aparecem em 05 e 06/10, o que sugere pouco histórico de segundos no
                 backtest. Ver o texto da tela no 1 s antes de concluir.
-    PENDENTE    `vwapvp_continuacao` e `ea_123_vb` têm o MESMO ramo ORFA e quase
-                certamente o mesmo defeito; não foram alterados porque o mecanismo
-                exato (mesmo candle ou barra seguinte) ainda não está medido. O
-                `z_agf_win` já reconstrói a barra de entrada, mas não tem o NTSD.
+    MEDIDO      (2º backtest, 5 s, v4.35) NTSD: em TODAS as 7 entradas, `Evento 10` (Pos 0) e
+                `Evento 11` (Pos 1, LadoAnt 0) no MESMO `Bar`: o Profit reprocessa o MESMO
+                candle depois do fill. Zero ORFA; durações 9–177 barras = o CSV, uma a uma;
+                saídas nos níveis (4 alvos, 3 stops), máx. 4 ordens/dia. Resultado bruto
+                +R$ 44 (+220 pts), deslizamento médio da entrada contra o nível de detecção
+                +44 pts (fill do simulador, NÃO conta para a ficha). Amostra de DEPURAÇÃO.
+    CONTAGEM    carimbo `ignicao.ntsl` sha256 `30248ebe0439…`; só vale em simulador AO VIVO,
+                a partir do próximo pregão. Backtest nunca conta. As 7 entradas de 05–06/10
+                (13:57, 15:08, 16:30, 09:20, 10:11, 10:45, 11:56) ficam como lista de
+                conferência contra o `ea-ignicao-replay` do Python, quando o tape voltar.
+    v4.36       `vwapvp_continuacao` entra a MERCADO no fechamento da barra do sinal, como o
+                ignicao: mesma exposição, mesmo conserto (sinal calculado antes do bloco de
+                posição + reconstrução, evento 11). `ea_123_vb` NÃO foi alterado: a entrada é
+                ordem STOP que enche em t+1 e o estado foi gravado em t, então o reprocessamento
+                lê o estado em [1]. É PREMISSA, não medida: se o 1º backtest do 123 mostrar
+                `NT123|ORFA|`, ela caiu. `z_agf_win` (entrada a mercado) já reconstrói a barra
+                de entrada, mas não tem o NTSD.
 
 **`NTSD` (diagnóstico, uma linha por avaliação com posição, sinal ou evento; sem `LastBarOnChart`):**
 `NTSD|Bar|Date|Time|Close|Pos|LadoAnt|LadoPos|Ops|BarsPos|Refrat|Lado|Status|Evento|AlvoPx|StopPx`
@@ -177,7 +190,7 @@ Como ler: duas linhas com o MESMO `Bar` = reprocessamento do mesmo candle. `Pos 
 [Chutando] ≈ 8 itens, por ordem de risco:
 
 1. **Compila?** Escrevi contra o manual e os `.ntsl` que já rodam. Nenhum compilador à mão. O primeiro erro de compilação é esperado.
-2. **Em que candle o reprocessamento pós-fill roda.** [CONFIRMADO que o estado se perde, 06/10; o candle exato falta medir com o NTSD.] O manual (11.11) diz "reprocessa o mesmo candle para as ordens Cover"; assumi que é o candle em formação (t+1), com os níveis lidos de `[1]`. Se for o candle t, o estado do sinal se perde e a estratégia cai no ramo `ORFA` e fecha a posição que acabou de abrir.
+2. **Em que candle o reprocessamento pós-fill roda.** [CONFIRMADO em 06/10 (NTSD, ignicao): é o MESMO candle, reprocessado depois do fill.] O manual (11.11) diz "reprocessa o mesmo candle para as ordens Cover"; assumi que é o candle em formação (t+1), com os níveis lidos de `[1]`. Se for o candle t, o estado do sinal se perde e a estratégia cai no ramo `ORFA` e fecha a posição que acabou de abrir.
 3. **Reavaliação no meio do candle sem posição.** Se uma cover fechar a posição no meio de um candle, o código roda de novo com a barra PARCIAL. O guarda de relógio (`CurrentTime >= fim da barra`) cobre vwapvp e 123; na ignição o refratário de 30 min cobre.
 4. **OCO re-editada a cada barra.** Em 1 s isso pode virar enxurrada (`ModoSaidaOCO = 0` é a saída).
 5. **`DailyResult(False)` e taxas**: o `DescontarCusto` pode estar contando o custo em dobro ou não contando.

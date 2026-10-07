@@ -202,3 +202,21 @@ def test_ignicao_detecta_antes_do_bloco_de_posicao() -> None:
     orfa = codigo.index('ConsoleLog("NTSI|ORFA|"')
     assert recons < orfa
     assert "NTSD|" in codigo
+
+
+def test_vwapvp_reconhece_o_proprio_sinal_antes_do_bloco_de_posicao() -> None:
+    """v4.36: mesmo reprocessamento da barra de entrada do ignicao. O sinal
+    (sArma) tem que estar calculado ANTES de `if HasPosition`, e o ramo de
+    reconstrucao (evento 11) tem que vir antes do ORFA."""
+    codigo = "\n".join(_codigo("vwapvp_continuacao.ntsl"))
+    assert codigo.index("sArma := 1;") < codigo.index("if HasPosition then")
+    assert codigo.index("sEvento  := 11;") < codigo.index('ConsoleLog("NTSV|ORFA|"')
+
+
+def test_123_nao_tem_o_defeito_do_reprocessamento_do_mesmo_candle() -> None:
+    """O 123 entra por ordem STOP: o fill acontece em t+1 e o estado foi
+    gravado em t (slot [1]). Este teste so' registra a premissa para nao
+    mexer no arquivo sem medir: se o backtest do 123 mostrar ORFA, a premissa
+    caiu e o ramo de reconstrucao precisa ser portado."""
+    codigo = "\n".join(_codigo("ea_123_vb.ntsl"))
+    assert "BuyStop(" in codigo and "BuyAtMarket" not in codigo

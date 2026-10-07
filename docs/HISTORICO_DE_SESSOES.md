@@ -5383,3 +5383,14 @@ teste estrutural da ordem; `NTSL_PORTE_EAS.md` com o achado, o conserto, o que e
 
 **Não compilado.** **Tags:** entregue-v4.35 (sobre v4.34).
 
+### 2026-10-06d — Conserto medido e estendido ao vwapvp (v4.36)
+
+Segundo backtest do `ignicao` (5 s) com a v4.35: 7 operações, zero ORFA, 9–177 barras (= CSV), saídas em alvo (4) e stop (3), no máximo 4 por dia; o NTSD mostrou `Evento 10` e `11` no mesmo `Bar`:
+o Profit reprocessa o MESMO candle depois do fill. Resultado bruto +R$ 44, deslizamento de entrada médio +44 pts no simulador (amostra de depuração; não conta, não serve ao critério de livro ao vivo da ficha).
+Dois PDFs enviados antes eram o mesmo relatório antigo (md5 igual, criado às 19:16); o Diego mandou os corretos em seguida.
+
+Entregue: `vwapvp_continuacao.ntsl` com o mesmo conserto (sinal calculado antes do bloco de posição; reconstrução na barra de entrada reprocessada, evento 11); dois testes (ordem do código no vwapvp e a premissa do 123).
+`ea_123_vb` não foi alterado (entrada STOP enche em t+1; premissa registrada, a medir). Contagem do `ignicao` NTSL: carimbo `30248ebe0439…`, só simulador ao vivo, a partir de 07/10.
+
+**Não compilado.** **Tags:** entregue-v4.36 (sobre v4.35).
+

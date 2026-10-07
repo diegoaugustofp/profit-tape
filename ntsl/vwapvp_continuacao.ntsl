@@ -42,6 +42,11 @@
 //      o log imprime o valor cru (campo DeltaRes) para voce conferir.
 //   6. Bloqueio/contadores recomecam em zero se a automacao for ligada
 //      no meio do dia. Ligue ANTES das 11:00.
+//   7. v4.36: o Profit reprocessa o MESMO candle depois do fill (medido no
+//      ignicao). A barra de entrada reprocessada reconhece o proprio sinal e
+//      reconstroi o estado (evento 11) em vez de cair no ramo ORFA, que
+//      fechava a posicao na hora. Se o estado se perder DEPOIS, o ORFA
+//      continua fechando por seguranca.
 //
 // COMO LIGAR (Automacao de estrategias, grafico WINFUT M5)
 //   - Modo: "Realizar envio de ordens no FECHAMENTO DO CANDLE".
@@ -187,10 +192,44 @@ begin
     end;
 
     //-----------------------------------------------------------------
-    // POSICAO ABERTA: gerencia saidas. Nada de sinal novo aqui.
+    // SINAL (puro, ANTES do bloco de posicao -- v4.35/v4.36: o
+    // reprocessamento da barra de entrada precisa reconhecer o proprio
+    // sinal). Ordem dos filtros = a do Python. Nenhum efeito colateral.
     //-----------------------------------------------------------------
     sFimBarra := CalcTime(sHora, MinutosBarra);
     bCompleta := (GuardaRelogio = 0) or (CurrentTime >= sFimBarra);
+    sLadoSinal := 0;
+    sDist := 0;
+    bBanda := (sZ >= ZBanda) or (sZ <= 0 - ZBanda);
+    bJanela := (sHora >= JanelaIniHHMM) and (sHora < JanelaFimHHMM);
+
+    if bBanda and (sSd > 0) then
+    begin
+      if sZ > 0 then sLadoSinal := 1 else sLadoSinal := 0 - 1;
+      sDist := Close - sVwap;
+      if sDist < 0 then sDist := 0 - sDist;
+
+      if not bJanela then
+        sMotivo := 2
+      else if (LadoPermitido <> 0) and (LadoPermitido <> sLadoSinal) then
+        sMotivo := 3
+      else if sBloq = 1 then
+        sMotivo := 4
+      else if sOps >= MaxOpsDia then
+        sMotivo := 6
+      else if (CurrentBar - sUltBar) < CooldownBarras then
+        sMotivo := 7
+      else if sDist <= 0 then
+        sMotivo := 8
+      else if not bCompleta then
+        sMotivo := 9
+      else
+        sArma := 1;
+    end;
+
+    //-----------------------------------------------------------------
+    // POSICAO ABERTA: gerencia saidas. Nada de sinal novo aqui.
+    //-----------------------------------------------------------------
     sPos := 0;
     if HasPosition then
     begin
@@ -198,13 +237,30 @@ begin
       sBarsPos := sBarsPos + 1;
       bSaida := False;
 
-      // niveis nao guardados (ligou com posicao antiga, ou o contexto de
-      // reprocessamento perdeu o estado): NAO inventa nivel. Zera.
       if (sLadoPos = 0) or (sAlvoPx = 0) or (sStopPx = 0) then
       begin
-        ConsoleLog("NTSV|ORFA|" + sData + "|" + sHora + "|posicao sem niveis: ClosePosition");
-        bSaida := True;
-        sEvento := 9;
+        if (sArma = 1) and (sBarsPos <= 1) then
+        begin
+          // v4.36: REPROCESSAMENTO DA BARRA DE ENTRADA (medido no ignicao,
+          // v4.35: o Profit reprocessa o MESMO candle depois do fill e o
+          // estado gravado antes nao esta' em [1]). O sinal e'
+          // deterministico: reconhece-se de novo e reconstroi o estado que
+          // a avaliacao perdida gravaria, SEM nova ordem.
+          sLadoPos := sLadoSinal;
+          sAlvoPx  := Round2Fraction(Close + sLadoSinal * AlvoSd * sSd);
+          sStopPx  := Round2Fraction(Close - sLadoSinal * StopFracDist * sDist);
+          sOps     := sOps + 1;
+          sUltBar  := CurrentBar;
+          sBarsPos := 0;
+          sMotivo  := 1;
+          sEvento  := 11;
+        end
+        else
+        begin
+          ConsoleLog("NTSV|ORFA|" + sData + "|" + sHora + "|posicao sem niveis: ClosePosition");
+          bSaida := True;
+          sEvento := 9;
+        end;
       end
       else if sBarsPos >= TempoMaxBarras then
       begin
@@ -232,41 +288,19 @@ begin
           BuyToCoverLimit(sAlvoPx, Lote);
         end;
       end;
+
+      // com posicao o campo Motivo do log fica 0, como na v4.33 (a
+      // reconstrucao mantem Motivo = 1).
+      if sEvento <> 11 then
+      begin
+        sMotivo := 0;
+        sArma := 0;
+      end;
     end
     else
     begin
       sBarsPos := 0;
       sLadoPos := 0; sAlvoPx := 0; sStopPx := 0;
-
-      //---------------------------------------------------------------
-      // SINAL (so' sem posicao). Ordem dos filtros = a do Python.
-      //---------------------------------------------------------------
-      bBanda := (sZ >= ZBanda) or (sZ <= 0 - ZBanda);
-      bJanela := (sHora >= JanelaIniHHMM) and (sHora < JanelaFimHHMM);
-
-      if bBanda and (sSd > 0) then
-      begin
-        if sZ > 0 then sLadoSinal := 1 else sLadoSinal := 0 - 1;
-        sDist := Close - sVwap;
-        if sDist < 0 then sDist := 0 - sDist;
-
-        if not bJanela then
-          sMotivo := 2
-        else if (LadoPermitido <> 0) and (LadoPermitido <> sLadoSinal) then
-          sMotivo := 3
-        else if sBloq = 1 then
-          sMotivo := 4
-        else if sOps >= MaxOpsDia then
-          sMotivo := 6
-        else if (CurrentBar - sUltBar) < CooldownBarras then
-          sMotivo := 7
-        else if sDist <= 0 then
-          sMotivo := 8
-        else if not bCompleta then
-          sMotivo := 9
-        else
-          sArma := 1;
-      end;
 
       if sArma = 1 then
       begin
@@ -290,6 +324,7 @@ begin
     // Motivo: 0 fora_banda | 1 ARMOU | 2 fora_janela | 3 lado | 4 bloqueado
     //         | 6 max_ops | 7 cooldown | 8 sem_dist | 9 barra_incompleta
     // Evento: 0 nada | 1 entrada | 3 saiu por tempo | 4 zeragem | 9 orfa
+    //         | 11 estado reconstruido (v4.36)
     //-----------------------------------------------------------------
     if (LogAtivo = 1) and LastBarOnChart then
     begin
