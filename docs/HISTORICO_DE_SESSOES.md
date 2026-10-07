@@ -5402,3 +5402,11 @@ e saiu a −240 pts; +1.215 pts no total, 130% numa única operação (n = 4, se
 
 Entregue: log `NTSVD` no vwapvp (High/Low, níveis, `HasPendingOrders` após o envio, sem `LastBarOnChart`) e a seção de achados em `NTSL_PORTE_EAS.md`. Nenhuma regra mudou. **Não compilado.** **Tags:** entregue-v4.37 (sobre v4.36).
 
+### 2026-10-07 — Passadas do backtest e alarme ALVO_CRUZADO (v4.38)
+
+Diego reproduziu: primeira execução do vwapvp dá 4 operações, atualizar dá 6; hipótese dele: dado não atualizado. Console das duas execuções (vwapvp e ignicao): o Profit roda várias passadas, os candles são idênticos (0 divergências em 1.829 barras),
+mas nas passadas iniciais o ToCover existe (`Pend=1`), o preço cruza o alvo e não há fill; saídas só por tempo. Passadas finais estáveis: vwapvp 6 operações (alvo 5, stop 1), ignicao 7. As linhas `NTSV` −251 e +414 eram a passada 0 e as finais. Hipótese de dado incompleto refutada nos candles; causa [Chutando].
+Regra registrada: só vale a lista das duas últimas passadas, idênticas, sem avisos de ToCover.
+
+Entregue: alarme `ALVO_CRUZADO` no ignicao e no vwapvp (só diagnóstico, input `AlarmeCruzado`), 7 testes novos (espelho do comportamento, nada de ordem/estado no bloco, Float no log), seção em `NTSL_PORTE_EAS.md`, carimbos novos (ignicao `0da080ab35cb…`, vwapvp `6891f8a2db47…`; contagem do ignicao ainda não começou).
+Backtests são depuração, não contam. **Não compilado.** **Tags:** entregue-v4.38 (sobre v4.37).

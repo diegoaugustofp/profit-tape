@@ -79,6 +79,7 @@ input
   HeartbeatBarras(300);      // uma linha de vida a cada N barras (0 = nunca)
   LogDiag(1);                // 1 = linha NTSD a cada avaliacao com posicao/deteccao
                              // (NAO depende de LastBarOnChart: aparece no backtest)
+  AlarmeCruzado(1);          // 1 = linha NTSI|ALVO_CRUZADO (v4.38, so' diagnostico)
 
 var
   sData, sDataAnt, sDataRef, sHora                 : Float;
@@ -283,6 +284,22 @@ begin
       + "|" + sPos + "|" + sLadoAnt + "|" + sLadoPos + "|" + sOps
       + "|" + sBarsPos + "|" + sRefrat + "|" + sLado + "|" + sStatus
       + "|" + sEvento + "|" + sAlvoPx + "|" + sStopPx);
+  end;
+
+  // ALARME DE EXECUCAO (v4.38, SO' diagnostico, nao altera ordens nem
+  // estado). Posicao ainda aberta num candle POSTERIOR ao de entrada
+  // (BarsPos >= 1) cujo High/Low cruzou alvo ou stop = a ordem ToCover nao
+  // executou. Medido em 06/10: na 1a passada do backtest isso acontece
+  // (Pend=1, preco cruzou, sem fill); nas passadas finais nunca. Ao vivo,
+  // uma linha destas e' DEFEITO DE EXECUCAO: parar e nao contar.
+  if (AlarmeCruzado = 1) and HasPosition and (sBarsPos >= 1) and (sAlvoPx > 0) then
+  begin
+    sBar := CurrentBar;
+    if ((sLadoPos > 0) and ((sHigh >= sAlvoPx) or (sLow <= sStopPx)))
+       or ((sLadoPos < 0) and ((sLow <= sAlvoPx) or (sHigh >= sStopPx))) then
+      ConsoleLog("NTSI|ALVO_CRUZADO|" + sData + "|" + sHora + "|" + sBar
+        + "|" + sLadoPos + "|" + sAlvoPx + "|" + sStopPx + "|" + sHigh
+        + "|" + sLow + "|" + sBarsPos);
   end;
 
   if (LogAtivo = 1) and LastBarOnChart then

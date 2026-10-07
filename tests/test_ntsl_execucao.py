@@ -220,3 +220,71 @@ def test_123_nao_tem_o_defeito_do_reprocessamento_do_mesmo_candle() -> None:
     caiu e o ramo de reconstrucao precisa ser portado."""
     codigo = "\n".join(_codigo("ea_123_vb.ntsl"))
     assert "BuyStop(" in codigo and "BuyAtMarket" not in codigo
+
+
+# --------------------------------------------------------------------------
+# v4.38: alarme ALVO_CRUZADO (so' diagnostico). Achado de 06/10: na 1a
+# passada do backtest o ToCover existe (Pend=1), o preco cruza o alvo e nao
+# ha' fill; nas passadas finais nunca. O alarme torna isso visivel ao vivo.
+# --------------------------------------------------------------------------
+ALARMADOS = ["ignicao.ntsl", "vwapvp_continuacao.ntsl"]
+
+
+def _bloco_alarme(nome: str) -> list[str]:
+    linhas = _codigo(nome)
+    ini = next(i for i, ln in enumerate(linhas) if "AlarmeCruzado = 1" in ln)
+    fim = next(i for i in range(ini, len(linhas)) if "ConsoleLog" in linhas[i])
+    while ";" not in linhas[fim]:
+        fim += 1
+    return linhas[ini : fim + 1]
+
+
+def _alarme_py(lado: float, alvo: float, stop: float, hi: float, lo: float,
+               bars_pos: float, tem_pos: bool = True) -> bool:
+    """Espelho da condicao do .ntsl."""
+    if not (tem_pos and bars_pos >= 1 and alvo > 0):
+        return False
+    if lado > 0:
+        return hi >= alvo or lo <= stop
+    if lado < 0:
+        return lo <= alvo or hi >= stop
+    return False
+
+
+@pytest.mark.parametrize("nome", ALARMADOS)
+def test_alarme_existe_default_ligado_e_so_na_barra_posterior_a_entrada(nome: str) -> None:
+    texto = "\n".join(_codigo(nome))
+    assert re.search(r"AlarmeCruzado\(1\)", texto)
+    bloco = "\n".join(_bloco_alarme(nome))
+    assert "sBarsPos >= 1" in bloco and "HasPosition" in bloco
+
+
+@pytest.mark.parametrize("nome", ALARMADOS)
+def test_alarme_nao_altera_estado_nem_envia_ordem(nome: str) -> None:
+    bloco = "\n".join(_bloco_alarme(nome))
+    atribuicoes = re.findall(r"(\w+)\s*:=", bloco)
+    assert set(atribuicoes) <= {"sBar"}, atribuicoes
+    for ordem in ("BuyAtMarket", "SellShortAtMarket", "ClosePosition", "ToCover"):
+        assert ordem not in bloco
+
+
+@pytest.mark.parametrize("nome", ALARMADOS)
+def test_alarme_usa_float_no_consolelog_e_nao_depende_de_lastbaronchart(nome: str) -> None:
+    bloco = "\n".join(_bloco_alarme(nome))
+    log = bloco[bloco.index("ConsoleLog"):]
+    assert "CurrentBar" not in log and "sBar" in log
+    assert "LastBarOnChart" not in bloco
+
+
+def test_alarme_comportamento_na_mao() -> None:
+    # compra, alvo 100, stop 90: barra posterior com High 101 cruza o alvo
+    assert _alarme_py(1, 100, 90, 101, 95, 1)
+    # venda, alvo 100, stop 110: Low 99 cruza o alvo; High 111 cruza o stop
+    assert _alarme_py(-1, 100, 110, 105, 99, 2)
+    assert _alarme_py(-1, 100, 110, 111, 105, 2)
+    # sem cruzar: nada
+    assert not _alarme_py(1, 100, 90, 99, 91, 3)
+    # barra de entrada (BarsPos 0): faixa inclui o pre-fill, nao alarma
+    assert not _alarme_py(1, 100, 90, 101, 95, 0)
+    # sem posicao: nada (fill normal do ToCover)
+    assert not _alarme_py(1, 100, 90, 101, 95, 1, tem_pos=False)

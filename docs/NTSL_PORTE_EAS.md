@@ -206,6 +206,38 @@ Ler: se `High`/`Low` cruzaram `AlvoPx`/`StopPx` e a posição continuou, o ToCov
 `NTSD|Bar|Date|Time|Close|Pos|LadoAnt|LadoPos|Ops|BarsPos|Refrat|Lado|Status|Evento|AlvoPx|StopPx`
 Como ler: duas linhas com o MESMO `Bar` = reprocessamento do mesmo candle. `Pos = 1` com `LadoAnt = 0` e `Evento = 11` = o conserto agiu. `Evento = 9` = perda de estado fora do caso coberto.
 
+## Regra das passadas do backtest e alarme `ALVO_CRUZADO` (2026-10-07, v4.38)
+
+**Medido (6/10, console do vwapvp e do ignicao, primeira x segunda execução):** o editor de estratégia do Profit roda o backtest em VÁRIAS passadas (o console repete o histórico inteiro).
+Na primeira execução do vwapvp foram 3 passadas (1.864, 1.835, 1.835 linhas); na segunda, 2 (1.835, 1.835). No ignicao: 4 passadas (3.469, 1.935, 362, 362) contra 2 (362, 362).
+
+    [Certo] Candles iguais: nas 1.829 barras comuns à passada 0 e à 1 do vwapvp, High, Low, Close, z, SD e VWAP
+            não diferem (0 divergências). A hipótese "dado incompleto" NÃO explica a diferença.
+    [Certo] Passada 0 do vwapvp: `Pend = 1`, o preço cruzou o alvo (30/09 15:00, High 188.760 contra alvo 188.750)
+            e a posição seguiu aberta; as 4 saídas foram por tempo (`Evento 3`, 12 barras). Por isso só 4 entradas
+            (a posição ainda estava aberta nos sinais de 01/10 12:15 e 02/10 16:55). PnlDia −251 nessa passada, +414 nas finais.
+    [Certo] Passadas finais (as duas últimas, idênticas entre si e à segunda execução): 6 operações no vwapvp, todas
+            saindo por alvo (5) ou stop (1) exatamente no nível; 7 no ignicao (alvo 4, stop 3).
+    [Certo] Ignicao, passadas iniciais: saídas por tempo com `BarsPos` até 721 e 533 avisos do Profit
+            ("...ToCoverStop enviado com stop abaixo da abertura do candle. Em automação essa ordem pode ter
+            comportamento diferente"). Esses avisos NÃO existem na segunda execução.
+    [Chutando] causa: nas passadas iniciais o simulador não executa as ordens ToCover (intrabarra ainda não
+            carregado?). Não provado.
+
+**REGRA (vale para todo backtest NTSL):** só conta como depuração a lista de operações das DUAS ÚLTIMAS passadas do console, que têm de ser idênticas entre si, e o relatório depois de "atualizar".
+Primeira execução, ou execução com avisos de ToCover, NÃO vale. Diego já tinha visto isso como "4 operações, depois 6".
+
+**Alarme (v4.38, só diagnóstico, comportamento idêntico à v4.35/v4.37; novo input `AlarmeCruzado(1)`):**
+`NTSI|ALVO_CRUZADO|Date|Time|Bar|LadoPos|AlvoPx|StopPx|High|Low|BarsPos` (ignicao) e `NTSV|ALVO_CRUZADO|...` (vwapvp, mesmos campos).
+Dispara quando há posição, `BarsPos >= 1` (candle posterior ao de entrada, cuja faixa não inclui o pré-fill) e o High/Low do candle cruzou alvo ou stop: a ordem ToCover deveria ter executado.
+Não depende de `LastBarOnChart` (aparece no backtest). **Ao vivo, uma linha destas é DEFEITO DE EXECUÇÃO: PARADA imediata, o dia não conta.**
+Conferido sobre o console do vwapvp (condição reaplicada em Python às linhas `NTSVD`): passada 0 da primeira execução = 24 disparos; passadas finais e segunda execução = 0. No ignicao não dá para conferir (o `NTSD` não traz High/Low).
+
+**Carimbos novos (comportamento inalterado; a contagem do ignicao ainda NÃO começou, começa em 07/10):**
+`ignicao.ntsl` sha256 `0da080ab35cb…` (substitui `30248ebe0439…`), `vwapvp_continuacao.ntsl` sha256 `6891f8a2db47…`. Gráfico: ignicao 5 s com `BarrasJanela` 12; vwapvp M5.
+
+**NÃO coberto:** o alarme só enxerga cruzamento em candle posterior; uma falha do ToCover no próprio candle de entrada não aparece. Se o Profit rodar passadas iniciais ao vivo, não sei. `ea_123_vb` e `z_agf_win` não receberam o alarme (123 sem backtest validado; z_agf em `ModoConferir`, sem ordens).
+
 ## O que NÃO sei (nenhum item testado; é o que eu verificaria primeiro)
 
 [Chutando] ≈ 8 itens, por ordem de risco:

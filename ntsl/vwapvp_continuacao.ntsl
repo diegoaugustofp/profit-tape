@@ -91,6 +91,7 @@ input
                               // 0 em Market Replay (o relogio e' de hoje).
   LogAtivo(1);
   LogDiag(1);                 // 1 = linha NTSVD com posicao/sinal (sem LastBarOnChart)
+  AlarmeCruzado(1);           // 1 = linha NTSV|ALVO_CRUZADO (v4.38, so' diagnostico)
 
 var
   sDataAnt, sData, sHora                         : Float;
@@ -334,6 +335,24 @@ begin
         + "|" + sAlvoPx + "|" + sStopPx + "|" + sBarsPos + "|" + sOps
         + "|" + sMotivo + "|" + sEvento + "|" + sPend + "|" + sZ
         + "|" + sSd + "|" + sVwap);
+    end;
+
+    //-----------------------------------------------------------------
+    // ALARME DE EXECUCAO (v4.38, SO' diagnostico, nao altera ordens nem
+    // estado). Posicao aberta num candle POSTERIOR ao de entrada
+    // (BarsPos >= 1) cujo High/Low cruzou alvo ou stop = ToCover nao
+    // executou. Medido em 06/10: acontece na 1a passada do backtest
+    // (Pend=1, preco cruzou, sem fill), nunca nas passadas finais. Ao
+    // vivo, uma linha destas e' DEFEITO DE EXECUCAO: parar e nao contar.
+    //-----------------------------------------------------------------
+    if (AlarmeCruzado = 1) and HasPosition and (sBarsPos >= 1) and (sAlvoPx > 0) then
+    begin
+      sBar := CurrentBar;
+      if ((sLadoPos > 0) and ((High >= sAlvoPx) or (Low <= sStopPx)))
+         or ((sLadoPos < 0) and ((Low <= sAlvoPx) or (High >= sStopPx))) then
+        ConsoleLog("NTSV|ALVO_CRUZADO|" + sData + "|" + sHora + "|" + sBar
+          + "|" + sLadoPos + "|" + sAlvoPx + "|" + sStopPx + "|" + High
+          + "|" + Low + "|" + sBarsPos);
     end;
 
     //-----------------------------------------------------------------
