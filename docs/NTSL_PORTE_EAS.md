@@ -1,6 +1,6 @@
 # Porte dos EAs para NTSL (contingência da queda do ProfitDLL)
 
-> **Status:** vivo — **Revisado:** 2026-10-06 — **Assunto:** `vwapvp_continuacao`, `ignicao`, `ea_123_vb` (E4) e `z_agf_win` (Rota A, v4.34) reescritos como estratégias de execução do Profit enquanto o ProfitDLL da Nelogica está fora; MECANISMO NOVO, carimbo e contagem próprios; NÃO COMPILADO ainda.
+> **Status:** vivo — **Revisado:** 2026-10-07 — **Assunto:** `vwapvp_continuacao`, `ignicao`, `ea_123_vb` (E4) e `z_agf_win` (Rota A, v4.34) reescritos como estratégias de execução do Profit enquanto o ProfitDLL da Nelogica está fora; MECANISMO NOVO, carimbo e contagem próprios; NÃO COMPILADO ainda.
 
 Arquivos: `ntsl/vwapvp_continuacao.ntsl`, `ntsl/ignicao.ntsl`, `ntsl/ea_123_vb.ntsl`, `ntsl/z_agf_win.ntsl` (v4.34).
 Guarda estática: `tests/test_ntsl_execucao.py` (só pega os defeitos de sintaxe/idioma que a skill de engenharia §3.1 já custou; **não prova que compila nem que opera**).
@@ -89,14 +89,15 @@ O que isto **não** é: não reabre nenhuma ficha, não troca número, não auto
 1. Automação de estratégias → escolher o `.ntsl` → **conta SIMULADOR**.
 2. Modo "Realizar envio de ordens no **fechamento do candle**" e **marcar** "executar apenas no fechamento do candle ou com atualização de posição". Desmarcada, o código roda várias vezes por candle (manual NTSL, 11.4) e o estado conta em dobro.
 3. Quantidade por Ordem = 1 e Quantidade máxima da posição = 1.
-4. Gráficos: `vwapvp_continuacao` WINFUT **M5**; `ea_123_vb` WINFUT **M15**; `ignicao` WINFUT em **1 segundo** (`BarrasJanela` 60; 5 s ⇒ 12).
+4. Gráficos: `vwapvp_continuacao` WINFUT **M5**; `ea_123_vb` WINFUT **M15**; `ignicao` WINFUT em **5 segundos com `BarrasJanela` 12** (é o que opera ao vivo desde 07/10; em 1 s seria 60). O `BarrasJanela` padrão do arquivo é 60: **um replay/backtest sem o input ajustado roda outra regra** (janela de 5 min e refratário de 150 min num gráfico de 5 s; aconteceu em 07/10). Desde a v4.42 o console imprime `NTSI|PARAMS|...` no primeiro candle; confira-o em todo replay.
 5. Ligar **antes** da abertura da janela (vwapvp 11:00; ignição 09:16; 123 09:30). Contadores e bloqueios recomeçam em zero se ligar no meio do dia.
 6. **Nunca junto com o `record` no mesmo ticker e conta.** O Python tem "vaga do ticker"; o NTSL não o conhece. Quando o DLL voltar: desligar as automações NTSL ANTES de subir o `record`.
 7. Market Replay: `GuardaRelogio = 0` (o relógio do PC é o de hoje, não o do replay).
-8. **Uma automação por ativo e por conta.** As quatro estratégias operam WINFUT. Duas automações na MESMA conta e no mesmo ativo somam a posição líquida: uma vê
-   `HasPosition` por causa da outra e a lógica de estado (que assume que a posição é dela) quebra. **NÃO SEI** se o Profit oferece subcontas/contas simuladas separadas
-   para isso. Até saber, ligue UMA automação por vez, ou cada uma numa conta simulada distinta. Isto também vale para as três da v4.33 (não constava lá).
-9. `z_agf_win`: gráfico de **120.000 lotes** (período por quantidade de lotes), não de tempo; ao vivo apenas (o `BalanceAgent` não roda em backtest).
+8. **Uma CARTEIRA por automação** (resolvido por informação do Diego em 2026-10-07: o Profit oferece o recurso de carteira; uma carteira por automação executa sem interferir
+   nas outras e admite posições simultâneas e contrárias). Sem isso, duas automações na MESMA conta e no mesmo ativo somariam a posição líquida e a lógica de estado (que assume
+   que a posição é dela) quebraria. Vale para o simulador; **não testado em conta real** (não é o caminho pré-registrado). A isolação entre carteiras foi observada em 07/10
+   só indiretamente (o ignição operou sozinho; os outros dois não operaram).
+9. `z_agf_win`: gráfico de **120.000 lotes** (período por quantidade de lotes), não de tempo; ao vivo apenas (o `BalanceAgent` não roda em backtest). **ESTACIONADO em 2026-10-07**: o Profit não tem gráfico de 120.000; o máximo por quantidade é 10.000 (informação do Diego). Não é refutação da hipótese, só inviabilidade de teste no Profit; a equivalência de barra (10.000 ≠ 120.000) não foi medida. Arquivo e testes ficam como estão (`ModoConferir = 1`, nenhuma ordem).
 
 ### Rolagem do WIN (14/10)
 
@@ -291,6 +292,49 @@ CSV de operações cruzado com o `NT123D` (`D` = distância entrada–stop; alvo
 Dispara com posição, sem `Evento 11`, níveis > 0 e `CurrentBar >= ArmBar + 2` (o fill é em t+1 do arme; a faixa do candle do fill inclui o pré-fill) quando o High/Low cruzou alvo ou stop. Mesma regra dos outros: **ao vivo, uma linha destas é DEFEITO DE EXECUÇÃO: PARADA imediata, o dia não conta.** Não confirmado contra console (o `NT123D` não traz High/Low); a condição segue o ignicao/vwapvp, onde foi reaplicada ao `NTSVD` (24 disparos na passada inicial, 0 nas finais).
 Carimbo novo: `ea_123_vb.ntsl` sha256 `b768ec42c477…` (nunca contou). Contagem do 123 NTSL: só simulador ao vivo, a partir da data em que o Diego ligar com este carimbo.
 
+## 07/10 no simulador: níveis velhos no ignição, replay ≠ ao vivo (2026-10-07, v4.42)
+
+**Primeiro pregão em simulador (carteira por automação).** Só o ignição operou. `vwapvp` e `ea_123_vb` ligados, sem ordem. Os três arquivos conferidos contra o repositório (v4.41): o hash de quem roda no Windows sai com fim de linha CRLF e difere do carimbo; com LF bate. **O carimbo vale sobre o arquivo com LF** (hash CRLF equivalente: vwapvp `1594D08D0712` = `6891f8a2db47`; ignicao `890DCB0DD5DF` = `0da080ab35cb`; 123 `A64003163831` = `b768ec42c477`).
+
+**Ignição ao vivo, 4 operações** (relatório de operações + log de ordens; todas as entradas nos múltiplos de 5 s ⇒ gráfico de 5 s; espaço entre detecções 31:30, 30:05, 42:55 ⇒ refratário de 30 min ⇒ `BarrasJanela` 12):
+
+    09:31:10–10:02:36  C  +620 alvo   níveis 206.715 / 205.655   ok
+    10:02:40–10:02:40  C    −5         níveis 206.715 / 205.655   DEFEITO (iguais aos do trade 1)
+    10:32:45–11:09:12  V  +495 alvo   níveis 205.640 / 206.700   ok
+    11:15:40–11:38:45  C  −510 stop   níveis 206.265 / 205.205   ok     (total +600 pts, R$ 120)
+
+**Defeito (níveis velhos).** A compra de 10:02:40 enviou o ToCover com o alvo 206.715 do trade 1, abaixo do preço de entrada (206.770): a limitada de venda ficou executável e saiu a 206.765, 0,13 s depois. [Provável] Mecanismo: o candle anterior foi avaliado com o trade 1 aberto e gravou seus níveis; o reprocessamento do candle de entrada lê `[1]`, que não está zerado; a reconstrução (v4.35/36/40) só roda com níveis zerados e não rodou. Bate com todos os números do log de ordens; **não** confirmado por console (não existe ao vivo). A mesma estrutura existe no vwapvp e no 123 (só acontece com entrada no candle seguinte à saída anterior; não verifiquei se ocorreu nos backtests).
+
+### Pré-registro v4.42 (escrito antes de codificar; autorizado pelo Diego em 2026-10-07)
+
+    MOTIVO     Trade 2 do ignição em 07/10 (acima).
+    REGRA      Com posição e DailyResult(False) diferente do registrado no candle anterior
+               (|Δ| > 0,001; vale ganho e perda), os níveis lidos de [1] são descartados
+               antes do bloco de posição; a reconstrução (Evento 11) ou o ORFA assumem. Só se
+               aplica com HasPosition; o fluxo sem posição não muda.
+    OBSERVAVEL Coluna final `Descarte` em NTSD / NTSVD / NT123D (só aparece em backtest/replay).
+    PARAMS     Linha `NTSI|PARAMS|` / `NTSV|PARAMS|` / `NT123|PARAMS|` no primeiro candle
+               (diagnóstico; BarrasJanela, SegBarra, RefratBarras etc.).
+    CRITERIO   Ao vivo, nenhuma entrada com ToCover em níveis diferentes dos do próprio sinal
+               (conferido no log de ordens: alvo do lado certo do preço de entrada, ±D/±530).
+    LIMITE     Trade fechado com resultado exatamente 0 não dispara o descarte [Chutando: raro].
+    CARIMBOS   Mudam os três arquivos. Nada foi contado ainda, então a contagem recomeça sem custo.
+    DIA INVALIDO (acréscimo, escrito DEPOIS de ver o dado de 07/10; efeito numérico no ignição:
+               −5 pts): qualquer entrada cujo ToCover não corresponda ao próprio sinal.
+
+**Dia 07/10 do ignição não conta** (execução com níveis errados). Os outros 3 trades ficam como amostra de depuração.
+
+### Replay do ignição ≠ ao vivo: parâmetro, não "modo de execução"
+
+O console do replay (NTSD, 05–07/10) mostra `Refrat = 1800` na armada. O código define `Refrat = RefratarioSeg / (60 / BarrasJanela)`; 1800 ⇒ `BarrasJanela = 60`. As barras andam de 5 em 5 s (ex.: 76 barras em 7 min), então o replay rodou com janela de **5 min** (ref = fechamento 60 barras atrás) e refratário de **150 min**, enquanto o ao vivo usava 12. Detecções do replay em 07/10: 09:24 (alvo em 09:31) e 12:24; ao vivo: 09:31:10, 10:02:40, 10:32:45, 11:15:40; **zero coincidência**. Os consoles de 05–06/10 desse arquivo também têm `Refrat = 1800`. Conclusão: este replay não serve de comparação com o ao vivo. Refazer com `BarrasJanela = 12`, gráfico de 5 s, mesmo período, e comparar a lista de detecções com as 4 do ao vivo (horário ±5 s, lado, nível); se coincidirem, o caminho histórico do ignição reproduz o ao vivo; se não, é caminho de dados.
+
+### 123 e vwapvp: o replay armou, o ao vivo não
+
+Replay de 07/10: vwapvp armou às 12:25 com `z = −2,0198` (limiar 2,0; margem 1%) e fechou com −546 pts líquidos (custo de 11 incluso; [Provável] no stop 205.280); 123 armou às 12:30 com volume 452.302 contra mediana 472.268 (razão 0,958) e bateu o alvo (+790 pts, R$ 158), mais uma armada às 15:45 (razão 0,927) sem fill. Ao vivo: nenhuma ordem.
+Marginalidade medida nos mesmos consoles (replay, 01–07/10): no vwapvp 19 de 50 armadas (38%) têm \|z\| < 2,10 e 11 (22%) < 2,05; no 123, 4 de 5 armadas têm volume ≥ 90% da mediana. [Provável] Sinais assim mudam com diferença pequena no volume do candle formado em tempo real contra o histórico consolidado. [Chutando] Também possível: `Fechou = 0` (relógio, Motivo 8) ou `GateN < 20` (histórico carregado, Motivo 6). **Sem console ao vivo não há como separar as hipóteses.** Dia ao vivo do vwapvp e do 123 em 07/10: zero operações, **sem evidência de que avaliaram as barras certas**.
+
+Testar o caminho ao vivo: o Market Replay do Profit (replay de mercado) alimenta os candles negócio a negócio, como ao vivo, com `GuardaRelogio = 0`. NÃO SEI se o console da automação aparece nesse modo; é a primeira coisa a verificar.
+
 ## O que NÃO sei (nenhum item testado; é o que eu verificaria primeiro)
 
 [Chutando] ≈ 8 itens, por ordem de risco:
@@ -309,7 +353,9 @@ Carimbo novo: `ea_123_vb.ntsl` sha256 `b768ec42c477…` (nunca contou). Contagem
 11. **Histórico do `BalanceAgent`**: o manual diz "no máximo até o dia anterior". Não sei se isso significa candles do dia anterior ao carregar o gráfico ou só o saldo agregado.
 12. **`BalanceAgent`/`VolumeAgent` com `AgenteId` vindo de `input`**: o manual diz que funções de indicador só aceitam constantes nos parâmetros. Input é constante em tempo de execução, mas
     não conferi que o compilador aceite. Se recusar: trocar `AgenteId` por `3` literal.
-13. **Uma automação por conta** (item 8 de "Como ligar").
+13. ~~Uma automação por conta~~ — resolvido para o simulador pelo recurso de carteira (item 8 de "Como ligar"); não testado em conta real.
+14. **O Profit não guarda o console da automação ao vivo** (informação do Diego, 07/10; onde, se existir, ele não sabe). Só o relatório de operações e o log de ordens sobrevivem ao dia. Logo, os campos `Fechou`/`Motivo`/`GateN` do pré-registro não são observáveis ao vivo; só no replay/backtest. Qualquer "não operou ao vivo" fica sem causa observável.
+15. **Caminho de dados ao vivo ≠ histórico.** Em 07/10 o replay armou sinais que a automação não armou ao vivo (vwapvp 12:25, 123 12:30), todos a ~1–4% do limiar. Não sei se a causa é volume do candle em tempo real, relógio (`Fechou`), histórico carregado (`GateN`) ou outra. Ver a seção v4.42.
 
 ## Quando o DLL voltar
 

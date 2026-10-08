@@ -5428,3 +5428,10 @@ Entregue: `ea_123_vb.ntsl` com sinal puro antes do bloco de posição, reconstru
 Backtest do 123 depois da v4.40: zero ORFA, 5 `Evento 11`, 5 operações de compra (30/09 ×4, 06/10 ×1) todas saindo em alvo (3) ou stop (2) nos níveis `±D`, +1.160 pts (R$ 232); depuração, não conta.
 Entregue: alarme `ALVO_CRUZADO` no `ea_123_vb` (só log, input `AlarmeCruzado`), 2 testes, seção em `NTSL_PORTE_EAS.md`. Carimbo `b768ec42c477…`. **Não compilado.** **Tags:** entregue-v4.41 (sobre v4.40).
 
+
+### 2026-10-07e — Primeiro pregão em simulador: níveis velhos e replay ≠ ao vivo (v4.42)
+
+Primeiro dia ao vivo no simulador, uma carteira por automação (resolve o risco de posição líquida entre automações; `z_agf_win` estacionado: o Profit só tem gráfico por quantidade até 10.000, não 120.000). Só o ignição operou (4 operações, +600 pts). A entrada das 10:02:40 saiu com os níveis do trade anterior (alvo abaixo do preço, saída em 0,13 s, −5 pts): [Provável] níveis de `[1]` do trade fechado 4 s antes, não zerados, escapam da reconstrução. O replay do ignição rodou com `BarrasJanela` 60 (ao vivo 12), por isso nenhuma detecção coincidiu; vwapvp e 123 armaram no replay com sinais a 1–4% do limiar e não armaram ao vivo; o Profit não guarda o console ao vivo.
+Pré-registro v4.42 escrito antes de codificar. Dia 07/10 do ignição não conta. Fim de linha CRLF muda o sha256 no Windows: o carimbo vale sobre o arquivo com LF.
+
+Entregue: descarte de níveis velhos (ignicao, vwapvp, 123; só com posição e `DailyResult` diferente do candle anterior), coluna `Descarte` nos logs de diagnóstico, linhas `PARAMS` no primeiro candle, 18 testes novos, seção em `NTSL_PORTE_EAS.md`. Carimbos dos três mudam (nada contou ainda). **Não compilado.** **Tags:** entregue-v4.42 (sobre v4.41).

@@ -41,6 +41,19 @@
 //      Agora a barra de entrada reprocessada se reconhece e reconstroi o
 //      estado (evento 11). Se o estado se perder DEPOIS, o ORFA continua
 //      fechando por seguranca. O log NTSD diz qual dos dois acontece.
+//   9. v4.42: NIVEIS VELHOS (achado de 07/10, simulador). Uma entrada 4 s
+//      depois da saida da anterior foi enviada com alvo/stop DA OPERACAO
+//      ANTERIOR: o candle anterior foi avaliado com a posicao ainda aberta e
+//      guardou os niveis dela; o reprocessamento do candle de entrada le' isso
+//      em [1], os niveis nao estavam zerados, a reconstrucao (so' com niveis
+//      zerados) nao rodou, e o alvo velho, abaixo do preco, saiu a mercado em
+//      0,13 s (-5 pts). Agora: se ha' posicao e o DailyResult mudou desde o
+//      candle anterior, um trade FECHOU depois daquela avaliacao e os niveis
+//      de [1] sao descartados antes do bloco de posicao. NTSD ganha a coluna
+//      final Descarte (1 = descartou) e o console imprime NTSI|PARAMS no
+//      primeiro candle (BarrasJanela, SegBarra, Refratario em barras): o
+//      replay de 07/10 rodou com BarrasJanela 60 enquanto a automacao ao vivo
+//      usava 12, e nada no console mostrava isso.
 //
 // COMO LIGAR (Automacao de estrategias, WINFUT em 1 SEGUNDO)
 //   - Grafico em SEGUNDOS: 1 s => BarrasJanela 60 | 5 s => 12 | 15 s => 4.
@@ -87,6 +100,7 @@ var
   sLadoPos, sNivel, sAlvoPx, sStopPx, sBarsPos    : Float;
   sRefrat, sOps, sLado, sStatus, sEvento           : Float;
   sDailyRes, sPos, sNivelDet, sBar, sLadoAnt       : Float;
+  sDailyAnt, sDescarte, sPar                       : Float;
   bNovoDia, bNaJanela, bTemRef, bSaida, bRecons    : Boolean;
 begin
   //-------------------------------------------------------------------
@@ -108,6 +122,7 @@ begin
   sBarsPos  := sBarsPos[1];
   sRefrat   := sRefrat[1];
   sOps      := sOps[1];
+  sDailyAnt := sDailyRes[1];
 
   sSegBarra := 60 / BarrasJanela;
   bNovoDia  := (sData <> sDataAnt);
@@ -115,6 +130,27 @@ begin
   begin
     sLadoPos := 0; sNivel := 0; sAlvoPx := 0; sStopPx := 0; sBarsPos := 0;
     sRefrat := 0; sOps := 0;
+  end;
+
+  // v4.42: parametros efetivos, uma vez, sem LastBarOnChart (aparece no
+  // backtest; ao vivo o Profit nao guarda console).
+  if (LogDiag = 1) and (CurrentBar = 1) then
+  begin
+    sPar := RefratarioSeg / sSegBarra;
+    ConsoleLog("NTSI|PARAMS|BarrasJanela=" + BarrasJanela + "|SegBarra=" + sSegBarra
+      + "|RefratBarras=" + sPar + "|LimiarPts=" + LimiarPts
+      + "|ModoSaidaOCO=" + ModoSaidaOCO);
+  end;
+
+  // v4.42: NIVEIS VELHOS. Com posicao e o resultado fechado do dia diferente
+  // do que o candle anterior registrou, um trade fechou DEPOIS daquela
+  // avaliacao: os niveis lidos em [1] sao dele, nao desta posicao.
+  sDailyRes := DailyResult(False);
+  sDescarte := 0;
+  if HasPosition and ((sDailyRes - sDailyAnt > 0.001) or (sDailyAnt - sDailyRes > 0.001)) then
+  begin
+    sDescarte := 1;
+    sLadoPos := 0; sNivel := 0; sAlvoPx := 0; sStopPx := 0; sBarsPos := 0;
   end;
 
   sStatus := 0;
@@ -271,8 +307,6 @@ begin
   //    Evento: 1 alvo | 2 stop | 3 tempo | 4 zeragem | 5 ambiguo
   //            | 9 orfa | 10 entrada | 11 estado reconstruido (v4.35)
   //-------------------------------------------------------------------
-  sDailyRes := DailyResult(False);
-
   // DIAGNOSTICO (v4.35): sem LastBarOnChart, para aparecer no backtest.
   // LadoAnt = estado que o candle ANTERIOR deixou em [1]; Recons = 1 se
   // este candle reconstruiu o estado. Duas linhas com o MESMO Bar =
@@ -283,7 +317,7 @@ begin
     ConsoleLog("NTSD|" + sBar + "|" + sData + "|" + sHora + "|" + sClose
       + "|" + sPos + "|" + sLadoAnt + "|" + sLadoPos + "|" + sOps
       + "|" + sBarsPos + "|" + sRefrat + "|" + sLado + "|" + sStatus
-      + "|" + sEvento + "|" + sAlvoPx + "|" + sStopPx);
+      + "|" + sEvento + "|" + sAlvoPx + "|" + sStopPx + "|" + sDescarte);
   end;
 
   // ALARME DE EXECUCAO (v4.38, SO' diagnostico, nao altera ordens nem

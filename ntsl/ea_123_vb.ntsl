@@ -61,6 +61,14 @@
 //      volume do contrato novo e' curto/fino logo depois da rolagem e o
 //      gate sai distorcido. UsarGate=0 desliga o gate (= `ea_123` puro,
 //      outra familia).
+//   8. v4.42: NIVEIS VELHOS (achado de 07/10 no ignicao; mesma estrutura
+//      aqui). Se um trade fecha entre a avaliacao do candle anterior e a do
+//      candle de um novo arme, o reprocessamento le' em [1] os niveis do trade
+//      que fechou, nao zerados, e a reconstrucao (so' com niveis zerados) nao
+//      roda. Agora, com posicao e DailyResult diferente do registrado no
+//      candle anterior, os niveis de [1] sao descartados antes do bloco de
+//      posicao. NT123D ganha a coluna final Descarte; o console imprime
+//      NT123|PARAMS no primeiro candle.
 //
 // COMO LIGAR (Automacao de estrategias, grafico WINFUT M15)
 //   - Modo: "Realizar envio de ordens no FECHAMENTO DO CANDLE" + opcao
@@ -108,6 +116,7 @@ var
   sPadC, sPadV, sRegime, sDiaOk, sFimBarra, sFechou    : Float;
   sDailyRes, sTmp, sLimStop                            : Float;
   sBarDia, sHoraAnt, sBar                              : Float;
+  sDailyAnt, sDescarte                                 : Float;
   nIndex, nOff, nI, nJ                                 : Integer;
   vals                                                 : array[1..20] of Float;
   bNovoDia, bCalcular, bJanela, bCompleta, bSaida      : Boolean;
@@ -137,6 +146,7 @@ begin
   sDiaOk    := sDiaOk[1];
   sBarDia   := sBarDia[1];
   sHoraAnt  := sHora[1];
+  sDailyAnt := sDailyRes[1];
 
   bNovoDia  := (sData <> sDataAnt);
   bCalcular := (CalcDataInicio = 0) or (sData >= CalcDataInicio);
@@ -209,6 +219,25 @@ begin
   end;
 
   sDailyRes := DailyResult(False);
+
+  // v4.42: NIVEIS VELHOS. Com posicao e o resultado fechado do dia diferente
+  // do que o candle anterior registrou, um trade fechou DEPOIS daquela
+  // avaliacao: os niveis lidos em [1] sao dele, nao desta posicao (visto no
+  // ignicao em 07/10: alvo velho, abaixo do preco, saiu a mercado em 0,13 s).
+  // Zerar manda o bloco de posicao para a reconstrucao (Evento 11) ou ORFA.
+  sDescarte := 0;
+  if HasPosition and ((sDailyRes - sDailyAnt > 0.001) or (sDailyAnt - sDailyRes > 0.001)) then
+  begin
+    sDescarte := 1;
+    sLadoPos := 0; sNivEnt := 0; sNivStop := 0; sNivAlvo := 0;
+  end;
+
+  // v4.42: parametros efetivos, uma vez, sem LastBarOnChart.
+  if (LogDiag = 1) and (CurrentBar = 1) then
+    ConsoleLog("NT123|PARAMS|MinutosBarra=" + MinutosBarra + "|BarrasPorDia=" + BarrasPorDia
+      + "|MmePeriodo=" + MmePeriodo + "|UsarGate=" + UsarGate
+      + "|GuardaRelogio=" + GuardaRelogio + "|SlackStopPts=" + SlackStopPts);
+
   sMotivo := 0;
   sEvento := 0;
   sLadoCand := 0;
@@ -432,7 +461,7 @@ begin
       ConsoleLog("NT123D|" + sBar + "|" + sData + "|" + sHora + "|" + sFechou
         + "|" + sPadC + "|" + sPadV + "|" + sRegime + "|" + sD + "|" + sLadoCand
         + "|" + sVolTot + "|" + sMed + "|" + sGateN + "|" + sGateOk
-        + "|" + sMotivo + "|" + sEvento + "|" + sClose + "|" + sMme);
+        + "|" + sMotivo + "|" + sEvento + "|" + sClose + "|" + sMme + "|" + sDescarte);
     end;
 
     if (LogAtivo = 1) and LastBarOnChart then

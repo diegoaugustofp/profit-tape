@@ -384,3 +384,135 @@ def test_123_alarme_comportamento_na_mao() -> None:
     assert _alarme_123_py(-1, 90, 100, 96, 89, 12, 10)      # venda, alvo (Low cruza)
     assert not _alarme_123_py(1, 100, 90, 101, 95, 12, 10, evento=11)
     assert not _alarme_123_py(1, 100, 90, 101, 95, 12, 10, tem_pos=False)
+
+
+# --------------------------------------------------------------------------
+# v4.42: NIVEIS VELHOS (achado de 07/10, simulador). No ignicao, a entrada das
+# 10:02:40 saiu com o alvo/stop da operacao anterior (fechada 4 s antes): o
+# candle anterior foi avaliado com a posicao aberta e guardou os niveis dela;
+# o reprocessamento do candle de entrada leu isso em [1]; a reconstrucao so'
+# roda com niveis ZERADOS, entao nao rodou; alvo velho abaixo do preco = saida
+# a mercado em 0,13 s (-5 pts). Conserto: com posicao e DailyResult diferente
+# do registrado no candle anterior, descartar os niveis de [1].
+# --------------------------------------------------------------------------
+DESCARTAM = ["ignicao.ntsl", "vwapvp_continuacao.ntsl", "ea_123_vb.ntsl"]
+_ESTADO = {"sDescarte", "sLadoPos", "sNivel", "sAlvoPx", "sStopPx", "sBarsPos",
+           "sNivEnt", "sNivStop", "sNivAlvo"}
+_ORDENS = ("BuyAtMarket", "SellShortAtMarket", "BuyStop", "SellShortStop",
+           "ClosePosition", "ToCover", "CancelPendingOrders")
+
+
+def _i_posicao(linhas: list[str]) -> int:
+    return next(k for k, ln in enumerate(linhas) if re.match(r"\s*if HasPosition then", ln))
+
+
+def _bloco_descarte(nome: str) -> tuple[int, list[str]]:
+    linhas = _codigo(nome)
+    i = next(k for k, ln in enumerate(linhas) if "sDescarte := 1" in ln)
+    return i, linhas[i : i + 2]
+
+
+@pytest.mark.parametrize("nome", DESCARTAM)
+def test_descarte_de_niveis_velhos_vem_antes_do_bloco_de_posicao(nome: str) -> None:
+    linhas = _codigo(nome)
+    i, _ = _bloco_descarte(nome)
+    assert i < _i_posicao(linhas)
+
+
+@pytest.mark.parametrize("nome", DESCARTAM)
+def test_descarte_so_vale_com_posicao_e_dailyresult_diferente(nome: str) -> None:
+    linhas = _codigo(nome)
+    i, _ = _bloco_descarte(nome)
+    cond = "\n".join(linhas[max(0, i - 3) : i + 1])
+    assert "HasPosition" in cond
+    if nome == "vwapvp_continuacao.ntsl":
+        # reaproveita o bFechouTrade (sDelta = DailyResult - registrado em [1])
+        assert "bFechouTrade and HasPosition" in cond
+        texto = "\n".join(linhas)
+        assert "sDelta := sDailyRes - sDailyAnt" in texto
+        assert "bFechouTrade := (sDelta > 0.001) or (sDelta < 0 - 0.001)" in texto
+    else:
+        assert "sDailyRes - sDailyAnt > 0.001" in cond
+        assert "sDailyAnt - sDailyRes > 0.001" in cond   # perdedor tambem (sem Abs)
+        assert "sDailyAnt := sDailyRes[1];" in "\n".join(linhas)
+
+
+@pytest.mark.parametrize("nome", DESCARTAM)
+def test_descarte_so_zera_estado_e_nao_manda_ordem(nome: str) -> None:
+    _, bloco = _bloco_descarte(nome)
+    texto = "\n".join(bloco)
+    atribs = set(re.findall(r"(\w+)\s*:=", texto))
+    assert atribs <= _ESTADO, atribs
+    for ordem in _ORDENS:
+        assert ordem not in texto
+    # zera (nao rebaixa): todo nivel recebe 0
+    for nivel in re.findall(r"(sAlvoPx|sStopPx|sNivAlvo|sNivStop)\s*:=\s*(\S+);", texto):
+        assert nivel[1] == "0", nivel
+
+
+@pytest.mark.parametrize("nome", DESCARTAM)
+def test_descarte_aparece_na_ultima_coluna_do_diagnostico(nome: str) -> None:
+    texto = "\n".join(_codigo(nome))
+    marcador = {"ignicao.ntsl": "NTSD|", "vwapvp_continuacao.ntsl": "NTSVD|",
+                "ea_123_vb.ntsl": "NT123D|"}[nome]
+    chamada = re.search(r'ConsoleLog\("' + re.escape(marcador) + r'.*?\);', texto, re.DOTALL)
+    assert chamada, marcador
+    assert chamada.group(0).rstrip(");").endswith('"|" + sDescarte')
+
+
+@pytest.mark.parametrize("nome", DESCARTAM)
+def test_params_uma_vez_no_primeiro_candle_sem_lastbaronchart(nome: str) -> None:
+    linhas = _codigo(nome)
+    i = next(k for k, ln in enumerate(linhas) if "|PARAMS|" in ln)
+    janela = "\n".join(linhas[max(0, i - 4) : i + 6])
+    assert "CurrentBar = 1" in janela and "LogDiag = 1" in janela
+    assert "LastBarOnChart" not in janela
+    esperado = {"ignicao.ntsl": ("BarrasJanela", "RefratBarras"),
+                "vwapvp_continuacao.ntsl": ("MinutosBarra", "GuardaRelogio"),
+                "ea_123_vb.ntsl": ("BarrasPorDia", "GuardaRelogio")}[nome]
+    for campo in esperado:
+        assert campo in janela
+
+
+def _precisa_reconstruir(lado: float, alvo: float, stop: float) -> bool:
+    """Espelho da condicao do ramo ORFA/reconstrucao (niveis ausentes)."""
+    return lado == 0 or alvo == 0 or stop == 0
+
+
+def _niveis_lidos(velhos: tuple[float, float, float], daily_ant: float,
+                  daily_agora: float, tem_pos: bool) -> tuple[tuple[float, float, float], int]:
+    """Espelho do descarte da v4.42: (niveis que o bloco de posicao enxerga, descarte)."""
+    if tem_pos and (daily_agora - daily_ant > 0.001 or daily_ant - daily_agora > 0.001):
+        return (0.0, 0.0, 0.0), 1
+    return velhos, 0
+
+
+def test_a_reconstrucao_so_roda_com_nivel_zerado_premissa_do_defeito() -> None:
+    for nome, esperado in (("ignicao.ntsl", "(sLadoPos = 0) or (sAlvoPx = 0) or (sStopPx = 0)"),
+                           ("vwapvp_continuacao.ntsl",
+                            "(sLadoPos = 0) or (sAlvoPx = 0) or (sStopPx = 0)"),
+                           ("ea_123_vb.ntsl",
+                            "(sLadoPos = 0) or (sNivStop = 0) or (sNivAlvo = 0)")):
+        assert esperado in "\n".join(_codigo(nome))
+
+
+def test_cenario_de_07_10_niveis_do_trade_1_nao_chegam_ao_trade_2() -> None:
+    # trade 1 (long): alvo 206715, stop 205655; fechou com +124 R$ depois da
+    # avaliacao do candle anterior (registrou 0). Trade 2 enche no candle seguinte.
+    velhos = (1.0, 206715.0, 205655.0)
+    # sem o descarte (v4.41): niveis nao zerados -> nao reconstroi -> ToCover errado
+    assert not _precisa_reconstruir(*velhos)
+    lidos, descarte = _niveis_lidos(velhos, daily_ant=0.0, daily_agora=124.0, tem_pos=True)
+    assert descarte == 1 and _precisa_reconstruir(*lidos)
+
+
+def test_descarte_nao_mexe_no_fluxo_normal() -> None:
+    velhos = (1.0, 206715.0, 205655.0)
+    # posicao aberta, nenhum trade fechou desde o candle anterior: niveis ficam
+    assert _niveis_lidos(velhos, 124.0, 124.0, True) == (velhos, 0)
+    # variacao abaixo da tolerancia (ruido de ponto flutuante): ficam
+    assert _niveis_lidos(velhos, 124.0, 124.0004, True) == (velhos, 0)
+    # sem posicao: o fluxo sem posicao ja' zera e cancela; o descarte nao entra
+    assert _niveis_lidos(velhos, 0.0, 124.0, False) == (velhos, 0)
+    # trade perdedor tambem fecha: descarta
+    assert _niveis_lidos(velhos, 0.0, -102.0, True)[1] == 1

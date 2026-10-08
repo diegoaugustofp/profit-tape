@@ -47,6 +47,14 @@
 //      reconstroi o estado (evento 11) em vez de cair no ramo ORFA, que
 //      fechava a posicao na hora. Se o estado se perder DEPOIS, o ORFA
 //      continua fechando por seguranca.
+//   8. v4.42: NIVEIS VELHOS (achado de 07/10 no ignicao, mesma estrutura
+//      aqui). Se um trade fecha entre a avaliacao do candle anterior e a do
+//      candle da proxima entrada, o reprocessamento da entrada le' em [1] os
+//      niveis do trade que fechou, nao zerados, e a reconstrucao (so' com
+//      niveis zerados) nao roda: alvo/stop saem errados. Agora, com posicao e
+//      trade fechado desde o candle anterior (DailyResult mudou), os niveis
+//      de [1] sao descartados antes do bloco de posicao. NTSVD ganha a coluna
+//      final Descarte e o console imprime NTSV|PARAMS no primeiro candle.
 //
 // COMO LIGAR (Automacao de estrategias, grafico WINFUT M5)
 //   - Modo: "Realizar envio de ordens no FECHAMENTO DO CANDLE".
@@ -104,6 +112,7 @@ var
   sFimBarra, sFechou, sPos, sBar, sPend          : Float;
   bNovoDia, bCalcular, bJanela, bBanda, bCompleta : Boolean;
   bFechouTrade, bSaida                           : Boolean;
+  sDescarte                                      : Float;
 begin
   //-------------------------------------------------------------------
   // LEITURAS POSICIONAIS: todas aqui, atribuicao simples.
@@ -141,6 +150,15 @@ begin
   sEvento := 0;
   sDelta := 0;
   sLiqPts := 0;
+  sDescarte := 0;
+
+  // v4.42: parametros efetivos, uma vez, sem LastBarOnChart (aparece no
+  // backtest; ao vivo o Profit nao guarda console).
+  if (LogDiag = 1) and (CurrentBar = 1) then
+    ConsoleLog("NTSV|PARAMS|MinutosBarra=" + MinutosBarra + "|ZBanda=" + ZBanda
+      + "|JanelaIni=" + JanelaIniHHMM + "|JanelaFim=" + JanelaFimHHMM
+      + "|TempoMaxBarras=" + TempoMaxBarras + "|CooldownBarras=" + CooldownBarras
+      + "|GuardaRelogio=" + GuardaRelogio);
 
   if bCalcular then
   begin
@@ -179,6 +197,13 @@ begin
     //-----------------------------------------------------------------
     sDelta := sDailyRes - sDailyAnt;
     bFechouTrade := (sDelta > 0.001) or (sDelta < 0 - 0.001);
+    // v4.42: trade fechou depois da avaliacao do candle anterior e ja' ha'
+    // outra posicao: os niveis de [1] sao do trade velho.
+    if bFechouTrade and HasPosition then
+    begin
+      sDescarte := 1;
+      sLadoPos := 0; sAlvoPx := 0; sStopPx := 0; sBarsPos := 0;
+    end;
     if bFechouTrade then
     begin
       sLiqPts := sDelta / ValorPonto / Lote;
@@ -334,7 +359,7 @@ begin
         + "|" + Low + "|" + Close + "|" + sPos + "|" + sLadoPos
         + "|" + sAlvoPx + "|" + sStopPx + "|" + sBarsPos + "|" + sOps
         + "|" + sMotivo + "|" + sEvento + "|" + sPend + "|" + sZ
-        + "|" + sSd + "|" + sVwap);
+        + "|" + sSd + "|" + sVwap + "|" + sDescarte);
     end;
 
     //-----------------------------------------------------------------
