@@ -516,3 +516,76 @@ def test_descarte_nao_mexe_no_fluxo_normal() -> None:
     assert _niveis_lidos(velhos, 0.0, 124.0, False) == (velhos, 0)
     # trade perdedor tambem fecha: descarta
     assert _niveis_lidos(velhos, 0.0, -102.0, True)[1] == 1
+
+
+# --------------------------------------------------------------------------
+# v4.43: batimento de fechamento (HB) e AVISO_MODO. SO' log.
+# Ver docs/NTSL_PORTE_EAS.md "07/10: o buraco das 12:12 e a caixa desmarcada".
+# --------------------------------------------------------------------------
+HB_ARQUIVOS = {"ea_123_vb.ntsl": "NT123", "vwapvp_continuacao.ntsl": "NTSV"}
+
+
+def _bloco_log(nome: str, marca: str) -> tuple[str, str]:
+    """(condicao do `if`, corpo ate' o `end;`) do bloco que imprime `marca`."""
+    linhas = _codigo(nome)
+    j = next(k for k, ln in enumerate(linhas) if marca in ln)
+    i = j
+    while not re.match(r"\s*if ", linhas[i]):
+        i -= 1
+    k = j
+    while not re.match(r"\s*end;", linhas[k]):
+        k += 1
+    cond = " ".join(linhas[i : next(m for m in range(i, j) if "begin" in linhas[m]) + 1])
+    return cond, " ".join(linhas[i : k + 1])
+
+
+@pytest.mark.parametrize("nome", HB_ARQUIVOS)
+def test_hb_nao_depende_de_lastbaronchart_e_so_com_relogio(nome: str) -> None:
+    cond, _ = _bloco_log(nome, f'"{HB_ARQUIVOS[nome]}|HB|"')
+    assert "LastBarOnChart" not in cond
+    assert "GuardaRelogio = 1" in cond and "bCompleta" in cond and "LogDiag = 1" in cond
+    assert "CalcTime(sFimBarra, 3)" in cond          # janela de 3 min
+    assert "sKey <> sHbKey" in cond                  # 1 linha por candle
+
+
+@pytest.mark.parametrize("nome", HB_ARQUIVOS)
+def test_aviso_modo_so_candle_incompleto_ao_vivo(nome: str) -> None:
+    cond, _ = _bloco_log(nome, f'"{HB_ARQUIVOS[nome]}|AVISO_MODO|"')
+    assert "LastBarOnChart" in cond and "not bCompleta" in cond
+    assert "GuardaRelogio = 1" in cond and "sKey <> sAvKey" in cond
+
+
+@pytest.mark.parametrize("nome", HB_ARQUIVOS)
+def test_hb_e_aviso_so_logam_sem_ordem_e_sem_estado_de_decisao(nome: str) -> None:
+    for marca in ("|HB|", "|AVISO_MODO|"):
+        _, corpo = _bloco_log(nome, f'"{HB_ARQUIVOS[nome]}{marca}"')
+        assert not any(o in corpo for o in _ORDENS)
+        # unico estado escrito: a chave de deduplicacao
+        escritos = set(re.findall(r"\b(s\w+)\s*:=", corpo))
+        assert escritos <= {"sHbKey", "sAvKey"}
+
+
+@pytest.mark.parametrize("nome", HB_ARQUIVOS)
+def test_hb_leitura_posicional_no_topo_e_chave_declarada(nome: str) -> None:
+    cod = "\n".join(_codigo(nome))
+    assert re.search(r"sHbKey\s*:=\s*sHbKey\[1\];", cod)
+    assert re.search(r"sAvKey\s*:=\s*sAvKey\[1\];", cod)
+    assert re.search(r"sHbKey, sAvKey, sKey, sLast\s*:\s*Float;", cod)
+    # nenhuma leitura posicional dentro dos blocos novos
+    for marca in ("|HB|", "|AVISO_MODO|"):
+        _, corpo = _bloco_log(nome, f'"{HB_ARQUIVOS[nome]}{marca}"')
+        assert "[1]" not in corpo
+
+
+def _hb_deve_imprimir(guarda: int, completa: bool, seg_apos_fim: float,
+                      chave: float, chave_hb: float) -> bool:
+    """Espelho Python da condicao do HB (janela de 3 min)."""
+    return (guarda == 1 and completa and seg_apos_fim < 180 and chave != chave_hb)
+
+
+def test_espelho_hb_um_por_candle_e_nada_no_backtest() -> None:
+    assert _hb_deve_imprimir(1, True, 0.4, 1261007_0930, 0)           # fechamento
+    assert not _hb_deve_imprimir(1, True, 0.4, 1261007_0930, 1261007_0930)  # reprocesso
+    assert not _hb_deve_imprimir(0, True, 0.4, 1261007_0930, 0)       # backtest
+    assert not _hb_deve_imprimir(1, False, 0.0, 1261007_0930, 0)      # incompleto
+    assert not _hb_deve_imprimir(1, True, 600, 1261007_0930, 0)       # > 3 min depois

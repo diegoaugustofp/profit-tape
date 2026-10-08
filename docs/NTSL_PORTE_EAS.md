@@ -335,6 +335,38 @@ Marginalidade medida nos mesmos consoles (replay, 01–07/10): no vwapvp 19 de 5
 
 Testar o caminho ao vivo: o Market Replay do Profit (replay de mercado) alimenta os candles negócio a negócio, como ao vivo, com `GuardaRelogio = 0`. NÃO SEI se o console da automação aparece nesse modo; é a primeira coisa a verificar.
 
+## 07/10: o buraco das 12:12 e a caixa desmarcada (2026-10-08, v4.43)
+
+**Fonte:** `LogDesktop_2026_10_07.log` do Profit (pasta `Roaming\Nelogica\Profit\Logs`), lido em 08/10. O console da automação AO VIVO existe: aparece no log de eventos da própria automação (tela) e no `LogDesktop` como `Event=Evento Personalizado (ConsoleLog)`. **A afirmação anterior "o Profit não guarda o console ao vivo" (item 14 de "O que NÃO sei") estava errada.**
+
+**Por que o vwapvp e o 123 não armaram às 12:25 e 12:30 [Certo]:** às 12:12:39 o notebook foi para a bateria (falta de energia, informada pelo Diego; o modem desligou); às 12:12:42 os pings falharam; às 12:12:46 todas as automações receberam "Servidor desconectado". A reconexão só ocorreu às 19:45:53 (a rede não voltou sozinha). Os dois sinais do replay (12:25 e 12:30) caem dentro dessa janela. **Não houve divergência de lógica.** A hipótese de "volume em tempo real contra consolidado" (seção acima) deixa de ser necessária para explicar o dia.
+
+**Antes das 12:12, o 123 ao vivo [Certo]:** padrão presente nos candles 11:15 e 11:45, ambos reprovados pelo gate (volume final 1,13× e 1,10× a mediana). Nenhum sinal armável perdido antes da queda.
+
+**Defeito operacional achado [Certo]:** o 123 (RobotID 7) e o vwapvp ligado na carteira antiga (RobotID 2) rodaram a cada 5–10 s dentro do candle (caixa "executar apenas no fechamento do candle ou com atualização de posição" DESMARCADA). Dos 13 candles de 15 min avaliados até 12:12, só 2 tiveram `Fechou = 1` (10:45:00.060 e 11:00:00.024): o fechamento só é visto se um tick chegar nos milissegundos entre o fim do candle e a criação do próximo. Nessa configuração o arme ao vivo funciona por sorte (2 de 13 = 15%), mesmo com rede. Toda a contagem ao vivo exige a caixa MARCADA.
+
+**Dois vwapvp ligados [Certo]:** RobotID 2 (corretora 1003, conta 3813830, carteira 10030009, a antiga do WINV26; gerou todo o console NTSV do dia) e RobotID 5 (carteira nova 320060032, mesma conta do 123 e do ignição). O RobotID 5 fez só 40 loops, nos fechamentos de candle (caixa marcada) e **não imprimiu nenhuma linha de console**. [Provável] No modo de fechamento o loop avalia o candle anterior (`CurrentIndex/Count = 104631/104633`, contra `100637/100638` no modo desmarcado), logo `LastBarOnChart` é falso e `LogAtivo` fica mudo. [Chutando] A conta 3813830 é outra conta/corretora; o Diego deve confirmar o que ela é e desligar o RobotID 2.
+
+### Pré-registro v4.43 (escrito antes de codificar; autorizado pelo Diego em 2026-10-08)
+
+**Motivação:** (1) no modo "só no fechamento" o console ao vivo some, e sem ele "não operou" não tem causa observável; (2) no modo desmarcado o código roda errado e ninguém é avisado.
+**Mudança (SÓ log; nenhuma ordem, nenhum estado, nenhum parâmetro novo de comportamento), em `ea_123_vb` e `vwapvp_continuacao`; a ignição NÃO muda (já avalia por tick/5 s por desenho):**
+1. `NT123|HB|...` / `NTSV|HB|...` (batimento de fechamento): uma linha por candle, na primeira avaliação com `bCompleta` e `CurrentTime` até 3 min depois do fim da barra, só com `GuardaRelogio = 1` e `LogDiag = 1`, **sem `LastBarOnChart`**. Campos: Data, Hora, CurrentTime, LastBar (1/0), e o estado do sinal (padrão, regime, motivo, gate, z). Prova de que o candle foi avaliado COMPLETO e, via `LastBar`, em que modo.
+2. `NT123|AVISO_MODO|...` / `NTSV|AVISO_MODO|...`: uma linha por candle quando `GuardaRelogio = 1`, `LastBarOnChart` e a barra está incompleta (só ocorre com a caixa desmarcada).
+**Critério de decisão (sem calibração):** favorável = no pregão seguinte, com a caixa marcada, aparece 1 linha `HB` por candle avaliado e nenhum `AVISO_MODO`; contra/inconclusivo = nenhuma linha `HB` com a caixa marcada ⇒ o fechamento é avaliado fora da janela de 3 min ou o loop não executa o código; nesse caso a janela é o primeiro suspeito e NÃO se muda lógica de arme antes de ver o dado. Risco conhecido: ao ligar a automação o histórico é reprocessado; a janela de 3 min limita o HB a no máximo 1 candle por dia de histórico, só se ligar logo após um fechamento. Retrocompatibilidade: com `GuardaRelogio = 0` (backtest/replay) nenhuma linha nova.
+
+### Checklist de ligar (consolidado em 08/10)
+
+1. Caixa "executar apenas no fechamento do candle ou com atualização de posição" MARCADA nas 3 (a do 123 e a do vwapvp antigo estavam desmarcadas).
+2. UM vwapvp ligado (carteira 320060032); desligar o RobotID 2 (conta 3813830) depois de confirmar o que é.
+3. Gráfico/contrato: as automações estão em `WINV26`; em 14/10 (rolagem) trocar para `WINZ26` e conferir o `GateN` do 123 e o roteamento (cross-order).
+4. Energia: nobreak para notebook, modem e roteador; reconexão automática do Wi-Fi/Ethernet; avisar quando o Profit mostrar "Servidor desconectado". Ao voltar a conexão, conferir se as automações continuam habilitadas.
+5. Carimbo no lado do Profit: o texto é colado e compilado no editor do Profit, o byte a byte pode mudar. Compilar a v4.43 uma vez, ler o `SourceCodeMD5` no cabeçalho do dump (`LogStratDump_*.stdmp`) de cada automação e registrá-lo ao lado do sha256 do arquivo do repositório.
+
+### Ferramenta `tools/analisa_log_profit.py`
+
+Lê o `LogDesktop_AAAA_MM_DD.log` e resume, por automação (RobotID): linhas de console por hora, fração de `Fechou = 1`, quedas de conexão ("Servidor desconectado" até "Servidor conectado") e lacunas sem console. Feito em cima do caso de 07/10 (queda 12:12:46–19:45:53; 2 de 13 fechamentos).
+
 ## O que NÃO sei (nenhum item testado; é o que eu verificaria primeiro)
 
 [Chutando] ≈ 8 itens, por ordem de risco:
@@ -354,8 +386,8 @@ Testar o caminho ao vivo: o Market Replay do Profit (replay de mercado) alimenta
 12. **`BalanceAgent`/`VolumeAgent` com `AgenteId` vindo de `input`**: o manual diz que funções de indicador só aceitam constantes nos parâmetros. Input é constante em tempo de execução, mas
     não conferi que o compilador aceite. Se recusar: trocar `AgenteId` por `3` literal.
 13. ~~Uma automação por conta~~ — resolvido para o simulador pelo recurso de carteira (item 8 de "Como ligar"); não testado em conta real.
-14. **O Profit não guarda o console da automação ao vivo** (informação do Diego, 07/10; onde, se existir, ele não sabe). Só o relatório de operações e o log de ordens sobrevivem ao dia. Logo, os campos `Fechou`/`Motivo`/`GateN` do pré-registro não são observáveis ao vivo; só no replay/backtest. Qualquer "não operou ao vivo" fica sem causa observável.
-15. **Caminho de dados ao vivo ≠ histórico.** Em 07/10 o replay armou sinais que a automação não armou ao vivo (vwapvp 12:25, 123 12:30), todos a ~1–4% do limiar. Não sei se a causa é volume do candle em tempo real, relógio (`Fechou`), histórico carregado (`GateN`) ou outra. Ver a seção v4.42.
+14. ~~O Profit não guarda o console ao vivo~~ — ERRADO (corrigido em 08/10): o console aparece no log de eventos da automação e no `LogDesktop`. Mas no modo "só no fechamento" o `LastBarOnChart` fica falso e o `NTSV|`/`NT123|` some (v4.43 acrescenta o batimento `HB`).
+15. ~~Caminho de dados ao vivo ≠ histórico~~ — explicado em 08/10 para 07/10: os sinais de 12:25 e 12:30 caíram numa queda de conexão (12:12:46–19:45:53). A pergunta de fundo (o candle em tempo real tem o mesmo volume do consolidado?) segue sem medida; só um dia ao vivo com conexão contínua responde.
 
 ## Quando o DLL voltar
 

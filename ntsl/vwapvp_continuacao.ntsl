@@ -55,6 +55,14 @@
 //      trade fechado desde o candle anterior (DailyResult mudou), os niveis
 //      de [1] sao descartados antes do bloco de posicao. NTSVD ganha a coluna
 //      final Descarte e o console imprime NTSV|PARAMS no primeiro candle.
+//   9. v4.43: SO' LOG. 07/10: a caixa "executar apenas no fechamento do candle
+//      ou com atualizacao de posicao" estava DESMARCADA e so' 2 de 13
+//      fechamentos foram avaliados completos; marcada, o loop avalia o candle
+//      anterior (LastBarOnChart falso) e a linha NTSV| some. Novas linhas, so'
+//      com GuardaRelogio = 1: NTSV|HB (1 por candle, 1a avaliacao completa
+//      ate 3 min depois do fim da barra, sem LastBarOnChart) e
+//      NTSV|AVISO_MODO (candle incompleto ao vivo = caixa desmarcada).
+//      Nenhuma ordem nem estado de decisao mudou.
 //
 // COMO LIGAR (Automacao de estrategias, grafico WINFUT M5)
 //   - Modo: "Realizar envio de ordens no FECHAMENTO DO CANDLE".
@@ -113,6 +121,7 @@ var
   bNovoDia, bCalcular, bJanela, bBanda, bCompleta : Boolean;
   bFechouTrade, bSaida                           : Boolean;
   sDescarte                                      : Float;
+  sHbKey, sAvKey, sKey, sLast                    : Float;
 begin
   //-------------------------------------------------------------------
   // LEITURAS POSICIONAIS: todas aqui, atribuicao simples.
@@ -131,6 +140,8 @@ begin
   sBloq     := sBloq[1];
   sPnlDia   := sPnlDia[1];
   sDailyAnt := sDailyRes[1];
+  sHbKey    := sHbKey[1];
+  sAvKey    := sAvKey[1];
 
   sData  := Date;
   sHora  := Time;
@@ -397,6 +408,32 @@ begin
         + "|" + sAlvoPx + "|" + sStopPx
         + "|" + sPos + "|" + sBarsPos + "|" + sOps + "|" + sPerdas
         + "|" + sPnlDia + "|" + sBloq + "|" + sDelta);
+    end;
+
+    //-----------------------------------------------------------------
+    // v4.43 (SO' LOG: nenhuma ordem, nenhum estado de decisao). HB =
+    // batimento de fechamento (1a avaliacao completa ate 3 min depois do
+    // fim da barra), sem LastBarOnChart: no modo "so' no fechamento" a
+    // linha NTSV| de cima some (07/10). AVISO_MODO = candle incompleto ao
+    // vivo = caixa "executar apenas no fechamento do candle..." desmarcada.
+    // Ambos so' com GuardaRelogio = 1.
+    //-----------------------------------------------------------------
+    sKey := sData * 10000 + sHora;
+    if LastBarOnChart then sLast := 1 else sLast := 0;
+    if (LogDiag = 1) and (GuardaRelogio = 1) and bCompleta
+       and (CurrentTime < CalcTime(sFimBarra, 3)) and (sKey <> sHbKey) then
+    begin
+      sHbKey := sKey;
+      ConsoleLog("NTSV|HB|" + sData + "|" + sHora + "|" + CurrentTime + "|" + sLast
+        + "|" + Close + "|" + sVwap + "|" + sSd + "|" + sZ
+        + "|" + sMotivo + "|" + sEvento + "|" + sPos + "|" + sOps);
+    end;
+    if (LogDiag = 1) and (GuardaRelogio = 1) and LastBarOnChart
+       and (not bCompleta) and (sKey <> sAvKey) then
+    begin
+      sAvKey := sKey;
+      ConsoleLog("NTSV|AVISO_MODO|" + sData + "|" + sHora + "|" + CurrentTime
+        + "|candle incompleto: marque executar apenas no fechamento do candle");
     end;
 
     Plot(sVwap);

@@ -69,6 +69,14 @@
 //      candle anterior, os niveis de [1] sao descartados antes do bloco de
 //      posicao. NT123D ganha a coluna final Descarte; o console imprime
 //      NT123|PARAMS no primeiro candle.
+//   9. v4.43: SO' LOG. 07/10: a caixa "executar apenas no fechamento do candle
+//      ou com atualizacao de posicao" estava DESMARCADA e so' 2 de 13
+//      fechamentos foram avaliados completos; marcada, o loop avalia o candle
+//      anterior (LastBarOnChart falso) e a linha NT123| some. Novas linhas, so'
+//      com GuardaRelogio = 1: NT123|HB (1 por candle, 1a avaliacao completa
+//      ate 3 min depois do fim da barra, sem LastBarOnChart) e
+//      NT123|AVISO_MODO (candle incompleto ao vivo = caixa desmarcada).
+//      Nenhuma ordem nem estado de decisao mudou.
 //
 // COMO LIGAR (Automacao de estrategias, grafico WINFUT M15)
 //   - Modo: "Realizar envio de ordens no FECHAMENTO DO CANDLE" + opcao
@@ -117,6 +125,7 @@ var
   sDailyRes, sTmp, sLimStop                            : Float;
   sBarDia, sHoraAnt, sBar                              : Float;
   sDailyAnt, sDescarte                                 : Float;
+  sHbKey, sAvKey, sKey, sLast                          : Float;
   nIndex, nOff, nI, nJ                                 : Integer;
   vals                                                 : array[1..20] of Float;
   bNovoDia, bCalcular, bJanela, bCompleta, bSaida      : Boolean;
@@ -147,6 +156,8 @@ begin
   sBarDia   := sBarDia[1];
   sHoraAnt  := sHora[1];
   sDailyAnt := sDailyRes[1];
+  sHbKey    := sHbKey[1];
+  sAvKey    := sAvKey[1];
 
   bNovoDia  := (sData <> sDataAnt);
   bCalcular := (CalcDataInicio = 0) or (sData >= CalcDataInicio);
@@ -473,6 +484,35 @@ begin
         + "|" + sLadoCand + "|" + sEntrada + "|" + sStopPx + "|" + sAlvoPx
         + "|" + sVolTot + "|" + sMed + "|" + sGateN + "|" + sGateOk
         + "|" + sMotivo + "|" + sEvento + "|" + sPos + "|" + sDailyRes);
+    end;
+
+    //-----------------------------------------------------------------
+    // v4.43 (SO' LOG: nenhuma ordem, nenhum estado de decisao).
+    // HB = batimento de fechamento: uma linha por candle, na 1a avaliacao
+    // COMPLETA (bCompleta) ate 3 min depois do fim da barra. NAO depende
+    // de LastBarOnChart: no modo "so' no fechamento" o loop avalia o
+    // candle anterior, LastBarOnChart fica falso e a linha NT123| de
+    // cima some (07/10, RobotID 5). LastBar (1/0) diz em que modo esta'.
+    // AVISO_MODO = avaliando candle INCOMPLETO ao vivo: a caixa "executar
+    // apenas no fechamento do candle..." esta' DESMARCADA (07/10: so' 2
+    // de 13 fechamentos foram vistos). Ambos so' com GuardaRelogio = 1.
+    //-----------------------------------------------------------------
+    sKey := sData * 10000 + sHora;
+    if LastBarOnChart then sLast := 1 else sLast := 0;
+    if (LogDiag = 1) and (GuardaRelogio = 1) and bCompleta
+       and (CurrentTime < CalcTime(sFimBarra, 3)) and (sKey <> sHbKey) then
+    begin
+      sHbKey := sKey;
+      ConsoleLog("NT123|HB|" + sData + "|" + sHora + "|" + CurrentTime + "|" + sLast
+        + "|" + sPadC + "|" + sPadV + "|" + sRegime + "|" + sMotivo
+        + "|" + sGateN + "|" + sVolTot + "|" + sMed + "|" + sPos);
+    end;
+    if (LogDiag = 1) and (GuardaRelogio = 1) and LastBarOnChart
+       and (not bCompleta) and (sKey <> sAvKey) then
+    begin
+      sAvKey := sKey;
+      ConsoleLog("NT123|AVISO_MODO|" + sData + "|" + sHora + "|" + CurrentTime
+        + "|candle incompleto: marque executar apenas no fechamento do candle");
     end;
 
     Plot(sMme);
