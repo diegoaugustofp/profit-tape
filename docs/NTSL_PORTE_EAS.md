@@ -87,7 +87,7 @@ O que isto **não** é: não reabre nenhuma ficha, não troca número, não auto
 ## Como ligar (os três)
 
 1. Automação de estratégias → escolher o `.ntsl` → **conta SIMULADOR**.
-2. Modo "Realizar envio de ordens no **fechamento do candle**" e **marcar** "executar apenas no fechamento do candle ou com atualização de posição". Desmarcada, o código roda várias vezes por candle (manual NTSL, 11.4) e o estado conta em dobro.
+2. Marcar o rádio "Realizar envio de ordens no **fechamento do candle**" (`bClosedCandle=Sim`). No rádio "...quando a condição for satisfeita" o código roda a cada atualização (5–10 s) e quase nunca vê o candle fechado (corrigido em 14/10: a caixa "Esperar fechamento do candle para primeira execução" NÃO é o controle). O ignição é a exceção: opera intrabar por desenho (rádio "quando a condição for satisfeita").
 3. Quantidade por Ordem = 1 e Quantidade máxima da posição = 1.
 4. Gráficos: `vwapvp_continuacao` WINFUT **M5**; `ea_123_vb` WINFUT **M15**; `ignicao` WINFUT em **5 segundos com `BarrasJanela` 12** (é o que opera ao vivo desde 07/10; em 1 s seria 60). O `BarrasJanela` padrão do arquivo é 60: **um replay/backtest sem o input ajustado roda outra regra** (janela de 5 min e refratário de 150 min num gráfico de 5 s; aconteceu em 07/10). Desde a v4.42 o console imprime `NTSI|PARAMS|...` no primeiro candle; confira-o em todo replay.
 5. Ligar **antes** da abertura da janela (vwapvp 11:00; ignição 09:16; 123 09:30). Contadores e bloqueios recomeçam em zero se ligar no meio do dia.
@@ -357,7 +357,7 @@ Testar o caminho ao vivo: o Market Replay do Profit (replay de mercado) alimenta
 
 ### Checklist de ligar (consolidado em 08/10)
 
-1. Caixa "executar apenas no fechamento do candle ou com atualização de posição" MARCADA nas 3 (a do 123 e a do vwapvp antigo estavam desmarcadas).
+1. Rádio "Realizar envio de ordens no fechamento do candle" selecionado no 123 e no vwapvp (corrigido em 14/10; antes eu falava de uma caixa que não é o controle). Ignição: rádio "quando a condição for satisfeita".
 2. UM vwapvp ligado (carteira 320060032); desligar o RobotID 2 (conta 3813830) depois de confirmar o que é.
 3. Gráfico/contrato: as automações estão em `WINV26`; em 14/10 (rolagem) trocar para `WINZ26` e conferir o `GateN` do 123 e o roteamento (cross-order).
 4. Energia: nobreak para notebook, modem e roteador; reconexão automática do Wi-Fi/Ethernet; avisar quando o Profit mostrar "Servidor desconectado". Ao voltar a conexão, conferir se as automações continuam habilitadas.
@@ -366,6 +366,19 @@ Testar o caminho ao vivo: o Market Replay do Profit (replay de mercado) alimenta
 ### Ferramenta `tools/analisa_log_profit.py`
 
 Lê o `LogDesktop_AAAA_MM_DD.log` e resume, por automação (RobotID): linhas de console por hora, fração de `Fechou = 1`, quedas de conexão ("Servidor desconectado" até "Servidor conectado") e lacunas sem console. Feito em cima do caso de 07/10 (queda 12:12:46–19:45:53; 2 de 13 fechamentos).
+
+## 14/10: alvo e stop ancorados no preço da posição (2026-10-14, v4.44)
+
+**Achado [Certo]:** no ignição, alvo e stop saem do NÍVEL teórico da detecção (referência ± 500), mas a entrada é a mercado. Posição aberta às 10:1x de 14/10: fill 208.545 contra nível 208.585 ⇒ stop a 570 e alvo a 490 do fill. O fill cai em torno do nível com sinal aleatório (5 trades válidos: −90, +35, −20, +40, +40; média ≈ 0, sem viés mensurável). O defeito não é viés: é que cada trade carrega uma assimetria alvo/stop diferente da 1:1 pré-registrada (530/530).
+
+### Pré-registro v4.44 (escrito antes de codificar; autorizado pelo Diego em 2026-10-14)
+
+1. **Mudança de comportamento (ignição e vwapvp):** com posição aberta, alvo e stop passam a ser medidos a partir do preço da posição (`Price`), não do nível teórico. Ignição: alvo = `Price` ± 530, stop = `Price` ∓ 530. vwapvp: os mesmos deslocamentos de antes (`AlvoSd`·SD e `StopFracDist`·dist, calculados no sinal) aplicados a `Price` em vez do `Close` do sinal. Input `AncorarNoFill` (padrão 1; 0 = comportamento v4.43 exato). Só com `ModoSaidaOCO = 1` no ignição (com 0, as barras tocam os níveis teóricos como antes).
+2. **Guarda:** se `Price` ≤ 0 ou se distanciar mais de `AncMaxPts` (padrão 150) do nível/Close de referência, NÃO ancora (níveis da v4.43) e registra `NTSI|ANC` / `NTSV|ANC` com o código do motivo. O vwapvp ancora UMA vez (flag de estado), porque SD e dist mudam de barra para barra; o ignição tem deslocamentos fixos, então reancora sem estado.
+3. **Log novo:** `NTSI|ANC|Data|Hora|Nivel|Price|Slip|Alvo|Stop|Cod` (ignição; Slip = lado·(Price − nível), positivo = contra) e `NTSV|ANC|...` equivalente. Cod: 1 ancorou, 2 fora da guarda, 3 Price ≤ 0.
+4. **Corrigido junto:** `AVISO_MODO` repetia a cada reprocessamento do candle (950 linhas em 80 min em 14/10) porque a chave de dedupe lida em `[1]` não sobrevive ao reprocessamento do mesmo candle, e disparava falso positivo ao habilitar. Passa a só disparar com `CurrentBar` maior que o último candle avisado e a mensagem diz o botão certo. O texto "caixa desmarcada" estava errado para o Profit atual: o botão é o rádio "Realizar envio de ordens no fechamento do candle" (Sim) vs "...quando a condição for satisfeita" (Não). A caixa "Esperar fechamento do candle para primeira execução" NÃO é o controle.
+5. **Critério de decisão (sem calibração):** favorável = no próximo pregão com entrada, aparece 1+ linha `ANC` Cod 1 e as ordens ToCover no log do Profit saem em `Price` ± 530 (ignição) com |alvo − Price| = |Price − stop|; Cod 2/3 raro (< 10% das entradas). Contra = Cod 2/3 frequente ou `Price` devolvendo outra coisa que o preço do fill ⇒ voltar `AncorarNoFill = 0` e investigar antes de qualquer outra mudança. Retrocompatibilidade: `AncorarNoFill = 0` reproduz a v4.43. O dia 14/10 do ignição e do vwapvp não conta como amostra; a contagem recomeça de uma data registrada após aplicar a v4.44.
+6. **Risco assumido:** `Price` no simulador pode ser preço médio da posição (igual ao fill com lote 1) e o manual não diz se atualiza após o fill no mesmo candle. É isso que o `ANC` mede.
 
 ## O que NÃO sei (nenhum item testado; é o que eu verificaria primeiro)
 

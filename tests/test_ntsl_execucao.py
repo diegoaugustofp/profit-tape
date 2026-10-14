@@ -589,3 +589,119 @@ def test_espelho_hb_um_por_candle_e_nada_no_backtest() -> None:
     assert not _hb_deve_imprimir(0, True, 0.4, 1261007_0930, 0)       # backtest
     assert not _hb_deve_imprimir(1, False, 0.0, 1261007_0930, 0)      # incompleto
     assert not _hb_deve_imprimir(1, True, 600, 1261007_0930, 0)       # > 3 min depois
+
+
+# --------------------------------------------------------------------------
+# v4.44: alvo/stop ancorados no preco da posicao (Price) + AVISO_MODO por hora.
+# Ver docs/NTSL_PORTE_EAS.md "14/10: alvo e stop ancorados no preco da posicao".
+# --------------------------------------------------------------------------
+ANC_ARQUIVOS = {"ignicao.ntsl": "NTSI", "vwapvp_continuacao.ntsl": "NTSV"}
+
+
+def _texto(nome: str) -> str:
+    return "\n".join(_codigo(nome))
+
+
+def _bloco_anc(nome: str) -> tuple[str, str]:
+    """(condicao, corpo) do `if (AncorarNoFill = 1) ...` ate' o `end;` de mesmo recuo."""
+    linhas = _codigo(nome)
+    i = next(k for k, ln in enumerate(linhas) if "AncorarNoFill = 1" in ln)
+    while not re.match(r"\s*if ", linhas[i]):
+        i -= 1
+    recuo = len(linhas[i]) - len(linhas[i].lstrip())
+    b = next(m for m in range(i, len(linhas)) if linhas[m].strip() == "begin")
+    k = next(
+        m for m in range(b, len(linhas))
+        if re.match(r"\s*end;", linhas[m])
+        and len(linhas[m]) - len(linhas[m].lstrip()) == recuo
+    )
+    return " ".join(linhas[i:b]), " ".join(linhas[b : k + 1])
+
+
+@pytest.mark.parametrize("nome", ANC_ARQUIVOS)
+def test_ancoragem_inputs_default_ligado_e_guarda(nome: str) -> None:
+    cod = _texto(nome)
+    assert re.search(r"AncorarNoFill\(1\);", cod)
+    assert re.search(r"AncMaxPts\(150\);", cod)
+    cond, corpo = _bloco_anc(nome)
+    assert "AncorarNoFill = 1" in cond and "not bSaida" in cond
+    assert "Price" in corpo and "AncMaxPts" in corpo
+    assert "ClosePosition" not in corpo and "AtMarket" not in corpo   # so' reescreve niveis
+
+
+@pytest.mark.parametrize("nome", ANC_ARQUIVOS)
+def test_ancoragem_vem_antes_das_ordens_tocover(nome: str) -> None:
+    cod = _texto(nome)
+    assert cod.index("AncorarNoFill = 1") < cod.index("SellToCoverStop(")
+    assert cod.index("AncorarNoFill = 1") < cod.index("BuyToCoverLimit(")
+
+
+def test_ignicao_ancora_sem_estado_e_so_com_oco() -> None:
+    cond, corpo = _bloco_anc("ignicao.ntsl")
+    assert "ModoSaidaOCO = 1" in cond
+    assert re.search(r"sAlvoPx\s*:=\s*Round2Fraction\(sPx \+ sLadoPos \* AlvoPts\)", corpo)
+    assert re.search(r"sStopPx\s*:=\s*Round2Fraction\(sPx - sLadoPos \* StopPts\)", corpo)
+    assert "[1]" not in corpo
+    # log so' nas barras de entrada: nao inunda o console a cada 5 s
+    assert "sBarsPos <= 2" in corpo
+
+
+def test_vwapvp_ancora_uma_vez_deslocando_niveis_do_sinal() -> None:
+    cond, corpo = _bloco_anc("vwapvp_continuacao.ntsl")
+    assert "sAncOk = 0" in cond and "sRefPx > 0" in cond
+    assert "sShift  := sPx - sRefPx;" in corpo
+    assert "sAlvoPx + sShift" in corpo and "sStopPx + sShift" in corpo
+    assert "sAncOk  := 1;" in corpo
+    cod = _texto("vwapvp_continuacao.ntsl")
+    # a referencia e' gravada no arme e na reconstrucao; zerada no novo dia/descarte/sem posicao
+    assert len(re.findall(r"sRefPx\s*:=\s*Close;", cod)) == 2
+    assert len(re.findall(r"sRefPx := 0; sAncOk := 0;", cod)) >= 3
+    assert re.search(r"sRefPx\s*:=\s*sRefPx\[1\];", cod)
+    assert re.search(r"sAncOk\s*:=\s*sAncOk\[1\];", cod)
+
+
+@pytest.mark.parametrize("nome", ANC_ARQUIVOS)
+def test_ancoragem_nao_mexe_na_decisao_de_entrada(nome: str) -> None:
+    """Retrocompat: o bloco so' ve niveis ja' montados; a entrada continua igual."""
+    cod = _texto(nome)
+    assert cod.count("BuyAtMarket(Lote)") == 1
+    assert cod.count("SellShortAtMarket(Lote)") == 1
+
+
+def _ancora_ign(lado: int, nivel: float, price: float, alvo: float, stop: float,
+                anc: int = 1, max_pts: float = 150) -> tuple[float, float, int]:
+    """Espelho Python do bloco do ignicao."""
+    if not anc:
+        return nivel + lado * alvo, nivel - lado * stop, 0
+    if price <= 0:
+        return nivel + lado * alvo, nivel - lado * stop, 3
+    if price - nivel > max_pts or nivel - price > max_pts:
+        return nivel + lado * alvo, nivel - lado * stop, 2
+    return price + lado * alvo, price - lado * stop, 1
+
+
+def test_cenario_de_14_10_volta_a_simetria() -> None:
+    # venda: nivel 208585, fill 208545 (40 pts a favor do alvo)
+    alvo, stop, cod = _ancora_ign(-1, 208585, 208545, 530, 530)
+    assert cod == 1 and (alvo, stop) == (208015, 209075)
+    assert 208545 - alvo == stop - 208545 == 530
+    # sem ancoragem (v4.43): 490 / 570 -- o que o Diego viu
+    alvo0, stop0, _ = _ancora_ign(-1, 208585, 208545, 530, 530, anc=0)
+    assert (208545 - alvo0, stop0 - 208545) == (490, 570)
+    # compra com fill contra: simetrico tambem
+    a, s, _ = _ancora_ign(1, 100000, 99960, 530, 530)
+    assert (a - 99960, 99960 - s) == (530, 530)
+
+
+def test_guarda_cai_no_nivel_teorico() -> None:
+    assert _ancora_ign(1, 100000, 100400, 530, 530)[2] == 2
+    assert _ancora_ign(1, 100000, 0, 530, 530)[2] == 3
+    assert _ancora_ign(1, 100000, 100400, 530, 530)[:2] == (100530, 99470)
+
+
+@pytest.mark.parametrize("nome", ["ea_123_vb.ntsl", "vwapvp_continuacao.ntsl"])
+def test_aviso_modo_so_em_hora_cheia_e_aponta_o_radio(nome: str) -> None:
+    cond, corpo = _bloco_log(nome, f'"{HB_ARQUIVOS[nome]}|AVISO_MODO|"')
+    assert "Mod(sHora, 100) = 0" in cond
+    assert "radio" in corpo and "Realizar envio de ordens no fechamento do candle" in corpo
+    assert "caixa" not in corpo

@@ -75,14 +75,17 @@
 //      anterior (LastBarOnChart falso) e a linha NT123| some. Novas linhas, so'
 //      com GuardaRelogio = 1: NT123|HB (1 por candle, 1a avaliacao completa
 //      ate 3 min depois do fim da barra, sem LastBarOnChart) e
-//      NT123|AVISO_MODO (candle incompleto ao vivo = caixa desmarcada).
+//      NT123|AVISO_MODO (candle incompleto ao vivo). v4.44: o controle e' o RADIO
+//      "fechamento do candle", nao a caixa "Esperar fechamento..."; o aviso
+//      agora so' sai em barras de hora cheia.
 //      Nenhuma ordem nem estado de decisao mudou.
 //
 // COMO LIGAR (Automacao de estrategias, grafico WINFUT M15)
-//   - Modo: "Realizar envio de ordens no FECHAMENTO DO CANDLE" + opcao
-//     "executar apenas no fechamento do candle ou com atualizacao de
-//     posicao" MARCADA (a ordem STOP vale ate' o fim do candle seguinte e
-//     o Profit a cancela sozinho se nao for reenviada).
+//   - Modo: RADIO "Realizar envio de ordens no FECHAMENTO DO CANDLE"
+//     (bClosedCandle=Sim). A caixa "Esperar fechamento do candle para
+//     primeira execucao" NAO e' o controle (corrigido em 14/10, v4.44).
+//     A ordem STOP vale ate' o fim do candle seguinte e o Profit a cancela
+//     sozinho se nao for reenviada.
 //   - Quantidade por Ordem = 1; Quantidade maxima da posicao = 1.
 //   - CONTA: SIMULADOR.
 //   - Grafico com >= 30 pregoes de historico.
@@ -507,12 +510,16 @@ begin
         + "|" + sPadC + "|" + sPadV + "|" + sRegime + "|" + sMotivo
         + "|" + sGateN + "|" + sVolTot + "|" + sMed + "|" + sPos);
     end;
+    // v4.44: a chave em [1] NAO dedupa dentro do mesmo candle (o Profit
+    // reprocessa o candle e [1] e' o candle anterior): 950 linhas em 80 min
+    // em 14/10. Agora so' nas barras que abrem na hora cheia (no maximo
+    // ~1 candle por hora de pregao) e a mensagem aponta o botao certo.
     if (LogDiag = 1) and (GuardaRelogio = 1) and LastBarOnChart
-       and (not bCompleta) and (sKey <> sAvKey) then
+       and (not bCompleta) and (Mod(sHora, 100) = 0) and (sKey <> sAvKey) then
     begin
       sAvKey := sKey;
       ConsoleLog("NT123|AVISO_MODO|" + sData + "|" + sHora + "|" + CurrentTime
-        + "|candle incompleto: marque executar apenas no fechamento do candle");
+        + "|candle incompleto: selecione o radio Realizar envio de ordens no fechamento do candle");
     end;
 
     Plot(sMme);

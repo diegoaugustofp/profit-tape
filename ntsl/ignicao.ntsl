@@ -54,13 +54,21 @@
 //      primeiro candle (BarrasJanela, SegBarra, Refratario em barras): o
 //      replay de 07/10 rodou com BarrasJanela 60 enquanto a automacao ao vivo
 //      usava 12, e nada no console mostrava isso.
+//  10. v4.44: ALVO/STOP ANCORADOS NO PRECO DA POSICAO. Antes saiam do NIVEL
+//      teorico; o fill a mercado cai +-40..90 pts do nivel, com sinal
+//      aleatorio (14/10: fill 208.545, nivel 208.585 => stop 570 / alvo 490).
+//      Agora, com AncorarNoFill = 1 e ModoSaidaOCO = 1, alvo = Price +-
+//      AlvoPts e stop = Price -+ StopPts (1:1 de novo). Guarda: Price <= 0
+//      ou |Price - nivel| > AncMaxPts => fica nos niveis do nivel teorico
+//      (v4.43) e o NTSI|ANC diz o codigo. AncorarNoFill = 0 = v4.43 exato.
 //
 // COMO LIGAR (Automacao de estrategias, WINFUT em 1 SEGUNDO)
 //   - Grafico em SEGUNDOS: 1 s => BarrasJanela 60 | 5 s => 12 | 15 s => 4.
 //     (Em 1 minuto a regra perde: 27/52 no teste sintetico.)
-//   - Modo: "Realizar envio de ordens no FECHAMENTO DO CANDLE" + a opcao
-//     "executar apenas no fechamento do candle ou com atualizacao de
-//     posicao" MARCADA.
+//   - Modo: RADIO "Realizar envio de ordens quando a condicao for
+//     satisfeita" (bClosedCandle=Nao): o ignicao e' intrabar por desenho,
+//     validado assim ao vivo em 07-14/10 (corrigido em 14/10, v4.44; o
+//     texto antigo mandava o modo de fechamento).
 //   - Quantidade por Ordem = 1; Quantidade maxima da posicao = 1.
 //   - CONTA: SIMULADOR.
 //   - ModoSaidaOCO = 1 manda stop+alvo como ordens ToCover. Em barra de
@@ -93,6 +101,8 @@ input
   LogDiag(1);                // 1 = linha NTSD a cada avaliacao com posicao/deteccao
                              // (NAO depende de LastBarOnChart: aparece no backtest)
   AlarmeCruzado(1);          // 1 = linha NTSI|ALVO_CRUZADO (v4.38, so' diagnostico)
+  AncorarNoFill(1);          // 1 = alvo/stop a partir de Price (v4.44) | 0 = do nivel (v4.43)
+  AncMaxPts(150);            // guarda: |Price - nivel| maior que isto => nao ancora
 
 var
   sData, sDataAnt, sDataRef, sHora                 : Float;
@@ -101,6 +111,7 @@ var
   sRefrat, sOps, sLado, sStatus, sEvento           : Float;
   sDailyRes, sPos, sNivelDet, sBar, sLadoAnt       : Float;
   sDailyAnt, sDescarte, sPar                       : Float;
+  sPx, sAnc, sSlip                                 : Float;
   bNovoDia, bNaJanela, bTemRef, bSaida, bRecons    : Boolean;
 begin
   //-------------------------------------------------------------------
@@ -250,6 +261,32 @@ begin
         else if sHigh >= sStopPx then
         begin bSaida := True; sEvento := 2; end;
       end;
+    end;
+
+    // v4.44: ancora alvo/stop no preco da posicao (Price). Sem estado: os
+    // deslocamentos sao fixos, entao reancorar em toda avaliacao da o mesmo
+    // resultado. So' reescreve sAlvoPx/sStopPx; a decisao de sair acima ja'
+    // foi tomada com os niveis teoricos (so' ModoSaidaOCO = 0 usa barras).
+    sAnc := 0;
+    if (AncorarNoFill = 1) and (ModoSaidaOCO = 1) and (not bSaida)
+       and (sLadoPos <> 0) and (sAlvoPx > 0) then
+    begin
+      sPx := Price;
+      sSlip := sLadoPos * (sPx - sNivel);
+      if sPx <= 0 then
+        sAnc := 3
+      else if ((sPx - sNivel) > AncMaxPts) or ((sNivel - sPx) > AncMaxPts) then
+        sAnc := 2
+      else
+      begin
+        sAlvoPx := Round2Fraction(sPx + sLadoPos * AlvoPts);
+        sStopPx := Round2Fraction(sPx - sLadoPos * StopPts);
+        sAnc := 1;
+      end;
+      // so' nas barras de entrada (BarsPos <= 2): nao inunda o console
+      if sBarsPos <= 2 then
+        ConsoleLog("NTSI|ANC|" + sData + "|" + sHora + "|" + sNivel + "|" + sPx
+          + "|" + sSlip + "|" + sAlvoPx + "|" + sStopPx + "|" + sAnc);
     end;
 
     if bSaida then

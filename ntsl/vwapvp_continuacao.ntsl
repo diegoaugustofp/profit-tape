@@ -61,14 +61,24 @@
 //      anterior (LastBarOnChart falso) e a linha NTSV| some. Novas linhas, so'
 //      com GuardaRelogio = 1: NTSV|HB (1 por candle, 1a avaliacao completa
 //      ate 3 min depois do fim da barra, sem LastBarOnChart) e
-//      NTSV|AVISO_MODO (candle incompleto ao vivo = caixa desmarcada).
+//      NTSV|AVISO_MODO (candle incompleto ao vivo). v4.44: o controle e' o RADIO
+//      "fechamento do candle", nao a caixa "Esperar fechamento..."; o aviso
+//      agora so' sai em barras de hora cheia.
 //      Nenhuma ordem nem estado de decisao mudou.
+//  10. v4.44: ALVO/STOP ANCORADOS NO PRECO DA POSICAO. Os niveis saiam do
+//      Close do sinal e a entrada e' a mercado (fill diferente do Close, sinal
+//      aleatorio): a distancia real ao alvo/stop variava trade a trade. Com
+//      AncorarNoFill = 1 os niveis guardados no sinal sao DESLOCADOS UMA VEZ
+//      por (Price - Close do sinal), mantendo AlvoSd*SD e StopFracDist*dist.
+//      Guarda: Price <= 0 ou |Price - Close| > AncMaxPts => nao ancora
+//      (v4.43) e o NTSV|ANC diz o codigo. AncorarNoFill = 0 = v4.43 exato.
 //
 // COMO LIGAR (Automacao de estrategias, grafico WINFUT M5)
-//   - Modo: "Realizar envio de ordens no FECHAMENTO DO CANDLE".
-//   - Marcar a opcao "executar apenas no fechamento do candle ou com
-//     atualizacao de posicao" (desmarcada, o codigo roda varias vezes
-//     por candle e o estado abaixo conta em dobro).
+//   - Modo: RADIO "Realizar envio de ordens no FECHAMENTO DO CANDLE"
+//     (bClosedCandle=Sim). No outro radio ("quando a condicao for
+//     satisfeita") o codigo roda a cada 5-10 s e quase nunca ve o candle
+//     fechado. A caixa "Esperar fechamento do candle para primeira
+//     execucao" NAO e' o controle (corrigido em 14/10, v4.44).
 //   - Quantidade por Ordem = 1; Quantidade maxima da posicao = 1.
 //   - CONTA: SIMULADOR.
 //   - Grafico com >= 3 pregoes de historico (a VWAP zera por dia; o
@@ -108,6 +118,8 @@ input
   LogAtivo(1);
   LogDiag(1);                 // 1 = linha NTSVD com posicao/sinal (sem LastBarOnChart)
   AlarmeCruzado(1);           // 1 = linha NTSV|ALVO_CRUZADO (v4.38, so' diagnostico)
+  AncorarNoFill(1);           // 1 = alvo/stop deslocados para Price (v4.44) | 0 = v4.43
+  AncMaxPts(150);             // guarda: |Price - Close do sinal| maior => nao ancora
 
 var
   sDataAnt, sData, sHora                         : Float;
@@ -122,6 +134,7 @@ var
   bFechouTrade, bSaida                           : Boolean;
   sDescarte                                      : Float;
   sHbKey, sAvKey, sKey, sLast                    : Float;
+  sRefPx, sAncOk, sPx, sShift, sAnc              : Float;
 begin
   //-------------------------------------------------------------------
   // LEITURAS POSICIONAIS: todas aqui, atribuicao simples.
@@ -142,6 +155,8 @@ begin
   sDailyAnt := sDailyRes[1];
   sHbKey    := sHbKey[1];
   sAvKey    := sAvKey[1];
+  sRefPx    := sRefPx[1];
+  sAncOk    := sAncOk[1];
 
   sData  := Date;
   sHora  := Time;
@@ -151,6 +166,7 @@ begin
   if bNovoDia then
   begin
     sLadoPos := 0; sAlvoPx := 0; sStopPx := 0; sBarsPos := 0;
+    sRefPx := 0; sAncOk := 0;
     sOps := 0; sUltBar := 0 - 1000; sPerdas := 0; sBloq := 0; sPnlDia := 0;
     sDailyAnt := 0;
   end;
@@ -214,6 +230,7 @@ begin
     begin
       sDescarte := 1;
       sLadoPos := 0; sAlvoPx := 0; sStopPx := 0; sBarsPos := 0;
+      sRefPx := 0; sAncOk := 0;
     end;
     if bFechouTrade then
     begin
@@ -287,6 +304,8 @@ begin
           sLadoPos := sLadoSinal;
           sAlvoPx  := Round2Fraction(Close + sLadoSinal * AlvoSd * sSd);
           sStopPx  := Round2Fraction(Close - sLadoSinal * StopFracDist * sDist);
+          sRefPx   := Close;
+          sAncOk   := 0;
           sOps     := sOps + 1;
           sUltBar  := CurrentBar;
           sBarsPos := 0;
@@ -309,6 +328,31 @@ begin
       begin
         bSaida := True;
         sEvento := 4;
+      end;
+
+      // v4.44: desloca os niveis UMA VEZ para o preco da posicao (Price).
+      // SD e dist mudam a cada barra, entao nao se recalcula: soma-se
+      // (Price - Close do sinal) aos niveis ja' guardados. Cada execucao do
+      // mesmo candle parte do [1] do candle anterior, logo e' idempotente.
+      sAnc := 0;
+      if (AncorarNoFill = 1) and (not bSaida) and (sAncOk = 0)
+         and (sRefPx > 0) and (sAlvoPx > 0) then
+      begin
+        sPx := Price;
+        if sPx <= 0 then
+          sAnc := 3
+        else if ((sPx - sRefPx) > AncMaxPts) or ((sRefPx - sPx) > AncMaxPts) then
+          sAnc := 2
+        else
+        begin
+          sShift  := sPx - sRefPx;
+          sAlvoPx := Round2Fraction(sAlvoPx + sShift);
+          sStopPx := Round2Fraction(sStopPx + sShift);
+          sAncOk  := 1;
+          sAnc    := 1;
+        end;
+        ConsoleLog("NTSV|ANC|" + sData + "|" + sHora + "|" + sRefPx + "|" + sPx
+          + "|" + sLadoPos + "|" + sAlvoPx + "|" + sStopPx + "|" + sAnc);
       end;
 
       if bSaida then
@@ -339,12 +383,15 @@ begin
     begin
       sBarsPos := 0;
       sLadoPos := 0; sAlvoPx := 0; sStopPx := 0;
+      sRefPx := 0; sAncOk := 0;
 
       if sArma = 1 then
       begin
         sLadoPos := sLadoSinal;
         sAlvoPx  := Round2Fraction(Close + sLadoSinal * AlvoSd * sSd);
         sStopPx  := Round2Fraction(Close - sLadoSinal * StopFracDist * sDist);
+        sRefPx   := Close;
+        sAncOk   := 0;
         sOps     := sOps + 1;
         sUltBar  := CurrentBar;
         sMotivo  := 1;
@@ -428,12 +475,16 @@ begin
         + "|" + Close + "|" + sVwap + "|" + sSd + "|" + sZ
         + "|" + sMotivo + "|" + sEvento + "|" + sPos + "|" + sOps);
     end;
+    // v4.44: a chave em [1] NAO dedupa dentro do mesmo candle (o Profit
+    // reprocessa o candle e [1] e' o candle anterior): 950 linhas em 80 min
+    // em 14/10. Agora so' nas barras que abrem na hora cheia (no maximo
+    // ~1 candle por hora de pregao) e a mensagem aponta o botao certo.
     if (LogDiag = 1) and (GuardaRelogio = 1) and LastBarOnChart
-       and (not bCompleta) and (sKey <> sAvKey) then
+       and (not bCompleta) and (Mod(sHora, 100) = 0) and (sKey <> sAvKey) then
     begin
       sAvKey := sKey;
       ConsoleLog("NTSV|AVISO_MODO|" + sData + "|" + sHora + "|" + CurrentTime
-        + "|candle incompleto: marque executar apenas no fechamento do candle");
+        + "|candle incompleto: selecione o radio Realizar envio de ordens no fechamento do candle");
     end;
 
     Plot(sVwap);
